@@ -1,0 +1,25 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Build outputs
+*.apk
+*.aab
+*.dm
+
+# Generated dictionary: build it with tools/build_jmdict_db.py
+app/src/main/assets/db/jmdict.sqlite
+
+# Device evidence screenshots stay out of history
+docs/jp-prototype/**/*.png
+docs/jp-prototype/**/*.jpg

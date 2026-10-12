@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <int name="support_dialog_show_count" value="1" />
+    <boolean name="bubble_enabled" value="true" />
+</map>

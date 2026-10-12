@@ -1,0 +1,2 @@
+It consists of 2 profiles for automating both single
+and long press. You can delete what you dont need.
