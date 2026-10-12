@@ -34,6 +34,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.gaten.app.data.BitmapRepository
+import com.gaten.app.media.MediaPauser
 import com.gaten.app.ui.lookup.LookupOverlay
 import com.gaten.app.ui.theme.GatenTheme
 
@@ -54,7 +55,10 @@ private const val TAG = "Gaten"
  *
  * Everything here belongs on the main thread: it adds and removes views.
  */
-class OverlayWindowController(private val context: Context) {
+class OverlayWindowController(
+    private val context: Context,
+    private val mediaPauser: MediaPauser
+) {
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
 
@@ -89,6 +93,9 @@ class OverlayWindowController(private val context: Context) {
         windowManager.addView(view, windowParams())
         host.onResume()
         showing = Showing(view, host)
+        // The overlay is up: stop whatever media is playing underneath so the frozen capture is
+        // not quietly moving on behind it.
+        mediaPauser.pause()
         Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture")
     }
 
@@ -101,6 +108,9 @@ class OverlayWindowController(private val context: Context) {
 
     /** Takes the overlay down and drops the capture it was drawn from. */
     fun hide() {
+        // The overlay draws the media pause, so it has to undo it on the way out, whatever the
+        // reason for closing. A resume with nothing paused does nothing.
+        mediaPauser.resume()
         val current = showing ?: return
         showing = null
         windowManager.removeViewImmediate(current.view)
