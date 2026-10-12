@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * YomiLens
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+
+    <!-- Add to Anki -->
+    <string name="anki_add">Add to Anki</string>
+    <string name="anki_added">Added</string>
+    <string name="anki_duplicate">Already in Anki</string>
+    <string name="anki_error_permission">AnkiDroid did not allow writing to its database</string>
+    <string name="anki_error_deck">Could not create the deck in AnkiDroid</string>
+    <string name="anki_error_model">Could not create the note type in AnkiDroid</string>
+    <string name="anki_error_failed">Could not add the word to AnkiDroid</string>
+    <string name="anki_error_share">AnkiDroid cannot be opened for sharing</string>
+</resources>

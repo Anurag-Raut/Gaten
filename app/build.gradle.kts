@@ -64,6 +64,14 @@ android {
         }
     }
 
+    lint {
+        // The AnkiDroid API library ships its own lint checks. Its DuplicateCrowdInStrings is an
+        // error there and flags two of our intentional duplicates — the app name repeated across
+        // app_name/home_title/qs_tile_label/tile_label, and "Select again" as both a button label
+        // and a content description — which would otherwise fail :app:lintVitalRelease.
+        disable += "DuplicateCrowdInStrings"
+    }
+
     splits {
         abi {
             isEnable = true
@@ -146,4 +154,8 @@ dependencies {
 
     // On-device Japanese OCR (bundled models, offline, free, no API key)
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+
+    // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and YomiLens
+    // still needs no INTERNET permission.
+    implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 }

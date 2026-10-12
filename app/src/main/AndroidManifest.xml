@@ -19,6 +19,13 @@
          and grants no access. -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
 
+    <!-- AnkiDroid is reached through its `flashcards` ContentProvider, which Android 11+ hides from
+         other packages unless the package is named here. The provider's READ_WRITE_DATABASE
+         permission comes along with the API library. Still no INTERNET: this is on-device IPC. -->
+    <queries>
+        <package android:name="com.ichi2.anki" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

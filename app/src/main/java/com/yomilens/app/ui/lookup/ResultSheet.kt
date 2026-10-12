@@ -10,6 +10,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -37,13 +40,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Gesture
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,8 +72,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yomilens.app.R
+import com.yomilens.app.anki.AddResult
+import com.yomilens.app.anki.AnkiCard
+import com.yomilens.app.anki.AnkiExporter
+import com.yomilens.app.anki.AnkiStatus
 import com.yomilens.app.dict.ScannedWord
 import com.yomilens.app.ui.theme.Spacing
+import kotlinx.coroutines.launch
 
 /** Dragging the handle down past this distance dismisses the overlay. */
 private const val DISMISS_DRAG_DP = 80f
@@ -343,6 +356,93 @@ private fun EntryColumn(word: ScannedWord) {
         }
         if (word.entries.size > 1) {
             OtherMatches(word)
+        }
+        AddToAnki(word)
+    }
+}
+
+/** The add button's own state: nothing yet, working, or finished with the label it ended on. */
+private sealed interface AnkiUiState {
+    data object Idle : AnkiUiState
+
+    data object Adding : AnkiUiState
+
+    /** Added, or already there; either way the button is done and shows [label]. */
+    data class Done(@StringRes val label: Int) : AnkiUiState
+}
+
+/**
+ * "Add to Anki" for [word]: the tap adds the card, or first asks AnkiDroid for its database
+ * permission, or — when the user declines that — hands the word to AnkiDroid's share handler
+ * instead. Hidden entirely when AnkiDroid is not installed.
+ *
+ * The state lives with the entry it belongs to, so selecting another word chip starts from a fresh
+ * button.
+ */
+@Composable
+private fun AddToAnki(word: ScannedWord) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf(AnkiExporter.status(context)) }
+    var state by remember { mutableStateOf<AnkiUiState>(AnkiUiState.Idle) }
+    val card = AnkiCard.from(word, sentence = "")
+    // TODO(integration): pass word.context once WS-A lands
+
+    if (status == AnkiStatus.NotInstalled) return
+
+    suspend fun add() {
+        state = AnkiUiState.Adding
+        when (val result = AnkiExporter.add(context, card)) {
+            AddResult.Added -> state = AnkiUiState.Done(R.string.anki_added)
+            AddResult.Duplicate -> state = AnkiUiState.Done(R.string.anki_duplicate)
+            is AddResult.Failed -> {
+                state = AnkiUiState.Idle
+                Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val requestPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            status = AnkiStatus.Ready
+            scope.launch { add() }
+        } else if (!AnkiExporter.shareFallback(context, card)) {
+            Toast.makeText(context, R.string.anki_error_share, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Spacer(Modifier.height(Spacing.m))
+    Button(
+        onClick = {
+            if (status == AnkiStatus.NeedsPermission) {
+                requestPermission.launch(AnkiExporter.PERMISSION)
+            } else {
+                scope.launch { add() }
+            }
+        },
+        enabled = state is AnkiUiState.Idle,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        when (val current = state) {
+            AnkiUiState.Adding -> CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = LocalContentColor.current,
+                strokeWidth = 2.dp
+            )
+
+            is AnkiUiState.Done -> Text(stringResource(current.label))
+
+            AnkiUiState.Idle -> {
+                Icon(
+                    Icons.Rounded.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(Spacing.s))
+                Text(stringResource(R.string.anki_add))
+            }
         }
     }
 }
