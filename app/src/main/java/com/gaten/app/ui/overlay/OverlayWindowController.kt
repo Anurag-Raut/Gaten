@@ -17,9 +17,12 @@ import android.os.Looper
 import android.util.Log
 import android.view.Choreographer
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.WindowManager
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.activity.OnBackPressedDispatcher
@@ -97,7 +100,26 @@ class OverlayWindowController(
         hide()
 
         val host = OverlayHost()
-        val root = FrameLayout(context).apply {
+        val root = OverlayRoot(
+            context,
+            onBack = {
+                // The lookup UI closes itself with a fade; before it is composed there is none.
+                if (host.onBackPressedDispatcher.hasEnabledCallbacks()) {
+                    host.onBackPressedDispatcher.onBackPressed()
+                } else {
+                    hide()
+                }
+            },
+            // Posted: the window is not taken down from inside its own focus dispatch.
+            onFocusLost = {
+                mainHandler.post {
+                    if (showing?.view === it) {
+                        Log.d(TAG, "Overlay lost window focus - the user went elsewhere, closing it")
+                        hide()
+                    }
+                }
+            }
+        ).apply {
             // The freeze has to hold whatever is moving behind it. The window itself is opaque
             // (see windowParams), so the root's black is what fills every pixel the capture does
             // not cover: nothing of the live app behind can reach the display through the overlay.
@@ -260,6 +282,58 @@ class OverlayWindowController(
 
     /** The overlay on screen: the view to detach and the host its lifecycle runs on. */
     private class Showing(val view: View, val host: OverlayHost)
+}
+
+/**
+ * The overlay's root view, which also hears what the window is told.
+ *
+ * The overlay is a focusable window, so it holds window focus until the user goes somewhere else:
+ * home, recents, another app, the notification shade or a share sheet all take it. [onFocusLost]
+ * reports that - and only after the window has had focus, so a window that never got it (the
+ * system was busy with something else as it came up) is never closed for it. It needs no
+ * accessibility event, which the service is not set up to receive.
+ *
+ * [onBack] gets the back gesture. The manifest opts in to predictive back, which routes the gesture
+ * past the key event to a registered callback, so both are listened for.
+ */
+private class OverlayRoot(
+    context: Context,
+    private val onBack: () -> Unit,
+    private val onFocusLost: (View) -> Unit
+) : FrameLayout(context) {
+
+    private var hadFocus = false
+
+    private val backCallback = OnBackInvokedCallback { onBack() }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (hasWindowFocus) hadFocus = true else if (hadFocus) onFocusLost(this)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            findOnBackInvokedDispatcher()?.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback
+            )
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            findOnBackInvokedDispatcher()?.unregisterOnBackInvokedCallback(backCallback)
+        }
+        super.onDetachedFromWindow()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) onBack()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
 }
 
 /**
