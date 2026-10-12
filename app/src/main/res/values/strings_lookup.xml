@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * YomiLens
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+
+    <!-- Lookup overlay -->
+    <string name="lookup_hint">Circle Japanese text</string>
+    <string name="lookup_reading">Reading…</string>
+    <string name="lookup_no_text">No text found</string>
+    <string name="lookup_no_words">No dictionary words found</string>
+    <string name="lookup_dict_error">Dictionary unavailable: %1$s</string>
+    <string name="lookup_select_again">Select again</string>
+    <string name="lookup_other_matches">Other matches (%1$d)</string>
+    <string name="lookup_base_form">from %1$s</string>
+    <string name="lookup_common">common</string>
+    <string name="lookup_toast_copied">Copied</string>
+
+    <!-- Lookup overlay content descriptions -->
+    <string name="lookup_cd_close">Close</string>
+    <string name="lookup_cd_copy">Copy recognized text</string>
+    <string name="lookup_cd_select_again">Select again</string>
+</resources>

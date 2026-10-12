@@ -24,7 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.yomilens.app.data.BitmapRepository
-import com.yomilens.app.ui.components.JpLookupOverlay
+import com.yomilens.app.ui.lookup.LookupOverlay
 import com.yomilens.app.ui.theme.YomiLensTheme
 
 /**
@@ -32,7 +32,7 @@ import com.yomilens.app.ui.theme.YomiLensTheme
  *
  * YomiLens has exactly one overlay workflow — lasso a region, OCR it, look the words up in the
  * offline dictionary — so this activity is deliberately nothing more than that: the captured
- * bitmap plus [JpLookupOverlay].
+ * bitmap plus [LookupOverlay].
  *
  * The activity is declared `singleInstance`, so a second capture arrives through [onNewIntent]
  * rather than a fresh `onCreate`. [Capture.id] is bumped for every new bitmap and used as the
@@ -70,7 +70,7 @@ class OverlayActivity : ComponentActivity() {
                     val current = capture.value
                     if (current != null) {
                         key(current.id) {
-                            JpLookupOverlay(
+                            LookupOverlay(
                                 screenshot = current.bitmap,
                                 onDismiss = {
                                     BitmapRepository.clear()

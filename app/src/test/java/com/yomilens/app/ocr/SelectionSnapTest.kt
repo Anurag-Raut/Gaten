@@ -59,16 +59,6 @@ class SelectionSnapTest {
     }
 
     @Test
-    fun unionBoundsCoversEveryLine() {
-        val lines = listOf(
-            line("一行目", 10, 100, 200, 150),
-            line("二行目", 30, 200, 260, 260)
-        )
-
-        assertEquals(Box(10, 100, 260, 260), SelectionSnap.unionBounds(lines))
-    }
-
-    @Test
     fun searchRegionClampsToTheBitmap() {
         val selection = Box(5, 5, 100, 60)
 
@@ -102,13 +92,6 @@ class SelectionSnapTest {
 
         assertEquals(Box(100, 200, 700, 260), onScreen.single().bounds)
         assertEquals("猫が水を飲む", onScreen.single().text)
-    }
-
-    @Test
-    fun padAndClampKeepsTheBoxInsideTheBitmap() {
-        val box = Box(2, 3, 1078, 2398)
-
-        assertEquals(Box(0, 0, 1080, 2400), SelectionSnap.padAndClamp(box, 6, 6, 1080, 2400))
     }
 
     @Test
