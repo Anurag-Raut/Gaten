@@ -96,6 +96,17 @@ class MediaPauser(private val context: Context) {
             controller.transportControls.pause()
             paused += controller to (controller.playbackState?.state ?: PlaybackState.STATE_NONE)
         }
+
+        // A player can be playing without exposing a usable media session — Google Photos' does not
+        // register one at all — so nothing above can see it. `isMusicActive` is the platform's own
+        // "something is coming out of the music stream" flag; when it is set and no session was
+        // pausable, send the same key a headset button would. It stays quiet when nothing plays, so
+        // an overlay over silence never queues a play() for the way out.
+        if (paused.isEmpty() && audio.isMusicActive()) {
+            Log.d(TAG, "No pausable media session - pausing with a media key event instead")
+            dispatchKeyEvent(KeyEvent.KEYCODE_MEDIA_PAUSE)
+            pausedByKeyEvent = true
+        }
         Log.d(TAG, "Paused ${paused.size} of ${active.size} media sessions")
     }
 
