@@ -15,14 +15,22 @@ bindings (Key Mapper broadcasts and the Quick Settings tile).
    way a lookup is requested from outside the app.
 2. **Capture** — the accessibility service calls `takeScreenshot()` and freezes the current screen.
    Surfaces marked `FLAG_SECURE` (DRM video) come back blank; Gaten never tries to bypass them.
-3. **Lasso** — a transparent overlay shows the frozen screen and you drag a loop over the Japanese
-   text.
-4. **OCR** — the cropped region is recognised on device. ML Kit's Japanese model is the default;
-   Tesseract (`jpn+eng`) is both the fallback and a selectable engine in settings.
-5. **Dictionary** — the recognised text is scanned for words (with deinflection) against a bundled
-   SQLite database built from JMdict and JMnedict, and the overlay lists the matching entries.
+3. **Scan** — as soon as the overlay opens, the whole screen is recognised once in the background
+   (ML Kit Japanese) and every line is indexed with a box per character. Faint outlines fade in
+   when it is done.
+4. **Tap or circle** — once the scan is ready, tap a word (a tap mid-word still finds the whole
+   word) or circle some text; both are answered from the index with no further OCR, and a circle
+   keeps any word the loop only grazed. Before the scan is ready, or when Tesseract is the selected
+   engine, a circle falls back to recognising the circled region at that moment.
+5. **Repair** — common OCR confusions are fixed against the dictionary before lookup (ー/一,
+   カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
+6. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
+   database built from JMdict and JMnedict, and the overlay lists the matching entries.
+7. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to a
+   "Gaten" deck (word, reading, meaning and the full line it came from) through AnkiDroid's
+   instant-add API. The first add asks for AnkiDroid's database permission; no network is used.
 
-Steps 2–5 are fully offline.
+Steps 2–6 are fully offline.
 
 ## Setup on a phone
 
@@ -68,7 +76,9 @@ build fails early with a clear message if step 1 was skipped.
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
   Settings tile, accessibility service.
 - `ocr/` — on-device OCR: ML Kit Japanese, the Tesseract fallback (`TesseractEngine`), the engine
-  preference, and selection snapping.
+  preference, selection snapping, the full-screen text index (`ScreenText*`, `ScreenHits`) and
+  `OcrRepair`.
+- `anki/` — the AnkiDroid instant-add export.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
