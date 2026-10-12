@@ -9,7 +9,7 @@ package com.yomilens.app.anki
 import com.yomilens.app.dict.ScannedWord
 
 /**
- * One Anki note: one property per field of the "YomiLens" note type.
+ * One Anki note: one property per field of the "Gaten" note type.
  *
  * Anki renders every field as HTML, so the values are HTML too — the dictionary text is escaped and
  * the looked-up word in [sentence] is bolded. Nothing here touches Android, which is what makes the

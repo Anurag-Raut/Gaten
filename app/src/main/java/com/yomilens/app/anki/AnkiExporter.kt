@@ -50,7 +50,7 @@ internal enum class AddOutcome { DUPLICATE, ADDED, FAILED }
  * Adds looked-up words to AnkiDroid through its instant-add API.
  *
  * [AddContentApi] talks to AnkiDroid's `flashcards` ContentProvider, not to a network service, so
- * YomiLens keeps its no-INTERNET manifest. AnkiDroid must be declared in the manifest's `<queries>`
+ * Gaten keeps its no-INTERNET manifest. AnkiDroid must be declared in the manifest's `<queries>`
  * for that provider to be visible at all on Android 11+, and its `READ_WRITE_DATABASE` permission is
  * granted once by the user.
  *
@@ -71,7 +71,7 @@ object AnkiExporter {
     private const val NO_ID = -1L
 
     /** Display name of both the deck and the note type created on the first add. */
-    private const val DECK_AND_MODEL_NAME = "YomiLens"
+    private const val DECK_AND_MODEL_NAME = "Gaten"
 
     private val NOTE_FIELDS = arrayOf("Expression", "Reading", "Meaning", "Sentence")
     private val CARD_TEMPLATE_NAMES = arrayOf(DECK_AND_MODEL_NAME)
@@ -107,7 +107,7 @@ object AnkiExporter {
     )
 
     /**
-     * Adds [card] to the "YomiLens" deck, creating the deck and the note type on first use.
+     * Adds [card] to the "Gaten" deck, creating the deck and the note type on first use.
      *
      * Every AnkiDroid call is a provider round-trip, so this runs on [Dispatchers.IO]. It never
      * throws but for cancellation: a missing permission, a provider error and a rejected note all
@@ -148,7 +148,7 @@ object AnkiExporter {
     /**
      * Hands [card] to AnkiDroid's own share handler: the fallback for a user who declined the
      * database permission. AnkiDroid opens its "add note" screen with the word filled in and the
-     * user confirms it there, so this needs no permission from YomiLens at all.
+     * user confirms it there, so this needs no permission from Gaten at all.
      *
      * Returns false when nothing can handle the intent, so the caller can say so.
      */
@@ -175,7 +175,7 @@ object AnkiExporter {
     }
 
     /**
-     * The id of the "YomiLens" deck, creating the deck when the cached id is gone.
+     * The id of the "Gaten" deck, creating the deck when the cached id is gone.
      *
      * A cached id is only kept while AnkiDroid still lists it; otherwise an existing deck of the
      * same name wins over creating a second one.
@@ -191,7 +191,7 @@ object AnkiExporter {
     }
 
     /**
-     * The id of the "YomiLens" note type, creating it — four fields, one template — when the cached
+     * The id of the "Gaten" note type, creating it — four fields, one template — when the cached
      * id is gone. The template's question side is the word alone, the answer side adds reading,
      * meaning and the sentence.
      */

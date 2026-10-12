@@ -155,7 +155,7 @@ dependencies {
     // On-device Japanese OCR (bundled models, offline, free, no API key)
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 
-    // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and YomiLens
+    // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and Gaten
     // still needs no INTERNET permission.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 }

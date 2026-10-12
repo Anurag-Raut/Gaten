@@ -385,8 +385,7 @@ private fun AddToAnki(word: ScannedWord) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf(AnkiExporter.status(context)) }
     var state by remember { mutableStateOf<AnkiUiState>(AnkiUiState.Idle) }
-    val card = AnkiCard.from(word, sentence = "")
-    // TODO(integration): pass word.context once WS-A lands
+    val card = AnkiCard.from(word, sentence = word.context)
 
     if (status == AnkiStatus.NotInstalled) return
 
