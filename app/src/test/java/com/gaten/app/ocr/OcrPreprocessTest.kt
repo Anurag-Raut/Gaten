@@ -69,6 +69,19 @@ class OcrPreprocessTest {
     }
 
     @Test
+    fun aCropReadWithItsOwnBoundsCannotGrowPastTheCrop() {
+        // A circle reads the exact rectangle it cut out: the crop is passed as the bitmap and its
+        // own bounds as the box, so the 10% padding is clamped to the crop's edge and the read can
+        // never reach the lines beside the selection.
+        val crop = OcrPreprocess.cropFor(Box(0, 0, 200, 100), 200, 100)
+
+        assertEquals(0, crop.left)
+        assertEquals(0, crop.top)
+        assertEquals(200, crop.width)
+        assertEquals(100, crop.height)
+    }
+
+    @Test
     fun aBoxOutsideTheBitmapStillYieldsACrop() {
         val crop = OcrPreprocess.cropFor(Box(5000, 5000, 5100, 5100), 100, 100)
 

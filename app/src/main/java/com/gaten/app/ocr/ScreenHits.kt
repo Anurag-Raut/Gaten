@@ -16,9 +16,10 @@ data class LineSpan(val lineIndex: Int, val start: Int, val endExclusive: Int)
  * Answers a gesture from the pre-recognised screen index instead of another OCR round-trip.
  *
  * A tap lands wherever the finger was, never on the character the reader meant, and a lasso is
- * drawn by hand — both are resolved against [ScreenText]'s per-character boxes, with enough slack
- * that a near miss still yields the character or the words that were pointed at. The index is in
- * bitmap pixels, so every decision here is arithmetic on integers; nothing touches Android.
+ * drawn by hand — both are resolved against [ScreenText]'s per-character boxes: a tap with enough
+ * slack that a near miss still yields the character that was pointed at, a lasso with none, because
+ * what a circle reads is the crop the reader drew and the index only supplements it. The index is
+ * in bitmap pixels, so every decision here is arithmetic on integers; nothing touches Android.
  */
 object ScreenHits {
 
@@ -50,31 +51,23 @@ object ScreenHits {
     /**
      * The characters a lasso covered, as one span per line.
      *
-     * A hand-drawn loop is never tight: it clips whole characters at its ends and, drawn around a
-     * word, touches the neighbours it passed over. Each character box is therefore grown by half a
-     * character before intersecting — the loop still has to be at the character, but ending on the
-     * seam between two characters pulls the second one in rather than losing it. The span of a line
-     * is then the whole run from its first to its last selected character, so a word the loop
-     * crossed in the middle is never delivered in pieces. Lines come back in index order, spans
-     * within a line are contiguous, and indices address `ScreenLine.text`.
+     * The loop has to be at the character: a character box is selected when it shares pixels with
+     * the selection, and nothing else is. There is no slack and no nearest-line fallback, because a
+     * circle's answer is the crop the reader drew ([com.gaten.app.ui.lookup.runLookup]) and the
+     * index only supplements it — a neighbouring glyph the loop never touched must not ride along.
      *
-     * A loop drawn between the lines — or one that caught no character at all — falls back to the
-     * single nearest line when it is within one and a half line-heights of it, and that whole line
-     * is selected: the reader clearly aimed at that line, and half an answer beats none. Beyond
-     * that reach the gesture is taken as touching nothing and the result is empty.
+     * The span of a line is then the whole run from its first to its last selected character, so a
+     * word the loop crossed in the middle is never delivered in pieces. Lines come back in index
+     * order, spans within a line are contiguous, and indices address `ScreenLine.text`.
      */
     fun spansInSelection(screen: ScreenText, selection: Box): List<LineSpan> {
         val spans = ArrayList<LineSpan>()
-        var nearestLine = -1
-        var nearestDistance = Int.MAX_VALUE
 
         screen.lines.forEachIndexed { lineIndex, line ->
-            if (line.charBoxes.isEmpty()) return@forEachIndexed
-
             var first = -1
             var last = -1
             line.charBoxes.forEachIndexed { charIndex, box ->
-                if (inflated(box).overlaps(selection)) {
+                if (box.overlaps(selection)) {
                     if (first < 0) first = charIndex
                     last = charIndex
                 }
@@ -82,47 +75,34 @@ object ScreenHits {
 
             if (first >= 0) {
                 spans.add(LineSpan(lineIndex, first, last + 1))
-            } else {
-                val distance = squaredRectDistance(line.bounds, selection)
-                if (distance < nearestDistance) {
-                    nearestDistance = distance
-                    nearestLine = lineIndex
-                }
             }
         }
 
-        if (spans.isNotEmpty()) return spans
-
-        val fallback = screen.lines.getOrNull(nearestLine) ?: return emptyList()
-        // 1.5 line-heights of slack, compared squared to stay in integers. The line's thickness is
-        // its short axis: the height of a normal line, the width of a tategaki one.
-        val reach = minOf(fallback.bounds.width, fallback.bounds.height) * 3 / 2
-        return if (nearestDistance <= reach * reach) {
-            listOf(LineSpan(nearestLine, 0, fallback.text.length))
-        } else {
-            emptyList()
-        }
+        return spans
     }
 
-    /** [box] grown by half its own size on every side: the slack a hand-drawn loop gets. */
-    private fun inflated(box: Box): Box = Box(
-        box.left - box.width / 2,
-        box.top - box.height / 2,
-        box.right + box.width / 2,
-        box.bottom + box.height / 2
-    )
+    /**
+     * The lines a lasso should be read for, in index order and without duplicates.
+     *
+     * That is the lines whose characters it covered ([spansInSelection]), plus any line with no
+     * character boxes yet whose own box it covers: a meiki-only placeholder has no characters to
+     * intersect, and it is offered to the reader here so manga-ocr can fill it in. A line whose
+     * boxes are present is judged on the boxes alone, so a box the loop did not reach is never
+     * read for the sake of its line's loose bounds.
+     */
+    fun linesInSelection(screen: ScreenText, selection: Box): List<Int> {
+        val lines = ArrayList<Int>()
+        spansInSelection(screen, selection).forEach { lines.add(it.lineIndex) }
+        screen.lines.forEachIndexed { lineIndex, line ->
+            if (line.charBoxes.isEmpty() && line.bounds.overlaps(selection)) lines.add(lineIndex)
+        }
+        return lines.distinct().sorted()
+    }
 
     /** Distance from the point to the box, 0 when it is inside it. */
     private fun squaredPointDistance(x: Int, y: Int, box: Box): Int {
         val dx = maxOf(box.left - x, x - box.right, 0)
         val dy = maxOf(box.top - y, y - box.bottom, 0)
-        return dx * dx + dy * dy
-    }
-
-    /** Distance between the two boxes' nearest edges, 0 when they share any pixel. */
-    private fun squaredRectDistance(a: Box, b: Box): Int {
-        val dx = maxOf(a.left - b.right, b.left - a.right, 0)
-        val dy = maxOf(a.top - b.bottom, b.top - a.bottom, 0)
         return dx * dx + dy * dy
     }
 }

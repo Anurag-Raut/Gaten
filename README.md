@@ -21,12 +21,12 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
    stylized-text model* below). ML Kit's own reading stays for any line it cannot read: no model, a
    failure, or an answer slower than 2.5 s.
 5. **Tap or circle** — tap a word (a tap mid-word still finds the whole word) or circle some text.
-   The lines the gesture touched are read first, and only those, so a tap usually waits for one
-   line; the rest of the screen keeps being read behind the result. Words come from the index with
-   no further OCR, and a circle keeps any word the loop only grazed. Before the index is ready — or
-   when ML Kit read nothing Japanese in the circled region — a circle falls back to recognising the
-   circled region at that moment, and when ML Kit read nothing Japanese there the selection box
-   itself goes to manga-ocr.
+   A tap answers from the index, reading the line it touched first and only that one. A circle
+   always crops the exact rectangle that was drawn and attempts manga-ocr on it — index or no index,
+   Japanese in the index or not — and the index lines the loop actually covered then add the words
+   they hold behind that reading, deduplicated. With no model installed the crop yields no reading,
+   and the answer is those index lines' text — or, before the index exists, ML Kit's own reading of
+   the crop. The rest of the screen keeps being read behind the result.
 6. **Repair** — common OCR confusions are fixed against the dictionary before lookup (ー/一,
    カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
@@ -82,17 +82,19 @@ build fails early with a clear message if step 1 was skipped.
 ML Kit finds the lines; manga-ocr reads them. ML Kit's own reading is good on plain text but misreads
 stylized fonts — outlined video-thumbnail text, hand-lettered manga lettering — which is exactly what
 [manga-ocr](https://github.com/kha-white/manga-ocr) (a ViT encoder plus a BERT decoder, run on
-[ONNX Runtime](https://onnxruntime.ai/)) is trained on. With the model installed and the settings
-toggle on ("Read Japanese text with manga-ocr", the default), it becomes the reader of every line
-worth reading: the Japanese lines, and lines too short for ML Kit to have had anything to go on.
-Latin and digit lines keep ML Kit's text, because manga-ocr widens ASCII to full width and there is
-nothing to gain.
+[ONNX Runtime](https://onnxruntime.ai/)) is trained on. With the model installed it is offered every
+line ML Kit found, whatever script ML Kit read it in — a line it read as Latin can still be stylized
+Japanese — and the line's final text decides whether it stays: a line with no Japanese in it is
+dropped, so Latin and digit lines do not stay on screen as text. A circle does not depend on any of
+that: it crops the rectangle it was drawn around and attempts manga-ocr on that, whatever the index
+found elsewhere on the screen.
 
 Nothing waits for it. The overlay is usable as soon as ML Kit's index exists; the lines are then read
-in the background, biggest boxes first, and a tap or a lasso waits only for the lines it touched —
-one, usually, at 2.5 s each at the very worst. Any line it cannot read (no model, a failure, a
-timeout, a runaway answer) keeps ML Kit's text, and the rest of the screen keeps being read behind
-the result sheet, so the next gesture usually needs no wait at all.
+in the background, biggest boxes first, and a tap waits only for the line it touched — one, usually,
+at 2.5 s at the very worst. A circle's crop is read before the lines it covered are, so the answer
+never queues behind them. Any line it cannot read (no model, a failure, a timeout, a runaway answer)
+keeps ML Kit's text, and the rest of the screen keeps being read behind the result sheet, so the next
+gesture usually needs no wait at all.
 
 The model is ~117 MB, so it is never part of a release APK. There are three ways to get it onto a
 phone, and the app only reaches the network for the first one:
@@ -114,8 +116,9 @@ phone, and the app only reaches the network for the first one:
   the app copies them into its own storage the first time the second pass runs. Without the property
   nothing is downloaded, and a release build never sees the files.
 
-Without the model — or with the toggle off — ML Kit both finds and reads the lines, which is exactly
-what the app did before the model existed.
+Without the model, ML Kit both finds and reads the lines, which is exactly what the app did before
+the model existed; a circle is then answered from the index lines it covered, or — before the index
+exists — from ML Kit's own reading of the crop.
 
 The catalog also lists `encoder_model_fp16.onnx` / `decoder_model_fp16.onnx` from the same
 repository — they are **not** offered, because ONNX Runtime refuses to load the fp16 decoder (its
@@ -131,13 +134,12 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
   Settings tile, accessibility service.
 - `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the optional meiki
   text-line detector (`meiki.text.detect.v0`, shipped in the APK alongside ML Kit and merged into
-  ML Kit's boxes by `DetectionMerge`), selection snapping, the
-  full-screen text index (`ScreenText*`, `ScreenHits`) and `OcrRepair`. The reader is
-  `ScreenLineReader` (the per-session cache that replaces each line's text as manga-ocr reads it, and
-  drops the lines whose final text has no Japanese), `MangaOcrModel` (where the model lives),
-  `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrLinePolicy` (when an answer is
-  kept) and `RegionReadPolicy` (what a circled region reads as). `MangaOcrCatalog` is the list of
-  downloadable models and `MangaOcrDownloader` the only network code in the app.
+  ML Kit's boxes by `DetectionMerge`), the full-screen text index (`ScreenText*`, `ScreenHits`) and
+  `OcrRepair`. The reader is `ScreenLineReader` (the per-session cache that replaces each line's text
+  as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
+  (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop) and
+  `OcrLinePolicy` (when an answer is kept). `MangaOcrCatalog` is the list of downloadable models and
+  `MangaOcrDownloader` the only network code in the app.
 - `anki/` — the AnkiDroid instant-add export.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).

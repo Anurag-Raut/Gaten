@@ -127,11 +127,11 @@ private fun sheetExit(dock: SheetDock, fraction: Float): ExitTransition = when (
  * usable the moment that index exists, and manga-ocr then reads its lines behind it
  * ([ScreenLineReader]), replacing each one's text as it lands. Ready is ML Kit's index: the
  * optional meiki model runs afterwards, entirely behind the ready overlay, and the lines it finds
- * beyond ML Kit's are appended to the live index and read like every other line. A tap or a lasso waits for the lines
- * it touched — and only those — before answering from the index, and the region OCR path stays as
- * the fallback while the scan runs and when it is unavailable. Words are tokenised against the
- * offline JMdict and shown in a bottom sheet. The dictionary is opened once and kept warm for the
- * whole overlay lifetime.
+ * beyond ML Kit's are appended to the live index and read like every other line. A tap waits for the
+ * line it touched — and only that one — before answering from the index. A circle is read from its
+ * own crop first, whatever the index holds; the lines it covered are read after that, and only then,
+ * and supplement the crop's words. Words are tokenised against the offline JMdict and shown in a
+ * bottom sheet. The dictionary is opened once and kept warm for the whole overlay lifetime.
  */
 @Composable
 fun LookupOverlay(
@@ -161,8 +161,8 @@ fun LookupOverlay(
     var result by remember { mutableStateOf<LookupResult?>(null) }
 
     // One full-screen OCR pass on open, keyed to the screenshot so each new capture rescans. It
-    // answers taps and lassos from the index for the rest of the session; the region OCR path
-    // stays as the fallback while it runs and when it is unavailable.
+    // answers taps from the index for the rest of the session, and a circle from its own crop
+    // whatever the index holds.
     val scanState by produceState<ScanState>(ScanState.Scanning, screenshot) {
         val bmp = screenshot
         if (bmp == null) {
@@ -315,7 +315,7 @@ fun LookupOverlay(
         ) {
             return
         }
-        // The trail is drawn in view pixels; the index, the hit tests and the region crop are all in
+        // The trail is drawn in view pixels; the index, the hit tests and the selection crop are all in
         // the capture's pixels, so the selection is converted on the way in.
         val bitmapBox = mapping.toBitmap(box)
         frozenTrail = buildTrailPath(drawn)
@@ -330,26 +330,16 @@ fun LookupOverlay(
                     bitmapBox.right.toInt(),
                     bitmapBox.bottom.toInt()
                 )
+                // The circle is read from its own crop inside runLookup, index or no index, before
+                // anything else. The lines it touched are handed over as a callback and read only
+                // once the crop is in, so the answer never waits on the lines beside it; which
+                // lines those are comes from the index as it stands, and the spans themselves are
+                // resolved again inside runLookup, because a line that has been read no longer has
+                // the same offsets.
                 val live = screen
-                val lookup = if (live == null) {
-                    Log.d(TAG, "Circle path: region")
-                    runLookup(context, bmp, bitmapBox, repo)
-                } else {
-                    Log.d(TAG, "Circle path: index")
-                    // Which lines to read comes from the index as it stands; the spans themselves
-                    // are resolved again inside lookupFromSelection, because a line that has been
-                    // read no longer has the same offsets.
-                    val indexed = readGestureLines(
-                        live,
-                        ScreenHits.spansInSelection(live, selection).map { it.lineIndex }
-                    )
-                    withContext(Dispatchers.Default) {
-                        lookupFromSelection(
-                            indexed,
-                            selection,
-                            lookup = { term -> repo?.lookup(term) ?: emptyList() }
-                        )
-                    }
+                Log.d(TAG, "Circle path: crop read (index ${if (live == null) "unavailable" else "ready"})")
+                val lookup = runLookup(context, bmp, bitmapBox, repo) {
+                    live?.let { readGestureLines(it, ScreenHits.linesInSelection(it, selection)) }
                 }
                 val failure = (repoState as? RepoState.Failed)?.message
                 if (failure != null) lookup.copy(error = failure) else lookup

@@ -47,9 +47,10 @@ class ScreenLookupTest {
         val screen = screenOf(screenLine("猫が水を飲む", top = 100))
         val lookup = dictionaryOf("猫", "水", "飲む")
 
-        // 40 px characters: 水 80..120, を 120..160, 飲 160..200. The half character of slack
-        // pulls を in at 145, but が's slack ends at 100 and む's starts at 180.
-        val result = lookupFromSelection(screen, Box(105, 110, 145, 140), lookup)
+        // 40 px characters: 水 80..120, を 120..160, 飲 160..200, む 200..240. The selection covers
+        // 水, を and 飲 and stops before む, and there is no slack: a character the loop did not
+        // reach is not selected.
+        val result = lookupFromSelection(screen, Box(100, 110, 170, 140), lookup)
 
         assertEquals(listOf("水", "飲む"), result.words.map { it.surface })
         // 猫 lies outside the selection and is gone; 飲む is not clipped to 飲.
