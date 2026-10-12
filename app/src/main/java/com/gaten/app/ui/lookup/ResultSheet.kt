@@ -14,6 +14,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -25,8 +28,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -35,7 +37,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -72,6 +74,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -108,14 +111,25 @@ private val RightSheetShape = RoundedCornerShape(topStart = SheetCorner, bottomS
 /** Height of the compact "Add to Anki" button: shorter than the 40dp default, still tappable. */
 private val CompactButtonHeight = 36.dp
 
+/** The handle row's height: a generous 48dp touch target for the drag-to-dismiss grip. */
+private val HandleTouchHeight = 48.dp
+
+/** The handle pill's width at rest; it stretches by [HandleStretch] at a full dismiss drag. */
+private val HandleWidth = 32.dp
+private val HandleStretch = 16.dp
+
+/** The word chip row's fixed height, so scrolling chips can never grow the sheet. */
+private val ChipRowHeight = 40.dp
+
 /**
  * One sheet's whole text scale, so a dock only has to say whether it is compact.
  *
- * The bottom dock passes the theme's own styles straight through — the portrait sheet must not
- * change. The side dock swaps in a tighter copy of them: the headword drops from [MaterialTheme]
- * displaySmall (32sp) to titleLarge (22sp), the reading 16sp -> 15sp, the part-of-speech and badge
- * line 12sp -> 11sp, the glosses 16sp -> 13sp on a 17sp line, chips 14sp -> 12sp and the Add
- * button's label 14sp -> 12sp. Nothing here touches the theme.
+ * The bottom dock keeps the theme's own styles, only a step larger for the glosses (bodyLarge
+ * 16sp -> 17sp) and the small muted lines (bodySmall 12sp -> 13sp). The side dock swaps in a tighter
+ * copy of them: the headword drops from [MaterialTheme] displaySmall (32sp) to titleLarge (22sp),
+ * the reading 16sp -> 15sp, the part-of-speech and badge line 12sp -> 11sp, the glosses to 14sp on a
+ * 17sp line, the small muted lines to 12sp on a 15sp line, chips 14sp -> 12sp and the Add button's
+ * label 14sp -> 12sp. Nothing here touches the theme.
  */
 private data class SheetType(
     val header: TextStyle,
@@ -140,10 +154,10 @@ private fun sheetType(compact: Boolean): SheetType {
                 headword = type.titleLarge,
                 reading = type.titleMedium.copy(fontSize = 15.sp, lineHeight = 20.sp),
                 small = type.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
-                gloss = type.bodyLarge.copy(fontSize = 13.sp, lineHeight = 17.sp),
+                gloss = type.bodyLarge.copy(fontSize = 14.sp, lineHeight = 17.sp),
                 chip = type.labelLarge.copy(fontSize = 12.sp),
                 menu = type.bodyMedium.copy(fontSize = 12.sp),
-                sub = type.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
+                sub = type.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
                 button = type.labelSmall
             )
         } else {
@@ -152,10 +166,10 @@ private fun sheetType(compact: Boolean): SheetType {
                 headword = type.displaySmall,
                 reading = type.titleMedium,
                 small = type.labelSmall,
-                gloss = type.bodyLarge,
+                gloss = type.bodyLarge.copy(fontSize = 17.sp),
                 chip = type.labelLarge,
                 menu = type.bodyMedium,
-                sub = type.bodySmall,
+                sub = type.bodySmall.copy(fontSize = 13.sp),
                 button = type.labelLarge
             )
         }
@@ -168,12 +182,15 @@ private fun sheetType(compact: Boolean): SheetType {
  *
  * A side dock (landscape) fills the height and takes [SheetLayout.fraction] of the width, keeps its
  * content clear of the status bar, nav bar and camera cutout, and carries the same compact scale
- * throughout so far more of the entry fits without scrolling. The bottom dock (portrait) is
- * untouched: full width, a bottom-docked cap on its height, top corners and nav-bar padding.
+ * throughout so far more of the entry fits without scrolling. The bottom dock (portrait) is full
+ * width with a bottom-docked cap on its height and rounded top corners; it paints edge-to-edge to
+ * the physical bottom, under the navigation strip, and insets only its content.
  *
  * Everything beside the sheet stays as scrim; tapping it dismisses the overlay, as does dragging
- * the handle toward the docked edge past [DISMISS_DRAG_DP]. Chip selection crossfades the entry;
- * empty and error results collapse the body to one muted line plus "Select again".
+ * the handle — and the rest of the panel — toward the docked edge past [DISMISS_DRAG_DP]. While
+ * dragged, the bottom sheet follows the finger and springs back if the drag was short. Chip
+ * selection crossfades the entry; empty and error results collapse the body to one muted line plus
+ * "Select again".
  */
 @Composable
 fun ResultSheet(
@@ -188,6 +205,14 @@ fun ResultSheet(
     val type = sheetType(compact)
     val dismissDragPx = with(LocalDensity.current) { DISMISS_DRAG_DP.dp.toPx() }
     var dragDistance by remember { mutableStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    // Snapped while the finger is down, so the sheet tracks it exactly; springing back on release.
+    val sheetOffset by animateFloatAsState(
+        targetValue = dragDistance,
+        animationSpec = if (dragging) snap() else spring(),
+        label = "sheetDrag"
+    )
+    val dragProgress = (sheetOffset / dismissDragPx).coerceIn(0f, 1f)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim over the rest of the screen: a tap dismisses the overlay.
@@ -198,20 +223,26 @@ fun ResultSheet(
         )
 
         // Drag-to-dismiss toward the docked edge — down for the bottom, left or right for a side.
-        // The scrollable entry wins its own scroll gesture, as intended.
+        // The scrollable entry wins its own scroll gesture, as intended. The bottom drag clamps at
+        // zero: the sheet follows the finger down and must never lift off its docked edge.
         val dragModifier = when (dock) {
             SheetDock.Bottom -> Modifier.pointerInput(dismissDragPx) {
                 detectVerticalDragGestures(
+                    onDragStart = { dragging = true },
                     onVerticalDrag = { change, amount ->
                         change.consume()
-                        dragDistance += amount
+                        dragDistance = (dragDistance + amount).coerceAtLeast(0f)
                     },
                     onDragEnd = {
+                        dragging = false
                         val dragged = dragDistance
                         dragDistance = 0f
                         if (dragged > dismissDragPx) onDismiss()
                     },
-                    onDragCancel = { dragDistance = 0f }
+                    onDragCancel = {
+                        dragging = false
+                        dragDistance = 0f
+                    }
                 )
             }
 
@@ -239,7 +270,8 @@ fun ResultSheet(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * layout.fraction)
-                    .navigationBarsPadding(),
+                    // Dragged: the sheet rides the finger, past the physical bottom and back.
+                    .graphicsLayer { translationY = sheetOffset },
                 shape = BottomSheetShape,
                 color = MaterialTheme.colorScheme.surface
             ) {
@@ -248,8 +280,11 @@ fun ResultSheet(
                         .fillMaxWidth()
                         .then(dragModifier)
                         .padding(horizontal = Spacing.l)
+                        // Inset inside the panel, not around it: the sheet colour paints under the
+                        // navigation strip, which stays transparent over it.
+                        .windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
-                    HandleBar()
+                    HandleBar(dragProgress)
                     SheetBody(
                         result = result,
                         selected = selected,
@@ -303,18 +338,23 @@ fun ResultSheet(
     }
 }
 
-/** The grip at the inner edge of the bottom dock: the horizontal pill the sheet has always drawn. */
+/**
+ * The grip at the inner edge of the bottom dock: the horizontal pill the sheet has always drawn,
+ * inside a 48dp touch target. [dragProgress] is how far a dismiss drag has come, 0 to 1: the pill
+ * stretches with it, so the handle answers the finger before the sheet is let go.
+ */
 @Composable
-private fun HandleBar() {
+private fun HandleBar(dragProgress: Float = 0f) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = HandleTouchHeight)
             .padding(vertical = Spacing.s),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .width(32.dp)
+                .width(HandleWidth + HandleStretch * dragProgress)
                 .height(4.dp)
                 .background(MaterialTheme.colorScheme.outline, CircleShape)
         )
@@ -483,11 +523,10 @@ private fun EmptyState(
 }
 
 /**
- * The scanned words as chips, the selected one filled primary. The side dock wraps them onto as
- * many lines as it takes, so every word stays visible in a panel only two fifths wide; the bottom
- * dock keeps the single scrolling row it has always had.
+ * The scanned words as chips, the selected one filled primary. One horizontally scrolling row at
+ * every dock — portrait bottom sheet and landscape side panel alike — so the words never wrap and
+ * the panel's height cannot change with how many were scanned.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChipRow(
     words: List<ScannedWord>,
@@ -496,24 +535,16 @@ private fun ChipRow(
     type: SheetType,
     compact: Boolean
 ) {
-    if (!compact) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            itemsIndexed(words) { index, word ->
-                Chip(word, index == selected, { onSelect(index) }, type, compact = false)
-            }
-        }
-        return
-    }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-        modifier = Modifier.fillMaxWidth()
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+        contentPadding = PaddingValues(horizontal = Spacing.l),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = ChipRowHeight, max = ChipRowHeight)
     ) {
-        words.forEachIndexed { index, word ->
-            Chip(word, index == selected, { onSelect(index) }, type, compact = true)
+        itemsIndexed(words) { index, word ->
+            Chip(word, index == selected, { onSelect(index) }, type, compact)
         }
     }
 }
