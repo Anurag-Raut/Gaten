@@ -10,16 +10,19 @@ package com.gaten.app.ui.overlay
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
+import android.os.Build
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -77,8 +80,14 @@ class OverlayWindowController(
         view.setViewTreeViewModelStoreOwner(host)
         view.setViewTreeSavedStateRegistryOwner(host)
         view.setViewTreeOnBackPressedDispatcherOwner(host)
+        val frozen = bitmap.asImageBitmap()
         view.setContent {
             GatenTheme {
+                // The capture itself, unscaled from the window's origin, is the freeze: the app
+                // keeps running underneath - the player pauses after the screenshot, raising its
+                // controls and moving its subtitles - and none of that shows through. Drawn 1:1, it
+                // lines up with the recognised boxes, which are in the same screenshot pixels.
+                Canvas(Modifier.fillMaxSize()) { drawImage(frozen) }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent,
@@ -95,8 +104,7 @@ class OverlayWindowController(
         windowManager.addView(view, windowParams())
         host.onResume()
         showing = Showing(view, host)
-        // Media was paused by the trigger pipeline before the capture, not here: the pause has to
-        // land before the screenshot, or the frame is the pre-pause UI.
+        // Media is paused by the trigger pipeline once the capture is stored, not here.
         Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture")
     }
 
@@ -127,7 +135,9 @@ class OverlayWindowController(
     /**
      * Full-screen and transparent, so the overlay sits exactly where the capture was taken: the
      * lasso and the recognised boxes are in screenshot pixels, and those are only the same as view
-     * pixels when the window covers the whole display from its origin.
+     * pixels when the window covers the whole display from its origin. By default the system keeps
+     * a window out of the cutout band while the status bar is hidden - over fullscreen video - and
+     * shrinks it for a visible navigation bar, so both are switched off.
      */
     private fun windowParams() = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
@@ -137,7 +147,15 @@ class OverlayWindowController(
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
-    ).apply { gravity = Gravity.TOP or Gravity.START }
+    ).apply {
+        gravity = Gravity.TOP or Gravity.START
+        layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        } else {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) fitInsetsTypes = 0
+    }
 
     /** The overlay on screen: the view to detach and the host its lifecycle runs on. */
     private class Showing(val view: ComposeView, val host: OverlayHost)

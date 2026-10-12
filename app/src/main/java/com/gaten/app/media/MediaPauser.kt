@@ -13,9 +13,6 @@ import android.media.AudioManager
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationManagerCompat
@@ -23,12 +20,6 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 private const val TAG = "Gaten"
-
-/** How often [MediaPauser.pause] re-checks `isMusicActive` while it waits for playback to stop. */
-private const val PlaybackStopPollMs = 50L
-
-/** How long [MediaPauser.pause] waits for playback to actually stop before reporting anyway. */
-private const val PlaybackStopTimeoutMs = 800L
 
 /**
  * True when the user has granted Gaten notification-listener access in system settings.
@@ -68,9 +59,6 @@ class MediaPauser(private val context: Context) {
 
     private val executor: Executor = Executors.newSingleThreadExecutor()
 
-    /** Where [pause]'s `onPaused` callback lands: the callers touch windows and views. */
-    private val mainHandler = Handler(Looper.getMainLooper())
-
     /** Sessions [pause] stopped, with the state each was in, so [resume] restores only those. */
     private val paused = mutableListOf<Pair<MediaController, Int>>()
 
@@ -80,23 +68,17 @@ class MediaPauser(private val context: Context) {
     /**
      * Pauses the media playing now, remembering it for [resume]. Safe to call with nothing playing.
      *
-     * The session lookup, the transport calls and the playback-stop wait all run on the private
-     * executor, then [onPaused] is posted to the main thread; it fires in every case — nothing
-     * playing, no notification access, a denied session lookup, and after a real pause. Callers
-     * capture the screen from that callback, so it is what guarantees the frame is post-pause.
-     *
-     * The callback's argument says whether this call stopped (or may have stopped) playback. When
-     * it is false nothing was playing, so the screen was not disturbed by a pause and a caller can
-     * capture it as it is.
+     * The session lookup and the transport calls run on the private executor; nothing is reported
+     * back. The lookup overlay already shows a frozen screenshot by the time this is called, so
+     * nobody waits for the player to actually stop.
      */
-    fun pause(onPaused: (wasPlaying: Boolean) -> Unit) = executor.execute { pauseNow(onPaused) }
+    fun pause() = executor.execute(::pauseNow)
 
     /** Plays back only what [pause] stopped. A no-op when nothing was paused. */
     fun resume() = executor.execute(::resumeNow)
 
-    private fun pauseNow(onPaused: (Boolean) -> Unit) {
+    private fun pauseNow() {
         if (paused.isNotEmpty() || pausedByKeyEvent) {
-            postOnPaused(onPaused, true)
             return
         }
 
@@ -104,8 +86,6 @@ class MediaPauser(private val context: Context) {
             Log.d(TAG, "No notification access - pausing with a media key event instead")
             dispatchKeyEvent(KeyEvent.KEYCODE_MEDIA_PAUSE)
             pausedByKeyEvent = true
-            // The key event is sent blind: playback may well have been stopped by it.
-            postOnPaused(onPaused, true)
             return
         }
 
@@ -116,7 +96,6 @@ class MediaPauser(private val context: Context) {
             Log.w(TAG, "Media session access denied - pausing with a media key event instead", e)
             dispatchKeyEvent(KeyEvent.KEYCODE_MEDIA_PAUSE)
             pausedByKeyEvent = true
-            postOnPaused(onPaused, true)
             return
         }
 
@@ -131,40 +110,12 @@ class MediaPauser(private val context: Context) {
         // "something is coming out of the music stream" flag; when it is set and no session was
         // pausable, send the same key a headset button would. It stays quiet when nothing plays, so
         // an overlay over silence never queues a play() for the way out.
-        var pausedByKey = false
         if (paused.isEmpty() && audio.isMusicActive()) {
             Log.d(TAG, "No pausable media session - pausing with a media key event instead")
             dispatchKeyEvent(KeyEvent.KEYCODE_MEDIA_PAUSE)
             pausedByKeyEvent = true
-            pausedByKey = true
         }
         Log.d(TAG, "Paused ${paused.size} of ${active.size} media sessions")
-
-        // Something was playing: the transport pause is asynchronous, and a capture taken before
-        // the audio stops is the pre-pause frame. Wait for the music stream to go quiet first.
-        val wasPlaying = paused.isNotEmpty() || pausedByKey
-        if (wasPlaying) {
-            awaitPlaybackStopped()
-        }
-        postOnPaused(onPaused, wasPlaying)
-    }
-
-    /** Spins on the executor until `isMusicActive` goes false, or [PlaybackStopTimeoutMs] elapses. */
-    private fun awaitPlaybackStopped() {
-        val deadline = SystemClock.uptimeMillis() + PlaybackStopTimeoutMs
-        while (audio.isMusicActive() && SystemClock.uptimeMillis() < deadline) {
-            try {
-                Thread.sleep(PlaybackStopPollMs)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return
-            }
-        }
-    }
-
-    /** Posts the pause callback to the main thread, where every caller expects it. */
-    private fun postOnPaused(onPaused: (Boolean) -> Unit, wasPlaying: Boolean) {
-        mainHandler.post { onPaused(wasPlaying) }
     }
 
     private fun resumeNow() {
