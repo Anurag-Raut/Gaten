@@ -13,11 +13,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Icon as TileIcon
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.text.TextUtils
+import android.text.format.Formatter
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -35,23 +39,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,18 +79,24 @@ import com.gaten.app.LookupTriggerReceiver
 import com.gaten.app.R
 import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.media.hasNotificationAccess
+import com.gaten.app.ocr.MangaOcrCatalog
+import com.gaten.app.ocr.MangaOcrDownloader
+import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.OcrEngine
 import com.gaten.app.ocr.OcrPreferences
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
 import com.gaten.app.ui.theme.Spacing
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private const val EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch"
 
 /**
- * Home screen: service status, the two ways to start a lookup, the OCR engine setting and the
- * legal footer. The app is used from the overlay, so this stays a plain setup page.
+ * Home screen: service status, the two ways to start a lookup, the OCR engine setting, the optional
+ * manga-ocr model and the legal footer. The app is used from the overlay, so this stays a plain
+ * setup page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +104,7 @@ fun HomeScreen() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
 
     // Service state, re-read on every resume because the user grants it in Settings.
     var serviceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
@@ -98,6 +114,64 @@ fun HomeScreen() {
     var floatingEnabled by remember {
         mutableStateOf(TriggerPreferences.floatingButtonEnabled(context))
     }
+    var mangaInstalled by remember { mutableStateOf(MangaOcrModel.isInstalled(context)) }
+    var mangaSizeBytes by remember { mutableStateOf(MangaOcrModel.installedSizeBytes(context)) }
+    var mangaCatalogId by remember { mutableStateOf(MangaOcrModel.installedCatalogId(context)) }
+    var mangaEnabled by remember { mutableStateOf(OcrPreferences.mangaOcrEnabled(context)) }
+    // The entry the confirm dialog is asking about, the one downloading, and its progress.
+    var confirmDownload by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
+    var downloading by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
+    var downloadProgress by remember { mutableStateOf<MangaOcrDownloader.Progress?>(null) }
+    val downloader = remember { MangaOcrDownloader(MangaOcrModel.dir(context)) }
+
+    fun refreshMangaModel() {
+        mangaInstalled = MangaOcrModel.isInstalled(context)
+        mangaSizeBytes = MangaOcrModel.installedSizeBytes(context)
+        mangaCatalogId = MangaOcrModel.installedCatalogId(context)
+    }
+
+    /** Runs the download the user confirmed, keeping the progress bar and the outcome message in sync. */
+    fun startDownload(entry: MangaOcrCatalog.Entry) {
+        confirmDownload = null
+        downloading = entry
+        downloadProgress = null
+        scope.launch {
+            // The progress callback fires on Dispatchers.IO; Compose snapshot writes are thread-safe.
+            val outcome = downloader.download(entry) { downloadProgress = it }
+            downloading = null
+            downloadProgress = null
+            refreshMangaModel()
+            val message = when (outcome) {
+                MangaOcrDownloader.Outcome.Installed ->
+                    context.getString(R.string.home_manga_download_ok, entry.label)
+
+                MangaOcrDownloader.Outcome.Cancelled ->
+                    context.getString(R.string.home_manga_download_cancelled)
+
+                is MangaOcrDownloader.Outcome.Failed ->
+                    context.getString(R.string.home_manga_download_failed, outcome.reason)
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // The other way onto the device: the three files, from wherever the user got them.
+    val pickModelFiles = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val installed = MangaOcrModel.importFrom(context, uris)
+            refreshMangaModel()
+            Toast.makeText(
+                context,
+                context.getString(
+                    if (installed) R.string.home_manga_import_ok else R.string.home_manga_import_failed
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -105,6 +179,7 @@ fun HomeScreen() {
                 serviceEnabled = isAccessibilityServiceEnabled(context)
                 notificationAccess = hasNotificationAccess(context)
                 floatingEnabled = TriggerPreferences.floatingButtonEnabled(context)
+                refreshMangaModel()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -226,6 +301,29 @@ fun HomeScreen() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            SectionLabel(text = stringResource(R.string.home_section_manga))
+            MangaOcrSection(
+                installed = mangaInstalled,
+                installedId = mangaCatalogId,
+                sizeBytes = mangaSizeBytes,
+                enabled = mangaEnabled,
+                downloading = downloading,
+                progress = downloadProgress,
+                onToggle = { checked ->
+                    mangaEnabled = checked
+                    OcrPreferences.setMangaOcrEnabled(context, checked)
+                },
+                onDownload = { entry -> confirmDownload = entry },
+                onCancelDownload = { downloader.cancel() },
+                onImport = { pickModelFiles.launch(arrayOf("*/*")) },
+                onRemove = {
+                    MangaOcrModel.remove(context)
+                    refreshMangaModel()
+                }
+            )
+
             Spacer(modifier = Modifier.height(Spacing.xxl))
             AboutFooter()
             Spacer(modifier = Modifier.height(Spacing.xl))
@@ -247,6 +345,38 @@ fun HomeScreen() {
                 }
             },
             onDismiss = { showDisclosure = false }
+        )
+    }
+
+    // The size is shown before anything is fetched, and on mobile data the wording says so: the
+    // download must never start as a surprise on a metered connection.
+    confirmDownload?.let { entry ->
+        val metered = remember(entry) { isMetered(context) }
+        AlertDialog(
+            onDismissRequest = { confirmDownload = null },
+            title = { Text(stringResource(R.string.home_manga_confirm_title, entry.label)) },
+            text = {
+                Text(
+                    stringResource(
+                        if (metered) {
+                            R.string.home_manga_confirm_metered
+                        } else {
+                            R.string.home_manga_confirm_body
+                        },
+                        entry.approxSizeMb
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { startDownload(entry) }) {
+                    Text(stringResource(R.string.home_manga_download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDownload = null }) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
         )
     }
 }
@@ -348,6 +478,193 @@ private fun FloatingButtonRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
         Spacer(modifier = Modifier.width(Spacing.m))
         Switch(checked = enabled, onCheckedChange = onToggle)
     }
+}
+
+/**
+ * The optional manga-ocr model: what is installed, the models the catalog offers, the switch that
+ * lets it re-read ML Kit's doubtful lines, and the ways onto the device.
+ *
+ * Downloading is the app's only network request, and it only happens after the size has been shown
+ * and confirmed ([confirmDownload] in the screen above); importing opens a document picker for a
+ * phone that has no network or a model fetched elsewhere. Both end up in the same place, and Remove
+ * takes the model off again.
+ */
+@Composable
+private fun MangaOcrSection(
+    installed: Boolean,
+    installedId: String?,
+    sizeBytes: Long,
+    enabled: Boolean,
+    downloading: MangaOcrCatalog.Entry?,
+    progress: MangaOcrDownloader.Progress?,
+    onToggle: (Boolean) -> Unit,
+    onDownload: (MangaOcrCatalog.Entry) -> Unit,
+    onCancelDownload: () -> Unit,
+    onImport: () -> Unit,
+    onRemove: () -> Unit
+) {
+    val installedLabel = MangaOcrCatalog.byId(installedId)?.label
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_manga_enabled),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Text(
+                    text = mangaStatusText(installed, installedLabel, sizeBytes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(Spacing.m))
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+        Spacer(modifier = Modifier.height(Spacing.s))
+        Text(
+            text = stringResource(R.string.home_manga_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        for (entry in MangaOcrCatalog.entries) {
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.m),
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.m),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Text(
+                        text = stringResource(R.string.home_manga_entry_size, entry.approxSizeMb),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Text(
+                        text = entry.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(Spacing.m))
+                if (installed && installedId == entry.id) {
+                    Text(
+                        text = stringResource(R.string.home_manga_installed_chip),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Button(
+                        onClick = { onDownload(entry) },
+                        enabled = downloading == null
+                    ) {
+                        Text(stringResource(R.string.home_manga_download))
+                    }
+                }
+            }
+        }
+
+        downloading?.let { entry ->
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.m),
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.m),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.home_manga_downloading, entry.label),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.s))
+                    val fraction = progress?.fraction
+                    if (fraction == null) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { fraction.toFloat() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Text(
+                        text = mangaProgressText(progress),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(Spacing.m))
+                TextButton(onClick = onCancelDownload) {
+                    Text(stringResource(R.string.home_manga_cancel))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.m))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onImport, enabled = downloading == null) {
+                Text(stringResource(R.string.home_manga_import))
+            }
+            if (installed) {
+                Spacer(modifier = Modifier.width(Spacing.m))
+                OutlinedButton(onClick = onRemove, enabled = downloading == null) {
+                    Text(stringResource(R.string.home_manga_remove))
+                }
+            }
+        }
+    }
+}
+
+/** "Installed: manga-ocr (int8) (117 MB)", "Installed (117 MB)", or "Not installed". */
+@Composable
+private fun mangaStatusText(installed: Boolean, installedLabel: String?, sizeBytes: Long): String {
+    val context = LocalContext.current
+    val size = Formatter.formatShortFileSize(context, sizeBytes)
+    return when {
+        !installed -> stringResource(R.string.home_manga_status_missing)
+        installedLabel != null -> stringResource(R.string.home_manga_status_installed, installedLabel, size)
+        else -> stringResource(R.string.home_manga_status_installed_unknown, size)
+    }
+}
+
+/** "42% · decoder.onnx", or just the file name when the entry does not declare its sizes. */
+@Composable
+private fun mangaProgressText(progress: MangaOcrDownloader.Progress?): String {
+    val percent = progress?.fraction?.let { (it * 100).roundToInt() }
+    return when {
+        progress == null -> stringResource(R.string.home_manga_progress_starting)
+        percent == null -> stringResource(R.string.home_manga_progress_unknown, progress.fileName)
+        else -> stringResource(R.string.home_manga_progress, percent, progress.fileName)
+    }
+}
+
+/** True when the active network is metered, i.e. a download would run on mobile data. */
+private fun isMetered(context: Context): Boolean = try {
+    context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == true
+} catch (_: Exception) {
+    false
 }
 
 /** Muted uppercase-style section header followed by a small gap. */

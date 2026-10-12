@@ -12,16 +12,22 @@
 
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
-    <!-- Gaten is fully offline: on-device OCR and a bundled dictionary, no network code.
-         Google's transport library (pulled in by ML Kit) still asks for INTERNET for its
-         analytics backend, so it has to be removed explicitly or it stays in the merged manifest
-         and that backend can phone home. ACCESS_NETWORK_STATE only comes from profileinstaller
-         and grants no access. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- Reading is offline: the screenshot is recognised on-device, the dictionary is bundled and
+         the Anki export is local IPC. INTERNET is here for one thing only — downloading the optional
+         manga-ocr model (ocr/MangaOcrDownloader.kt) when the user taps Download on the settings
+         screen, having been shown the size. Nothing else in the app makes a request, and nothing
+         downloads without that tap.
+
+         It also has to be declared rather than removed: ML Kit's transport library and ONNX Runtime
+         both ask for it for their analytics and telemetry backends, and stripping it from the merged
+         manifest would take the model download with it. ACCESS_NETWORK_STATE comes from
+         profileinstaller, ONNX Runtime and androidx; the app reads it to warn when the download would
+         run on mobile data. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- AnkiDroid is reached through its `flashcards` ContentProvider, which Android 11+ hides from
          other packages unless the package is named here. The provider's READ_WRITE_DATABASE
-         permission comes along with the API library. Still no INTERNET: this is on-device IPC. -->
+         permission comes along with the API library. No network is involved: this is on-device IPC. -->
     <queries>
         <package android:name="com.ichi2.anki" />
     </queries>

@@ -20,6 +20,7 @@ enum class OcrEngine { MLKIT, TESSERACT }
 object OcrPreferences {
     private const val PREFS_NAME = "gaten_settings"
     private const val KEY_OCR_ENGINE = "ocr_engine"
+    private const val KEY_MANGA_OCR = "manga_ocr_enabled"
 
     fun engine(context: Context): OcrEngine {
         val stored = prefs(context).getString(KEY_OCR_ENGINE, null)
@@ -28,6 +29,16 @@ object OcrPreferences {
 
     fun setEngine(context: Context, engine: OcrEngine) {
         prefs(context).edit().putString(KEY_OCR_ENGINE, engine.name).apply()
+    }
+
+    /**
+     * Whether the optional manga-ocr model may re-read the lines ML Kit read badly. On by default:
+     * the model does nothing at all until it is installed, and once it is, the reader asked for it.
+     */
+    fun mangaOcrEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_MANGA_OCR, true)
+
+    fun setMangaOcrEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_MANGA_OCR, enabled).apply()
     }
 
     private fun prefs(context: Context) =

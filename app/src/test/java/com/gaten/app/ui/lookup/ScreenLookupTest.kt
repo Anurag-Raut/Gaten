@@ -8,6 +8,8 @@ package com.gaten.app.ui.lookup
 
 import com.gaten.app.dict.dictionaryOf
 import com.gaten.app.ocr.Box
+import com.gaten.app.ocr.ScreenHits
+import com.gaten.app.ocr.withText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -16,6 +18,27 @@ import org.junit.Test
 
 /** [lookupFromSelection] (a lasso) and [lookupFromTap] (a tap), answered from the screen index. */
 class ScreenLookupTest {
+
+    @Test
+    fun aTapAfterTheTextWasReplacedAddressesTheNewText() {
+        // ML Kit read three characters of this line; manga-ocr read five, so the boxes were rebuilt.
+        val line = screenLine("猫カド", top = 100).withText("猫がカード")
+        val screen = screenOf(line)
+        val lookup = dictionaryOf("猫", "カード")
+
+        // 40 px characters became 24 px ones, so x = 110 addresses ド at index 4 in the new text and
+        // at index 2 in ML Kit's: the offset moved with the text rather than being carried over.
+        assertEquals(2, ScreenHits.hitTest(screenOf(screenLine("猫カド", top = 100)), 110, 130, 8)?.charIndex)
+        assertEquals(4, ScreenHits.hitTest(screen, 110, 130, 8)?.charIndex)
+
+        val tap = lookupFromTap(screen, 110, 130, 8, lookup)
+
+        assertNotNull(tap)
+        assertEquals("カード", tap!!.result.words.first().surface)
+        // The word's box is the union of the new character boxes it spans.
+        assertEquals(Box(48, 100, 120, 160), tap.wordBox)
+        assertEquals("猫がカード", tap.result.ocrText)
+    }
 
     @Test
     fun aWordStraddlingTheSelectionEdgeIsKeptWholeAndWordsOutsideAreDropped() {

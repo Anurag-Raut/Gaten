@@ -36,6 +36,32 @@
     <string name="home_engine_hint_mlkit">Most accurate. Falls back to Tesseract if nothing is found.</string>
     <string name="home_engine_hint_tesseract">Open-source engine. Use it if ML Kit misreads your text.</string>
 
+    <!-- Stylized-text model (optional manga-ocr second pass) -->
+    <string name="home_section_manga">Stylized-text model (manga-ocr, optional)</string>
+    <string name="home_manga_status_installed">Installed: %1$s (%2$s)</string>
+    <string name="home_manga_status_installed_unknown">Installed (%1$s)</string>
+    <string name="home_manga_status_missing">Not installed</string>
+    <string name="home_manga_enabled">Read Japanese text with manga-ocr (recommended)</string>
+    <string name="home_manga_help">ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads — outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read (no model, a failure, or a slow answer) keeps ML Kit&#8217;s text. Everything runs on the device: the only network request Gaten makes is downloading a model here, and only when you ask for one. A model already on your phone can be imported instead.</string>
+    <string name="home_manga_entry_size">~%1$d MB</string>
+    <string name="home_manga_download">Download</string>
+    <string name="home_manga_installed_chip">Installed</string>
+    <string name="home_manga_confirm_title">Download %1$s?</string>
+    <string name="home_manga_confirm_body">About %1$d MB will be downloaded from huggingface.co. Use Wi-Fi if you can.</string>
+    <string name="home_manga_confirm_metered">You are on mobile data. About %1$d MB will be downloaded from huggingface.co — use Wi-Fi if you can.</string>
+    <string name="home_manga_downloading">Downloading %1$s…</string>
+    <string name="home_manga_progress_starting">Starting…</string>
+    <string name="home_manga_progress">%1$d%% &#183; %2$s</string>
+    <string name="home_manga_progress_unknown">%1$s</string>
+    <string name="home_manga_cancel">Cancel</string>
+    <string name="home_manga_download_ok">%1$s installed</string>
+    <string name="home_manga_download_cancelled">Download cancelled</string>
+    <string name="home_manga_download_failed">Download failed: %1$s</string>
+    <string name="home_manga_import">Import model files</string>
+    <string name="home_manga_remove">Remove</string>
+    <string name="home_manga_import_ok">manga-ocr model installed</string>
+    <string name="home_manga_import_failed">Import failed: encoder, decoder and vocab files are all needed</string>
+
     <!-- About -->
     <string name="home_about">About</string>
     <string name="home_about_version">Gaten %1$s</string>

@@ -71,4 +71,58 @@ class ScreenTextTest {
         assertFalse(isFullWidthText("日本語123"))
         assertFalse(isFullWidthText(""))
     }
+
+    @Test
+    fun replacingALinesTextRebuildsItsCharacterBoxes() {
+        val bounds = Box(0, 10, 120, 70)
+        val line = ScreenLine("描が水", bounds, vertical = false, charBoxes = interpolateCharBoxes("描が水", bounds, false))
+
+        // A second reader gives back a longer string: the boxes have to address it.
+        val replaced = line.withText("猫が水を飲む")
+
+        assertEquals("猫が水を飲む", replaced.text)
+        assertEquals(replaced.text.length, replaced.charBoxes.size)
+        assertEquals("the line itself does not move", bounds, replaced.bounds)
+        assertEquals(bounds.left, replaced.charBoxes.first().left)
+        assertEquals(bounds.right, replaced.charBoxes.last().right)
+        replaced.charBoxes.zipWithNext { left, right -> assertEquals(left.right, right.left) }
+    }
+
+    @Test
+    fun aTategakiLineIsRebuiltDownItsHeight() {
+        val bounds = Box(100, 0, 160, 120)
+        val line = ScreenLine("描が", bounds, vertical = true, charBoxes = interpolateCharBoxes("描が", bounds, true))
+
+        val replaced = line.withText("猫が水を飲む")
+
+        assertEquals(replaced.text.length, replaced.charBoxes.size)
+        assertEquals(bounds.left, replaced.charBoxes.first().left)
+        assertEquals(bounds.right, replaced.charBoxes.last().right)
+        assertEquals(bounds.top, replaced.charBoxes.first().top)
+        assertEquals(bounds.bottom, replaced.charBoxes.last().bottom)
+        replaced.charBoxes.zipWithNext { above, below -> assertEquals(above.bottom, below.top) }
+    }
+
+    @Test
+    fun replacingOneLineLeavesTheOthersAlone() {
+        val first = ScreenLine("猫", Box(0, 0, 40, 60), false, interpolateCharBoxes("猫", Box(0, 0, 40, 60), false))
+        val second = ScreenLine("描が水", Box(0, 100, 120, 160), false, interpolateCharBoxes("描が水", Box(0, 100, 120, 160), false))
+        val screen = ScreenText(listOf(first, second), width = 1080, height = 2400)
+
+        val updated = screen.withLineText(1, "猫が水を飲む")
+
+        assertEquals("猫が水を飲む", updated.lines[1].text)
+        assertEquals(first, updated.lines[0])
+        assertEquals(screen.width, updated.width)
+        assertEquals(screen.height, updated.height)
+    }
+
+    @Test
+    fun replacingALineThatIsNotThereChangesNothing() {
+        val screen = ScreenText(listOf(screenLine()), width = 1080, height = 2400)
+
+        assertEquals(screen, screen.withLineText(9, "猫"))
+    }
+
+    private fun screenLine() = ScreenLine("猫", Box(0, 0, 40, 60), false, interpolateCharBoxes("猫", Box(0, 0, 40, 60), false))
 }

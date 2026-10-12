@@ -5,6 +5,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+// Explicit: in a build script `java` is the Java plugin's extension, not a package.
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URI
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -133,6 +138,86 @@ tasks.named("preBuild") {
     dependsOn(verifyDictionaryAsset)
 }
 
+// The optional manga-ocr model (~117 MB) is never shipped in a release APK: the user imports it
+// from device storage, or a debug build downloads it here. `-PbundleMangaOcr=true` makes Gradle
+// fetch the three files into a gitignored, debug-only asset directory (release variants never see
+// it) so the debug APK carries the model for testing; without the property nothing is downloaded.
+val bundleMangaOcr = providers.gradleProperty("bundleMangaOcr").map { it.toBoolean() }.getOrElse(false)
+val mangaOcrAssets = layout.projectDirectory.dir("src/debug/assets/manga-ocr")
+
+/** Streams [url] into [target] through a temp file, following redirects (Hugging Face serves 307s). */
+fun downloadFollowingRedirects(url: String, target: File) {
+    val temp = File(target.parentFile, "${target.name}.part")
+    var current = URI(url).toURL()
+    var redirects = 0
+    while (true) {
+        val connection = (current.openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
+            connectTimeout = 30_000
+            readTimeout = 120_000
+            setRequestProperty("User-Agent", "gaten-gradle")
+        }
+        connection.connect()
+        val code = connection.responseCode
+        if (code in 300..399) {
+            val location = connection.getHeaderField("Location")
+            connection.disconnect()
+            if (location == null) error("HTTP $code from $current without a Location header")
+            if (++redirects > 5) error("too many redirects for $url")
+            current = current.toURI().resolve(location).toURL()
+            continue
+        }
+        if (code != 200) {
+            connection.disconnect()
+            error("HTTP $code from $current")
+        }
+        connection.inputStream.use { input -> temp.outputStream().use { input.copyTo(it) } }
+        connection.disconnect()
+        break
+    }
+    if (!temp.renameTo(target)) {
+        target.delete()
+        if (!temp.renameTo(target)) error("cannot move ${temp.path} to ${target.path}")
+    }
+}
+
+val fetchMangaOcrModel by tasks.registering {
+    val targetDir = mangaOcrAssets.asFile
+    val downloads = mapOf(
+        "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/encoder_model_int8.onnx" to "encoder.onnx",
+        "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/decoder_model_int8.onnx" to "decoder.onnx",
+        "https://huggingface.co/kha-white/manga-ocr-base/resolve/main/vocab.txt" to "vocab.txt"
+    )
+    description = "Downloads the optional manga-ocr ONNX model into ${mangaOcrAssets.asFile.relativeTo(projectDir)} (debug builds with -PbundleMangaOcr=true)."
+    // Nothing to do while every file is there, so a rebuild after the first fetch is free.
+    outputs.upToDateWhen { downloads.values.all { File(targetDir, it).isFile } }
+    doLast {
+        targetDir.mkdirs()
+        for ((url, name) in downloads) {
+            val file = File(targetDir, name)
+            if (file.isFile && file.length() > 0) {
+                logger.lifecycle("manga-ocr: $name is already there, skipping")
+                continue
+            }
+            logger.lifecycle("manga-ocr: downloading $url")
+            try {
+                downloadFollowingRedirects(url, file)
+            } catch (e: Exception) {
+                error("Could not download $url: ${e.message} — remove ${targetDir.path} and retry, or use tools/fetch_manga_ocr.sh")
+            }
+            logger.lifecycle("manga-ocr: wrote $name (${file.length() / 1024 / 1024} MB)")
+        }
+    }
+}
+
+// Only the debug build, and only when asked for: the model must never reach a release APK, and a
+// normal debug build must not touch the network.
+if (bundleMangaOcr) {
+    tasks.matching { it.name == "mergeDebugAssets" }.configureEach {
+        dependsOn(fetchMangaOcrModel)
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -158,4 +243,9 @@ dependencies {
     // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and Gaten
     // still needs no INTERNET permission.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
+
+    // ONNX Runtime Mobile, for the optional manga-ocr second pass (ocr/MangaOcrEngine.kt). The
+    // library asks for INTERNET in its manifest, which the app manifest removes; the model itself
+    // is never bundled in a release APK (see fetchMangaOcrModel above).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
 }

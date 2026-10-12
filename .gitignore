@@ -20,6 +20,10 @@ local.properties
 # Generated dictionary: build it with tools/build_jmdict_db.py
 app/src/main/assets/db/jmdict.sqlite
 
+# Optional manga-ocr model: downloaded by the debug build with -PbundleMangaOcr=true, or by
+# tools/fetch_manga_ocr.sh. ~117 MB of weights, debug-only, never part of a release APK.
+app/src/debug/assets/manga-ocr/
+
 # Device evidence screenshots stay out of history
 docs/jp-prototype/**/*.png
 docs/jp-prototype/**/*.jpg

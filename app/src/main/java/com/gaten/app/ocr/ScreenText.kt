@@ -75,3 +75,21 @@ fun isFullWidthText(text: String): Boolean = text.isNotEmpty() && text.all { cha
     code in 0x3000..0x30FF || code in 0x3400..0x4DBF || code in 0x4E00..0x9FFF ||
         code in 0xFF00..0xFFEF
 }
+
+/**
+ * The line with its text replaced by [text], and its character boxes recomputed to match.
+ *
+ * A second reader gives back a different string — usually a different length — so the boxes the
+ * detector reported no longer address it. They are rebuilt with [interpolateCharBoxes], which is
+ * what the scanner itself uses for full-width and tategaki lines; the detector's own symbol boxes
+ * cannot be reused, because they describe the characters that were just replaced. The invariant
+ * holds either way: `charBoxes.size == text.length`.
+ */
+fun ScreenLine.withText(text: String): ScreenLine =
+    copy(text = text, charBoxes = interpolateCharBoxes(text, bounds, vertical))
+
+/** [screen] with the text of line [index] replaced, or [screen] itself when there is no such line. */
+fun ScreenText.withLineText(index: Int, text: String): ScreenText {
+    val line = lines.getOrNull(index) ?: return this
+    return copy(lines = lines.toMutableList().also { it[index] = line.withText(text) })
+}

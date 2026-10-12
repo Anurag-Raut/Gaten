@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -61,13 +62,19 @@ import androidx.compose.ui.zIndex
 import com.gaten.app.R
 import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
+import com.gaten.app.ocr.JapaneseOcr
 import com.gaten.app.ocr.ScanState
 import com.gaten.app.ocr.ScreenHits
+import com.gaten.app.ocr.ScreenLineReader
+import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
+import com.gaten.app.ocr.prefetchOrder
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +83,12 @@ private const val TAG = "Gaten"
 
 /** How far from a character a tap may land and still hit it, converted to bitmap px. */
 private val TapTolerance = 24.dp
+
+/**
+ * Lines one gesture waits for. A tap touches one line and a lasso two or three; beyond that the
+ * wait would be longer than the answer is worth, and the rest keep ML Kit's text.
+ */
+private const val MAX_GESTURE_LINES = 3
 
 /** [ocr.Box]'s bounds as the compose [Rect] the overlay highlights. */
 private fun Box.toRect(): Rect =
@@ -116,11 +129,13 @@ private fun sheetExit(dock: SheetDock, fraction: Float): ExitTransition = when (
 /**
  * Full-screen lasso selector plus the result sheet, shown over a frozen screenshot.
  *
- * On open the whole capture is recognised once in the background; from then on a tap on a
- * character — or a lasso, whose box is answered from the index — needs no further OCR, and the
- * region OCR path stays as the fallback while the scan runs and when it is unavailable. Words
- * are tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is
- * opened once and kept warm for the whole overlay lifetime.
+ * On open the whole capture is detected and read once by ML Kit, in the background; the overlay is
+ * usable the moment that index exists, and manga-ocr then reads its lines behind it
+ * ([ScreenLineReader]), replacing each one's text as it lands. A tap or a lasso waits for the lines
+ * it touched — and only those — before answering from the index, and the region OCR path stays as
+ * the fallback while the scan runs and when it is unavailable. Words are tokenised against the
+ * offline JMdict and shown in a bottom sheet. The dictionary is opened once and kept warm for the
+ * whole overlay lifetime.
  */
 @Composable
 fun LookupOverlay(
@@ -157,6 +172,36 @@ fun LookupOverlay(
         } else {
             Log.d(TAG, "Screen scan ready in $elapsed ms (${screen.lines.size} lines)")
         }
+    }
+
+    // ML Kit's index is what the overlay goes Ready with, instantly. The reader then replaces each
+    // line's text as manga-ocr reads it, and [screen] is that live index: the gestures and the
+    // faint highlights use it, so a line read a moment ago is already the better text.
+    val scannedScreen = (scanState as? ScanState.Ready)?.screen
+    val reader = remember(scannedScreen, screenshot) {
+        if (scannedScreen == null || screenshot == null) {
+            null
+        } else {
+            ScreenLineReader(
+                screen = scannedScreen,
+                readLine = { line ->
+                    JapaneseOcr.readLineWithMangaOcr(context, screenshot, line.bounds)
+                },
+                onLog = { message -> Log.d(TAG, message) }
+            )
+        }
+    }
+    // Dropped when the overlay closes or a new screenshot replaces the index.
+    DisposableEffect(reader) { onDispose { reader?.close() } }
+
+    val readFlow: StateFlow<ScreenText?> = remember(reader) { reader?.text ?: MutableStateFlow(null) }
+    val readScreen by readFlow.collectAsState()
+    val screen = readScreen ?: scannedScreen
+
+    // Read the screen in the background as soon as the index is in, biggest boxes first.
+    LaunchedEffect(reader) {
+        val current = screen ?: return@LaunchedEffect
+        reader?.prefetch(prefetchOrder(current))
     }
 
     // Open the offline dictionary once and keep it warm for the whole overlay lifetime.
@@ -197,6 +242,19 @@ fun LookupOverlay(
 
     BackHandler { close() }
 
+    /**
+     * The index with [lineIndices] read by manga-ocr: waits for those lines (bounded by the
+     * reader's own timeout, so a gesture always gets an answer) and re-prioritises the rest of the
+     * screen from there. The rest keeps ML Kit's text.
+     */
+    suspend fun readGestureLines(from: ScreenText, lineIndices: List<Int>): ScreenText {
+        val active = reader ?: return from
+        val touched = lineIndices.distinct().take(MAX_GESTURE_LINES)
+        for (lineIndex in touched) active.read(lineIndex)
+        active.prefetch(prefetchOrder(active.text.value, fromLine = touched.firstOrNull()))
+        return active.text.value
+    }
+
     /** Turn a finished lasso into a lookup; degenerate gestures are ignored. */
     fun startLookup() {
         val drawn = points
@@ -214,21 +272,29 @@ fun LookupOverlay(
         scope.launch {
             result = try {
                 val repo = awaitRepo()
-                val screen = (scanState as? ScanState.Ready)?.screen
-                val lookup = if (screen == null) {
+                val selection = Box(
+                    box.left.toInt(),
+                    box.top.toInt(),
+                    box.right.toInt(),
+                    box.bottom.toInt()
+                )
+                val live = screen
+                val lookup = if (live == null) {
                     Log.d(TAG, "Circle path: region")
                     runLookup(context, bmp, box, repo)
                 } else {
                     Log.d(TAG, "Circle path: index")
+                    // Which lines to read comes from the index as it stands; the spans themselves
+                    // are resolved again inside lookupFromSelection, because a line that has been
+                    // read no longer has the same offsets.
+                    val indexed = readGestureLines(
+                        live,
+                        ScreenHits.spansInSelection(live, selection).map { it.lineIndex }
+                    )
                     withContext(Dispatchers.Default) {
                         lookupFromSelection(
-                            screen,
-                            Box(
-                                box.left.toInt(),
-                                box.top.toInt(),
-                                box.right.toInt(),
-                                box.bottom.toInt()
-                            ),
+                            indexed,
+                            selection,
                             lookup = { term -> repo?.lookup(term) ?: emptyList() }
                         )
                     }
@@ -249,16 +315,17 @@ fun LookupOverlay(
 
     /** A tap while selecting: the word under the finger when the index is ready, dismiss otherwise. */
     fun onTap(at: Offset) {
-        val bmp = screenshot
-        val screen = (scanState as? ScanState.Ready)?.screen
-        if (bmp == null || screen == null) {
+        val live = screen
+        if (screenshot == null || live == null) {
             close()
             return
         }
         val x = at.x.toInt()
         val y = at.y.toInt()
         val tolerance = tapTolerancePx.toInt()
-        val hit = ScreenHits.hitTest(screen, x, y, tolerance)
+        // Hit-tested against the index as it stands: the boxes are ML Kit's either way, and the
+        // line they name is the one to read before answering.
+        val hit = ScreenHits.hitTest(live, x, y, tolerance)
         if (hit == null) {
             Log.d(TAG, "Tap missed: no character within $tolerance px")
             close()
@@ -267,7 +334,7 @@ fun LookupOverlay(
         Log.d(TAG, "Tap hit line ${hit.lineIndex} char ${hit.charIndex}")
         frozenTrail = null
         // The tapped character's own box until the word around it has been resolved.
-        frozenBox = screen.lines[hit.lineIndex].charBoxes[hit.charIndex].toRect()
+        frozenBox = live.lines[hit.lineIndex].charBoxes[hit.charIndex].toRect()
         phase = Phase.Scanning
         scope.launch {
             val outcome: LookupResult? = try {
@@ -280,9 +347,13 @@ fun LookupOverlay(
                         error = (repoState as? RepoState.Failed)?.message
                     )
                 } else {
+                    // The tapped line is read first, and the tap is then resolved again against the
+                    // index that came back: its character offsets are the new text's, not the old
+                    // one's.
+                    val indexed = readGestureLines(live, listOf(hit.lineIndex))
                     val tap = withContext(Dispatchers.Default) {
                         lookupFromTap(
-                            screen,
+                            indexed,
                             x,
                             y,
                             tolerance,
@@ -330,7 +401,7 @@ fun LookupOverlay(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             LassoLayer(
                 screenshot = screenshot,
-                screen = (scanState as? ScanState.Ready)?.screen,
+                screen = screen,
                 points = points,
                 frozenTrail = frozenTrail,
                 frozenBox = frozenBox,

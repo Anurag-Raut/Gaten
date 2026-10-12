@@ -23,6 +23,11 @@ import kotlinx.coroutines.CancellationException
  *
  * ML Kit only, deliberately: Tesseract reports no layout, so a screen index built from it would be
  * one line covering the whole bitmap — worth less than the region path the caller already has.
+ *
+ * This is the detector, not the reader: what it returns is ML Kit's reading of each line, and it is
+ * what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines manga-ocr
+ * reads, leaving these boxes — which are ML Kit's, and which every gesture is hit-tested against —
+ * where they are.
  */
 object ScreenTextScanner {
     private const val TAG = "GatenOcr"
