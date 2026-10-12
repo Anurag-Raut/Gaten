@@ -63,12 +63,14 @@ import com.gaten.app.R
 import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
+import com.gaten.app.ocr.OcrPreferences
 import com.gaten.app.ocr.ScanState
 import com.gaten.app.ocr.ScreenHits
 import com.gaten.app.ocr.ScreenLineReader
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ocr.prefetchOrder
+import com.gaten.app.ui.overlay.ViewMapping
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +80,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 private const val TAG = "Gaten"
 
@@ -89,10 +92,6 @@ private val TapTolerance = 24.dp
  * wait would be longer than the answer is worth, and the rest keep ML Kit's text.
  */
 private const val MAX_GESTURE_LINES = 3
-
-/** [ocr.Box]'s bounds as the compose [Rect] the overlay highlights. */
-private fun Box.toRect(): Rect =
-    Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
 
 /** Lifecycle of the offline dictionary handle. */
 private sealed interface RepoState {
@@ -140,11 +139,22 @@ private fun sheetExit(dock: SheetDock, fraction: Float): ExitTransition = when (
 @Composable
 fun LookupOverlay(
     screenshot: Bitmap?,
+    /**
+     * The capture's pixels -> this window's pixels. The frozen frame is drawn through it, and so is
+     * every box and gesture: it is identity while the window is the capture's own size and origin.
+     */
+    mapping: ViewMapping,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val tapTolerancePx = with(LocalDensity.current) { TapTolerance.toPx() }
+    // The hit tests are in the capture's pixels, so the tolerance is too: one view pixel is worth
+    // mapping.minScale of them, and the same physical slack has to follow the window's scale.
+    val tapTolerancePx = with(LocalDensity.current) {
+        (TapTolerance.toPx() / mapping.minScale).roundToInt()
+    }
+    // Debug aid, read for each overlay: the recognised boxes themselves, over the frozen frame.
+    val showCharBoxes = OcrPreferences.showCharBoxes(context)
 
     var visible by remember { mutableStateOf(false) }
     var phase by remember { mutableStateOf(Phase.Selecting) }
@@ -266,6 +276,9 @@ fun LookupOverlay(
         ) {
             return
         }
+        // The trail is drawn in view pixels; the index, the hit tests and the region crop are all in
+        // the capture's pixels, so the selection is converted on the way in.
+        val bitmapBox = mapping.toBitmap(box)
         frozenTrail = buildTrailPath(drawn)
         frozenBox = box
         phase = Phase.Scanning
@@ -273,15 +286,15 @@ fun LookupOverlay(
             result = try {
                 val repo = awaitRepo()
                 val selection = Box(
-                    box.left.toInt(),
-                    box.top.toInt(),
-                    box.right.toInt(),
-                    box.bottom.toInt()
+                    bitmapBox.left.toInt(),
+                    bitmapBox.top.toInt(),
+                    bitmapBox.right.toInt(),
+                    bitmapBox.bottom.toInt()
                 )
                 val live = screen
                 val lookup = if (live == null) {
                     Log.d(TAG, "Circle path: region")
-                    runLookup(context, bmp, box, repo)
+                    runLookup(context, bmp, bitmapBox, repo)
                 } else {
                     Log.d(TAG, "Circle path: index")
                     // Which lines to read comes from the index as it stands; the spans themselves
@@ -320,9 +333,12 @@ fun LookupOverlay(
             close()
             return
         }
-        val x = at.x.toInt()
-        val y = at.y.toInt()
-        val tolerance = tapTolerancePx.toInt()
+        // The finger is in view pixels; the index, and everything it is hit-tested against, is in
+        // the capture's pixels.
+        val tapped = mapping.toBitmap(at.x, at.y)
+        val x = tapped.x.toInt()
+        val y = tapped.y.toInt()
+        val tolerance = tapTolerancePx
         // Hit-tested against the index as it stands: the boxes are ML Kit's either way, and the
         // line they name is the one to read before answering.
         val hit = ScreenHits.hitTest(live, x, y, tolerance)
@@ -334,7 +350,7 @@ fun LookupOverlay(
         Log.d(TAG, "Tap hit line ${hit.lineIndex} char ${hit.charIndex}")
         frozenTrail = null
         // The tapped character's own box until the word around it has been resolved.
-        frozenBox = live.lines[hit.lineIndex].charBoxes[hit.charIndex].toRect()
+        frozenBox = mapping.toView(live.lines[hit.lineIndex].charBoxes[hit.charIndex])
         phase = Phase.Scanning
         scope.launch {
             val outcome: LookupResult? = try {
@@ -361,7 +377,7 @@ fun LookupOverlay(
                         )
                     }
                     if (tap == null) null else {
-                        frozenBox = tap.wordBox.toRect()
+                        frozenBox = mapping.toView(tap.wordBox)
                         tap.result
                     }
                 }
@@ -396,12 +412,15 @@ fun LookupOverlay(
         exit = fadeOut(tween(150)),
         modifier = Modifier.zIndex(3000f)
     ) {
-        // The constraints are the full-screen overlay in pixels — the same space the screenshot and
-        // the highlight boxes use — so the panel can be placed against the word it explains.
+        // The constraints are the full-screen overlay in view pixels — the same space the selection
+        // and the highlight boxes are placed in — so the panel can be placed against the word it
+        // explains.
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             LassoLayer(
                 screenshot = screenshot,
                 screen = screen,
+                mapping = mapping,
+                showCharBoxes = showCharBoxes,
                 points = points,
                 frozenTrail = frozenTrail,
                 frozenBox = frozenBox,

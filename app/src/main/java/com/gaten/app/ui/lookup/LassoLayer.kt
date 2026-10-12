@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.gaten.app.ocr.ScreenText
+import com.gaten.app.ui.overlay.ViewMapping
 
 /** Degenerate gestures (a tap or a sliver) are ignored below this side length, in view px. */
 internal const val MIN_SELECTION_PX = 24f
@@ -38,6 +39,10 @@ internal const val MIN_SELECTION_PX = 24f
 /** Stroke and corner radius of the faint outlines drawn around the indexed lines. */
 private val OutlineStrokeWidth = 1.5.dp
 private val OutlineCorner = 4.dp
+
+/** Debug layer ("Show text boxes"): line bounds in one colour, character boxes in another. */
+private val DebugLineColor = Color.Red.copy(alpha = 0.9f)
+private val DebugCharColor = Color.Cyan.copy(alpha = 0.9f)
 
 /** Bounding box of a freehand stroke, in view pixels; null when there is nothing drawn. */
 internal fun boundingBoxOf(points: List<Offset>): Rect? {
@@ -76,6 +81,10 @@ internal fun buildTrailPath(points: List<Offset>): Path = Path().apply {
 fun LassoLayer(
     screenshot: Bitmap?,
     screen: ScreenText?,
+    /** Capture pixels -> view pixels: how every box is placed on the frozen frame. */
+    mapping: ViewMapping,
+    /** Debug: outline every indexed line and every character box of [screen]. */
+    showCharBoxes: Boolean,
     points: List<Offset>,
     frozenTrail: Path?,
     frozenBox: Rect?,
@@ -158,17 +167,41 @@ fun LassoLayer(
             )
             drawRect(primary, topLeft = box.topLeft, size = box.size, style = Stroke(width = 2f))
         }
-        // Faint outlines over every indexed line, so the reader can see what a tap now hits.
-        if (screen != null && outlineAlpha > 0f) {
+        // Faint outlines over every indexed line, so the reader can see what a tap now hits. The
+        // debug layer below draws the same lines in its own colours, so one or the other, not both.
+        if (screen != null && outlineAlpha > 0f && !showCharBoxes) {
             for (line in screen.lines) {
-                val bounds = line.bounds
+                val bounds = mapping.toView(line.bounds)
                 drawRoundRect(
                     color = primary.copy(alpha = 0.45f * outlineAlpha),
-                    topLeft = Offset(bounds.left.toFloat(), bounds.top.toFloat()),
-                    size = Size(bounds.width.toFloat(), bounds.height.toFloat()),
+                    topLeft = bounds.topLeft,
+                    size = bounds.size,
                     cornerRadius = CornerRadius(OutlineCorner.toPx()),
                     style = Stroke(width = OutlineStrokeWidth.toPx())
                 )
+            }
+        }
+        // Debug: every line's bounds and every character box as the index has them, placed through
+        // the same mapping as the frozen frame. Drawn on every recomposition, so the boxes follow
+        // the index as the reader replaces ML Kit's text line by line.
+        if (showCharBoxes && screen != null) {
+            for (line in screen.lines) {
+                val bounds = mapping.toView(line.bounds)
+                drawRoundRect(
+                    color = DebugLineColor,
+                    topLeft = bounds.topLeft,
+                    size = bounds.size,
+                    style = Stroke(width = OutlineStrokeWidth.toPx())
+                )
+                for (charBox in line.charBoxes) {
+                    val char = mapping.toView(charBox)
+                    drawRect(
+                        color = DebugCharColor,
+                        topLeft = char.topLeft,
+                        size = char.size,
+                        style = Stroke(width = OutlineStrokeWidth.toPx())
+                    )
+                }
             }
         }
         // The frozen lasso trail, fading out on completion.

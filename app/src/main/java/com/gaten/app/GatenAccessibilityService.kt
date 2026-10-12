@@ -13,6 +13,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
@@ -121,7 +122,8 @@ class GatenAccessibilityService : AccessibilityService() {
      * own is still in the way: the collapsing shade after [fromShade], or the floating button.
      */
     private fun startOrderedCapture(fromShade: Boolean) {
-        Log.d(TAG, "Starting the ordered capture pipeline (fromShade=$fromShade)")
+        Log.d(TAG, "Starting the ordered capture pipeline (fromShade=$fromShade," +
+            " +${elapsedSinceTrigger()} ms since the trigger)")
         val capture = { performCapture() }
         val button = floatingButton
         when {
@@ -144,7 +146,7 @@ class GatenAccessibilityService : AccessibilityService() {
      * come back blank; Gaten never tries to bypass that.
      */
     private fun performCapture() {
-        Log.d(TAG, "performCapture called")
+        Log.d(TAG, "performCapture called (+${elapsedSinceTrigger()} ms since the trigger)")
 
         // Clear the repository at the source so a stale capture can never flash.
         BitmapRepository.clear()
@@ -155,6 +157,7 @@ class GatenAccessibilityService : AccessibilityService() {
             return
         }
 
+        Log.d(TAG, "takeScreenshot requested (+${elapsedSinceTrigger()} ms since the trigger)")
         takeScreenshot(
             Display.DEFAULT_DISPLAY,
             executor,
@@ -180,6 +183,7 @@ class GatenAccessibilityService : AccessibilityService() {
      */
     private fun deliverScreenshot(screenshot: ScreenshotResult): Boolean {
         captureInFlight = false
+        Log.d(TAG, "Screenshot delivered (+${elapsedSinceTrigger()} ms since the trigger)")
         // Never let a stale capture flash if this one cannot be stored.
         BitmapRepository.clear()
         try {
@@ -237,6 +241,18 @@ class GatenAccessibilityService : AccessibilityService() {
         var instance: GatenAccessibilityService? = null
             private set
 
+        /** When the running capture pipeline was triggered, in elapsedRealtime ms; 0 between triggers. */
+        @Volatile
+        private var triggerAtMs = 0L
+
+        /**
+         * Milliseconds since the trigger the overlay on screen came from, or 0 when no capture is in
+         * flight. One clock for the whole chain — accepted, screenshot requested, screenshot
+         * delivered, frozen frame committed — so a capture that lands late can be placed in it.
+         */
+        fun elapsedSinceTrigger(): Long =
+            if (triggerAtMs == 0L) 0L else SystemClock.elapsedRealtime() - triggerAtMs
+
         /**
          * Entry point for the Quick Settings tile, the trigger broadcast and the floating button.
          *
@@ -262,6 +278,10 @@ class GatenAccessibilityService : AccessibilityService() {
                     return@post
                 }
                 service.captureInFlight = true
+                // Everything from here is timed against this instant, so logcat shows where a
+                // capture spent its time when the frozen frame lands late.
+                triggerAtMs = SystemClock.elapsedRealtime()
+                Log.d(TAG, "Trigger accepted (+${elapsedSinceTrigger()} ms since the trigger)")
                 service.startOrderedCapture(fromShade)
             }
         }

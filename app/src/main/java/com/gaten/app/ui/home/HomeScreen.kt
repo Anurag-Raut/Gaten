@@ -118,6 +118,7 @@ fun HomeScreen() {
     var mangaSizeBytes by remember { mutableStateOf(MangaOcrModel.installedSizeBytes(context)) }
     var mangaCatalogId by remember { mutableStateOf(MangaOcrModel.installedCatalogId(context)) }
     var mangaEnabled by remember { mutableStateOf(OcrPreferences.mangaOcrEnabled(context)) }
+    var showCharBoxes by remember { mutableStateOf(OcrPreferences.showCharBoxes(context)) }
     // The entry the confirm dialog is asking about, the one downloading, and its progress.
     var confirmDownload by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
     var downloading by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
@@ -321,6 +322,15 @@ fun HomeScreen() {
                 onRemove = {
                     MangaOcrModel.remove(context)
                     refreshMangaModel()
+                }
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.m))
+            DebugBoxesRow(
+                enabled = showCharBoxes,
+                onToggle = { checked ->
+                    showCharBoxes = checked
+                    OcrPreferences.setShowCharBoxes(context, checked)
                 }
             )
 
@@ -634,6 +644,32 @@ private fun MangaOcrSection(
                 }
             }
         }
+    }
+}
+
+/**
+ * Debug aid: draws the recognised boxes - every line's bounds and every character box - over the
+ * frozen frame, so a box that is off its text is visible. The accessibility service reads the
+ * preference for each overlay it opens, so a toggle here applies to the next lookup.
+ */
+@Composable
+private fun DebugBoxesRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.home_debug_boxes),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(Spacing.m))
+        Switch(checked = enabled, onCheckedChange = onToggle)
     }
 }
 

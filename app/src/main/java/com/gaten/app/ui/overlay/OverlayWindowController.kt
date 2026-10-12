@@ -9,6 +9,7 @@ package com.gaten.app.ui.overlay
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
@@ -41,6 +42,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.data.BitmapRepository
 import com.gaten.app.media.MediaPauser
 import com.gaten.app.ui.lookup.LookupOverlay
@@ -95,21 +97,29 @@ class OverlayWindowController(
         hide()
 
         val host = OverlayHost()
-        val root = FrameLayout(context)
+        val root = FrameLayout(context).apply {
+            // The freeze has to hold whatever is moving behind it. The window itself is opaque
+            // (see windowParams), so the root's black is what fills every pixel the capture does
+            // not cover: nothing of the live app behind can reach the display through the overlay.
+            setBackgroundColor(android.graphics.Color.BLACK)
+        }
         root.setViewTreeLifecycleOwner(host)
         root.setViewTreeViewModelStoreOwner(host)
         root.setViewTreeSavedStateRegistryOwner(host)
         root.setViewTreeOnBackPressedDispatcherOwner(host)
-        // The capture itself, unscaled from the window's origin, is the freeze: the app keeps
-        // running underneath and none of it shows through. Drawn 1:1 (an identity matrix), it lines
-        // up with the recognised boxes, which are in the same screenshot pixels.
-        root.addView(
-            ImageView(context).apply {
-                scaleType = ImageView.ScaleType.MATRIX
-                setImageBitmap(bitmap)
-            },
-            FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-        )
+        // A capture can carry alpha below 255 - a video surface can come back as a transparent-hole
+        // region - and the ImageView would then draw the app behind it through the frozen frame.
+        // The frame is the whole display, so it is opaque by definition. Safe to mutate: the
+        // repository holds the ARGB_8888 software copy the service made (`deliverScreenshot`).
+        bitmap.setHasAlpha(false)
+        // The capture itself is the freeze: the app keeps running underneath and none of it shows
+        // through. Drawn through the mapping below, it lines up with the recognised boxes, which
+        // are in the same screenshot pixels.
+        val image = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.MATRIX
+            setImageBitmap(bitmap)
+        }
+        root.addView(image, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         // The composition reads the owners on attach, so the lifecycle has to be CREATED before the
         // window is added and RESUMED once it is up, exactly as an activity would be.
@@ -118,16 +128,56 @@ class OverlayWindowController(
         host.onResume()
         val current = Showing(root, host)
         showing = current
-        Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture")
+        Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture" +
+            " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
+
+        // Where the capture is drawn: the window's size and its origin on the display are what the
+        // frozen frame and every box have to be placed through. Derived in the layout pass - before
+        // the first draw, so the frame is never shown at the wrong scale - and re-derived on every
+        // further layout, since a display change under a live overlay moves and resizes the window.
+        // Identity until then, which is also what a window of the capture's own size gets.
+        var mapping = ViewMapping.IDENTITY
+        var logged = false
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val origin = IntArray(2)
+            root.getLocationOnScreen(origin)
+            val fixed = ViewMapping.between(
+                bitmapWidth = bitmap.width,
+                bitmapHeight = bitmap.height,
+                viewWidth = root.width,
+                viewHeight = root.height,
+                originX = origin[0],
+                originY = origin[1]
+            )
+            image.imageMatrix = Matrix().apply {
+                setScale(fixed.scaleX, fixed.scaleY)
+                // postTranslate works in the destination space, so the offset is applied after the
+                // scale, exactly as ViewMapping does it.
+                postTranslate(-fixed.offsetX, -fixed.offsetY)
+            }
+            // Once per show, and again only when the window really moved under the capture.
+            if (!logged || fixed != mapping) {
+                logged = true
+                Log.d(TAG, "Mapping: bitmap ${bitmap.width}x${bitmap.height}," +
+                    " view ${root.width}x${root.height}," +
+                    " origin (${origin[0]}, ${origin[1]})," +
+                    " scale ${fixed.scaleX}x${fixed.scaleY}")
+            }
+            mapping = fixed
+        }
 
         var frozen = false
         val onFrozen = Runnable {
             if (frozen || showing !== current) return@Runnable
             frozen = true
-            Log.d(TAG, "Frozen frame on screen")
+            Log.d(TAG, "Frozen frame on screen" +
+                " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
             // Scheduled first: composing the lookup UI below blocks this thread for a while.
             mediaPauser.pause(PauseAfterFreezeMs)
-            root.addView(lookupView(bitmap), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            root.addView(
+                lookupView(bitmap, mapping),
+                FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            )
         }
         // Committed, then one vsync more: the frame is on the display. The timeout covers a frame
         // that is never drawn (screen off) so the lookup still opens and the media still pauses.
@@ -138,7 +188,7 @@ class OverlayWindowController(
     }
 
     /** The lookup UI, transparent apart from what it draws over the capture beneath it. */
-    private fun lookupView(bitmap: Bitmap) = ComposeView(context).apply {
+    private fun lookupView(bitmap: Bitmap, mapping: ViewMapping) = ComposeView(context).apply {
         setContent {
             GatenTheme {
                 Surface(
@@ -146,7 +196,11 @@ class OverlayWindowController(
                     color = Color.Transparent,
                     tonalElevation = 0.dp
                 ) {
-                    LookupOverlay(screenshot = bitmap, onDismiss = ::hide)
+                    LookupOverlay(
+                        screenshot = bitmap,
+                        mapping = mapping,
+                        onDismiss = ::hide
+                    )
                 }
             }
         }
@@ -176,11 +230,15 @@ class OverlayWindowController(
     }
 
     /**
-     * Full-screen and transparent, so the overlay sits exactly where the capture was taken: the
+     * Full-screen and opaque, so the overlay sits exactly where the capture was taken: the
      * lasso and the recognised boxes are in screenshot pixels, and those are only the same as view
      * pixels when the window covers the whole display from its origin. By default the system keeps
      * a window out of the cutout band while the status bar is hidden - over fullscreen video - and
      * shrinks it for a visible navigation bar, so both are switched off.
+     *
+     * OPAQUE rather than TRANSLUCENT, and the frozen frame is the whole display: the lookup UI is
+     * composed into this same window, over the capture, so there is nothing left to see through it —
+     * while a translucent window would let the app behind show wherever the capture is not opaque.
      */
     private fun windowParams() = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
@@ -189,7 +247,7 @@ class OverlayWindowController(
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-        PixelFormat.TRANSLUCENT
+        PixelFormat.OPAQUE
     ).apply {
         gravity = Gravity.TOP or Gravity.START
         layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

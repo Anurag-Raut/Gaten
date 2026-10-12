@@ -21,6 +21,7 @@ object OcrPreferences {
     private const val PREFS_NAME = "gaten_settings"
     private const val KEY_OCR_ENGINE = "ocr_engine"
     private const val KEY_MANGA_OCR = "manga_ocr_enabled"
+    private const val KEY_SHOW_CHAR_BOXES = "show_char_boxes"
 
     fun engine(context: Context): OcrEngine {
         val stored = prefs(context).getString(KEY_OCR_ENGINE, null)
@@ -39,6 +40,18 @@ object OcrPreferences {
 
     fun setMangaOcrEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_MANGA_OCR, enabled).apply()
+    }
+
+    /**
+     * Whether the overlay draws the recognised boxes themselves - every line's bounds and every
+     * character box - over the frozen frame. Off by default: it is a debugging aid for the mapping
+     * between the capture's pixels and the window's, not something a reader wants in the way.
+     */
+    fun showCharBoxes(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SHOW_CHAR_BOXES, false)
+
+    fun setShowCharBoxes(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHOW_CHAR_BOXES, enabled).apply()
     }
 
     private fun prefs(context: Context) =
