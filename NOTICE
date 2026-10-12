@@ -29,3 +29,15 @@ ML Kit Text Recognition (Japanese)
 © Google LLC
 Licence: Google ML Kit terms of service
 https://developers.google.com/ml-kit/terms
+
+meiki.text.detect.v0 (model weights)
+------------------------------------
+© rtr46 and contributors
+Licence: LGPL-3.0
+https://huggingface.co/rtr46/meiki.text.detect.v0
+
+ONNX Runtime (inference engine)
+-------------------------------
+Copyright (c) Microsoft Corporation
+Licence: MIT
+https://onnxruntime.ai/

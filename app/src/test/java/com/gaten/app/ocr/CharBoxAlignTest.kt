@@ -146,6 +146,23 @@ class CharBoxAlignTest {
     }
 
     @Test
+    fun anEmptyDetectorReadingTilesTheLineEvenly() {
+        // A meiki placeholder line has no text and no boxes; everything the reader returns is an
+        // insertion, so each character takes an even slice of the line along its axis.
+        val horizontal = CharBoxAlign.align("", emptyList(), "猫が水を飲む", bounds, vertical = false)
+        assertEquals(
+            interpolateCharBoxes("猫が水を飲む", bounds, vertical = false),
+            horizontal
+        )
+
+        val verticalBoxes = CharBoxAlign.align("", emptyList(), "猫が水を飲む", Box(100, 0, 160, 120), vertical = true)
+        assertEquals(
+            interpolateCharBoxes("猫が水を飲む", Box(100, 0, 160, 120), vertical = true),
+            verticalBoxes
+        )
+    }
+
+    @Test
     fun boxesThatDoNotDescribeTheOldTextFallBackToTheEvenSplit() {
         val mismatched = listOf(Box(0, 0, 10, 40))
 

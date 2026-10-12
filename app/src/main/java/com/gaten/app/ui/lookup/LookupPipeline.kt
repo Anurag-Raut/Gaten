@@ -13,7 +13,10 @@ import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.WordScanner
 import com.gaten.app.ocr.Box
+import com.gaten.app.ocr.DetectionMerge
 import com.gaten.app.ocr.JapaneseOcr
+import com.gaten.app.ocr.MeikiDetector
+import com.gaten.app.ocr.OcrLine
 import com.gaten.app.ocr.OcrRepair
 import com.gaten.app.ocr.RegionReadPolicy
 import com.gaten.app.ocr.SelectionSnap
@@ -67,7 +70,9 @@ suspend fun runLookup(
  *
  * When ML Kit found no Japanese in the region, the lines it did report are not a reading of the
  * text the reader circled: the selection box goes to manga-ocr instead ([RegionReadPolicy]), so a
- * stylized line ML Kit read as garbage still reaches the reader.
+ * stylized line ML Kit read as garbage still reaches the reader. The optional meiki model is run
+ * over the region too ([MeikiDetector], [DetectionMerge]); the boxes it adds beyond ML Kit's are
+ * read by manga-ocr directly, since they are precisely the lettering ML Kit never read at all.
  *
  * @return the snapped lines' text in reading order (or whatever was recognised when nothing
  *   overlapped)
@@ -93,15 +98,24 @@ private suspend fun snapToLines(
 
     val regionCrop = cropBitmap(screenshot, region)
     val detected = JapaneseOcr.detectLines(regionCrop)
-    // ML Kit found Japanese in the region: those lines are what it reads as, and manga-ocr reads
-    // them. When it found none, the stylized glyphs it saw as something else are exactly what the
-    // reader circled, so the selection box itself goes to manga-ocr instead.
-    val onScreen = if (RegionReadPolicy.hasJapaneseLines(detected)) {
-        SelectionSnap.translate(
-            JapaneseOcr.readLines(context, regionCrop, detected),
-            region.left,
-            region.top
-        )
+    // Meiki sees the lettering ML Kit's line detector misses; its boxes beyond ML Kit's become
+    // empty candidate lines, which manga-ocr fills in during the read below. One meiki pass per
+    // lookup: the merge runs here and never again. With no model installed the meiki lines are
+    // never read (they stay empty) and are filtered out, so the behaviour is exactly as before.
+    val meikiBoxes = DetectionMerge.merge(
+        detected.map { it.bounds },
+        MeikiDetector.detect(context, regionCrop)
+    ).added
+    val candidates = detected + meikiBoxes.map { OcrLine("", it) }
+    val read = JapaneseOcr.readLines(context, regionCrop, candidates)
+        .filter { it.text.isNotEmpty() }
+
+    // ML Kit found Japanese — in its own lines, or in a meiki box manga-ocr read: those lines are
+    // what the reader gets. When neither found any, the stylized glyphs ML Kit saw as something
+    // else are exactly what the reader circled, so the selection box itself goes to manga-ocr
+    // instead.
+    val onScreen = if (RegionReadPolicy.hasJapaneseLines(read)) {
+        SelectionSnap.translate(read, region.left, region.top)
     } else {
         RegionReadPolicy.fallbackLines(
             SelectionSnap.translate(detected, region.left, region.top),

@@ -129,7 +129,9 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
   Settings tile, accessibility service.
-- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, selection snapping, the
+- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the optional meiki
+  text-line detector (`meiki.text.detect.v0`, shipped in the APK alongside ML Kit and merged into
+  ML Kit's boxes by `DetectionMerge`), selection snapping, the
   full-screen text index (`ScreenText*`, `ScreenHits`) and `OcrRepair`. The reader is
   `ScreenLineReader` (the per-session cache that replaces each line's text as manga-ocr reads it, and
   drops the lines whose final text has no Japanese), `MangaOcrModel` (where the model lives),
@@ -172,6 +174,9 @@ left implicit.
   <https://www.edrdg.org/>.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
   lines and reads them when no manga-ocr model is installed.
+- **Text-line detection** — [meiki.text.detect.v0](https://huggingface.co/rtr46/meiki.text.detect.v0)
+  (rtr46 and contributors, LGPL-3.0), a second line finder shipped in the APK alongside ML Kit for
+  the lettering ML Kit's detector misses.
 - **Optional stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
   Apache-2.0) through the ONNX export at
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),

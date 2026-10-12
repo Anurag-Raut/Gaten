@@ -88,6 +88,7 @@ import kotlin.math.roundToInt
 
 private const val EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch"
+private const val MEIKI_MODEL_URL = "https://huggingface.co/rtr46/meiki.text.detect.v0"
 
 /**
  * Home screen: service status, the two ways to start a lookup, the optional manga-ocr model and the
@@ -749,7 +750,7 @@ private fun KeyMapperRow(onCopy: () -> Unit) {
     }
 }
 
-/** Small muted legal footer; the two attribution lines open their pages in a browser. */
+/** Small muted legal footer; the attribution lines open their pages in a browser. */
 @Composable
 private fun AboutFooter() {
     val context = LocalContext.current
@@ -780,6 +781,13 @@ private fun AboutFooter() {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.clickable { openUrl(context, CIRCLETOSEARCH_URL) }
+    )
+    Spacer(modifier = Modifier.height(Spacing.s))
+    Text(
+        text = stringResource(R.string.home_about_meiki),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.clickable { openUrl(context, MEIKI_MODEL_URL) }
     )
 }
 

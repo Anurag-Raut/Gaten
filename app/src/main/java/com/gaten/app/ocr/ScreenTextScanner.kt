@@ -6,6 +6,7 @@
 
 package com.gaten.app.ocr
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
@@ -20,7 +21,13 @@ import kotlinx.coroutines.CancellationException
  * every line, with a box per character, so a tap or a lasso can be answered from the index
  * ([ScreenHits]) with no further recognition.
  *
- * ML Kit only, deliberately: it is the detector, and it reports the layout the index is made of.
+ * ML Kit is the detector of record and reports the layout the index is made of; the optional
+ * meiki model ([MeikiDetector]) is a second opinion on *where* the lines are, and the boxes it
+ * finds beyond ML Kit's ([DetectionMerge]) become lines of their own. Those meiki-only lines start
+ * as empty placeholders with no character boxes — unreachable by gestures until [ScreenLineReader]
+ * reads them — and manga-ocr fills their text in; a line whose reading has no Japanese in it is
+ * dropped like any other. With no manga-ocr model installed they simply stay empty and
+ * unreachable, which is the same degradation every other manga-ocr path takes.
  *
  * Every line ML Kit read is kept, whatever script it is in — a line it read as Latin can still be
  * stylized Japanese, which is what manga-ocr is for — and each one's box is trimmed onto its ink
@@ -35,13 +42,15 @@ object ScreenTextScanner {
     private const val TAG = "GatenOcr"
 
     /**
-     * Recognises the whole [bitmap] and returns its index, lines in the order ML Kit reported them.
+     * Recognises the whole [bitmap] and returns its index: ML Kit's lines in the order it reported
+     * them, followed by the meiki-only lines ([MeikiDetector], [DetectionMerge]) as placeholders.
      *
      * Returns null — i.e. [ScanState.Unavailable] for the caller — when recognition fails, or when
-     * ML Kit read no line at all. On failure the region path still works, so nothing is logged as a
-     * crash. Never throws.
+     * ML Kit read no line at all (meiki-only lines are appended after that check: without ML Kit's
+     * layout there is nothing to index). On failure the region path still works, so nothing is
+     * logged as a crash. Never throws.
      */
-    suspend fun scan(bitmap: Bitmap): ScreenText? {
+    suspend fun scan(context: Context, bitmap: Bitmap): ScreenText? {
         val startedAt = SystemClock.elapsedRealtime()
         val lines = try {
             JapaneseOcr.mlKitResult(bitmap).textBlocks
@@ -55,8 +64,31 @@ object ScreenTextScanner {
         }
         if (lines.isEmpty()) return null
 
-        Log.d(TAG, "Indexed ${lines.size} lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
-        return ScreenText(lines, bitmap.width, bitmap.height)
+        // Meiki sees the lettering ML Kit's line detector misses; only its boxes beyond ML Kit's
+        // become lines, and they go at the end so ML Kit's reading order is kept. A failed meiki
+        // pass is an empty list (the model is optional), so the index is exactly as before.
+        val meikiStartedAt = SystemClock.elapsedRealtime()
+        val meikiBoxes = MeikiDetector.detect(context, bitmap)
+        val added = DetectionMerge.merge(
+            lines.map { it.bounds },
+            meikiBoxes
+        ).added
+        val placeholderLines = added.map { box ->
+            ScreenLine(
+                text = "",
+                bounds = box,
+                vertical = box.height > box.width * 1.5f,
+                charBoxes = emptyList()
+            )
+        }
+        Log.d(
+            TAG,
+            "meiki: ${meikiBoxes.size} boxes, ${added.size} beyond ML Kit, " +
+                "${SystemClock.elapsedRealtime() - meikiStartedAt} ms"
+        )
+
+        Log.d(TAG, "Indexed ${lines.size + placeholderLines.size} lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
+        return ScreenText(lines + placeholderLines, bitmap.width, bitmap.height)
     }
 
     /** Margin, in px, the line is cropped with before the ink profile is read. */

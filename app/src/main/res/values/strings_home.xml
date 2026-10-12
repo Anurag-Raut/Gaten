@@ -63,4 +63,5 @@
     <string name="home_about_version">Gaten %1$s</string>
     <string name="home_about_dict">Dictionary: JMdict &amp; JMnedict (EDRDG), CC BY-SA 4.0</string>
     <string name="home_about_license">Open-source under GPL-3.0 &#183; based on CircleToSearch by AKS-Labs</string>
+    <string name="home_about_meiki">meiki text detector — LGPL-3.0</string>
 </resources>

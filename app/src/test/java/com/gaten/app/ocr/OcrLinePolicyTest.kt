@@ -52,6 +52,15 @@ class OcrLinePolicyTest {
     }
 
     @Test
+    fun anEmptyMlKitReadingAcceptsARoomyMangaReading() {
+        // A meiki placeholder line has no ML Kit reading at all, so the floor (4 characters) sets
+        // the box's room: a short reading is accepted, and 4 x 3 + 4 = 16 is the limit.
+        assertTrue(OcrLinePolicy.acceptsMangaText("", "猫が水を飲む"))
+        assertTrue(OcrLinePolicy.acceptsMangaText("", "猫".repeat(16)))
+        assertFalse(OcrLinePolicy.acceptsMangaText("", "猫".repeat(17)))
+    }
+
+    @Test
     fun blankAndPlaceholderTextIsUnreadable() {
         assertTrue(OcrLinePolicy.isUnreadable(""))
         assertTrue(OcrLinePolicy.isUnreadable("  "))
