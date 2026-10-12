@@ -77,16 +77,17 @@ fun isFullWidthText(text: String): Boolean = text.isNotEmpty() && text.all { cha
 }
 
 /**
- * The line with its text replaced by [text], and its character boxes recomputed to match.
+ * The line with its text replaced by [text], and its character boxes re-aligned to it.
  *
- * A second reader gives back a different string — usually a different length — so the boxes the
- * detector reported no longer address it. They are rebuilt with [interpolateCharBoxes], which is
- * what the scanner itself uses for full-width and tategaki lines; the detector's own symbol boxes
- * cannot be reused, because they describe the characters that were just replaced. The invariant
- * holds either way: `charBoxes.size == text.length`.
+ * A second reader gives back a different string — usually a different length — so the detector's
+ * boxes no longer address it one for one. [CharBoxAlign] keeps the geometry anyway: every character
+ * both readings share keeps the box the detector drew for it, the characters only the reader saw are
+ * cut out of the gap their neighbours left, and the `…` it spells as dots takes the ellipsis's own
+ * box. A tap or a highlight then lands on the glyph that was pointed at. The invariant holds:
+ * `charBoxes.size == text.length`.
  */
 fun ScreenLine.withText(text: String): ScreenLine =
-    copy(text = text, charBoxes = interpolateCharBoxes(text, bounds, vertical))
+    copy(text = text, charBoxes = CharBoxAlign.align(this.text, this.charBoxes, text, bounds, vertical))
 
 /** [screen] with the text of line [index] replaced, or [screen] itself when there is no such line. */
 fun ScreenText.withLineText(index: Int, text: String): ScreenText {

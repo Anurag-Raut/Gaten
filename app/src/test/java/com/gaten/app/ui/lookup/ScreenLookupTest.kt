@@ -26,8 +26,9 @@ class ScreenLookupTest {
         val screen = screenOf(line)
         val lookup = dictionaryOf("猫", "カード")
 
-        // 40 px characters became 24 px ones, so x = 110 addresses ド at index 4 in the new text and
-        // at index 2 in ML Kit's: the offset moved with the text rather than being carried over.
+        // ML Kit's boxes touch, so が and ー, which it never saw, share the spans of their neighbours;
+        // x = 110 addresses ド at index 4 in the new text and at index 2 in ML Kit's, so the offset
+        // moved with the text rather than being carried over.
         assertEquals(2, ScreenHits.hitTest(screenOf(screenLine("猫カド", top = 100)), 110, 130, 8)?.charIndex)
         assertEquals(4, ScreenHits.hitTest(screen, 110, 130, 8)?.charIndex)
 
@@ -35,8 +36,9 @@ class ScreenLookupTest {
 
         assertNotNull(tap)
         assertEquals("カード", tap!!.result.words.first().surface)
-        // The word's box is the union of the new character boxes it spans.
-        assertEquals(Box(48, 100, 120, 160), tap.wordBox)
+        // The word's box is the union of the new character boxes it spans: カ, squeezed by が, at
+        // 53..80, through ド at 97..120.
+        assertEquals(Box(53, 100, 120, 160), tap.wordBox)
         assertEquals("猫がカード", tap.result.ocrText)
     }
 

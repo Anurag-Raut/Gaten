@@ -73,34 +73,44 @@ class ScreenTextTest {
     }
 
     @Test
-    fun replacingALinesTextRebuildsItsCharacterBoxes() {
+    fun replacingALinesTextKeepsTheBoxesOfTheCharactersItShares() {
         val bounds = Box(0, 10, 120, 70)
-        val line = ScreenLine("描が水", bounds, vertical = false, charBoxes = interpolateCharBoxes("描が水", bounds, false))
+        val detectorBoxes = interpolateCharBoxes("描が水", bounds, vertical = false)
+        val line = ScreenLine("描が水", bounds, vertical = false, charBoxes = detectorBoxes)
 
-        // A second reader gives back a longer string: the boxes have to address it.
+        // A second reader gives back a longer string: the boxes still have to address it.
         val replaced = line.withText("猫が水を飲む")
 
         assertEquals("猫が水を飲む", replaced.text)
         assertEquals(replaced.text.length, replaced.charBoxes.size)
         assertEquals("the line itself does not move", bounds, replaced.bounds)
-        assertEquals(bounds.left, replaced.charBoxes.first().left)
+        // 描 read as 猫 is a different character on the same glyph, so it keeps its box, and so does
+        // が. 水 has no room after it for the three new characters, so they share its span with it.
+        assertEquals(detectorBoxes[0], replaced.charBoxes[0])
+        assertEquals(detectorBoxes[1], replaced.charBoxes[1])
+        assertEquals(detectorBoxes[2].left, replaced.charBoxes[2].left)
+        // The characters ML Kit never saw sit at the end of the line, inside it.
         assertEquals(bounds.right, replaced.charBoxes.last().right)
-        replaced.charBoxes.zipWithNext { left, right -> assertEquals(left.right, right.left) }
+        replaced.charBoxes.forEach { assertTrue(it.left >= bounds.left && it.right <= bounds.right) }
     }
 
     @Test
     fun aTategakiLineIsRebuiltDownItsHeight() {
         val bounds = Box(100, 0, 160, 120)
-        val line = ScreenLine("描が", bounds, vertical = true, charBoxes = interpolateCharBoxes("描が", bounds, true))
+        val detectorBoxes = interpolateCharBoxes("描が", bounds, vertical = true)
+        val line = ScreenLine("描が", bounds, vertical = true, charBoxes = detectorBoxes)
 
         val replaced = line.withText("猫が水を飲む")
 
         assertEquals(replaced.text.length, replaced.charBoxes.size)
+        // 猫 keeps its own box; が shares its span with the new characters that stack after it, up to
+        // the line's own edge.
+        assertEquals(detectorBoxes[0], replaced.charBoxes[0])
+        assertEquals(detectorBoxes[1].top, replaced.charBoxes[1].top)
         assertEquals(bounds.left, replaced.charBoxes.first().left)
         assertEquals(bounds.right, replaced.charBoxes.last().right)
-        assertEquals(bounds.top, replaced.charBoxes.first().top)
         assertEquals(bounds.bottom, replaced.charBoxes.last().bottom)
-        replaced.charBoxes.zipWithNext { above, below -> assertEquals(above.bottom, below.top) }
+        replaced.charBoxes.forEach { assertTrue(it.top >= bounds.top && it.bottom <= bounds.bottom) }
     }
 
     @Test
