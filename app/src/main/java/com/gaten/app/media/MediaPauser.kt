@@ -16,8 +16,10 @@ import android.media.session.PlaybackState
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationManagerCompat
-import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "Gaten"
 
@@ -57,7 +59,10 @@ class MediaPauser(private val context: Context) {
     private val sessions = context.getSystemService(MediaSessionManager::class.java)
     private val audio = context.getSystemService(AudioManager::class.java)
 
-    private val executor: Executor = Executors.newSingleThreadExecutor()
+    private val executor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
+
+    /** The delayed pause not yet run, which [resume] cancels; touched on the caller's thread only. */
+    private var pendingPause: ScheduledFuture<*>? = null
 
     /** Sessions [pause] stopped, with the state each was in, so [resume] restores only those. */
     private val paused = mutableListOf<Pair<MediaController, Int>>()
@@ -70,12 +75,22 @@ class MediaPauser(private val context: Context) {
      *
      * The session lookup and the transport calls run on the private executor; nothing is reported
      * back. The lookup overlay already shows a frozen screenshot by the time this is called, so
-     * nobody waits for the player to actually stop.
+     * nobody waits for the player to actually stop. [delayMs] holds the pause back on that executor,
+     * off the caller's thread, so a busy main thread cannot hold it back further.
      */
-    fun pause() = executor.execute(::pauseNow)
+    fun pause(delayMs: Long = 0) {
+        pendingPause = executor.schedule(::pauseNow, delayMs, TimeUnit.MILLISECONDS)
+    }
 
-    /** Plays back only what [pause] stopped. A no-op when nothing was paused. */
-    fun resume() = executor.execute(::resumeNow)
+    /**
+     * Plays back only what [pause] stopped. A no-op when nothing was paused; a pause still waiting
+     * out its delay is cancelled instead, so it cannot stop the media after this.
+     */
+    fun resume() {
+        pendingPause?.cancel(false)
+        pendingPause = null
+        executor.execute(::resumeNow)
+    }
 
     private fun pauseNow() {
         if (paused.isNotEmpty() || pausedByKeyEvent) {

@@ -11,18 +11,23 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.Choreographer
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.WindowManager
+import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -43,6 +48,12 @@ import com.gaten.app.ui.theme.GatenTheme
 
 private const val TAG = "Gaten"
 
+/** How long the frozen frame is on screen before the media behind it is paused. */
+private const val PauseAfterFreezeMs = 100L
+
+/** Longest the overlay waits for its frozen first frame to reach the display. */
+private const val FreezeTimeoutMs = 250L
+
 /**
  * The lookup overlay, drawn in a window owned by the accessibility service.
  *
@@ -51,7 +62,7 @@ private const val TAG = "Gaten"
  * A [WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY] window never touches the activity
  * stack, so the app behind stays foreground and keeps playing fullscreen.
  *
- * The window is a bare [ComposeView], which is not an activity: [OverlayHost] supplies the owners
+ * The window holds a [ComposeView] and is not an activity: [OverlayHost] supplies the owners
  * the composition reads from the view tree, and [show]/[hide] drive that host's lifecycle. Every
  * [show] builds a fresh window from the capture it is handed — that, not a composition key, is what
  * resets the overlay to selection mode on a re-trigger.
@@ -66,28 +77,70 @@ class OverlayWindowController(
 ) {
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     /** The overlay on screen, if any. */
     private var showing: Showing? = null
 
-    /** Puts [bitmap]'s capture on screen, replacing any overlay already up. */
+    /**
+     * Puts [bitmap]'s capture on screen, replacing any overlay already up, and pauses the media
+     * behind it once the frozen frame is really showing.
+     *
+     * The window goes up holding nothing but the capture, so its first frame - the freeze - is as
+     * cheap as a frame can be; the lookup UI is composed into it only after that frame is on screen.
+     * The pause waits [PauseAfterFreezeMs] past the same point: a player raises its controls the
+     * moment it pauses, and paused any earlier they flash up before the freeze covers them.
+     */
     fun show(bitmap: Bitmap) {
         hide()
 
         val host = OverlayHost()
-        val view = ComposeView(context)
-        view.setViewTreeLifecycleOwner(host)
-        view.setViewTreeViewModelStoreOwner(host)
-        view.setViewTreeSavedStateRegistryOwner(host)
-        view.setViewTreeOnBackPressedDispatcherOwner(host)
-        val frozen = bitmap.asImageBitmap()
-        view.setContent {
+        val root = FrameLayout(context)
+        root.setViewTreeLifecycleOwner(host)
+        root.setViewTreeViewModelStoreOwner(host)
+        root.setViewTreeSavedStateRegistryOwner(host)
+        root.setViewTreeOnBackPressedDispatcherOwner(host)
+        // The capture itself, unscaled from the window's origin, is the freeze: the app keeps
+        // running underneath and none of it shows through. Drawn 1:1 (an identity matrix), it lines
+        // up with the recognised boxes, which are in the same screenshot pixels.
+        root.addView(
+            ImageView(context).apply {
+                scaleType = ImageView.ScaleType.MATRIX
+                setImageBitmap(bitmap)
+            },
+            FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+        )
+
+        // The composition reads the owners on attach, so the lifecycle has to be CREATED before the
+        // window is added and RESUMED once it is up, exactly as an activity would be.
+        host.onCreate()
+        windowManager.addView(root, windowParams())
+        host.onResume()
+        val current = Showing(root, host)
+        showing = current
+        Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture")
+
+        var frozen = false
+        val onFrozen = Runnable {
+            if (frozen || showing !== current) return@Runnable
+            frozen = true
+            Log.d(TAG, "Frozen frame on screen")
+            // Scheduled first: composing the lookup UI below blocks this thread for a while.
+            mediaPauser.pause(PauseAfterFreezeMs)
+            root.addView(lookupView(bitmap), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
+        // Committed, then one vsync more: the frame is on the display. The timeout covers a frame
+        // that is never drawn (screen off) so the lookup still opens and the media still pauses.
+        root.viewTreeObserver.registerFrameCommitCallback {
+            mainHandler.post { Choreographer.getInstance().postFrameCallback { onFrozen.run() } }
+        }
+        mainHandler.postDelayed(onFrozen, FreezeTimeoutMs)
+    }
+
+    /** The lookup UI, transparent apart from what it draws over the capture beneath it. */
+    private fun lookupView(bitmap: Bitmap) = ComposeView(context).apply {
+        setContent {
             GatenTheme {
-                // The capture itself, unscaled from the window's origin, is the freeze: the app
-                // keeps running underneath - the player pauses after the screenshot, raising its
-                // controls and moving its subtitles - and none of that shows through. Drawn 1:1, it
-                // lines up with the recognised boxes, which are in the same screenshot pixels.
-                Canvas(Modifier.fillMaxSize()) { drawImage(frozen) }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent,
@@ -97,15 +150,6 @@ class OverlayWindowController(
                 }
             }
         }
-
-        // The composition is built on attach and reads those owners there, so the lifecycle has to
-        // be CREATED first and RESUMED once the view is up, exactly as an activity would be.
-        host.onCreate()
-        windowManager.addView(view, windowParams())
-        host.onResume()
-        showing = Showing(view, host)
-        // Media is paused by the trigger pipeline once the capture is stored, not here.
-        Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture")
     }
 
     /** Takes the overlay down when it is up; true when there was one to take down. */
@@ -118,9 +162,8 @@ class OverlayWindowController(
     /** Takes the overlay down and drops the capture it was drawn from. */
     fun hide() {
         val current = showing
-        // Resume only when an overlay is really coming down. show() starts by calling hide(), so an
-        // unconditional resume here would undo the pipeline's pause on every open and the video
-        // would play on underneath the overlay.
+        // Resume only when an overlay is really coming down; show() starts by calling hide(). One
+        // closed before its delayed pause fired resumes nothing, and resume() cancels that pause.
         if (current != null) mediaPauser.resume()
         showing = null
         if (current == null) return
@@ -158,7 +201,7 @@ class OverlayWindowController(
     }
 
     /** The overlay on screen: the view to detach and the host its lifecycle runs on. */
-    private class Showing(val view: ComposeView, val host: OverlayHost)
+    private class Showing(val view: View, val host: OverlayHost)
 }
 
 /**

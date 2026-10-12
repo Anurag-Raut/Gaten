@@ -114,15 +114,15 @@ class GatenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * The ordered trigger pipeline: screenshot the screen, and only then pause the media. The
-     * screenshot is the freeze: the overlay shows it on top of the app, so whatever the player does
-     * once it pauses - raising its controls, moving its subtitles - happens underneath and is never
-     * seen. Nothing on screen needs to settle first, so the capture runs at once unless something of
-     * our own is still in the way: the collapsing shade after [fromShade], or the floating button.
+     * The ordered trigger pipeline: screenshot the screen, show it, and only then pause the media -
+     * the overlay does that once the frozen frame is on screen, so whatever the player does when it
+     * pauses - raising its controls, moving its subtitles - happens underneath and is never seen.
+     * Nothing on screen needs to settle first, so the capture runs at once unless something of our
+     * own is still in the way: the collapsing shade after [fromShade], or the floating button.
      */
     private fun startOrderedCapture(fromShade: Boolean) {
         Log.d(TAG, "Starting the ordered capture pipeline (fromShade=$fromShade)")
-        val capture = { performCapture { mediaPauser.pause() } }
+        val capture = { performCapture() }
         val button = floatingButton
         when {
             // The shade wait outlasts the button's removal, so a plain hide is enough there.
@@ -137,14 +137,13 @@ class GatenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Freezes the current screen and opens the lookup overlay. [onCaptured] runs once the screenshot
-     * is stored - the point from which the screen may safely change underneath the overlay. A
-     * capture that fails brings the floating button back, since no overlay will.
+     * Freezes the current screen and opens the lookup overlay. A capture that fails brings the
+     * floating button back, since no overlay will.
      *
      * `takeScreenshot` respects content protection, so surfaces marked FLAG_SECURE (DRM video)
      * come back blank; Gaten never tries to bypass that.
      */
-    private fun performCapture(onCaptured: () -> Unit = {}) {
+    private fun performCapture() {
         Log.d(TAG, "performCapture called")
 
         // Clear the repository at the source so a stale capture can never flash.
@@ -161,11 +160,7 @@ class GatenAccessibilityService : AccessibilityService() {
             executor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshot: ScreenshotResult) {
-                    if (deliverScreenshot(screenshot)) {
-                        onCaptured()
-                    } else {
-                        mainHandler.post { syncFloatingButton() }
-                    }
+                    if (!deliverScreenshot(screenshot)) mainHandler.post { syncFloatingButton() }
                 }
 
                 override fun onFailure(errorCode: Int) {
