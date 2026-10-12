@@ -23,6 +23,8 @@
     <string name="home_section_start">Start a lookup</string>
     <string name="home_start_tile_title">Quick Settings tile</string>
     <string name="home_start_tile_support">Add the Gaten tile from your quick settings editor.</string>
+    <string name="home_start_floating_title">Floating button</string>
+    <string name="home_start_floating_support">Tap the bubble on screen to look up.</string>
     <string name="home_start_key_title">Hardware key (Key Mapper)</string>
     <string name="home_start_key_support">Send a broadcast with this action:</string>
     <string name="home_cd_copy_action">Copy the trigger action</string>

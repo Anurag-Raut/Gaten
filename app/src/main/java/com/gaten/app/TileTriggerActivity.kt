@@ -10,13 +10,12 @@ package com.gaten.app
 import android.app.Activity
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 
 /**
  * Transparent activity launched from the Quick Settings tile: starting an activity from a
- * TileService collapses the shade, and once it is gone this activity triggers the lookup capture.
+ * TileService collapses the shade, and the trigger pipeline waits for that collapse itself before
+ * it captures, so this hands off immediately and gets out of the way.
  */
 class TileTriggerActivity : Activity() {
 
@@ -34,18 +33,16 @@ class TileTriggerActivity : Activity() {
 
         Log.d(TAG, "TileTriggerActivity started")
 
-        // Wait 500ms for the quick settings panel to collapse cleanly across all Android OEM skins (OneUI, MIUI/HyperOS, ColorOS)
-        Handler(Looper.getMainLooper()).postDelayed({
-            GatenAccessibilityService.triggerCapture()
-            finish()
+        // The pipeline waits out the shade; a fixed postDelayed here only added latency.
+        GatenAccessibilityService.triggerCapture()
+        finish()
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-            } else {
-                @Suppress("DEPRECATION")
-                overridePendingTransition(0, 0)
-            }
-        }, 500L)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
     }
 
     companion object {

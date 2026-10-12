@@ -45,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -71,6 +72,7 @@ import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.media.hasNotificationAccess
 import com.gaten.app.ocr.OcrEngine
 import com.gaten.app.ocr.OcrPreferences
+import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
 import com.gaten.app.ui.theme.Spacing
 
@@ -93,12 +95,16 @@ fun HomeScreen() {
     var notificationAccess by remember { mutableStateOf(hasNotificationAccess(context)) }
     var showDisclosure by remember { mutableStateOf(false) }
     var engine by remember { mutableStateOf(OcrPreferences.engine(context)) }
+    var floatingEnabled by remember {
+        mutableStateOf(TriggerPreferences.floatingButtonEnabled(context))
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 serviceEnabled = isAccessibilityServiceEnabled(context)
                 notificationAccess = hasNotificationAccess(context)
+                floatingEnabled = TriggerPreferences.floatingButtonEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -156,6 +162,20 @@ fun HomeScreen() {
             Spacer(modifier = Modifier.height(Spacing.xl))
 
             SectionLabel(text = stringResource(R.string.home_section_start))
+            FloatingButtonRow(
+                enabled = floatingEnabled,
+                onToggle = { checked ->
+                    floatingEnabled = checked
+                    TriggerPreferences.setFloatingButtonEnabled(context, checked)
+                    // Explicit package: a manifest receiver only receives implicit broadcasts that
+                    // name it (or its package) on API 26+.
+                    context.sendBroadcast(
+                        Intent(TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED)
+                            .setPackage(context.packageName)
+                    )
+                }
+            )
+            Spacer(modifier = Modifier.height(Spacing.m))
             TileRow()
             HorizontalDivider(
                 modifier = Modifier.fillMaxWidth(),
@@ -295,6 +315,38 @@ private fun MediaAccessRow(onGrant: () -> Unit) {
         Button(onClick = onGrant) {
             Text(stringResource(R.string.home_action_turn_on))
         }
+    }
+}
+
+/**
+ * Start-a-lookup row: the on-screen floating bubble. The switch only records the choice; the
+ * accessibility service owns the window and reacts to [TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED].
+ */
+@Composable
+private fun FloatingButtonRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.home_start_floating_title),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = stringResource(R.string.home_start_floating_support),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.width(Spacing.m))
+        Switch(checked = enabled, onCheckedChange = onToggle)
     }
 }
 

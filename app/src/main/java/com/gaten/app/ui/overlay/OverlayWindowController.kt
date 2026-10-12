@@ -57,7 +57,9 @@ private const val TAG = "Gaten"
  */
 class OverlayWindowController(
     private val context: Context,
-    private val mediaPauser: MediaPauser
+    private val mediaPauser: MediaPauser,
+    /** Runs on the main thread once the overlay is down and media resumed; the service re-shows its button. */
+    private val onHidden: () -> Unit
 ) {
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
@@ -93,9 +95,8 @@ class OverlayWindowController(
         windowManager.addView(view, windowParams())
         host.onResume()
         showing = Showing(view, host)
-        // The overlay is up: stop whatever media is playing underneath so the frozen capture is
-        // not quietly moving on behind it.
-        mediaPauser.pause()
+        // Media was paused by the trigger pipeline before the capture, not here: the pause has to
+        // land before the screenshot, or the frame is the pre-pause UI.
         Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture")
     }
 
@@ -108,8 +109,7 @@ class OverlayWindowController(
 
     /** Takes the overlay down and drops the capture it was drawn from. */
     fun hide() {
-        // The overlay draws the media pause, so it has to undo it on the way out, whatever the
-        // reason for closing. A resume with nothing paused does nothing.
+        // Gaten only pauses media it will resume; a resume with nothing paused does nothing.
         mediaPauser.resume()
         val current = showing ?: return
         showing = null
@@ -117,6 +117,8 @@ class OverlayWindowController(
         current.host.onDestroy()
         BitmapRepository.clear()
         Log.d(TAG, "Overlay window removed")
+        // The window is gone and media is playing again: whoever hid it can come back now.
+        onHidden()
     }
 
     /**

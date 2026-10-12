@@ -89,6 +89,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.gaten.app.action.TRIGGER_LOOKUP" />
+                <!-- Sent by the home screen after the floating-button switch is toggled. -->
+                <action android:name="com.gaten.app.action.FLOATING_BUTTON_CHANGED" />
             </intent-filter>
         </receiver>
 

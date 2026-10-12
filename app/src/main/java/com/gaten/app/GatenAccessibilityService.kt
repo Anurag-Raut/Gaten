@@ -8,18 +8,41 @@
 package com.gaten.app
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import com.gaten.app.data.BitmapRepository
 import com.gaten.app.media.MediaPauser
+import com.gaten.app.trigger.FloatingTriggerButton
+import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.overlay.OverlayWindowController
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+
+/** SystemUI owns the notification shade; its window is what the trigger pipeline waits out. */
+private const val SYSTEMUI_PACKAGE = "com.android.systemui"
+
+/** How long [GatenAccessibilityService] waits for the shade to collapse before capturing anyway. */
+private const val ShadeWaitMs = 1200L
+
+/** How often the shade wait re-reads the window list. */
+private const val ShadePollMs = 50L
+
+/** Used when the window list is unavailable: a fixed delay long enough for a normal shade collapse. */
+private const val ShadeFallbackMs = 400L
+
+/**
+ * How long to wait after a pause before the screenshot. A player's control bar animates in when
+ * playback stops and pushes the subtitles up, so a capture taken at the instant of the pause reads
+ * a frame the player is still moving.
+ */
+private const val ControlsSettleMs = 250L
 
 /**
  * Gaten' only use of the accessibility framework: screenshots the screen when a lookup is
@@ -29,20 +52,133 @@ import java.util.concurrent.Executors
 class GatenAccessibilityService : AccessibilityService() {
 
     private val executor: Executor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var overlay: OverlayWindowController
+    private lateinit var mediaPauser: MediaPauser
+    private var floatingButton: FloatingTriggerButton? = null
+    /** True once the system has connected the service; only then may a window be added. */
+    private var serviceConnected = false
+    /** True from the moment a trigger is accepted until its capture resolves; gates new triggers. */
+    @Volatile
+    private var captureInFlight = false
 
     override fun onCreate() {
         super.onCreate()
-        overlay = OverlayWindowController(this, MediaPauser(this))
+        mediaPauser = MediaPauser(this)
+        overlay = OverlayWindowController(this, mediaPauser) { syncFloatingButton() }
+        // No window may be added here: an AccessibilityService has no valid window token until the
+        // system connects it, so the floating button is shown from onServiceConnected instead.
         instance = this
+    }
+
+    /**
+     * The first point at which this service may add a window: its window token only exists once the
+     * system has connected it. Showing the button from onCreate threw BadTokenException and killed
+     * the process before the service could ever bind, so this call must stay here.
+     */
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        serviceConnected = true
+        syncFloatingButton()
+    }
+
+    /** A service that loses its binding must leave no window behind. */
+    override fun onUnbind(intent: Intent?): Boolean {
+        // Unbound means no window token again, so nothing may be shown until reconnection.
+        serviceConnected = false
+        floatingButton?.hide()
+        return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         // The window belongs to this service: without this it would stay on screen over everything
-        // after the service goes away.
+        // after the service goes away. hide() re-shows the button; take it down again after.
         overlay.hide()
+        floatingButton?.hide()
         instance = null
+    }
+
+    /**
+     * Shows the floating trigger when the user has it enabled and it is not already up, hides it
+     * otherwise. A no-op when the preference is unchanged and the button already matches it.
+     */
+    fun syncFloatingButton() {
+        // Before onServiceConnected there is no window token: adding the button now would throw
+        // BadTokenException, so the attempt is deferred to that callback.
+        if (!serviceConnected) {
+            Log.d(TAG, "Service not connected yet - not showing the floating button")
+            return
+        }
+        if (TriggerPreferences.floatingButtonEnabled(this)) {
+            if (floatingButton?.isShowing == true) return
+            val button = floatingButton
+                ?: FloatingTriggerButton(this) { triggerCapture() }.also { floatingButton = it }
+            try {
+                button.show()
+            } catch (e: Exception) {
+                // Adding a window can fail (no valid token yet); a button that cannot be shown is
+                // no reason to take the whole service - and every trigger with it - down.
+                Log.w(TAG, "Could not show the floating button", e)
+            }
+        } else {
+            floatingButton?.hide()
+        }
+    }
+
+    /**
+     * The ordered trigger pipeline: wait out the notification shade, pause media, let the player's
+     * controls settle, then capture. Capturing after the pause is what keeps every recognised box
+     * on the frame the user actually saw.
+     */
+    private fun startOrderedCapture() {
+        Log.d(TAG, "Starting the ordered capture pipeline")
+        waitForShadeGone {
+            mediaPauser.pause {
+                mainHandler.postDelayed({ performCapture() }, ControlsSettleMs)
+            }
+        }
+    }
+
+    /**
+     * Runs [onGone] once no window belongs to SystemUI, i.e. the shade has finished collapsing.
+     *
+     * Polls `windows` (the accessibility window list) every [ShadePollMs] for up to [ShadeWaitMs].
+     * A list that is empty or throws names no shade window to wait out, so it falls back to the
+     * fixed [ShadeFallbackMs] delay instead.
+     */
+    private fun waitForShadeGone(onGone: () -> Unit) {
+        val deadline = SystemClock.uptimeMillis() + ShadeWaitMs
+        val poll = object : Runnable {
+            override fun run() {
+                val openWindows = try {
+                    windows
+                } catch (e: Exception) {
+                    Log.w(TAG, "Window list unavailable - fixed ${ShadeFallbackMs}ms shade wait", e)
+                    mainHandler.postDelayed({ onGone() }, ShadeFallbackMs)
+                    return
+                }
+                if (openWindows.isNullOrEmpty()) {
+                    Log.d(TAG, "Window list empty - fixed ${ShadeFallbackMs}ms shade wait")
+                    mainHandler.postDelayed({ onGone() }, ShadeFallbackMs)
+                    return
+                }
+                // Only a SystemUI window means the shade is (still) up; the status bar it also owns
+                // is not in this list once the shade has collapsed on the devices this targets.
+                if (openWindows.none { it.root?.packageName == SYSTEMUI_PACKAGE }) {
+                    Log.d(TAG, "Notification shade is gone - capturing")
+                    onGone()
+                    return
+                }
+                if (SystemClock.uptimeMillis() >= deadline) {
+                    Log.d(TAG, "Shade still up after ${ShadeWaitMs}ms - capturing anyway")
+                    onGone()
+                    return
+                }
+                mainHandler.postDelayed(this, ShadePollMs)
+            }
+        }
+        mainHandler.post(poll)
     }
 
     /**
@@ -57,13 +193,18 @@ class GatenAccessibilityService : AccessibilityService() {
         // Clear the repository at the source so a stale capture can never flash.
         BitmapRepository.clear()
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            captureInFlight = false
+            return
+        }
 
         takeScreenshot(
             Display.DEFAULT_DISPLAY,
             executor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshot: ScreenshotResult) {
+                    // The screenshot has resolved; a fresh trigger may start a new pipeline.
+                    captureInFlight = false
                     try {
                         val hardwareBuffer = screenshot.hardwareBuffer
                         val colorSpace = screenshot.colorSpace
@@ -89,6 +230,7 @@ class GatenAccessibilityService : AccessibilityService() {
                 }
 
                 override fun onFailure(errorCode: Int) {
+                    captureInFlight = false
                     Log.e(TAG, "Screenshot failed with error code: $errorCode")
                 }
             }
@@ -108,6 +250,8 @@ class GatenAccessibilityService : AccessibilityService() {
             return
         }
         Log.d(TAG, "Bitmap loaded from Repository. Size: ${bitmap.width}x${bitmap.height}")
+        // The button must never sit on top of the frozen capture; the overlay's onHidden re-shows it.
+        floatingButton?.hide()
         overlay.show(bitmap)
     }
 
@@ -123,16 +267,31 @@ class GatenAccessibilityService : AccessibilityService() {
             private set
 
         /**
-         * Entry point for the Quick Settings tile and the trigger broadcast. Acts as a toggle: a
-         * trigger while the panel is up closes it instead of starting another lookup.
+         * Entry point for the Quick Settings tile, the trigger broadcast and the floating button.
+         *
+         * Acts as a toggle and is single-flight: a trigger while the panel is up closes it instead
+         * of starting another lookup, and a trigger while a capture is already in flight is
+         * ignored. The accepted trigger runs the ordered pipeline on the main thread.
          */
         fun triggerCapture() {
-            if (instance?.overlay?.hideIfShowing() == true) {
-                Log.d(TAG, "Lookup panel was open - closing it")
+            val service = instance
+            if (service == null) {
+                Log.d(TAG, "triggerCapture called but the accessibility service is not connected")
                 return
             }
-            Log.d(TAG, "triggerCapture static called. instance=${instance != null}")
-            instance?.performCapture()
+            // The toggle touches views; the whole decision belongs on the main thread.
+            service.mainHandler.post {
+                if (service.overlay.hideIfShowing()) {
+                    Log.d(TAG, "Lookup panel was open - closing it")
+                    return@post
+                }
+                if (service.captureInFlight) {
+                    Log.d(TAG, "Capture already in flight - ignoring the new trigger")
+                    return@post
+                }
+                service.captureInFlight = true
+                service.startOrderedCapture()
+            }
         }
     }
 }
