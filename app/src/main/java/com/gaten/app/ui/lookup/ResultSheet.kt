@@ -10,8 +10,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -641,9 +639,9 @@ private sealed interface AnkiUiState {
 }
 
 /**
- * "Add to Anki" for [word]: the tap adds the card, or first asks AnkiDroid for its database
- * permission, or — when the user declines that — hands the word to AnkiDroid's share handler
- * instead. Hidden entirely when AnkiDroid is not installed.
+ * "Add to Anki" for [word]: the tap adds the card, or — when AnkiDroid's database permission is not
+ * granted, which the overlay cannot ask for — hands the word to AnkiDroid's share handler instead.
+ * Hidden entirely when AnkiDroid is not installed.
  *
  * The state lives with the entry it belongs to, so selecting another word chip starts from a fresh
  * button.
@@ -652,7 +650,7 @@ private sealed interface AnkiUiState {
 private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf(AnkiExporter.status(context)) }
+    val status = remember { AnkiExporter.status(context) }
     var state by remember { mutableStateOf<AnkiUiState>(AnkiUiState.Idle) }
     val card = AnkiCard.from(word, sentence = word.context)
 
@@ -670,22 +668,16 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
         }
     }
 
-    val requestPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            status = AnkiStatus.Ready
-            scope.launch { add() }
-        } else if (!AnkiExporter.shareFallback(context, card)) {
-            Toast.makeText(context, R.string.anki_error_share, Toast.LENGTH_SHORT).show()
-        }
-    }
-
     Spacer(Modifier.height(if (compact) Spacing.s else Spacing.m))
     Button(
         onClick = {
             if (status == AnkiStatus.NeedsPermission) {
-                requestPermission.launch(AnkiExporter.PERMISSION)
+                // The overlay is the accessibility service's window and cannot show the system
+                // permission dialog, so an ungranted database permission takes the same route as a
+                // declined one: AnkiDroid's own add screen.
+                if (!AnkiExporter.shareFallback(context, card)) {
+                    Toast.makeText(context, R.string.anki_error_share, Toast.LENGTH_SHORT).show()
+                }
             } else {
                 scope.launch { add() }
             }

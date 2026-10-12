@@ -47,17 +47,17 @@ homographs appear under **Other matches**.
 
 Root cause was two interacting upstream behaviours, not the OCR path:
 
-1. `OverlayActivity` is declared `singleInstance`, so a re-trigger arrives via `onNewIntent` — but
-   the old panel's dismiss only set `isJpLookupMode = false` and left the activity alive. The second
-   bubble tap therefore re-showed the **upstream Circle-to-Search UI**, whose drag handler uploads
-   the crop to an image host and opens Google/Bing/Yandex/TinEye.
+1. The overlay screen was a `singleInstance` activity, so a re-trigger arrived via `onNewIntent` —
+   but the old panel's dismiss only set `isJpLookupMode = false` and left the activity alive. The
+   second bubble tap therefore re-showed the **upstream Circle-to-Search UI**, whose drag handler
+   uploads the crop to an image host and opens Google/Bing/Yandex/TinEye.
 2. `AndroidManifest` had no guard between the two drag consumers, so a lasso also reached that
    handler even in lookup mode.
 
-Fix: the overlay is now a single-purpose screen — `OverlayActivity` renders only the frozen capture
-plus `JpLookupOverlay`, every new capture bumps a composition key so it always starts in selection
-mode, and closing it finishes the activity. The search handlers, WebView, uploader and Lens helper
-were deleted outright.
+Fix: the overlay is now a single-purpose screen — it renders only the frozen capture plus
+`JpLookupOverlay`, every new capture bumps a composition key so it always starts in selection mode,
+and closing it takes the overlay down. The search handlers, WebView, uploader and Lens helper were
+deleted outright.
 
 Regression-tested on both the emulator and the phone: capture → lasso → panel, Back to close,
 capture → lasso → panel again. Logcat contains **zero** Lens/WebView/upload activity.
@@ -127,7 +127,7 @@ panel. Evidence for each lookup lands in
 
 | Area | Change |
 |---|---|
-| `OverlayActivity.kt` | JP-only overlay; per-capture composition key; dismiss finishes the activity |
+| `ui/overlay/OverlayWindowController.kt` | JP-only overlay; one window per capture, drawn from the accessibility service; dismiss removes it |
 | `CircleToSearchAccessibilityService.kt` | Reduced to capture + launch (1,196 → 132 lines); the floating bubble was deleted once the Plus Key became the trigger |
 | `CircleToSearchScreen.kt` | **deleted** (2,127 lines: the upstream search UI) |
 | `ui/components/JpLookupOverlay.kt` | Lasso, animated panel, ranked word list, alternates, evidence dump |
@@ -206,7 +206,7 @@ needs the same logcat read this ROM blocks).
 
 App side: `LookupTriggerReceiver` (exported, that action) → `CircleToSearchAccessibilityService.triggerCapture()`
 → screenshot → overlay. Verified via Key Mapper's action **Test**: `triggerCapture static called` →
-`performCapture` → `OverlayActivity` focused (`device/v8-keymapper-test.png`).
+`performCapture` → the overlay up (`device/v8-keymapper-test.png`).
 
 The floating bubble is gone: with the Plus Key as the trigger it was redundant, so the service lost
 its overlay window entirely (132 lines, no window of its own when idle). Re-verified after that
@@ -221,8 +221,10 @@ KEYLOG_Notify … scanCode=735 …            ← before the fix: OxygenOS still
 
 D CircleToSearch: triggerCapture static called. instance=true
 D CircleToSearch: performCapture called
-D CircleToSearch: AccessibilityService launching OverlayActivity
 ```
+
+(The third line that build logged named the overlay activity; the overlay is now a window owned by
+the service, so that message is `Overlay window added for a <w>x<h> capture`.)
 
 Symptom: Key Mapper's **Test** fires the action, but a physical press does nothing. Cause (from
 Key Mapper's own log): `Grabbing devices failed in system bridge: Disconnected` — the System Bridge
@@ -235,9 +237,9 @@ presses work again. Force it with `adb shell pkill -f keymapper_sysbridge` (auto
 re-handshakes it) or by stopping/starting Expert Mode inside Key Mapper.
 
 The trigger is a **toggle**: if the panel is already up, a trigger closes it instead of starting
-another lookup (`triggerCapture` → `OverlayActivity.closeIfShowing()`). Verified on device:
-trigger → `OverlayActivity` focused, trigger → `Lookup panel was open - closing it` → back to the
-previous app, trigger → opens again. This applies to both the Plus Key and the Quick Settings tile.
+another lookup (`triggerCapture` → the overlay's `hideIfShowing()`). Verified on device: trigger →
+overlay up, trigger → `Lookup panel was open - closing it` → back to the previous app, trigger →
+opens again. This applies to both the Plus Key and the Quick Settings tile.
 
 Per-reboot: Shizuku itself must be started again over adb (its documented limitation); Key Mapper's
 Expert Mode then auto-starts and re-handshakes on its own.
