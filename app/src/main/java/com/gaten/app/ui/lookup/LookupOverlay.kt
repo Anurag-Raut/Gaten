@@ -21,7 +21,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,11 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -182,6 +177,29 @@ fun LookupOverlay(
         } else {
             Log.d(TAG, "Screen scan ready in $elapsed ms (${screen.lines.size} lines)")
         }
+    }
+
+    // The pill at the top is up only while it has something to say: "Reading…" for as long as any
+    // work runs, then — once the scan has settled — one of the two short notices. [pillText] holds
+    // the text last shown, so the pill still has something to draw while it fades out.
+    var pillText by remember { mutableStateOf(R.string.lookup_reading) }
+    var noticeUp by remember { mutableStateOf(false) }
+    val busy = phase == Phase.Scanning || scanState == ScanState.Scanning
+
+    // A scan that settled without an index to tap says so for a couple of seconds: no text on the
+    // screen at all, or no scan at all — and while the latter holds, the circle-to-read path is
+    // still the way in.
+    LaunchedEffect(scanState) {
+        val settled = scanState
+        val notice = when {
+            settled is ScanState.Ready && settled.screen.lines.isEmpty() -> R.string.lookup_no_text
+            settled == ScanState.Unavailable -> R.string.lookup_hint
+            else -> null
+        } ?: return@LaunchedEffect
+        pillText = notice
+        noticeUp = true
+        delay(2000)
+        noticeUp = false
     }
 
     // ML Kit's index is what the overlay goes Ready with, instantly. The reader then replaces each
@@ -433,13 +451,20 @@ fun LookupOverlay(
                 onTap = { onTap(it) }
             )
 
+            // Pure drawing, over the selection canvas and under the pill: the ring around the edge
+            // of the display, telling work apart from idle without ever taking a touch.
+            EdgeOutline(busy = busy, modifier = Modifier.fillMaxSize())
+
             AnimatedVisibility(
-                visible = phase != Phase.Result,
+                visible = busy || noticeUp,
                 enter = fadeIn(tween(160)),
                 exit = fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.TopCenter)
             ) {
-                StatusPill(phase = phase, scanState = scanState, onClose = { close() })
+                StatusPill(
+                    text = if (busy) R.string.lookup_reading else pillText,
+                    busy = busy
+                )
             }
 
             // Chosen once per result, from the box this session highlighted, so the panel never
@@ -475,10 +500,13 @@ fun LookupOverlay(
     }
 }
 
-/** The one pill at the top: the ready hint once the index is in, the instruction before it, and "Reading…" with a spinner while a lookup or the scan itself runs. */
+/**
+ * The one pill at the top: "Reading…" with a spinner for as long as work runs — the screen scan or
+ * a gesture lookup — and a short notice in its place once the scan has settled. It is only up while
+ * it has something to say, so it never covers the text the reader is selecting.
+ */
 @Composable
-private fun StatusPill(phase: Phase, scanState: ScanState, onClose: () -> Unit) {
-    val spinner = phase == Phase.Scanning || scanState == ScanState.Scanning
+private fun StatusPill(text: Int, busy: Boolean) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
@@ -491,40 +519,23 @@ private fun StatusPill(phase: Phase, scanState: ScanState, onClose: () -> Unit) 
             modifier = Modifier.padding(
                 start = Spacing.l,
                 top = Spacing.xs,
-                end = Spacing.s,
+                end = Spacing.l,
                 bottom = Spacing.xs
             )
         ) {
             Text(
-                text = stringResource(
-                    when {
-                        phase == Phase.Scanning -> R.string.lookup_reading
-                        scanState is ScanState.Ready -> R.string.lookup_hint_ready
-                        else -> R.string.lookup_hint
-                    }
-                ),
+                text = stringResource(text),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(vertical = Spacing.s)
             )
-            Spacer(Modifier.width(Spacing.s))
-            Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-                if (spinner) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            Icons.Rounded.Close,
-                            contentDescription = stringResource(R.string.lookup_cd_close),
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+            if (busy) {
+                Spacer(Modifier.width(Spacing.s))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
