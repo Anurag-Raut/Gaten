@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -28,9 +29,15 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import com.yomilens.app.ocr.ScreenText
 
 /** Degenerate gestures (a tap or a sliver) are ignored below this side length, in view px. */
 internal const val MIN_SELECTION_PX = 24f
+
+/** Stroke and corner radius of the faint outlines drawn around the indexed lines. */
+private val OutlineStrokeWidth = 1.5.dp
+private val OutlineCorner = 4.dp
 
 /** Bounding box of a freehand stroke, in view pixels; null when there is nothing drawn. */
 internal fun boundingBoxOf(points: List<Offset>): Rect? {
@@ -57,8 +64,10 @@ internal fun buildTrailPath(points: List<Offset>): Path = Path().apply {
  *
  * Draws the dim-over-everything scrim (the selection box stays clear with a 2px outline), the
  * live lasso trail while the user is drawing, and the frozen trail fading out once the result
- * has arrived. Drag and tap gestures are active only while [interactive]; the result sheet sits
- * on top and handles its own touches afterwards.
+ * has arrived. While the screen index is ready and the user is selecting, every indexed line
+ * gets a faint outline, fading in so the reader can see what a tap will now hit. Drag and tap
+ * gestures are active only while [interactive]; the result sheet sits on top and handles its own
+ * touches afterwards.
  *
  * The points themselves are hoisted into [LookupOverlay] so the lasso can survive recomposition
  * and be reset on "select again"; [onLassoEnd] reads that state at call time.
@@ -66,6 +75,7 @@ internal fun buildTrailPath(points: List<Offset>): Path = Path().apply {
 @Composable
 fun LassoLayer(
     screenshot: Bitmap?,
+    screen: ScreenText?,
     points: List<Offset>,
     frozenTrail: Path?,
     frozenBox: Rect?,
@@ -75,7 +85,7 @@ fun LassoLayer(
     onLassoUpdate: (Offset) -> Unit,
     onLassoEnd: () -> Unit,
     onLassoCancel: () -> Unit,
-    onTap: () -> Unit,
+    onTap: (Offset) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -91,6 +101,13 @@ fun LassoLayer(
         targetValue = if (trailFading) 0f else 1f,
         animationSpec = tween(420),
         label = "trailAlpha"
+    )
+
+    // The line outlines fade in once the screen index is ready, and out again while it is in use.
+    val outlineAlpha by animateFloatAsState(
+        targetValue = if (screen != null && interactive) 1f else 0f,
+        animationSpec = tween(250),
+        label = "outlineAlpha"
     )
 
     Canvas(
@@ -111,8 +128,9 @@ fun LassoLayer(
             }
             .pointerInput(interactive) {
                 if (interactive) {
-                    // A tap without dragging closes the overlay; a drag is never a tap.
-                    detectTapGestures { currentTap() }
+                    // A tap without dragging is a word lookup once the index is ready, a
+                    // dismissal otherwise; a drag is never a tap.
+                    detectTapGestures { currentTap(it) }
                 }
             }
     ) {
@@ -139,6 +157,19 @@ fun LassoLayer(
                 size = Size((size.width - box.right).coerceAtLeast(0f), box.height)
             )
             drawRect(primary, topLeft = box.topLeft, size = box.size, style = Stroke(width = 2f))
+        }
+        // Faint outlines over every indexed line, so the reader can see what a tap now hits.
+        if (screen != null && outlineAlpha > 0f) {
+            for (line in screen.lines) {
+                val bounds = line.bounds
+                drawRoundRect(
+                    color = primary.copy(alpha = 0.45f * outlineAlpha),
+                    topLeft = Offset(bounds.left.toFloat(), bounds.top.toFloat()),
+                    size = Size(bounds.width.toFloat(), bounds.height.toFloat()),
+                    cornerRadius = CornerRadius(OutlineCorner.toPx()),
+                    style = Stroke(width = OutlineStrokeWidth.toPx())
+                )
+            }
         }
         // The frozen lasso trail, fading out on completion.
         frozenTrail?.let { trail ->

@@ -14,6 +14,7 @@ import com.yomilens.app.dict.ScannedWord
 import com.yomilens.app.dict.WordScanner
 import com.yomilens.app.ocr.Box
 import com.yomilens.app.ocr.JapaneseOcr
+import com.yomilens.app.ocr.OcrRepair
 import com.yomilens.app.ocr.SelectionSnap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,9 +27,10 @@ data class LookupResult(
 )
 
 /**
- * One full lookup: snap the gesture box to the OCR text lines, then scan the text into dictionary
- * words. Both stages are CPU/database work and run off the main thread. [repo] is null when the
- * dictionary failed to open; the caller turns that into [LookupResult.error].
+ * One full lookup: snap the gesture box to the OCR text lines, repair each line, then scan the
+ * text into dictionary words. Both stages are CPU/database work and run off the main thread.
+ * [repo] is null when the dictionary failed to open; the caller turns that into
+ * [LookupResult.error], and the repair — which is dictionary-checked — is skipped.
  */
 suspend fun runLookup(
     context: Context,
@@ -36,9 +38,14 @@ suspend fun runLookup(
     selection: Rect,
     repo: JmdictRepository?
 ): LookupResult {
-    val text = withContext(Dispatchers.Default) {
+    val lines = withContext(Dispatchers.Default) {
         snapToLines(screenshot, selection, context)
     }
+    // One character for one, so the repaired text still lines up with everything the region path
+    // reported. The joined text is what gets copied and what the dictionary sees.
+    val text = withContext(Dispatchers.Default) {
+        if (repo == null) lines else lines.map { OcrRepair.repair(it) { term -> repo.lookup(term) } }
+    }.joinToString("\n")
     val words = if (repo == null) {
         emptyList()
     } else {
@@ -55,15 +62,16 @@ suspend fun runLookup(
  * This is what makes a near-miss forgiving: circling 猫が水を飲む a character short used to lose
  * the verb entirely, because the tight bounding box of the trail simply did not contain it. Recognising
  * wider and keeping only the lines the selection overlaps returns the whole line the user meant.
+ * One text per line, so the caller can repair each line before the lines are joined.
  *
- * @return the text to scan, the snapped lines' text (or whatever was recognised when nothing
+ * @return the snapped lines' text in reading order (or whatever was recognised when nothing
  *   overlapped)
  */
 private suspend fun snapToLines(
     screenshot: Bitmap,
     selection: Rect,
     context: Context
-): String {
+): List<String> {
     val box = Box(
         selection.left.toInt(),
         selection.top.toInt(),
@@ -88,7 +96,7 @@ private suspend fun snapToLines(
     // Nothing overlapped (nothing recognised, or a gesture between lines): keep whatever was read.
     val used = chosen.ifEmpty { onScreen }
 
-    return used.joinToString("\n") { it.text }
+    return used.map { it.text }
 }
 
 /** Crops [box] (bitmap px) out of the capture, clamped so the result is never empty. */
