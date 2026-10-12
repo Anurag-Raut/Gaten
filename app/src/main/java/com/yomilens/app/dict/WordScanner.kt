@@ -10,14 +10,17 @@ package com.yomilens.app.dict
  * A dictionary word found inside a scanned text.
  *
  * [surface] is the exact substring of the input, [baseForm] the dictionary form that matched (the
- * surface itself when it matched directly, a deinflected or kana-folded form otherwise).
+ * surface itself when it matched directly, a deinflected or kana-folded form otherwise). [context]
+ * is the line the word was read from — the sentence a flashcard export wants to show next to the
+ * word — and is empty until whoever knows the line fills it in.
  */
 data class ScannedWord(
     val surface: String,
     val start: Int,
     val end: Int,
     val baseForm: String,
-    val entries: List<DictEntry>
+    val entries: List<DictEntry>,
+    val context: String = ""
 )
 
 /**
@@ -31,6 +34,12 @@ data class ScannedWord(
 object WordScanner {
     /** Longest surface probed at one position. Covers compounds such as 国立大学法人 without scanning the whole line. */
     private const val MAX_MATCH_LENGTH = 12
+
+    /**
+     * Extra candidates [scanLine] asks for, so the caller's cap falls on the words inside the range
+     * rather than on the whole line.
+     */
+    private const val RANGE_CANDIDATE_FACTOR = 4
 
     private const val KATAKANA_START = 0x30A1
     private const val KATAKANA_END = 0x30F6
@@ -74,6 +83,78 @@ object WordScanner {
                 compareByDescending<ScannedWord> { kanjiCount(it.surface) }
                     .thenBy { it.start }
             )
+            .take(maxWords)
+    }
+
+    /**
+     * Scans [text] from a character the reader actually pointed at, the way a tap is answered.
+     *
+     * The first word must start exactly at [startIndex] — that is the word under the finger. When
+     * nothing in the dictionary starts there the scan steps forward to the first position that does,
+     * so tapping a particle (を, が) still reaches the word behind it instead of returning nothing.
+     * That first word is kept come what may, even a lone kana (the あ of あの): unlike in [scan],
+     * where single kana are noise, here the reader chose it. Everything after it follows [scan]'s
+     * rules — longest match, deinflection, single-kana surfaces dropped — and the list stays in text
+     * order rather than being re-ranked kanji-first, because the tapped word is the answer and the
+     * rest of the line is its context. At most [maxWords] are returned.
+     */
+    fun scanFrom(
+        text: String,
+        startIndex: Int,
+        lookup: (String) -> List<DictEntry>,
+        maxWords: Int = 24
+    ): List<ScannedWord> {
+        if (text.isEmpty() || maxWords <= 0 || startIndex >= text.length) return emptyList()
+
+        var first: ScannedWord? = null
+        var index = startIndex.coerceAtLeast(0)
+        while (index < text.length) {
+            val word = matchAt(text, index, lookup)
+            if (word != null) {
+                first = word
+                break
+            }
+            index++
+        }
+        val tapped = first ?: return emptyList()
+
+        val words = ArrayList<ScannedWord>(minOf(maxWords, 8))
+        words.add(tapped)
+        index = tapped.end
+        while (index < text.length && words.size < maxWords) {
+            val word = matchAt(text, index, lookup)
+            if (word == null || isLoneKana(word.surface)) {
+                index++
+            } else {
+                words.add(word)
+                index = word.end
+            }
+        }
+        return words
+    }
+
+    /**
+     * Scans the whole of [text] and keeps the words a lasso's `[rangeStart, rangeEndExclusive)`
+     * touches, one line's worth at a time.
+     *
+     * The line is scanned entire even though only part of it was circled, because that is what makes
+     * the partial range readable: ます on its own is nothing, but seen behind 飲み it deinflects to
+     * 飲む. Words whose span misses the range are then dropped, while a word straddling either edge
+     * survives whole — half a word is of no use to a reader. [ScannedWord.start] and
+     * [ScannedWord.end] keep indexing [text], and the ranking is [scan]'s: kanji-bearing words
+     * first, text order inside each rank. At most [maxWords] are returned.
+     */
+    fun scanLine(
+        text: String,
+        rangeStart: Int,
+        rangeEndExclusive: Int,
+        lookup: (String) -> List<DictEntry>,
+        maxWords: Int = 24
+    ): List<ScannedWord> {
+        if (text.isEmpty() || maxWords <= 0) return emptyList()
+
+        return scan(text, lookup, maxWords * RANGE_CANDIDATE_FACTOR)
+            .filter { it.start < rangeEndExclusive && rangeStart < it.end }
             .take(maxWords)
     }
 

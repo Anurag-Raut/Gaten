@@ -84,8 +84,15 @@ object JapaneseOcr {
         emptyList()
     }
 
+    /**
+     * The raw ML Kit result for [bitmap], shared with callers that need a pass of their own
+     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place.
+     */
+    internal suspend fun mlKitResult(bitmap: Bitmap): Text =
+        recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
+
     private suspend fun runMlKit(bitmap: Bitmap): List<OcrLine> {
-        val result: Text = recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
+        val result: Text = mlKitResult(bitmap)
         val lines = ArrayList<OcrLine>()
         for (block in result.textBlocks) {
             for (line in block.lines) {
