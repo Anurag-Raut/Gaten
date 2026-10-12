@@ -8,21 +8,21 @@
  -->
 
 <resources>
-    <string name="app_name">YomiLens</string>
+    <string name="app_name">Gaten</string>
 
     <!-- General -->
     <string name="btn_cancel">Cancel</string>
     <string name="toast_accessibility_settings_error">Could not open Accessibility Settings</string>
 
     <!-- Toast Messages -->
-    <string name="toast_enable_accessibility_tile">Please enable the YomiLens Accessibility Service</string>
+    <string name="toast_enable_accessibility_tile">Please enable the Gaten Accessibility Service</string>
 
     <!-- Accessibility Disclosure Dialog -->
     <string name="title_accessibility_permission">Grant Accessibility Permission</string>
-    <string name="body_accessibility_permission">YomiLens uses the accessibility service for one thing: capturing a screenshot when you start a lookup. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service cannot read your app content or type for you.</string>
+    <string name="body_accessibility_permission">Gaten uses the accessibility service for one thing: capturing a screenshot when you start a lookup. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service cannot read your app content or type for you.</string>
     <string name="label_accessibility_agree">I understand how this permission will be used and agree to proceed</string>
 
     <!-- Quick Settings Tile -->
-    <string name="tile_label">YomiLens</string>
-    <string name="qs_tile_label">YomiLens</string>
+    <string name="tile_label">Gaten</string>
+    <string name="qs_tile_label">Gaten</string>
 </resources>
