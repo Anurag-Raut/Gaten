@@ -30,12 +30,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -313,8 +315,17 @@ fun ResultSheet(
                         .fillMaxHeight()
                         .then(dragModifier)
                         // Edge-to-edge: the content stays clear of the status bar, nav bar and
-                        // camera cutout, wherever this panel happens to sit on the screen.
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        // camera cutout - but only the screen edge this panel sits on. A cutout on
+                        // the far side is nowhere near it and used to pad the handle off the panel.
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Vertical + if (dock == SheetDock.Left) {
+                                    WindowInsetsSides.Left
+                                } else {
+                                    WindowInsetsSides.Right
+                                }
+                            )
+                        )
                 ) {
                     if (dock == SheetDock.Right) HandleGutter()
                     Column(
