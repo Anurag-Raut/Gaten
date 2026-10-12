@@ -1,17 +1,20 @@
-# YomiLens
+# Gaten
 
-YomiLens is an Android app for reading Japanese on screen. When you hit a word you cannot read —
-in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the text, and YomiLens
+Gaten is an Android app for reading Japanese on screen. When you hit a word you cannot read —
+in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the text, and Gaten
 shows the words it recognises, their kana readings and English meanings from an offline
 dictionary. Everything runs on the device: there is no account, no server and no network
 permission, so it works in airplane mode.
+
+The internal package id remains `com.yomilens.app` for compatibility with existing trigger
+bindings (Key Mapper broadcasts and the Quick Settings tile).
 
 ## How it works
 
 1. **Trigger** — the OnePlus Plus Key (remapped with Key Mapper), or the Quick Settings tile. Either
    way a lookup is requested from outside the app.
 2. **Capture** — the accessibility service calls `takeScreenshot()` and freezes the current screen.
-   Surfaces marked `FLAG_SECURE` (DRM video) come back blank; YomiLens never tries to bypass them.
+   Surfaces marked `FLAG_SECURE` (DRM video) come back blank; Gaten never tries to bypass them.
 3. **Lasso** — a transparent overlay shows the frozen screen and you drag a loop over the Japanese
    text.
 4. **OCR** — the cropped region is recognised on device. ML Kit's Japanese model is the default;
@@ -24,9 +27,9 @@ Steps 2–5 are fully offline.
 ## Setup on a phone
 
 1. **Install the APK** for your ABI (`arm64-v8a` on modern phones).
-2. **Enable the accessibility service**: Settings → Accessibility → YomiLens → On. The main screen
+2. **Enable the accessibility service**: Settings → Accessibility → Gaten → On. The main screen
    has a button that opens the right settings page.
-3. **Add the Quick Settings tile**: open the Quick Settings panel, tap edit, and drag YomiLens in.
+3. **Add the Quick Settings tile**: open the Quick Settings panel, tap edit, and drag Gaten in.
    Tapping the tile starts a lookup; if the accessibility service is not enabled, it opens
    accessibility settings instead.
 4. **Optional — bind the Plus Key.** The OnePlus Plus Key is intercepted by OxygenOS before apps
@@ -76,13 +79,13 @@ build fails early with a clear message if step 1 was skipped.
 
 ## Privacy
 
-YomiLens has no `INTERNET` permission — it is explicitly removed from the merged manifest, because
+Gaten has no `INTERNET` permission — it is explicitly removed from the merged manifest, because
 ML Kit's transport library would otherwise request it. The screenshot stays in memory: it is never
 uploaded, never shared and never written to disk. There is no analytics, no account and no server.
 
 ## Credits and licences
 
-- **YomiLens** is licensed under the **GNU GPL v3.0 or later** (see `LICENSE`), and is derived from
+- **Gaten** is licensed under the **GNU GPL v3.0 or later** (see `LICENSE`), and is derived from
   [CircleToSearch](https://github.com/AKS-Labs/CircleToSearch) by AKS-Labs. See `NOTICE` for the
   full third-party attribution list.
 - **Dictionary data** — JMdict and JMnedict © Electronic Dictionary Research and Development Group
