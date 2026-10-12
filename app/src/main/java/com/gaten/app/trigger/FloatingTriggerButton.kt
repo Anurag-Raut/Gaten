@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -48,6 +49,9 @@ private const val DEFAULT_HEIGHT_FRACTION = 0.45f
 
 /** ~90% opacity, so the bubble reads as a float without hiding the text underneath it. */
 private const val BUBBLE_ALPHA = 0xE6
+
+/** Longest [FloatingTriggerButton.hideThen] waits for the cleared bubble to reach the screen. */
+private const val GONE_TIMEOUT_MS = 150L
 
 /**
  * The floating lookup trigger: a small bubble in its own accessibility-overlay window.
@@ -135,6 +139,39 @@ class FloatingTriggerButton(
         } catch (e: RuntimeException) {
             logWindowNotAdded("remove", e)
         }
+    }
+
+    /**
+     * Takes the bubble down and runs [onGone] on the main thread once the display no longer shows
+     * it, so a screenshot taken then cannot contain it; at once when the bubble is already down.
+     *
+     * A removed window leaves the screen whenever the window manager gets to it, which can take
+     * several frames. Clearing the bubble to transparent instead goes out as an ordinary frame: once
+     * that frame is committed to the compositor and one more vsync has passed, it is on screen.
+     * [GONE_TIMEOUT_MS] caps the wait in case no frame is ever drawn (screen off).
+     */
+    fun hideThen(onGone: () -> Unit) = onMain {
+        val current = view
+        if (current == null) {
+            onGone()
+            return@onMain
+        }
+        var finished = false
+        val finish = object : Runnable {
+            override fun run() {
+                if (finished) return
+                finished = true
+                mainHandler.removeCallbacks(this)
+                // Only this bubble: a newer one shown meanwhile is not ours to take down.
+                if (view === current) hide()
+                onGone()
+            }
+        }
+        current.viewTreeObserver.registerFrameCommitCallback {
+            mainHandler.post { Choreographer.getInstance().postFrameCallback { finish.run() } }
+        }
+        current.alpha = 0f
+        mainHandler.postDelayed(finish, GONE_TIMEOUT_MS)
     }
 
     /** One line per failed window op; [operation] is `add` or `remove`. */

@@ -34,7 +34,7 @@ class TileTriggerActivity : Activity() {
         Log.d(TAG, "TileTriggerActivity started")
 
         // The pipeline waits out the shade; a fixed postDelayed here only added latency.
-        GatenAccessibilityService.triggerCapture()
+        GatenAccessibilityService.triggerCapture(fromShade = true)
         finish()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

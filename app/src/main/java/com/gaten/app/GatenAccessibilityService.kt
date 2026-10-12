@@ -13,7 +13,6 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
@@ -25,17 +24,12 @@ import com.gaten.app.ui.overlay.OverlayWindowController
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
-/** SystemUI owns the notification shade; its window is what the trigger pipeline waits out. */
-private const val SYSTEMUI_PACKAGE = "com.android.systemui"
-
-/** How long [GatenAccessibilityService] waits for the shade to collapse before capturing anyway. */
-private const val ShadeWaitMs = 1200L
-
-/** How often the shade wait re-reads the window list. */
-private const val ShadePollMs = 50L
-
-/** Used when the window list is unavailable: a fixed delay long enough for a normal shade collapse. */
-private const val ShadeFallbackMs = 400L
+/**
+ * How long a trigger from the Quick Settings tile waits for the shade to collapse before capturing.
+ * The service does not ask for the window list (flagRetrieveInteractiveWindows), so it cannot watch
+ * the shade go and waits a fixed time long enough for a normal collapse instead.
+ */
+private const val ShadeCollapseMs = 400L
 
 /**
  * Gaten' only use of the accessibility framework: screenshots the screen when a lookup is
@@ -120,60 +114,26 @@ class GatenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * The ordered trigger pipeline: wait out the notification shade, screenshot the screen, and only
-     * then pause the media. The screenshot is the freeze: the overlay shows it on top of the app, so
-     * whatever the player does once it pauses - raising its controls, moving its subtitles - happens
-     * underneath and is never seen, and there is nothing to wait for before the capture.
+     * The ordered trigger pipeline: screenshot the screen, and only then pause the media. The
+     * screenshot is the freeze: the overlay shows it on top of the app, so whatever the player does
+     * once it pauses - raising its controls, moving its subtitles - happens underneath and is never
+     * seen. Nothing on screen needs to settle first, so the capture runs at once unless something of
+     * our own is still in the way: the collapsing shade after [fromShade], or the floating button.
      */
-    private fun startOrderedCapture() {
-        Log.d(TAG, "Starting the ordered capture pipeline")
-        // The capture is what the user sees frozen, so the button must already be off screen;
-        // the shade wait gives the removal time to reach the display.
-        floatingButton?.hide()
-        waitForShadeGone {
-            performCapture { mediaPauser.pause() }
-        }
-    }
-
-    /**
-     * Runs [onGone] once no window belongs to SystemUI, i.e. the shade has finished collapsing.
-     *
-     * Polls `windows` (the accessibility window list) every [ShadePollMs] for up to [ShadeWaitMs].
-     * A list that is empty or throws names no shade window to wait out, so it falls back to the
-     * fixed [ShadeFallbackMs] delay instead.
-     */
-    private fun waitForShadeGone(onGone: () -> Unit) {
-        val deadline = SystemClock.uptimeMillis() + ShadeWaitMs
-        val poll = object : Runnable {
-            override fun run() {
-                val openWindows = try {
-                    windows
-                } catch (e: Exception) {
-                    Log.w(TAG, "Window list unavailable - fixed ${ShadeFallbackMs}ms shade wait", e)
-                    mainHandler.postDelayed({ onGone() }, ShadeFallbackMs)
-                    return
-                }
-                if (openWindows.isNullOrEmpty()) {
-                    Log.d(TAG, "Window list empty - fixed ${ShadeFallbackMs}ms shade wait")
-                    mainHandler.postDelayed({ onGone() }, ShadeFallbackMs)
-                    return
-                }
-                // Only a SystemUI window means the shade is (still) up; the status bar it also owns
-                // is not in this list once the shade has collapsed on the devices this targets.
-                if (openWindows.none { it.root?.packageName == SYSTEMUI_PACKAGE }) {
-                    Log.d(TAG, "Notification shade is gone - capturing")
-                    onGone()
-                    return
-                }
-                if (SystemClock.uptimeMillis() >= deadline) {
-                    Log.d(TAG, "Shade still up after ${ShadeWaitMs}ms - capturing anyway")
-                    onGone()
-                    return
-                }
-                mainHandler.postDelayed(this, ShadePollMs)
+    private fun startOrderedCapture(fromShade: Boolean) {
+        Log.d(TAG, "Starting the ordered capture pipeline (fromShade=$fromShade)")
+        val capture = { performCapture { mediaPauser.pause() } }
+        val button = floatingButton
+        when {
+            // The shade wait outlasts the button's removal, so a plain hide is enough there.
+            fromShade -> {
+                button?.hide()
+                mainHandler.postDelayed(capture, ShadeCollapseMs)
             }
+            // The capture is what the user sees frozen, so the button must be off screen first.
+            button != null -> button.hideThen(capture)
+            else -> capture()
         }
-        mainHandler.post(poll)
     }
 
     /**
@@ -287,9 +247,10 @@ class GatenAccessibilityService : AccessibilityService() {
          *
          * Acts as a toggle and is single-flight: a trigger while the panel is up closes it instead
          * of starting another lookup, and a trigger while a capture is already in flight is
-         * ignored. The accepted trigger runs the ordered pipeline on the main thread.
+         * ignored. The accepted trigger runs the ordered pipeline on the main thread. [fromShade]
+         * is for the Quick Settings tile, whose shade is still collapsing when this is called.
          */
-        fun triggerCapture() {
+        fun triggerCapture(fromShade: Boolean = false) {
             val service = instance
             if (service == null) {
                 Log.d(TAG, "triggerCapture called but the accessibility service is not connected")
@@ -306,7 +267,7 @@ class GatenAccessibilityService : AccessibilityService() {
                     return@post
                 }
                 service.captureInFlight = true
-                service.startOrderedCapture()
+                service.startOrderedCapture(fromShade)
             }
         }
     }
