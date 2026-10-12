@@ -63,3 +63,15 @@ fun interpolateCharBoxes(text: String, bounds: Box, vertical: Boolean): List<Box
         }
     }
 }
+
+/**
+ * True when every character of [text] is full-width: kana, kanji, CJK punctuation or the full-width
+ * forms block. Such a line is laid out on an even grid, one em per character, which is what lets
+ * [interpolateCharBoxes] place its characters better than the model's own symbol boxes do. Any
+ * Latin letter, digit or space makes the widths uneven, so it is false for those and for "".
+ */
+fun isFullWidthText(text: String): Boolean = text.isNotEmpty() && text.all { char ->
+    val code = char.code
+    code in 0x3000..0x30FF || code in 0x3400..0x4DBF || code in 0x4E00..0x9FFF ||
+        code in 0xFF00..0xFFEF
+}

@@ -68,12 +68,18 @@ object ScreenTextScanner {
      * The per-character boxes of a line: the model's own symbol boxes when they line up with the
      * trimmed text, [interpolateCharBoxes] otherwise.
      *
-     * Symbol boxes are the accurate case and are used whenever the model exposes them for every
-     * character of the line, one box each. It often does not (and a line whose leading whitespace
-     * the model reported differently never lines up), so the interpolation is a normal outcome, not
-     * an error path.
+     * Symbol boxes are used for lines that are not uniformly full-width, whenever the model exposes
+     * them for every character of the line, one box each. A line whose leading whitespace the model
+     * reported differently never lines up, so the interpolation is a normal outcome, not an error
+     * path.
      */
     private fun charBoxes(line: Text.Line, text: String, bounds: Box, vertical: Boolean): List<Box> {
+        // Full-width text sits on an even grid, and the model's own symbol boxes drift off it (on
+        // a measured line they ran half a character past the glyphs by the end), so an even split
+        // of the line box is the more accurate of the two. Symbol boxes are kept for mixed lines,
+        // where Latin and digits make the widths uneven.
+        if (isFullWidthText(text)) return interpolateCharBoxes(text, bounds, vertical)
+
         val symbols = line.elements.flatMap { it.symbols }
         val rects = symbols.mapNotNull { it.boundingBox }
         if (rects.size == text.length && symbols.joinToString("") { it.text } == text) {

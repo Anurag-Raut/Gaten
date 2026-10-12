@@ -7,6 +7,7 @@
 package com.yomilens.app.ocr
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -53,5 +54,21 @@ class ScreenTextTest {
     fun blankTextHasNoBoxes() {
         assertTrue(interpolateCharBoxes("", Box(0, 0, 100, 50), vertical = false).isEmpty())
         assertTrue(interpolateCharBoxes("", Box(0, 0, 100, 50), vertical = true).isEmpty())
+    }
+
+    @Test
+    fun japaneseTextIsFullWidth() {
+        assertTrue(isFullWidthText("日本語の勉強は楽しいです"))
+        assertTrue(isFullWidthText("コンピュータを使っています"))
+        assertTrue(isFullWidthText("「猫が水を飲む。」"))
+        assertTrue(isFullWidthText("ＡＢＣ１２３"))
+    }
+
+    @Test
+    fun latinDigitsAndSpacesAreNotFullWidth() {
+        assertFalse(isFullWidthText("11:21"))
+        assertFalse(isFullWidthText("猫 cat"))
+        assertFalse(isFullWidthText("日本語123"))
+        assertFalse(isFullWidthText(""))
     }
 }
