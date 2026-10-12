@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- Gaten candidate 2: two overlapping circles, filled lens (lookup lens) -->
+  <rect width="108" height="108" fill="#283593"/>
+  <circle cx="43.5" cy="54" r="16.5" fill="none" stroke="#FFFFFF" stroke-width="7"/>
+  <circle cx="64.5" cy="54" r="16.5" fill="none" stroke="#FFFFFF" stroke-width="7"/>
+  <!-- lens = intersection of the two discs -->
+  <path d="M 54 41.27 A 16.5 16.5 0 0 1 54 66.73 A 16.5 16.5 0 0 1 54 41.27 Z" fill="#FFC107"/>
+</svg>
