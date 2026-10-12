@@ -169,7 +169,7 @@ fun LookupOverlay(
         }
         Log.d(TAG, "Screen scan started")
         val startedAt = SystemClock.elapsedRealtime()
-        val screen = withContext(Dispatchers.Default) { ScreenTextScanner.scan(context, bmp) }
+        val screen = withContext(Dispatchers.Default) { ScreenTextScanner.scan(bmp) }
         value = screen?.let { ScanState.Ready(it) } ?: ScanState.Unavailable
         val elapsed = SystemClock.elapsedRealtime() - startedAt
         if (screen == null) {

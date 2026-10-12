@@ -6,7 +6,6 @@
 
 package com.gaten.app.ocr
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
@@ -21,15 +20,16 @@ import kotlinx.coroutines.CancellationException
  * every line, with a box per character, so a tap or a lasso can be answered from the index
  * ([ScreenHits]) with no further recognition.
  *
- * ML Kit only, deliberately: Tesseract reports no layout, so a screen index built from it would be
- * one line covering the whole bitmap — worth less than the region path the caller already has.
+ * ML Kit only, deliberately: it is the detector, and it reports the layout the index is made of.
  *
- * Lines with no Japanese are dropped ([JapaneseText.isJapaneseLine]), and each kept line's box is
- * trimmed onto its ink with [InkProjection] so a tap lands on the glyphs, not on ML Kit's padding.
+ * Every line ML Kit read is kept, whatever script it is in — a line it read as Latin can still be
+ * stylized Japanese, which is what manga-ocr is for — and each one's box is trimmed onto its ink
+ * with [InkProjection] so a tap lands on the glyphs, not on ML Kit's padding.
  *
  * This is the detector, not the reader: what it returns is ML Kit's reading of each line, and it is
  * what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines manga-ocr
- * reads, leaving these boxes — which every gesture is hit-tested against — where they are.
+ * reads, leaving these boxes — which every gesture is hit-tested against — where they are, and drops
+ * the lines whose final text turns out to have no Japanese in it.
  */
 object ScreenTextScanner {
     private const val TAG = "GatenOcr"
@@ -37,13 +37,11 @@ object ScreenTextScanner {
     /**
      * Recognises the whole [bitmap] and returns its index, lines in the order ML Kit reported them.
      *
-     * Returns null — i.e. [ScanState.Unavailable] for the caller — when the engine preference is
-     * [OcrEngine.TESSERACT], when recognition fails, or when the screen held no text at all. On
-     * failure the region path still works, so nothing is logged as a crash. Never throws.
+     * Returns null — i.e. [ScanState.Unavailable] for the caller — when recognition fails, or when
+     * ML Kit read no line at all. On failure the region path still works, so nothing is logged as a
+     * crash. Never throws.
      */
-    suspend fun scan(context: Context, bitmap: Bitmap): ScreenText? {
-        if (OcrPreferences.engine(context) == OcrEngine.TESSERACT) return null
-
+    suspend fun scan(bitmap: Bitmap): ScreenText? {
         val startedAt = SystemClock.elapsedRealtime()
         val lines = try {
             JapaneseOcr.mlKitResult(bitmap).textBlocks
@@ -68,8 +66,10 @@ object ScreenTextScanner {
     private class Crop(val left: Int, val top: Int, val width: Int, val height: Int)
 
     /**
-     * One ML Kit line as a [ScreenLine], or null when the line is blank, boxless, or holds no
-     * Japanese worth indexing ([JapaneseText.isJapaneseLine]).
+     * One ML Kit line as a [ScreenLine], or null when the line is blank or boxless.
+     *
+     * A line whose text has no Japanese in it is kept: manga-ocr may still read Japanese out of the
+     * glyphs ML Kit saw as Latin, and [ScreenLineReader] drops the line if it does not.
      *
      * The model's box is loose, so the line is cropped (a small margin) and run through
      * [InkProjection]: the ink trims the box, and for a full-width line the character cells are cut
@@ -80,7 +80,6 @@ object ScreenTextScanner {
     private fun toScreenLine(bitmap: Bitmap, line: Text.Line): ScreenLine? {
         val text = line.text.trim()
         if (text.isEmpty()) return null
-        if (!JapaneseText.isJapaneseLine(text)) return null
         val rect = line.boundingBox ?: return null
         val mlKit = Box(rect.left, rect.top, rect.right, rect.bottom)
         val vertical = mlKit.height > mlKit.width * 1.5 && text.length > 1

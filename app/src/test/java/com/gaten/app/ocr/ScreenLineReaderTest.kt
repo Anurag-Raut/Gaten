@@ -93,8 +93,8 @@ class ScreenLineReaderTest {
     @Test
     fun keepsMlKitsTextWhenTheReadingIsRefused() {
         val screen = screenOf("描")
-        // Eight characters for a one character line: past what that box could hold.
-        val runaway = readerAnswering(screen, "猫が水を飲むよ！")
+        // Seventeen characters for a one character line: past what that box could hold.
+        val runaway = readerAnswering(screen, "猫".repeat(17))
 
         val text = runBlocking { runaway.read(0) }
 
@@ -104,13 +104,40 @@ class ScreenLineReaderTest {
     }
 
     @Test
-    fun doesNotReadLatinLines() {
+    fun aNonJapaneseLineIsStillOfferedToTheModel() {
+        // ML Kit reading a stylized line as Latin is exactly the case manga-ocr is here for.
         val screen = screenOf("Hello world")
 
-        val text = runBlocking { readerAnswering(screen, "Ｈｅｌｌｏ").read(0) }
+        val text = runBlocking { readerAnswering(screen, "猫が水を飲む").read(0) }
 
-        assertEquals("Hello world", text)
-        assertTrue("the model was never asked", asked.isEmpty())
+        assertEquals("猫が水を飲む", text)
+        assertEquals(listOf(0), asked)
+    }
+
+    @Test
+    fun aLineWhoseFinalTextHasNoJapaneseIsDropped() {
+        val screen = screenOf("Hello world")
+        val reader = readerAnswering(screen, "Hello there")
+
+        runBlocking { reader.read(0) }
+
+        val line = reader.text.value.lines[0]
+        assertEquals("", line.text)
+        assertTrue(line.charBoxes.isEmpty())
+        // The line keeps its place: every index a gesture hands back addresses this list.
+        assertEquals(screen.lines[0].bounds, line.bounds)
+        assertTrue(log.any { it.contains("dropped line") })
+    }
+
+    @Test
+    fun mlKitsOwnNonJapaneseTextIsDroppedWhenNoModelReadsTheLine() {
+        val screen = screenOf("11:21")
+        val reader = reader(screen) { null }
+
+        runBlocking { reader.read(0) }
+
+        assertEquals("", reader.text.value.lines[0].text)
+        assertTrue(log.any { it.contains("dropped line") })
     }
 
     @Test
@@ -175,16 +202,23 @@ class ScreenLineReaderTest {
     }
 
     @Test
-    fun prefetchSkipsLinesThatAreNotWorthReading() {
+    fun prefetchReadsEveryLine() {
         val screen = screenOf("Hello world", "描が水", "11:21")
-        val reader = readerAnswering(screen, "猫")
+        val finished = CountDownLatch(1)
+        val reader = ScreenLineReader(
+            screen,
+            { line -> asked.add(screen.lines.indexOfFirst { it === line }); "猫" },
+            timeoutMillis = 5_000,
+            onLog = { message ->
+                log.add(message)
+                if (message.contains("prefetch finished")) finished.countDown()
+            }
+        )
 
-        runBlocking {
-            reader.prefetch(listOf(0, 1, 2))
-            reader.read(1)
-        }
+        reader.prefetch(listOf(0, 1, 2))
 
-        assertEquals(listOf(1), asked)
+        assertTrue("the prefetch did not finish: asked=$asked", finished.await(5, TimeUnit.SECONDS))
+        assertEquals(listOf(0, 1, 2), asked)
     }
 
     @Test
@@ -211,8 +245,8 @@ class ScreenLineReaderTest {
     fun theBiggestBoxesAreReadFirstWhenNothingHasBeenTouched() {
         val screen = screenOf("Hello world", "描", "猫が水を飲む")
 
-        // The Latin line is not read at all, and the six-character line is the bigger box.
-        assertEquals(listOf(2, 1), prefetchOrder(screen))
+        // Every line is read, so the widest box goes first and the smallest last.
+        assertEquals(listOf(0, 2, 1), prefetchOrder(screen))
     }
 
     @Test
@@ -224,8 +258,9 @@ class ScreenLineReaderTest {
     }
 
     @Test
-    fun nothingWorthReadingIsAnEmptyOrder() {
-        assertTrue(prefetchOrder(screenOf("Hello", "11:21")).isEmpty())
+    fun everyLineIsInTheOrder() {
+        // Equal-size boxes, so the earlier line goes first.
+        assertEquals(listOf(0, 1), prefetchOrder(screenOf("Hello", "11:21")))
     }
 
     @Test

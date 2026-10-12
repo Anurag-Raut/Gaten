@@ -29,19 +29,12 @@
     <string name="home_start_key_support">Send a broadcast with this action:</string>
     <string name="home_cd_copy_action">Copy the trigger action</string>
 
-    <!-- Text recognition -->
-    <string name="home_section_ocr">Text recognition</string>
-    <string name="home_engine_mlkit">ML Kit</string>
-    <string name="home_engine_tesseract">Tesseract</string>
-    <string name="home_engine_hint_mlkit">Most accurate. Falls back to Tesseract if nothing is found.</string>
-    <string name="home_engine_hint_tesseract">Open-source engine. Use it if ML Kit misreads your text.</string>
-
-    <!-- Stylized-text model (optional manga-ocr second pass) -->
+    <!-- Text recognition: ML Kit detects the lines, manga-ocr reads them when installed -->
     <string name="home_section_manga">Stylized-text model (manga-ocr, optional)</string>
     <string name="home_manga_status_installed">Installed: %1$s (%2$s)</string>
     <string name="home_manga_status_installed_unknown">Installed (%1$s)</string>
     <string name="home_manga_status_missing">Not installed</string>
-    <string name="home_manga_enabled">Read Japanese text with manga-ocr (recommended)</string>
+    <string name="home_manga_builtin_reader">The built-in reader (ML Kit) is reading your screen. Installing a model below makes the stylized lettering it misreads readable.</string>
     <string name="home_manga_help">ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads — outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read (no model, a failure, or a slow answer) keeps ML Kit&#8217;s text. Everything runs on the device: the only network request Gaten makes is downloading a model here, and only when you ask for one. A model already on your phone can be imported instead.</string>
     <string name="home_manga_entry_size">~%1$d MB</string>
     <string name="home_manga_download">Download</string>

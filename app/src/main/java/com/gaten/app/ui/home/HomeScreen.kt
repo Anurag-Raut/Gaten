@@ -49,9 +49,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -82,7 +79,6 @@ import com.gaten.app.media.hasNotificationAccess
 import com.gaten.app.ocr.MangaOcrCatalog
 import com.gaten.app.ocr.MangaOcrDownloader
 import com.gaten.app.ocr.MangaOcrModel
-import com.gaten.app.ocr.OcrEngine
 import com.gaten.app.ocr.OcrPreferences
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
@@ -94,9 +90,8 @@ private const val EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch"
 
 /**
- * Home screen: service status, the two ways to start a lookup, the OCR engine setting, the optional
- * manga-ocr model and the legal footer. The app is used from the overlay, so this stays a plain
- * setup page.
+ * Home screen: service status, the two ways to start a lookup, the optional manga-ocr model and the
+ * legal footer. The app is used from the overlay, so this stays a plain setup page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,14 +105,12 @@ fun HomeScreen() {
     var serviceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
     var notificationAccess by remember { mutableStateOf(hasNotificationAccess(context)) }
     var showDisclosure by remember { mutableStateOf(false) }
-    var engine by remember { mutableStateOf(OcrPreferences.engine(context)) }
     var floatingEnabled by remember {
         mutableStateOf(TriggerPreferences.floatingButtonEnabled(context))
     }
     var mangaInstalled by remember { mutableStateOf(MangaOcrModel.isInstalled(context)) }
     var mangaSizeBytes by remember { mutableStateOf(MangaOcrModel.installedSizeBytes(context)) }
     var mangaCatalogId by remember { mutableStateOf(MangaOcrModel.installedCatalogId(context)) }
-    var mangaEnabled by remember { mutableStateOf(OcrPreferences.mangaOcrEnabled(context)) }
     var showCharBoxes by remember { mutableStateOf(OcrPreferences.showCharBoxes(context)) }
     // The entry the confirm dialog is asking about, the one downloading, and its progress.
     var confirmDownload by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
@@ -266,56 +259,13 @@ fun HomeScreen() {
 
             Spacer(modifier = Modifier.height(Spacing.xl))
 
-            SectionLabel(text = stringResource(R.string.home_section_ocr))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = engine == OcrEngine.MLKIT,
-                    onClick = {
-                        engine = OcrEngine.MLKIT
-                        OcrPreferences.setEngine(context, OcrEngine.MLKIT)
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                ) {
-                    Text(stringResource(R.string.home_engine_mlkit))
-                }
-                SegmentedButton(
-                    selected = engine == OcrEngine.TESSERACT,
-                    onClick = {
-                        engine = OcrEngine.TESSERACT
-                        OcrPreferences.setEngine(context, OcrEngine.TESSERACT)
-                    },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                ) {
-                    Text(stringResource(R.string.home_engine_tesseract))
-                }
-            }
-            Spacer(modifier = Modifier.height(Spacing.s))
-            Text(
-                text = stringResource(
-                    if (engine == OcrEngine.MLKIT) {
-                        R.string.home_engine_hint_mlkit
-                    } else {
-                        R.string.home_engine_hint_tesseract
-                    }
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.xl))
-
             SectionLabel(text = stringResource(R.string.home_section_manga))
             MangaOcrSection(
                 installed = mangaInstalled,
                 installedId = mangaCatalogId,
                 sizeBytes = mangaSizeBytes,
-                enabled = mangaEnabled,
                 downloading = downloading,
                 progress = downloadProgress,
-                onToggle = { checked ->
-                    mangaEnabled = checked
-                    OcrPreferences.setMangaOcrEnabled(context, checked)
-                },
                 onDownload = { entry -> confirmDownload = entry },
                 onCancelDownload = { downloader.cancel() },
                 onImport = { pickModelFiles.launch(arrayOf("*/*")) },
@@ -491,8 +441,11 @@ private fun FloatingButtonRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
 }
 
 /**
- * The optional manga-ocr model: what is installed, the models the catalog offers, the switch that
- * lets it re-read ML Kit's doubtful lines, and the ways onto the device.
+ * The optional manga-ocr model: what is installed, the models the catalog offers, and the ways onto
+ * the device.
+ *
+ * There is no switch: manga-ocr is the reader as soon as its model is on the phone. With no model
+ * installed the built-in reader (ML Kit) reads the screen, and the card says so.
  *
  * Downloading is the app's only network request, and it only happens after the size has been shown
  * and confirmed ([confirmDownload] in the screen above); importing opens a document picker for a
@@ -504,10 +457,8 @@ private fun MangaOcrSection(
     installed: Boolean,
     installedId: String?,
     sizeBytes: Long,
-    enabled: Boolean,
     downloading: MangaOcrCatalog.Entry?,
     progress: MangaOcrDownloader.Progress?,
-    onToggle: (Boolean) -> Unit,
     onDownload: (MangaOcrCatalog.Entry) -> Unit,
     onCancelDownload: () -> Unit,
     onImport: () -> Unit,
@@ -521,22 +472,18 @@ private fun MangaOcrSection(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = Spacing.l, vertical = Spacing.m)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.home_manga_enabled),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(Spacing.xs))
-                Text(
-                    text = mangaStatusText(installed, installedLabel, sizeBytes),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.width(Spacing.m))
-            Switch(checked = enabled, onCheckedChange = onToggle)
+        Text(
+            text = mangaStatusText(installed, installedLabel, sizeBytes),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (!installed) {
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = stringResource(R.string.home_manga_builtin_reader),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Spacer(modifier = Modifier.height(Spacing.s))
         Text(

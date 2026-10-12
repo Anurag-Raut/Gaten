@@ -31,11 +31,16 @@ import java.util.concurrent.ConcurrentHashMap
  * arrives.
  *
  * The overlay's index is ML Kit's — boxes, lines and a first reading — and it is built instantly so
- * the overlay is usable at once. This class is what happens next: the lines worth reading are read
- * in the background (see [prefetchOrder]) and [text] republishes the index with each line's text
- * replaced as it lands. A gesture asks for the lines it touched with [read], which waits for them
- * and falls back to ML Kit's text when the model is missing, fails, or takes longer than
- * [timeoutMillis] — the reader must never be the reason a tap does nothing.
+ * the overlay is usable at once. This class is what happens next: every line is read in the
+ * background (see [prefetchOrder]) and [text] republishes the index with each line's text replaced
+ * as it lands. A gesture asks for the lines it touched with [read], which waits for them and falls
+ * back to ML Kit's text when the model is missing, fails, or takes longer than [timeoutMillis] —
+ * the reader must never be the reason a tap does nothing.
+ *
+ * Every line ML Kit found is offered to the model, whatever script it read it in: a line read as
+ * Latin can still be stylized Japanese. The line's final text is what decides whether it stays in
+ * the index — manga-ocr's reading, or ML Kit's own text when there is no model — and a line with no
+ * Japanese in it is dropped ([withDroppedLine]) as soon as that is known.
  *
  * One line is read at a time ([mutex]): there is one model and one phone. A request for a line
  * already read, or being read, joins that read instead of starting a second one, and [close] — when
@@ -97,17 +102,14 @@ class ScreenLineReader(
      */
     fun prefetch(order: List<Int>) {
         prefetchJob?.cancel()
-        val work = order.filter { lineIndex ->
-            screen.lines.getOrNull(lineIndex)?.let { OcrLinePolicy.readWithMangaOcr(it.text) } == true
-        }
         prefetchJob = scope.launch {
-            for (lineIndex in work) {
+            for (lineIndex in order) {
                 val deferred = deferredFor(lineIndex) ?: continue
                 // Awaiting one before starting the next is what keeps a tap from queueing behind a
                 // whole screen's worth of reads.
                 deferred.await()
             }
-            onLog("manga-ocr prefetch finished (${work.size} lines)")
+            onLog("manga-ocr prefetch finished (${order.size} lines)")
         }
     }
 
@@ -118,12 +120,11 @@ class ScreenLineReader(
     }
 
     /**
-     * The read of [lineIndex], started now if it has not been started. Null when the line is not
-     * one manga-ocr should read at all — its text stays exactly as ML Kit read it.
+     * The read of [lineIndex], started now if it has not been started. Null when there is no such
+     * line.
      */
     private fun deferredFor(lineIndex: Int): Deferred<String>? {
         val line = screen.lines.getOrNull(lineIndex) ?: return null
-        if (!OcrLinePolicy.readWithMangaOcr(line.text)) return null
         return results.computeIfAbsent(lineIndex) { scope.async { readOnce(lineIndex, line) } }
     }
 
@@ -134,7 +135,7 @@ class ScreenLineReader(
         val raw = mutex.withLock {
             try {
                 // withTimeout rather than withTimeoutOrNull: a read that returns nothing (the model
-                // is not installed, the reader turned it off) is not a timeout and is not logged.
+                // is not installed) is not a timeout and is not logged.
                 withTimeout(timeoutMillis) { readLine(line) }
             } catch (_: TimeoutCancellationException) {
                 timedOut = true
@@ -142,21 +143,24 @@ class ScreenLineReader(
             }
         }
         val elapsed = (System.nanoTime() - startedAt) / 1_000_000
-        if (raw == null) {
-            if (timedOut) {
-                onLog("manga-ocr read \"${line.text}\" timed out after $timeoutMillis ms; keeping ML Kit's text")
-            }
-            return line.text
+        val accepted = raw?.takeIf { OcrLinePolicy.acceptsMangaText(line.text, it) }
+        if (raw != null) {
+            read.add(lineIndex)
+            onLog(
+                "manga-ocr read \"${line.text}\" -> \"${accepted ?: line.text}\" in $elapsed ms" +
+                    " (cache miss)" + if (accepted == null) " [rejected]" else ""
+            )
+        } else if (timedOut) {
+            onLog("manga-ocr read \"${line.text}\" timed out after $timeoutMillis ms; keeping ML Kit's text")
         }
 
-        val accepted = raw.takeIf { OcrLinePolicy.acceptsMangaText(line.text, it) }
         val text = accepted ?: line.text
-        read.add(lineIndex)
-        onLog(
-            "manga-ocr read \"${line.text}\" -> \"$text\" in $elapsed ms (cache miss)" +
-                if (accepted == null) " [rejected]" else ""
-        )
-        if (accepted != null) _text.update { it.withLineText(lineIndex, accepted) }
+        if (JapaneseText.isJapaneseLine(text)) {
+            if (accepted != null) _text.update { it.withLineText(lineIndex, accepted) }
+        } else {
+            onLog("dropped line \"$text\" (no Japanese)")
+            _text.update { it.withDroppedLine(lineIndex) }
+        }
         return text
     }
 
@@ -173,18 +177,19 @@ class ScreenLineReader(
  *
  * Once a gesture has happened, the lines nearest the one it touched are the ones about to be needed,
  * so they go first. Before that, the biggest boxes do: a big box is a headline, a sign or a caption
- * — the text a reader is most likely to circle — while a small one is incidental. Lines
- * [OcrLinePolicy] would not read are left out, so the order is the work itself and nothing else.
- * Pure.
+ * — the text a reader is most likely to circle — while a small one is incidental. Every line is in
+ * the order, whatever script ML Kit read it in; a line it already read is answered from the cache,
+ * so the tail of the order costs nothing. Pure.
  */
 internal fun prefetchOrder(screen: ScreenText, fromLine: Int? = null): List<Int> {
-    val readable = screen.lines.indices.filter { OcrLinePolicy.readWithMangaOcr(screen.lines[it].text) }
     val anchor = fromLine?.let { screen.lines.getOrNull(it)?.bounds }
 
     return if (anchor == null) {
-        readable.sortedWith(compareByDescending<Int> { screen.lines[it].bounds.area() }.thenBy { it })
+        screen.lines.indices.sortedWith(
+            compareByDescending<Int> { screen.lines[it].bounds.area() }.thenBy { it }
+        )
     } else {
-        readable.sortedWith(
+        screen.lines.indices.sortedWith(
             compareBy<Int> { centreDistanceSquared(screen.lines[it].bounds, anchor) }
                 .thenByDescending { screen.lines[it].bounds.area() }
                 .thenBy { it }

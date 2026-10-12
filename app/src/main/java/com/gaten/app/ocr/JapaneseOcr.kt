@@ -16,6 +16,7 @@ import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -26,22 +27,19 @@ data class OcrLine(val text: String, val bounds: Box)
 /**
  * On-device Japanese OCR for a single cropped region.
  *
- * Which engine runs is the user's choice ([OcrPreferences]): ML Kit's bundled Japanese recognizer
- * by default, the bundled Tesseract engine ([TesseractEngine], `jpn+eng`) when Tesseract is
- * selected. Under ML Kit the Tesseract engine is still the safety net for the cases it handles
- * better than the model — an outright failure, or a result with no usable lines.
+ * ML Kit is the detector and the fallback reader: it finds the lines and their boxes, and its
+ * reading is what the reader shows when nothing better is available. When the optional manga-ocr
+ * model is installed it is the reader instead — [readLines] re-reads the lines ML Kit found, and
+ * [readLineWithMangaOcr] reads the box the user circled when ML Kit found no Japanese in the region
+ * (see [RegionReadPolicy]).
  *
- * Under ML Kit, when the optional manga-ocr model is installed and enabled, ML Kit stays the
- * detector and manga-ocr reads the lines it found ([readLineWithMangaOcr], and [ScreenLineReader]
- * for the overlay's index). The Tesseract path is untouched by that.
+ * Both the region path and the overlay's index read a line through [readLineWithMangaOcr], so they
+ * crop and read it exactly the same way.
  */
 object JapaneseOcr {
     private const val TAG = "GatenOcr"
 
-    /** Language pack for the Tesseract engine: Japanese with Latin support. */
-    private const val TESSERACT_LANG = "jpn+eng"
-
-    /** Lines this region path reads with manga-ocr. Each is an encoder pass plus a decode. */
+    /** Lines one region pass reads with manga-ocr. Each is an encoder pass plus a decode. */
     private const val MAX_READ_LINES = 8
 
     /** ML Kit clients are expensive to build and safe to reuse; the model is app-lifetime. */
@@ -50,52 +48,44 @@ object JapaneseOcr {
     }
 
     /**
-     * OCR the bitmap. Returns recognized text, "" when nothing found. Never throws.
+     * The raw ML Kit result for [bitmap], shared with callers that need a pass of their own
+     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place.
      */
-    suspend fun recognize(context: Context, bitmap: Bitmap): String =
-        recognizeLines(context, bitmap).joinToString("\n") { it.text }
+    internal suspend fun mlKitResult(bitmap: Bitmap): Text =
+        recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
 
     /**
-     * OCR the bitmap keeping each line's bounds, so a caller can tell which lines a hand-drawn
-     * selection actually pointed at (see [SelectionSnap]).
-     *
-     * ML Kit detects the lines and reads them; when the optional manga-ocr model is installed and
-     * enabled, every line worth reading is read again by it ([readLines]) — this is the fallback
-     * path, so it takes the whole crop's lines in one go rather than answering a gesture.
-     *
-     * Tesseract reports no layout, so its result comes back as a single line covering the whole
-     * bitmap. Never throws; returns an empty list when nothing was recognised.
+     * The lines ML Kit reads in [bitmap], in the order it reported them. Never throws: a failed pass
+     * is an empty list, which the region path answers by reading the selection box itself.
      */
-    suspend fun recognizeLines(context: Context, bitmap: Bitmap): List<OcrLine> {
-        if (OcrPreferences.engine(context) == OcrEngine.TESSERACT) {
-            return runTesseract(context, bitmap)
+    suspend fun detectLines(bitmap: Bitmap): List<OcrLine> = try {
+        val result = mlKitResult(bitmap)
+        val lines = ArrayList<OcrLine>()
+        for (block in result.textBlocks) {
+            for (line in block.lines) {
+                val text = line.text.trim()
+                if (text.isEmpty()) continue
+                val box = line.boundingBox ?: continue
+                lines.add(OcrLine(text, Box(box.left, box.top, box.right, box.bottom)))
+            }
         }
-
-        val primary = try {
-            runMlKit(bitmap)
-        } catch (e: Exception) {
-            Log.w(TAG, "ML Kit Japanese OCR failed; falling back to Tesseract", e)
-            emptyList()
-        }
-        if (primary.isNotEmpty()) return readLines(context, bitmap, primary)
-
-        Log.w(TAG, "ML Kit returned no lines; falling back to Tesseract ($TESSERACT_LANG)")
-        return runTesseract(context, bitmap)
+        lines
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "ML Kit Japanese OCR failed", e)
+        emptyList()
     }
 
     /**
-     * [lines] with the text manga-ocr read for the lines worth reading, in reading order and at
-     * most [MAX_READ_LINES] of them. A line the model fails on, or whose reading is refused by
-     * [OcrLinePolicy], keeps ML Kit's text; with no model installed nothing is read at all.
+     * [lines] with the text manga-ocr read for them, in reading order and at most [MAX_READ_LINES]
+     * of them. Every line is offered to the model; a line it fails on, or whose reading is refused
+     * by [OcrLinePolicy], keeps ML Kit's text. With no model installed nothing is read at all.
      */
-    private suspend fun readLines(
-        context: Context,
-        bitmap: Bitmap,
-        lines: List<OcrLine>
-    ): List<OcrLine> {
+    suspend fun readLines(context: Context, bitmap: Bitmap, lines: List<OcrLine>): List<OcrLine> {
         var read = 0
         return lines.map { line ->
-            if (read >= MAX_READ_LINES || !OcrLinePolicy.readWithMangaOcr(line.text)) return@map line
+            if (read >= MAX_READ_LINES) return@map line
             read++
             val startedAt = SystemClock.elapsedRealtime()
             val text = readLineWithMangaOcr(context, bitmap, line.bounds) ?: return@map line
@@ -111,53 +101,18 @@ object JapaneseOcr {
     }
 
     /**
-     * Reads one line's box with manga-ocr: the crop [OcrPreprocess] builds, through
-     * [MangaOcrEngine]. Null when the model is not installed, the reader turned it off, or the read
-     * failed — the caller keeps ML Kit's text, which is the point of the fallback.
+     * Reads one box with manga-ocr: the crop [OcrPreprocess] builds, through [MangaOcrEngine]. Null
+     * when the model is not installed or the read failed — the caller keeps ML Kit's text, which is
+     * the point of the fallback.
      *
      * The overlay's index reads its lines through this too ([ScreenLineReader]), so the index and
      * this path crop and read a line exactly the same way.
      */
     suspend fun readLineWithMangaOcr(context: Context, bitmap: Bitmap, bounds: Box): String? {
-        if (!OcrPreferences.mangaOcrEnabled(context)) return null
         MangaOcrModel.installBundledIfPresent(context)
         if (!MangaOcrModel.isInstalled(context)) return null
         val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
         return MangaOcrEngine.recognize(context, crop)
-    }
-
-    /** The Tesseract engine's output as a single full-bitmap line; empty on failure or blank text. */
-    private suspend fun runTesseract(context: Context, bitmap: Bitmap): List<OcrLine> = try {
-        val text = TesseractEngine.extractRegionText(context, bitmap, TESSERACT_LANG).trim()
-        if (text.isEmpty()) {
-            emptyList()
-        } else {
-            listOf(OcrLine(text, Box(0, 0, bitmap.width, bitmap.height)))
-        }
-    } catch (e: Exception) {
-        Log.e(TAG, "Tesseract OCR failed", e)
-        emptyList()
-    }
-
-    /**
-     * The raw ML Kit result for [bitmap], shared with callers that need a pass of their own
-     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place.
-     */
-    internal suspend fun mlKitResult(bitmap: Bitmap): Text =
-        recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
-
-    private suspend fun runMlKit(bitmap: Bitmap): List<OcrLine> {
-        val result: Text = mlKitResult(bitmap)
-        val lines = ArrayList<OcrLine>()
-        for (block in result.textBlocks) {
-            for (line in block.lines) {
-                val text = line.text.trim()
-                if (text.isEmpty()) continue
-                val box = line.boundingBox ?: continue
-                lines.add(OcrLine(text, Box(box.left, box.top, box.right, box.bottom)))
-            }
-        }
-        return lines
     }
 
     /** Bridges an ML Kit [Task] into coroutines without kotlinx-coroutines-play-services. */

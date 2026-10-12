@@ -29,21 +29,3 @@ ML Kit Text Recognition (Japanese)
 © Google LLC
 Licence: Google ML Kit terms of service
 https://developers.google.com/ml-kit/terms
-
-Tesseract OCR
--------------
-© Tesseract contributors
-Licence: Apache License 2.0
-https://github.com/tesseract-ocr/tesseract
-
-Tesseract4Android (Android binding)
------------------------------------
-© adaptech-cz
-Licence: Apache License 2.0
-https://github.com/adaptech-cz/Tesseract4Android
-
-tessdata_fast (OCR language models)
------------------------------------
-© Tesseract contributors
-Licence: Apache License 2.0
-https://github.com/tesseract-ocr/tessdata_fast

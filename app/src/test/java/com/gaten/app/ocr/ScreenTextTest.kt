@@ -134,5 +134,26 @@ class ScreenTextTest {
         assertEquals(screen, screen.withLineText(9, "猫"))
     }
 
+    @Test
+    fun droppingALineKeepsItsPlaceButLeavesNothingToAddress() {
+        val dropped = ScreenLine("Hello", Box(0, 100, 200, 160), false, interpolateCharBoxes("Hello", Box(0, 100, 200, 160), false))
+        val screen = ScreenText(listOf(screenLine(), dropped), width = 1080, height = 2400)
+
+        val updated = screen.withDroppedLine(1)
+
+        assertEquals(2, updated.lines.size)
+        assertEquals("", updated.lines[1].text)
+        assertTrue(updated.lines[1].charBoxes.isEmpty())
+        assertEquals(dropped.bounds, updated.lines[1].bounds)
+        assertEquals(screen.lines[0], updated.lines[0])
+    }
+
+    @Test
+    fun droppingALineThatIsNotThereChangesNothing() {
+        val screen = ScreenText(listOf(screenLine()), width = 1080, height = 2400)
+
+        assertEquals(screen, screen.withDroppedLine(9))
+    }
+
     private fun screenLine() = ScreenLine("猫", Box(0, 0, 40, 60), false, interpolateCharBoxes("猫", Box(0, 0, 40, 60), false))
 }

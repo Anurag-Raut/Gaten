@@ -23,9 +23,10 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
 5. **Tap or circle** — tap a word (a tap mid-word still finds the whole word) or circle some text.
    The lines the gesture touched are read first, and only those, so a tap usually waits for one
    line; the rest of the screen keeps being read behind the result. Words come from the index with
-   no further OCR, and a circle keeps any word the loop only grazed. Before the index is ready, or
-   when Tesseract is the selected engine, a circle falls back to recognising the circled region at
-   that moment.
+   no further OCR, and a circle keeps any word the loop only grazed. Before the index is ready — or
+   when ML Kit read nothing Japanese in the circled region — a circle falls back to recognising the
+   circled region at that moment, and when ML Kit read nothing Japanese there the selection box
+   itself goes to manga-ocr.
 6. **Repair** — common OCR confusions are fixed against the dictionary before lookup (ー/一,
    カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
@@ -128,13 +129,13 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
   Settings tile, accessibility service.
-- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the Tesseract engine
-  (`TesseractEngine`), the engine preference, selection snapping, the full-screen text index
-  (`ScreenText*`, `ScreenHits`) and `OcrRepair`. The optional reader is `ScreenLineReader` (the
-  per-session cache that replaces each line's text as manga-ocr reads it), `MangaOcrModel` (where
-  the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop) and `OcrLinePolicy`
-  (which lines to read, and when an answer is kept). `MangaOcrCatalog` is the list of downloadable
-  models and `MangaOcrDownloader` the only network code in the app.
+- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, selection snapping, the
+  full-screen text index (`ScreenText*`, `ScreenHits`) and `OcrRepair`. The reader is
+  `ScreenLineReader` (the per-session cache that replaces each line's text as manga-ocr reads it, and
+  drops the lines whose final text has no Japanese), `MangaOcrModel` (where the model lives),
+  `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrLinePolicy` (when an answer is
+  kept) and `RegionReadPolicy` (what a circled region reads as). `MangaOcrCatalog` is the list of
+  downloadable models and `MangaOcrDownloader` the only network code in the app.
 - `anki/` — the AnkiDroid instant-add export.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).
@@ -169,10 +170,8 @@ left implicit.
   (EDRDG), used under
   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see
   <https://www.edrdg.org/>.
-- **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) and
-  [Tesseract](https://github.com/tesseract-ocr/tesseract) (Apache-2.0) via
-  [Tesseract4Android](https://github.com/adaptech-cz/Tesseract4Android) (Apache-2.0), using the
-  [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) models (Apache-2.0).
+- **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
+  lines and reads them when no manga-ocr model is installed.
 - **Optional stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
   Apache-2.0) through the ONNX export at
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),

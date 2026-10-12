@@ -171,6 +171,9 @@ fun LassoLayer(
         // debug layer below draws the same lines in its own colours, so one or the other, not both.
         if (screen != null && outlineAlpha > 0f && !showCharBoxes) {
             for (line in screen.lines) {
+                // A line with no character boxes has been dropped: it is not text on the screen,
+                // so it gets no outline either.
+                if (line.charBoxes.isEmpty()) continue
                 val bounds = mapping.toView(line.bounds)
                 drawRoundRect(
                     color = primary.copy(alpha = 0.45f * outlineAlpha),
@@ -186,6 +189,7 @@ fun LassoLayer(
         // the index as the reader replaces ML Kit's text line by line.
         if (showCharBoxes && screen != null) {
             for (line in screen.lines) {
+                if (line.charBoxes.isEmpty()) continue
                 val bounds = mapping.toView(line.bounds)
                 drawRoundRect(
                     color = DebugLineColor,

@@ -15,6 +15,7 @@ import com.gaten.app.dict.WordScanner
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
 import com.gaten.app.ocr.OcrRepair
+import com.gaten.app.ocr.RegionReadPolicy
 import com.gaten.app.ocr.SelectionSnap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,6 +65,10 @@ suspend fun runLookup(
  * wider and keeping only the lines the selection overlaps returns the whole line the user meant.
  * One text per line, so the caller can repair each line before the lines are joined.
  *
+ * When ML Kit found no Japanese in the region, the lines it did report are not a reading of the
+ * text the reader circled: the selection box goes to manga-ocr instead ([RegionReadPolicy]), so a
+ * stylized line ML Kit read as garbage still reaches the reader.
+ *
  * @return the snapped lines' text in reading order (or whatever was recognised when nothing
  *   overlapped)
  */
@@ -87,11 +92,24 @@ private suspend fun snapToLines(
     )
 
     val regionCrop = cropBitmap(screenshot, region)
-    val onScreen = SelectionSnap.translate(
-        JapaneseOcr.recognizeLines(context, regionCrop),
-        region.left,
-        region.top
-    )
+    val detected = JapaneseOcr.detectLines(regionCrop)
+    // ML Kit found Japanese in the region: those lines are what it reads as, and manga-ocr reads
+    // them. When it found none, the stylized glyphs it saw as something else are exactly what the
+    // reader circled, so the selection box itself goes to manga-ocr instead.
+    val onScreen = if (RegionReadPolicy.hasJapaneseLines(detected)) {
+        SelectionSnap.translate(
+            JapaneseOcr.readLines(context, regionCrop, detected),
+            region.left,
+            region.top
+        )
+    } else {
+        RegionReadPolicy.fallbackLines(
+            SelectionSnap.translate(detected, region.left, region.top),
+            box,
+            JapaneseOcr.readLineWithMangaOcr(context, screenshot, box)
+        )
+    }
+
     val chosen = SelectionSnap.selectLines(onScreen, box)
     // Nothing overlapped (nothing recognised, or a gesture between lines): keep whatever was read.
     val used = chosen.ifEmpty { onScreen }

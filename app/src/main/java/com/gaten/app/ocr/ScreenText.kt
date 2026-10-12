@@ -12,6 +12,10 @@ package com.gaten.app.ocr
  * [bounds] are bitmap pixels, [vertical] marks a tategaki line. [charBoxes] holds one box per
  * UTF-16 character of [text] — every index a hit test or a selection hands back addresses [text]
  * itself, so the two can never drift apart: `charBoxes.size == text.length` always holds.
+ *
+ * A line whose final text turned out to have no Japanese in it is dropped ([withDroppedLine]): it
+ * keeps its place in the list, because every line index a gesture hands back addresses that list,
+ * but it is left with no text and no boxes, so nothing can reach it.
  */
 data class ScreenLine(
     val text: String,
@@ -93,4 +97,20 @@ fun ScreenLine.withText(text: String): ScreenLine =
 fun ScreenText.withLineText(index: Int, text: String): ScreenText {
     val line = lines.getOrNull(index) ?: return this
     return copy(lines = lines.toMutableList().also { it[index] = line.withText(text) })
+}
+
+/**
+ * [screen] with line [index] dropped, or [screen] itself when there is no such line.
+ *
+ * The line is left in place — indices are what a gesture hands back, and they address this list —
+ * but with no text and no character boxes, so no tap, lasso or outline can reach it. That is the
+ * state a line whose final text has no Japanese in it ends up in.
+ */
+fun ScreenText.withDroppedLine(index: Int): ScreenText {
+    val line = lines.getOrNull(index) ?: return this
+    return copy(
+        lines = lines.toMutableList().also {
+            it[index] = line.copy(text = "", charBoxes = emptyList())
+        }
+    )
 }
