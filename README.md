@@ -38,6 +38,43 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
 Steps 2–7 are fully offline, and the app makes no network request of any kind until — and unless —
 the reader downloads the optional stylized-text model.
 
+### Closing the lookup
+
+A lookup is only useful on the screen the reader is looking at, so the overlay closes itself when
+that stops being true, and a trigger that cannot start one is refused:
+
+- **The screen goes off, the phone locks, or an always-on display comes up.** A pending capture is
+  dropped and a trigger while locked is ignored. Unlocking (or the screen coming back on) restores
+  the floating button, never the old lookup.
+- **An incoming call or a firing alarm.** These arrive two ways: as a posted notification
+  (`TYPE_NOTIFICATION_STATE_CHANGED`, no extra permission needed) and as the dialer's or clock's own
+  window. A *missed* call and an *upcoming* alarm reminder do not close a lookup: the notification
+  has to be an incoming call (`CallStyle` metadata, incoming call type), a legacy full-screen CALL,
+  or an ALARM-category notification
+  with a full-screen intent, which is how the ring and the alert are shown.
+- **The power menu or another SystemUI dialog.** These are recognised from the window event,
+  including framework dialogs whose class does not identify the power menu specifically.
+- **The display rotates (including a half-turn), unfolds or is otherwise reshaped** — while a capture is still pending or
+  while the frame is on screen. The frozen frame is in the pixels of the screen it was taken from,
+  so it is closed rather than rescaled; ordinary layout changes — the keyboard, a split-screen
+  divider, a font change — are ignored.
+- **The accessibility service is unbound or destroyed, or the app's task is finished** (including
+  being taken off recents, where the platform chooses whether to deliver the callback).
+
+The media that was paused for the lookup is left **paused** for all of these: the reader should not
+hear a video resume under a call, and a player that has already raised its controls must not be
+started again behind them. The reader's own dismissals — back, the scrim, the trigger toggle — play
+it back as before.
+
+Foreground app changes during capture cancel the pending lookup. Each callback is tied to its
+capture, so a late success or failure cannot reopen a closed lookup or alter a newer request.
+
+What this does **not** promise: the power menu, an OEM dialer's in-call screen, or a clock's alarm
+screen each have their own window class names, and only the ones listed above are recognised; an
+OEM that names them differently may only be covered by the window focus the overlay loses anyway.
+The same is true of whether OxygenOS delivers any given accessibility event — that is the part most
+likely to need a real device to confirm.
+
 ## Setup on a phone
 
 1. **Install the APK** for your ABI (`arm64-v8a` on modern phones).
@@ -158,6 +195,18 @@ stylized-text model the reader downloads by tapping Download — and that reques
 enforces that allow-list, redirects included). Nothing is fetched in the background, and the
 screenshot never leaves the device: it stays in memory, is never uploaded, never shared and never
 written to disk. There is no analytics, no account and no server.
+
+The only notifications Gaten looks at are the accessibility events Android already sends it for a
+posted notification, and it reads **metadata only**: whether an incoming call (`CallStyle`, incoming
+call type) or a firing alarm (ALARM category with a full-screen intent) was posted, so the lookup
+closes for those before their own window appears. No notification title, text or other content is
+read, kept, logged or stored. This needs no extra permission; it is a side effect of the
+accessibility service's event subscription.
+
+The optional notification-listener access the home screen offers is separate and is used for one
+thing only: reading the active media sessions so the video behind the overlay can be paused and
+resumed. It deliberately reads nothing from the notifications it is handed, and declining it leaves
+every lookup feature working (only the session-based pause gives way to a media key press).
 
 ML Kit's transport library and ONNX Runtime also declare `INTERNET` for their own analytics and
 telemetry backends. Gaten's code never calls those, but while the permission is in the merged
