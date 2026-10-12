@@ -24,10 +24,12 @@ import kotlinx.coroutines.CancellationException
  * ML Kit only, deliberately: Tesseract reports no layout, so a screen index built from it would be
  * one line covering the whole bitmap — worth less than the region path the caller already has.
  *
+ * Lines with no Japanese are dropped ([JapaneseText.isJapaneseLine]), and each kept line's box is
+ * trimmed onto its ink with [InkProjection] so a tap lands on the glyphs, not on ML Kit's padding.
+ *
  * This is the detector, not the reader: what it returns is ML Kit's reading of each line, and it is
  * what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines manga-ocr
- * reads, leaving these boxes — which are ML Kit's, and which every gesture is hit-tested against —
- * where they are.
+ * reads, leaving these boxes — which every gesture is hit-tested against — where they are.
  */
 object ScreenTextScanner {
     private const val TAG = "GatenOcr"
@@ -46,7 +48,7 @@ object ScreenTextScanner {
         val lines = try {
             JapaneseOcr.mlKitResult(bitmap).textBlocks
                 .flatMap { it.lines }
-                .mapNotNull(::toScreenLine)
+                .mapNotNull { toScreenLine(bitmap, it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -59,26 +61,138 @@ object ScreenTextScanner {
         return ScreenText(lines, bitmap.width, bitmap.height)
     }
 
-    /** One ML Kit line as a [ScreenLine], or null for a blank line or one the model gave no box for. */
-    private fun toScreenLine(line: Text.Line): ScreenLine? {
+    /** Margin, in px, the line is cropped with before the ink profile is read. */
+    private const val TIGHTEN_MARGIN = 2
+
+    /** A crop of [bitmap] to profile: where it starts and how big it is. */
+    private class Crop(val left: Int, val top: Int, val width: Int, val height: Int)
+
+    /**
+     * One ML Kit line as a [ScreenLine], or null when the line is blank, boxless, or holds no
+     * Japanese worth indexing ([JapaneseText.isJapaneseLine]).
+     *
+     * The model's box is loose, so the line is cropped (a small margin) and run through
+     * [InkProjection]: the ink trims the box, and for a full-width line the character cells are cut
+     * from the tightened span instead of an even split of the loose box. A tightening that comes
+     * back under half the line's length is a threshold failure, not text, so ML Kit's own box is
+     * kept.
+     */
+    private fun toScreenLine(bitmap: Bitmap, line: Text.Line): ScreenLine? {
         val text = line.text.trim()
         if (text.isEmpty()) return null
+        if (!JapaneseText.isJapaneseLine(text)) return null
         val rect = line.boundingBox ?: return null
-        val bounds = Box(rect.left, rect.top, rect.right, rect.bottom)
-        val vertical = bounds.height > bounds.width * 1.5 && text.length > 1
-        return ScreenLine(text, bounds, vertical, charBoxes(line, text, bounds, vertical))
+        val mlKit = Box(rect.left, rect.top, rect.right, rect.bottom)
+        val vertical = mlKit.height > mlKit.width * 1.5 && text.length > 1
+
+        val crop = cropFor(bitmap, mlKit)
+            ?: return ScreenLine(text, mlKit, vertical, fallbackCharBoxes(line, text, mlKit, vertical))
+
+        val gray = luminance(bitmap, crop)
+        val span = InkProjection.tighten(gray, crop.width, crop.height, vertical)
+        val originalMain = if (vertical) mlKit.height else mlKit.width
+        if (span == null || (span.mainEnd - span.mainStart) * 2 < originalMain) {
+            return ScreenLine(text, mlKit, vertical, fallbackCharBoxes(line, text, mlKit, vertical))
+        }
+
+        val bounds = tightenedBounds(span, crop.left, crop.top, mlKit, vertical)
+        if (bounds.width <= 0 || bounds.height <= 0) {
+            return ScreenLine(text, mlKit, vertical, fallbackCharBoxes(line, text, mlKit, vertical))
+        }
+        val boxes = if (isFullWidthText(text)) {
+            gridCharBoxes(gray, crop, span, text, vertical, bounds)
+        } else {
+            fallbackCharBoxes(line, text, bounds, vertical)
+        }
+        return ScreenLine(text, bounds, vertical, boxes)
+    }
+
+    /** The line's [bounds] grown by [TIGHTEN_MARGIN] px and clamped to [bitmap]'s edges, or null. */
+    private fun cropFor(bitmap: Bitmap, bounds: Box): Crop? {
+        val left = (bounds.left - TIGHTEN_MARGIN).coerceAtLeast(0)
+        val top = (bounds.top - TIGHTEN_MARGIN).coerceAtLeast(0)
+        val right = (bounds.right + TIGHTEN_MARGIN).coerceAtMost(bitmap.width)
+        val bottom = (bounds.bottom + TIGHTEN_MARGIN).coerceAtMost(bitmap.height)
+        val width = right - left
+        val height = bottom - top
+        if (width <= 0 || height <= 0) return null
+        return Crop(left, top, width, height)
+    }
+
+    /** The crop as Rec. 601 luma (`0..255`): one [Bitmap.getPixels] for the whole line. */
+    private fun luminance(bitmap: Bitmap, crop: Crop): IntArray {
+        val pixels = IntArray(crop.width * crop.height)
+        bitmap.getPixels(pixels, 0, crop.width, crop.left, crop.top, crop.width, crop.height)
+        val gray = IntArray(pixels.size)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            gray[i] = ((p shr 16 and 0xFF) * 299 + (p shr 8 and 0xFF) * 587 + (p and 0xFF) * 114) / 1000
+        }
+        return gray
+    }
+
+    /** [span] in bitmap coordinates, clamped so it can never reach past ML Kit's own [mlKit] box. */
+    private fun tightenedBounds(
+        span: InkProjection.Tightened,
+        cropLeft: Int,
+        cropTop: Int,
+        mlKit: Box,
+        vertical: Boolean
+    ): Box {
+        val left = (cropLeft + if (vertical) span.crossStart else span.mainStart).coerceIn(mlKit.left, mlKit.right)
+        val right = (cropLeft + if (vertical) span.crossEnd else span.mainEnd).coerceIn(mlKit.left, mlKit.right)
+        val top = (cropTop + if (vertical) span.mainStart else span.crossStart).coerceIn(mlKit.top, mlKit.bottom)
+        val bottom = (cropTop + if (vertical) span.mainEnd else span.crossEnd).coerceIn(mlKit.top, mlKit.bottom)
+        return Box(left, top, right, bottom)
     }
 
     /**
-     * The per-character boxes of a line: the model's own symbol boxes when they line up with the
-     * trimmed text, [interpolateCharBoxes] otherwise.
+     * [text]'s per-character boxes on the tightened [bounds], one cell per character of the
+     * full-width grid. The cells come from [InkProjection.charCells] over the crop's ink; when the
+     * span cannot be cut (too few pixels per character) the even split of [bounds] is used, so
+     * `charBoxes.size == text.length` always holds.
+     */
+    private fun gridCharBoxes(
+        gray: IntArray,
+        crop: Crop,
+        span: InkProjection.Tightened,
+        text: String,
+        vertical: Boolean,
+        bounds: Box
+    ): List<Box> {
+        val cells = InkProjection.charCells(gray, crop.width, crop.height, vertical, span, text.length)
+            ?: return interpolateCharBoxes(text, bounds, vertical)
+        val crossLow: Int
+        val crossHigh: Int
+        val mainOffset: Int
+        if (vertical) {
+            crossLow = (crop.left + span.crossStart).coerceIn(bounds.left, bounds.right)
+            crossHigh = (crop.left + span.crossEnd).coerceIn(bounds.left, bounds.right)
+            mainOffset = crop.top
+        } else {
+            crossLow = (crop.top + span.crossStart).coerceIn(bounds.top, bounds.bottom)
+            crossHigh = (crop.top + span.crossEnd).coerceIn(bounds.top, bounds.bottom)
+            mainOffset = crop.left
+        }
+        val mainLow = if (vertical) bounds.top else bounds.left
+        val mainHigh = if (vertical) bounds.bottom else bounds.right
+        return cells.map { cell ->
+            val start = (mainOffset + cell.first).coerceIn(mainLow, mainHigh)
+            val end = (mainOffset + cell.last + 1).coerceIn(mainLow, mainHigh)
+            if (vertical) Box(crossLow, start, crossHigh, end) else Box(start, crossLow, end, crossHigh)
+        }
+    }
+
+    /**
+     * The per-character boxes of a line the ink pass could not improve: the model's own symbol boxes
+     * when they line up with the trimmed text, [interpolateCharBoxes] otherwise.
      *
      * Symbol boxes are used for lines that are not uniformly full-width, whenever the model exposes
      * them for every character of the line, one box each. A line whose leading whitespace the model
      * reported differently never lines up, so the interpolation is a normal outcome, not an error
      * path.
      */
-    private fun charBoxes(line: Text.Line, text: String, bounds: Box, vertical: Boolean): List<Box> {
+    private fun fallbackCharBoxes(line: Text.Line, text: String, bounds: Box, vertical: Boolean): List<Box> {
         // Full-width text sits on an even grid, and the model's own symbol boxes drift off it (on
         // a measured line they ran half a character past the glyphs by the end), so an even split
         // of the line box is the more accurate of the two. Symbol boxes are kept for mixed lines,
