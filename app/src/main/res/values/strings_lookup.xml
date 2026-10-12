@@ -19,6 +19,7 @@
     <string name="lookup_other_matches">Other matches (%1$d)</string>
     <string name="lookup_base_form">from %1$s</string>
     <string name="lookup_common">common</string>
+    <string name="lookup_also_written">Also written: %1$s</string>
     <string name="lookup_toast_copied">Copied</string>
 
     <!-- Lookup overlay content descriptions -->

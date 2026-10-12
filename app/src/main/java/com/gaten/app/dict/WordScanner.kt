@@ -41,11 +41,8 @@ object WordScanner {
      */
     private const val RANGE_CANDIDATE_FACTOR = 4
 
-    private const val KATAKANA_START = 0x30A1
-    private const val KATAKANA_END = 0x30F6
     private const val HIRAGANA_START = 0x3041
     private const val HIRAGANA_END = 0x3096
-    private const val KATAKANA_TO_HIRAGANA_OFFSET = 0x60
 
     /** CJK unified ideographs: the "complex" characters that should head the result list. */
     private const val KANJI_START = 0x4E00
@@ -227,33 +224,39 @@ object WordScanner {
         }
         return null
     }
+}
 
-    /**
-     * Katakana folded to hiragana (コーヒー -> こーひー) so a katakana surface can still reach a
-     * hiragana-only dictionary form. Returns [text] itself when it holds no katakana.
-     */
-    private fun foldKatakanaToHiragana(text: String): String {
-        var hasKatakana = false
-        for (char in text) {
-            val code = char.code
-            if (code in KATAKANA_START..KATAKANA_END) {
-                hasKatakana = true
-                break
-            }
-        }
-        if (!hasKatakana) return text
+private const val KATAKANA_START = 0x30A1
+private const val KATAKANA_END = 0x30F6
+private const val KATAKANA_TO_HIRAGANA_OFFSET = 0x60
 
-        val folded = StringBuilder(text.length)
-        for (char in text) {
-            val code = char.code
-            folded.append(
-                if (code in KATAKANA_START..KATAKANA_END) {
-                    (code - KATAKANA_TO_HIRAGANA_OFFSET).toChar()
-                } else {
-                    char
-                }
-            )
+/**
+ * Katakana folded to hiragana (コーヒー -> こーひー) so a katakana surface can still reach a
+ * hiragana-only dictionary form. Returns [text] itself when it holds no katakana.
+ *
+ * Shared by [WordScanner]'s matching and [headwordFor]'s form selection.
+ */
+internal fun foldKatakanaToHiragana(text: String): String {
+    var hasKatakana = false
+    for (char in text) {
+        val code = char.code
+        if (code in KATAKANA_START..KATAKANA_END) {
+            hasKatakana = true
+            break
         }
-        return folded.toString()
     }
+    if (!hasKatakana) return text
+
+    val folded = StringBuilder(text.length)
+    for (char in text) {
+        val code = char.code
+        folded.append(
+            if (code in KATAKANA_START..KATAKANA_END) {
+                (code - KATAKANA_TO_HIRAGANA_OFFSET).toChar()
+            } else {
+                char
+            }
+        )
+    }
+    return folded.toString()
 }

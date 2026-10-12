@@ -88,6 +88,9 @@ import com.gaten.app.anki.AnkiCard
 import com.gaten.app.anki.AnkiExporter
 import com.gaten.app.anki.AnkiStatus
 import com.gaten.app.dict.ScannedWord
+import com.gaten.app.dict.alternativeHeadwordFor
+import com.gaten.app.dict.headwordFor
+import com.gaten.app.dict.notedForm
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.launch
 
@@ -598,9 +601,10 @@ private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
             return
         }
 
+        val alsoWritten = notedForm(word, entry)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = entry.primary,
+                text = headwordFor(word, entry),
                 style = type.headword,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -626,6 +630,13 @@ private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
                 text = entry.kana.joinToString("・"),
                 style = type.reading,
                 color = MaterialTheme.colorScheme.primary
+            )
+        }
+        if (alsoWritten != null) {
+            Text(
+                text = stringResource(R.string.lookup_also_written, alsoWritten),
+                style = type.small,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (word.baseForm != word.surface) {
@@ -783,7 +794,7 @@ private fun OtherMatches(word: ScannedWord, type: SheetType, compact: Boolean) {
             Spacer(Modifier.height(Spacing.xs))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = alternative.primary,
+                    text = alternativeHeadwordFor(word, alternative),
                     style = type.gloss,
                     color = MaterialTheme.colorScheme.onSurface
                 )
