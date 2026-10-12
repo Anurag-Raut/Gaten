@@ -21,14 +21,6 @@ data class Box(val left: Int, val top: Int, val right: Int, val bottom: Int) {
     /** True when the two boxes share at least one pixel row and column. */
     fun overlaps(other: Box): Boolean =
         left < other.right && other.left < right && top < other.bottom && other.top < bottom
-
-    /** Smallest box covering both. */
-    fun union(other: Box): Box = Box(
-        minOf(left, other.left),
-        minOf(top, other.top),
-        maxOf(right, other.right),
-        maxOf(bottom, other.bottom)
-    )
 }
 
 /**
@@ -87,18 +79,6 @@ object SelectionSnap {
         val nearest = lines.minByOrNull { squaredCentreDistance(it.bounds, selection) } ?: return emptyList()
         return listOf(nearest)
     }
-
-    /** Smallest box covering every line, or null when [lines] is empty. */
-    fun unionBounds(lines: List<OcrLine>): Box? =
-        lines.map { it.bounds }.reduceOrNull { acc, bounds -> acc.union(bounds) }
-
-    /** [box] grown by the given padding and clamped to the bitmap. */
-    fun padAndClamp(box: Box, padX: Int, padY: Int, bitmapWidth: Int, bitmapHeight: Int): Box = Box(
-        (box.left - padX).coerceAtLeast(0),
-        (box.top - padY).coerceAtLeast(0),
-        (box.right + padX).coerceAtMost(bitmapWidth),
-        (box.bottom + padY).coerceAtMost(bitmapHeight)
-    )
 
     private fun squaredCentreDistance(a: Box, b: Box): Int {
         val dx = a.centreX - b.centreX

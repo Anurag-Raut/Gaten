@@ -10,22 +10,7 @@
 <resources>
     <string name="app_name">YomiLens</string>
 
-    <!-- YomiLens Japanese lookup -->
-    <string name="jp_lookup_hint">Circle or drag over Japanese text</string>
-    <string name="jp_lookup_scanning">Recognizing Japanese…</string>
-    <string name="jp_lookup_no_text">No text recognized in the selection</string>
-    <string name="jp_lookup_select_again">Select again</string>
-    <string name="jp_no_words">No dictionary words found</string>
-    <string name="jp_dict_error">Dictionary unavailable: %1$s</string>
-    <string name="jp_word_base">base form: %1$s</string>
-    <string name="jp_word_kanji">Kanji</string>
-    <string name="jp_word_kana">Kana</string>
-    <string name="jp_word_pos">Part of speech</string>
-    <string name="jp_dict_attribution">Dictionary: JMdict (EDRDG) · CC BY-SA 4.0</string>
-    <string name="jp_word_other_matches">Other matches</string>
-
     <!-- General -->
-    <string name="close">Close</string>
     <string name="btn_cancel">Cancel</string>
     <string name="btn_grant">Grant</string>
 
