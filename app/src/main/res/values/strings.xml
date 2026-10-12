@@ -27,21 +27,7 @@
     <!-- General -->
     <string name="close">Close</string>
     <string name="btn_cancel">Cancel</string>
-    <string name="btn_grant">Grant</string>
-
-    <!-- Main Screen -->
-    <string name="header_title">YomiLens</string>
-    <string name="toast_getting_started">Press the Plus Key (or use the Quick Settings tile) to look up Japanese on screen.</string>
-    <string name="subtitle_main">Circle Japanese text on screen. Read it instantly.</string>
-    <string name="label_required">REQUIRED:</string>
-    <string name="label_accessibility_active">Accessibility Service Active</string>
-    <string name="label_accessibility_active_subtitle">Press the Plus Key to look up Japanese text</string>
-    <string name="label_enable_accessibility">Enable Accessibility</string>
-    <string name="label_enable_accessibility_subtitle">To do its job properly, the app needs this permission.\nTap allow and we\'re good to go! &#x1F44D;</string>
     <string name="toast_accessibility_settings_error">Could not open Accessibility Settings</string>
-
-    <!-- Content Descriptions -->
-    <string name="cd_granted">Granted</string>
 
     <!-- Toast Messages -->
     <string name="toast_enable_accessibility_tile">Please enable the YomiLens Accessibility Service</string>
