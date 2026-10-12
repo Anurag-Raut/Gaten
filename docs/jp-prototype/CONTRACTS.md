@@ -1,6 +1,6 @@
-# YomiLens — frozen interfaces for the build-out
+# Gaten — frozen interfaces for the build-out
 
-Project: `/home/Qui/Projects/YomiLens` (Kotlin, Jetpack Compose, AGP 8.13.1, namespace
+Project: `/home/Qui/Projects/Gaten` (Kotlin, Jetpack Compose, AGP 8.13.1, namespace
 `com.akslabs.circletosearch`, minSdk 29, targetSdk 36, ABI splits arm64-v8a/armeabi-v7a/x86_64).
 
 Product: on-screen Japanese text → **circle (lasso) select** → **OCR** → **word identification**

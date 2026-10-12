@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!--
- * YomiLens
+ * Gaten
  * Copyright (C) 2026 Anurag Raut
  * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -12,7 +12,7 @@
 
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
-    <!-- YomiLens is fully offline: on-device OCR and a bundled dictionary, no network code.
+    <!-- Gaten is fully offline: on-device OCR and a bundled dictionary, no network code.
          Google's transport library (pulled in by ML Kit) still asks for INTERNET for its
          analytics backend, so it has to be removed explicitly or it stays in the merged manifest
          and that backend can phone home. ACCESS_NETWORK_STATE only comes from profileinstaller
@@ -34,7 +34,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.YomiLens"
+        android:theme="@style/Theme.Gaten"
         android:enableOnBackInvokedCallback="true"
         android:extractNativeLibs="true"
         tools:targetApi="31">
@@ -42,7 +42,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.YomiLens">
+            android:theme="@style/Theme.Gaten">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -51,7 +51,7 @@
         </activity>
 
         <service
-            android:name=".YomiLensAccessibilityService"
+            android:name=".GatenAccessibilityService"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
@@ -67,7 +67,7 @@
         <activity
             android:name=".OverlayActivity"
             android:exported="false"
-            android:theme="@style/Theme.YomiLens.Transparent"
+            android:theme="@style/Theme.Gaten.Transparent"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance" />
 
@@ -83,7 +83,7 @@
             android:name=".LookupTriggerReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.yomilens.app.action.TRIGGER_LOOKUP" />
+                <action android:name="com.gaten.app.action.TRIGGER_LOOKUP" />
             </intent-filter>
         </receiver>
 

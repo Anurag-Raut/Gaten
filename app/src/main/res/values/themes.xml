@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!--
- * YomiLens
+ * Gaten
  * Copyright (C) 2026 Anurag Raut
  * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -9,9 +9,9 @@
 
 <resources>
 
-    <style name="Theme.YomiLens" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Gaten" parent="android:Theme.Material.Light.NoActionBar" />
 
-    <style name="Theme.YomiLens.Transparent" parent="Theme.YomiLens">
+    <style name="Theme.Gaten.Transparent" parent="Theme.Gaten">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowContentOverlay">@null</item>

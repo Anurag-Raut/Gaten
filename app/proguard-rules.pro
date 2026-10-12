@@ -1,4 +1,4 @@
-# YomiLens release shrinking rules (wired up in app/build.gradle.kts).
+# Gaten release shrinking rules (wired up in app/build.gradle.kts).
 
 # Tesseract4Android's JNI layer resolves these classes and methods from native code by name, so R8
 # must neither rename nor strip them.

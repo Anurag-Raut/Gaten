@@ -1,5 +1,5 @@
 /*
- * YomiLens
+ * Gaten
  * Copyright (C) 2026 Anurag Raut
  * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -12,7 +12,7 @@ plugins {
 }
 
 android {
-    namespace = "com.yomilens.app"
+    namespace = "com.gaten.app"
     compileSdk = 36
 
     signingConfigs {
@@ -28,7 +28,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.yomilens.app"
+        applicationId = "com.gaten.app"
         minSdk = 29
         targetSdk = 36
         versionCode = 1

@@ -6,9 +6,6 @@ shows the words it recognises, their kana readings and English meanings from an 
 dictionary. Everything runs on the device: there is no account, no server and no network
 permission, so it works in airplane mode.
 
-The internal package id remains `com.yomilens.app` for compatibility with existing trigger
-bindings (Key Mapper broadcasts and the Quick Settings tile).
-
 ## How it works
 
 1. **Trigger** — the OnePlus Plus Key (remapped with Key Mapper), or the Quick Settings tile. Either
@@ -49,7 +46,7 @@ Steps 2–6 are fully offline.
       turn on auto-start/keep-alive.
    4. Key map: Trigger → **Other** → *Record with Expert Mode* → press the Plus Key (records
       `Scan code 735`, device `gpio-keys`). Actions → **Send intent** → **Broadcast receiver**,
-      Action `com.yomilens.app.action.TRIGGER_LOOKUP`, Package `com.yomilens.app`.
+      Action `com.gaten.app.action.TRIGGER_LOOKUP`, Package `com.gaten.app`.
    5. Set the OxygenOS Plus Key function to **`nothing`** so no stock action fires as well.
 
    The trigger is a toggle: firing it while the panel is open closes the panel instead of starting

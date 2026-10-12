@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build the on-device dictionary asset used by YomiLens (CONTRACTS.md F2).
+"""Build the on-device dictionary asset used by Gaten (CONTRACTS.md F2).
 
 Downloads two frozen jmdict-simplified releases, verifies their SHA-256, converts the English
 JMdict JSON into a compact SQLite database with the exact F2 schema (`entries`, `terms`,

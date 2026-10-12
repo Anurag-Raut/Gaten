@@ -1,4 +1,4 @@
-# YomiLens — Japanese screen lookup: build report
+# Gaten — Japanese screen lookup: build report
 
 Date: 2026-10-11 · App id `com.akslabs.circletosearch` (upstream package kept) · debug APK, `versionName 0.5`
 
@@ -101,7 +101,7 @@ adb shell settings put secure enabled_accessibility_services \
 adb shell settings put secure accessibility_enabled 1
 ```
 
-Open any app → tap the **YomiLens bubble** → **draw a loop** around the Japanese text → read the
+Open any app → tap the **Gaten bubble** → **draw a loop** around the Japanese text → read the
 panel. Evidence for each lookup lands in
 `/sdcard/Android/data/com.akslabs.circletosearch/files/jp-prototype/`
 (`capture-full.png`, `capture-region.png`, `ocr-output.txt`).

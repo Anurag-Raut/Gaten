@@ -11,4 +11,4 @@ record. They are not current documentation — the current state of the project 
 - `image_search.md` — an early reverse-image-search design that Gaten does not implement.
 
 The reports mention the old package name `com.akslabs.circletosearch`. That is not a typo: they
-predate the rename to `com.yomilens.app`, and were left as written.
+predate the rename to `com.gaten.app`, and were left as written.

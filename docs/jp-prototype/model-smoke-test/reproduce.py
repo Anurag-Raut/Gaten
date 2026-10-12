@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduces the YomiLens Japanese-OCR model smoke test.
+"""Reproduces the Gaten Japanese-OCR model smoke test.
 
 Renders Japanese text with a CJK font and OCRs it using EXACTLY the model bundled in
 app/src/main/assets/tessdata/ (via TESSDATA_PREFIX), so the result backs the claim in
