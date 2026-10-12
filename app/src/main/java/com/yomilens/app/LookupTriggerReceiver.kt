@@ -12,17 +12,8 @@ import android.content.Intent
 import android.util.Log
 
 /**
- * External entry point so a key remapper can start a lookup.
- *
- * Send a broadcast to `com.yomilens.app` with action [ACTION_TRIGGER_LOOKUP]; the
- * running accessibility service takes the screenshot and opens the overlay.
- *
- * Key Mapper 4.x (its "Intent" action) needs: target *Broadcast receiver*,
- * Action = `com.yomilens.app.action.TRIGGER_LOOKUP`,
- * Package name = `com.yomilens.app`.
- *
- * A no-op when the accessibility service is not connected, because only that service can grab the
- * screen.
+ * External entry point so a key remapper can start a lookup: the [ACTION_TRIGGER_LOOKUP] broadcast
+ * asks the running accessibility service to screenshot the screen; a no-op when it is not connected.
  */
 class LookupTriggerReceiver : BroadcastReceiver() {
 

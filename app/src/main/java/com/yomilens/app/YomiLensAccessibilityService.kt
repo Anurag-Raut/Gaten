@@ -19,15 +19,8 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 /**
- * YomiLens' only use of the accessibility framework: one screenshot per lookup.
- *
- * A lookup is started from outside — by the OnePlus Plus Key (Key Mapper) broadcast, by the Quick
- * Settings tile, or by anything else sending the trigger action — and this service answers by
- * capturing the screen, handing the bitmap to [BitmapRepository] and opening [OverlayActivity].
- *
- * There is no floating trigger any more, so the service can start activities from the background
- * without an overlay window of its own; and because it never inspects window content, the
- * accessibility declaration asks for screenshots only (`canTakeScreenshot`).
+ * YomiLens' only use of the accessibility framework: screenshots the screen when a lookup is
+ * triggered, stores the bitmap in [BitmapRepository] and opens [OverlayActivity].
  */
 class YomiLensAccessibilityService : AccessibilityService() {
 

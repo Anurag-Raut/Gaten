@@ -1,39 +1,19 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# YomiLens release shrinking rules (wired up in app/build.gradle.kts).
 
-# R8 handles Compose optimization automatically. 
-# Broadly keeping all compose classes prevents maximum shrinking.
-# We only keep what's strictly necessary if we encounter issues.
+# Tesseract4Android's JNI layer resolves these classes and methods from native code by name, so R8
+# must neither rename nor strip them.
+-keep class com.googlecode.tesseract.android.** { *; }
 
-# Keep WebView JavaScript interfaces - essential for functionality
--keepclassmembers class * {
-    @android.webkit.JavascriptInterface <methods>;
-}
+# ML Kit builds its recognizer through a component registrar that R8 cannot follow statically; keep
+# the SDK intact rather than risk stripping a reflectively loaded class.
+-keep class com.google.mlkit.** { *; }
 
-# Keep the data classes for GSON but allow obfuscation of names
-# Since we added @SerializedName, we don't need to keep the field names.
--keepclassmembers class com.yomilens.app.data.** {
-    <fields>;
-}
-
-# Keep Enums for GSON serialization
--keepclassmembers enum com.yomilens.app.data.** {
-    <fields>;
-    public static **[] values();
-    public static ** valueOf(java.lang.String);
-}
-
-# Preserve line number information for debugging (optional, remove for absolute min size)
--keepattributes SourceFile,LineNumberTable
+# ML Kit reads annotations and signatures reflectively; SourceFile/LineNumberTable keep release
+# stack traces attributable.
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# Optimization flags
--optimizationpasses 5
--dontusemixedcaseclassnames
--dontskipnonpubliclibraryclasses
-
-# Remove log messages in release builds (improves performance and size)
+# Drop debug/verbose/info logs from release builds.
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);

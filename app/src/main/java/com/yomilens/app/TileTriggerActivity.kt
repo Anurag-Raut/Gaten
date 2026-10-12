@@ -10,19 +10,20 @@ package com.yomilens.app
 import android.app.Activity
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 
 /**
- * A transparent activity launched from the Quick Settings tile.
- * Launching an activity from TileService automatically collapses the notification shade.
+ * Transparent activity launched from the Quick Settings tile: starting an activity from a
+ * TileService collapses the shade, and once it is gone this activity triggers the lookup capture.
  */
 class TileTriggerActivity : Activity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Hide from recents and UI
-        // Theme is set in manifest (Translucent/Transparent)
-        
-        // Disable window animations for this activity
+
+        // Disable window animations: the activity is invisible, so any transition would be a flash.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
             overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
@@ -30,15 +31,14 @@ class TileTriggerActivity : Activity() {
             @Suppress("DEPRECATION")
             overridePendingTransition(0, 0)
         }
-        
-        android.util.Log.d("YomiLensTile", "TileTriggerActivity started")
-        
+
+        Log.d(TAG, "TileTriggerActivity started")
+
         // Wait 500ms for the quick settings panel to collapse cleanly across all Android OEM skins (OneUI, MIUI/HyperOS, ColorOS)
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            // Trigger capture
+        Handler(Looper.getMainLooper()).postDelayed({
             YomiLensAccessibilityService.triggerCapture()
             finish()
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
             } else {
@@ -46,5 +46,9 @@ class TileTriggerActivity : Activity() {
                 overridePendingTransition(0, 0)
             }
         }, 500L)
+    }
+
+    companion object {
+        private const val TAG = "YomiLens"
     }
 }

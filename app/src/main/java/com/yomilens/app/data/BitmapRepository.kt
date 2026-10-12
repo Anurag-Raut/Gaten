@@ -9,6 +9,7 @@ package com.yomilens.app.data
 
 import android.graphics.Bitmap
 
+/** Holds the single screenshot the accessibility service just captured, for OverlayActivity to read. */
 object BitmapRepository {
     private var screenshot: Bitmap? = null
 

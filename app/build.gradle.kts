@@ -80,7 +80,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    // Fixed dependenciesInfo block
     dependenciesInfo {
         @Suppress("UnstableApiUsage")
         includeInApk = false

@@ -1,0 +1,49 @@
+YomiLens — third-party notices
+==============================
+
+YomiLens is licensed under the GNU General Public License v3.0 or later (see LICENSE). It is an
+independent project derived from CircleToSearch by AKS-Labs.
+
+CircleToSearch (upstream)
+-------------------------
+Copyright (C) 2025 AKS-Labs
+Licence: GNU GPL v3.0
+https://github.com/AKS-Labs/CircleToSearch
+
+JMdict / JMnedict (dictionary data)
+-----------------------------------
+© Electronic Dictionary Research and Development Group (EDRDG)
+Licence: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+https://www.edrdg.org/
+https://www.edrdg.org/jmdict/j_jmdict.html
+https://www.edrdg.org/enamdict/enamdict_doc.html
+https://creativecommons.org/licenses/by-sa/4.0/
+
+jmdict-simplified (JSON release used to build the asset)
+--------------------------------------------------------
+By scriptin, packaging the EDRDG data above.
+https://github.com/scriptin/jmdict-simplified
+
+ML Kit Text Recognition (Japanese)
+----------------------------------
+© Google LLC
+Licence: Google ML Kit terms of service
+https://developers.google.com/ml-kit/terms
+
+Tesseract OCR
+-------------
+© Tesseract contributors
+Licence: Apache License 2.0
+https://github.com/tesseract-ocr/tesseract
+
+Tesseract4Android (Android binding)
+-----------------------------------
+© adaptech-cz
+Licence: Apache License 2.0
+https://github.com/adaptech-cz/Tesseract4Android
+
+tessdata_fast (OCR language models)
+-----------------------------------
+© Tesseract contributors
+Licence: Apache License 2.0
+https://github.com/tesseract-ocr/tessdata_fast

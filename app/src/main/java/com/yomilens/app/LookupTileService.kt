@@ -15,18 +15,21 @@ import android.os.Build
 import android.provider.Settings
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
-import android.util.Log
-import com.yomilens.app.R
 
+/**
+ * Quick Settings tile: starts a lookup through [TileTriggerActivity], or opens accessibility
+ * settings when the service is not enabled. Its state mirrors whether the service is enabled.
+ */
 class LookupTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        
-        Log.d("YomiLensTile", "Tile clicked. Service enabled: ${isAccessibilityServiceEnabled()}")
-        
+
+        Log.d(TAG, "Tile clicked. Service enabled: ${isAccessibilityServiceEnabled()}")
+
         if (isAccessibilityServiceEnabled()) {
             // Launch the trigger activity which will collapse the shade and call the capture logic
             val intent = Intent(this, TileTriggerActivity::class.java).apply {
@@ -67,7 +70,7 @@ class LookupTileService : TileService() {
     private fun updateTileState() {
         val tile = qsTile ?: return
         val isEnabled = isAccessibilityServiceEnabled()
-        
+
         tile.state = if (isEnabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = getString(R.string.tile_label)
         tile.updateTile()
@@ -83,5 +86,9 @@ class LookupTileService : TileService() {
             }
         }
         return false
+    }
+
+    companion object {
+        private const val TAG = "YomiLens"
     }
 }
