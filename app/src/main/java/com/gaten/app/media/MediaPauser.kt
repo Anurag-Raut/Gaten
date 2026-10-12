@@ -92,10 +92,9 @@ class MediaPauser(private val context: Context) {
         }
 
         for (controller in active) {
-            val state = controller.playbackState ?: continue
-            if (!isPlaying(state.state)) continue
+            if (!isPlaying(controller)) continue
             controller.transportControls.pause()
-            paused += controller to state.state
+            paused += controller to (controller.playbackState?.state ?: PlaybackState.STATE_NONE)
         }
         Log.d(TAG, "Paused ${paused.size} of ${active.size} media sessions")
     }
@@ -107,19 +106,33 @@ class MediaPauser(private val context: Context) {
             return
         }
         for ((controller, state) in paused) {
-            // Only PLAYING is restored: a session the user had paused themselves was never in this
-            // list, and playing back a session caught while buffering or connecting could start
-            // playback that had not begun.
-            if (state == PlaybackState.STATE_PLAYING) controller.transportControls.play()
+            // PLAYING is restored, and NONE too — it only got here through the speed check below,
+            // so it was playing. A session the user had paused themselves was never in this list,
+            // and playing back a session caught while buffering or connecting could start playback
+            // that had not begun.
+            if (state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_NONE) {
+                controller.transportControls.play()
+            }
         }
         paused.clear()
     }
 
-    /** The states a session is playing in — the platform's own "active", minus the seek states. */
-    private fun isPlaying(state: Int): Boolean =
-        state == PlaybackState.STATE_PLAYING ||
-            state == PlaybackState.STATE_BUFFERING ||
-            state == PlaybackState.STATE_CONNECTING
+    /**
+     * The states a session is playing in — the platform's own "active", minus the seek states.
+     * Some players keep STATE_NONE while playing and say it only through the speed (Google Photos'
+     * does on the emulator); a paused or idle session reports speed 0, so that check cannot start
+     * one the user had stopped.
+     */
+    private fun isPlaying(controller: MediaController): Boolean {
+        val state = controller.playbackState ?: return false
+        return when (state.state) {
+            PlaybackState.STATE_PLAYING,
+            PlaybackState.STATE_BUFFERING,
+            PlaybackState.STATE_CONNECTING -> true
+            PlaybackState.STATE_NONE -> state.playbackSpeed > 0f
+            else -> false
+        }
+    }
 
     /** Sends one media key press — a DOWN then an UP — the way a hardware media key would. */
     private fun dispatchKeyEvent(keyCode: Int) {
