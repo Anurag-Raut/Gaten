@@ -13,12 +13,12 @@
 
 # Keep the data classes for GSON but allow obfuscation of names
 # Since we added @SerializedName, we don't need to keep the field names.
--keepclassmembers class com.akslabs.circletosearch.data.** {
+-keepclassmembers class com.yomilens.app.data.** {
     <fields>;
 }
 
 # Keep Enums for GSON serialization
--keepclassmembers enum com.akslabs.circletosearch.data.** {
+-keepclassmembers enum com.yomilens.app.data.** {
     <fields>;
     public static **[] values();
     public static ** valueOf(java.lang.String);

@@ -1,21 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+
 <!--
-  ~ /*
-  ~  * Copyright (C) 2025 AKS-Labs (original author)
-  ~  *
-  ~  * This program is free software: you can redistribute it and/or modify
-  ~  * it under the terms of the GNU General Public License as published by
-  ~  * the Free Software Foundation, either version 3 of the License, or
-  ~  * (at your option) any later version.
-  ~  *
-  ~  * This program is distributed in the hope that it will be useful,
-  ~  * but WITHOUT ANY WARRANTY; without even the implied warranty of
-  ~  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  ~  * GNU General Public License for more details.
-  ~  *
-  ~  * You should have received a copy of the GNU General Public License
-  ~  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-  ~  */
-  -->
+ * YomiLens
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
 
 <resources>
     <string name="app_name">YomiLens</string>
@@ -36,8 +26,6 @@
 
     <!-- General -->
     <string name="close">Close</string>
-    <string name="cd_dismiss">Dismiss</string>
-    <string name="cd_selected">Selected</string>
     <string name="btn_cancel">Cancel</string>
     <string name="btn_grant">Grant</string>
 
@@ -50,58 +38,20 @@
     <string name="label_accessibility_active_subtitle">Press the Plus Key to look up Japanese text</string>
     <string name="label_enable_accessibility">Enable Accessibility</string>
     <string name="label_enable_accessibility_subtitle">To do its job properly, the app needs this permission.\nTap allow and we\'re good to go! &#x1F44D;</string>
-    <string name="section_customization">CUSTOMIZATION</string>
-    <string name="label_ocr_settings">OCR Language Settings</string>
-    <string name="label_ocr_settings_subtitle">Import custom Tesseract OCR models</string>
-    <string name="label_from_akslabs">From AKS-Labs With \u2764\uFE0F</string>
     <string name="toast_accessibility_settings_error">Could not open Accessibility Settings</string>
 
     <!-- Content Descriptions -->
     <string name="cd_granted">Granted</string>
-    <string name="cd_github">Github</string>
-    <string name="cd_telegram">Telegram</string>
-    <string name="cd_privacy">Privacy</string>
-    <string name="cd_back">Back</string>
-    <string name="cd_import_model">Import Model</string>
+
     <!-- Toast Messages -->
     <string name="toast_enable_accessibility_tile">Please enable the YomiLens Accessibility Service</string>
-    <string name="toast_invalid_model_file">File must be a .traineddata Tesseract model.</string>
-    <string name="toast_model_imported">Successfully imported %1$s model!</string>
-    <string name="toast_model_import_failed">Failed to import model</string>
-    <!-- OCR Settings Screen -->
-    <string name="title_ocr_settings">OCR Language Models</string>
-    <string name="btn_import_model">Import Model</string>
-    <string name="title_language_models_guide">Language Models Guide</string>
-    <string name="info_ocr_guide_part1">This app uses language models to detect text. By default, it uses a fast English model which may miss some text. To use high-accuracy models or detect other languages, download them from the </string>
-    <string name="info_ocr_guide_telegram_link">developer\'s Telegram group</string>
-    <string name="info_ocr_guide_part2"> with /model command, e.g. /model english and import them below.</string>
-    <string name="title_installed_models">Installed Models</string>
-    <!-- Privacy Dialog -->
-    <string name="title_privacy">Privacy &amp; Data Usage Transparency</string>
-    <string name="privacy_q_upload">Does this app upload my searched images anywhere other than search engines?</string>
-    <string name="privacy_a_upload">Yes! \u2705\nYour images are uploaded to LitterBox and Catbox third-party services to generate image url.\n\n\u2022 Litterbox \u2192 Auto-delete image after 1 hour\n\u2022 Catbox \u2192 Used only when Litterbox fails (stores image forever)\n\nImportant: Litterbox is actually part of Catbox.\nThey belong to the same service family and may use similar infrastructure.</string>
-    <string name="privacy_q_why_upload">Why does this app upload my image at all?</string>
-    <string name="privacy_a_why_upload">Search engines don\'t allow apps to directly upload images Programmatically (to prevent misuse &amp; abuse). So the app uploads your image first to create a safe, usable link/url of image.</string>
-    <string name="privacy_q_safe">Are Catbox and Litterbox safe?</string>
-    <string name="privacy_a_safe">They\'re widely trusted for temporary file hosting because:\n\n\u2022 No account &amp; API is required\n\u2022 Anonymous uploads are supported\n\u2022 Simple, fast and reliable\n\nThey are not open-source, so please read their official data and privacy policies to fully understand how your data is handled.</string>
-    <string name="privacy_q_personal">Should I search personal or private images?</string>
-    <string name="privacy_a_personal">Please don\'t! &#x1F64F;\n\nAvoid uploading personal photos, private documents, IDs, or anything sensitive. Only search images that are safe and non-personal.</string>
-    <string name="privacy_q_store">Does the app store my images or links?</string>
-    <string name="privacy_a_store">Nope! \u2705\n\nYour images and URLs are not stored, tracked, or logged by this app.</string>
-    <string name="privacy_q_developer">Can the developer see my images or links?</string>
-    <string name="privacy_a_developer">No. Never.\n\nThis App:\n\u2022 Has no server\n\u2022 Does not store images\n\u2022 Does not store image URLs\n\u2022 Does not track what you search\n\u2022 Does not collect data\n\nYour data stays between you \u2192 Catbox/Litterbox \u2192 Search engine.</string>
-    <string name="privacy_reminder_title">&#x1F514; Important Reminder</string>
-    <string name="privacy_reminder_body">Your searched images can remain on search engine servers, Catbox servers, caches, and backups. This is why you should never upload private or personal images.</string>
-    <string name="btn_privacy_accept">I Understand &amp; Accept</string>
 
     <!-- Accessibility Disclosure Dialog -->
     <string name="title_accessibility_permission">Grant Accessibility Permission</string>
     <string name="body_accessibility_permission">YomiLens uses the accessibility service for one thing: capturing a screenshot when you start a lookup. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service cannot read your app content or type for you.</string>
     <string name="label_accessibility_agree">I understand how this permission will be used and agree to proceed</string>
 
-    <!-- Tile Service -->
-    <string name="tile_label">YomiLens</string>
-
     <!-- Quick Settings Tile -->
+    <string name="tile_label">YomiLens</string>
     <string name="qs_tile_label">YomiLens</string>
 </resources>

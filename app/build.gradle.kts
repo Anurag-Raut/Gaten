@@ -1,20 +1,8 @@
 /*
- *
- *  * Copyright (C) 2025 AKS-Labs (original author)
- *  *
- *  * This program is free software: you can redistribute it and/or modify
- *  * it under the terms of the GNU General Public License as published by
- *  * the Free Software Foundation, either version 3 of the License, or
- *  * (at your option) any later version.
- *  *
- *  * This program is distributed in the hope that it will be useful,
- *  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  * GNU General Public License for more details.
- *  *
- *  * You should have received a copy of the GNU General Public License
- *  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *
+ * YomiLens
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 plugins {
@@ -24,7 +12,7 @@ plugins {
 }
 
 android {
-    namespace = "com.akslabs.circletosearch"
+    namespace = "com.yomilens.app"
     compileSdk = 36
 
     signingConfigs {
@@ -40,11 +28,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.akslabs.circletosearch"
+        applicationId = "com.yomilens.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.5"
+        versionCode = 1
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -119,6 +107,23 @@ androidComponents {
             }
         }
     }
+}
+
+// The JMdict database is generated (and gitignored), so a fresh clone builds an APK with no
+// dictionary at all unless someone remembers to run the builder. Fail early instead: the wording
+// below is the exact command that fixes it.
+val verifyDictionaryAsset by tasks.registering {
+    val asset = layout.projectDirectory.file("src/main/assets/db/jmdict.sqlite")
+    description = "Fails the build when the generated JMdict asset is missing."
+    doLast {
+        if (!asset.asFile.isFile) {
+            error("Missing app/src/main/assets/db/jmdict.sqlite — generate it with: python3 tools/build_jmdict_db.py")
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(verifyDictionaryAsset)
 }
 
 dependencies {

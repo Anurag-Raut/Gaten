@@ -1,22 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <!--
-  ~ /*
-  ~  * Copyright (C) 2025 AKS-Labs (original author)
-  ~  *
-  ~  * This program is free software: you can redistribute it and/or modify
-  ~  * it under the terms of the GNU General Public License as published by
-  ~  * the Free Software Foundation, either version 3 of the License, or
-  ~  * (at your option) any later version.
-  ~  *
-  ~  * This program is distributed in the hope that it will be useful,
-  ~  * but WITHOUT ANY WARRANTY; without even the implied warranty of
-  ~  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  ~  * GNU General Public License for more details.
-  ~  *
-  ~  * You should have received a copy of the GNU General Public License
-  ~  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-  ~  */
-  -->
+ * YomiLens
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -38,7 +27,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.CircleToSearch"
+        android:theme="@style/Theme.YomiLens"
         android:enableOnBackInvokedCallback="true"
         android:extractNativeLibs="true"
         tools:targetApi="31">
@@ -46,7 +35,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.CircleToSearch">
+            android:theme="@style/Theme.YomiLens">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -55,7 +44,7 @@
         </activity>
 
         <service
-            android:name=".CircleToSearchAccessibilityService"
+            android:name=".YomiLensAccessibilityService"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
@@ -71,7 +60,7 @@
         <activity
             android:name=".OverlayActivity"
             android:exported="false"
-            android:theme="@style/Theme.CircleToSearch.Transparent"
+            android:theme="@style/Theme.YomiLens.Transparent"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance" />
 
@@ -87,14 +76,14 @@
             android:name=".LookupTriggerReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.akslabs.circletosearch.action.TRIGGER_LOOKUP" />
+                <action android:name="com.yomilens.app.action.TRIGGER_LOOKUP" />
             </intent-filter>
         </receiver>
 
         <service
-            android:name=".CircleToSearchTileService"
+            android:name=".LookupTileService"
             android:exported="true"
-            android:icon="@drawable/cts1"
+            android:icon="@drawable/ic_qs_lookup"
             android:label="@string/qs_tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
