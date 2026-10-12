@@ -147,13 +147,22 @@ class GatenAccessibilityService : AccessibilityService() {
 
     /**
      * The ordered trigger pipeline: wait out the notification shade, pause media, let the player's
-     * controls settle, then capture once the frame itself stops changing. Capturing after the
-     * pause is what keeps every recognised box on the frame the user actually saw.
+     * controls settle, then capture once the frame itself stops changing. When nothing was playing
+     * there is nothing to settle and the capture is immediate. Capturing after the pause is what
+     * keeps every recognised box on the frame the user actually saw.
      */
     private fun startOrderedCapture() {
         Log.d(TAG, "Starting the ordered capture pipeline")
         waitForShadeGone {
-            mediaPauser.pause {
+            mediaPauser.pause { wasPlaying ->
+                if (!wasPlaying) {
+                    // Nothing was playing, so no pause disturbed the screen and no player is
+                    // re-laying its controls: the frame is as it will stay. Skip the settle floor
+                    // and the probes and capture it straight away.
+                    Log.d(TAG, "Nothing was playing - capturing without the settle wait")
+                    performCapture()
+                    return@pause
+                }
                 // The 1000 ms cap runs from the pause, so the clock starts here, on the far side of
                 // MediaPauser, and the settle floor is charged against it from the same instant.
                 val playbackStoppedAt = SystemClock.uptimeMillis()
