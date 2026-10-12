@@ -86,16 +86,26 @@ object OcrPreprocess {
      * The line [box] as the encoder's input bitmap: cropped, upscaled, grayscale. Null when the
      * crop cannot be produced (the box lies outside the bitmap, or the device is out of memory —
      * the upscale allocates a bitmap of its own, so a loaded device can refuse it).
+     * Releases intermediate bitmaps; the caller owns the returned grayscale bitmap.
      */
     fun cropForModel(bitmap: Bitmap, box: Box): Bitmap? = try {
         val crop = cropFor(box, bitmap.width, bitmap.height)
         val cut = Bitmap.createBitmap(bitmap, crop.left, crop.top, crop.width, crop.height)
-        val scaled = if (crop.scale == 1f) {
-            cut
-        } else {
-            Bitmap.createScaledBitmap(cut, crop.scaledWidth, crop.scaledHeight, true)
+        try {
+            val scaled = if (crop.scale == 1f) {
+                cut
+            } else {
+                Bitmap.createScaledBitmap(cut, crop.scaledWidth, crop.scaledHeight, true)
+            }
+            try {
+                grayscale(scaled)
+            } finally {
+                if (scaled !== cut && scaled !== bitmap) scaled.recycle()
+            }
+        } finally {
+            // A full-image crop can be the shared source itself.
+            if (cut !== bitmap) cut.recycle()
         }
-        grayscale(scaled)
     } catch (e: Exception) {
         Log.w(TAG, "manga-ocr crop failed for $box", e)
         null
@@ -117,18 +127,22 @@ object OcrPreprocess {
         } else {
             Bitmap.createScaledBitmap(bitmap, MODEL_SIZE, MODEL_SIZE, true)
         }
-        val pixels = IntArray(MODEL_SIZE * MODEL_SIZE)
-        scaled.getPixels(pixels, 0, MODEL_SIZE, 0, 0, MODEL_SIZE, MODEL_SIZE)
+        try {
+            val pixels = IntArray(MODEL_SIZE * MODEL_SIZE)
+            scaled.getPixels(pixels, 0, MODEL_SIZE, 0, 0, MODEL_SIZE, MODEL_SIZE)
 
-        val plane = MODEL_SIZE * MODEL_SIZE
-        val input = FloatArray(plane * 3)
-        for (index in pixels.indices) {
-            val gray = ((pixels[index] and 0xFF) / 255f - 0.5f) / 0.5f
-            input[index] = gray
-            input[plane + index] = gray
-            input[2 * plane + index] = gray
+            val plane = MODEL_SIZE * MODEL_SIZE
+            val input = FloatArray(plane * 3)
+            for (index in pixels.indices) {
+                val gray = ((pixels[index] and 0xFF) / 255f - 0.5f) / 0.5f
+                input[index] = gray
+                input[plane + index] = gray
+                input[2 * plane + index] = gray
+            }
+            return input
+        } finally {
+            if (scaled !== bitmap) scaled.recycle()
         }
-        return input
     }
 
     /**

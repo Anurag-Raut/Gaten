@@ -44,19 +44,23 @@ fun EdgeOutline(busy: Boolean, modifier: Modifier = Modifier) {
     val view = LocalView.current
     val primary = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
     val tertiary = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f)
-    val sweep = rememberInfiniteTransition(label = "edge outline").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(TRAVEL_MS, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "edge outline drift"
-    )
+    val sweep = if (busy) {
+        rememberInfiniteTransition(label = "edge outline").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(TRAVEL_MS, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "edge outline drift"
+        )
+    } else {
+        null
+    }
 
     Canvas(modifier = modifier) {
         // Read in the draw scope: the drift then only redraws the ring, it never recomposes it.
-        val shift = if (busy) sweep.value else 0.5f
+        val shift = sweep?.value ?: 0.5f
         val radius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             view.rootWindowInsets?.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)
                 ?.radius?.toFloat() ?: 0f

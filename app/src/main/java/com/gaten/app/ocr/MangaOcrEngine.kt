@@ -14,12 +14,14 @@ import android.graphics.Bitmap
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
+import kotlin.coroutines.coroutineContext
 
 /**
  * The optional reader: manga-ocr, a ViT encoder plus a two-layer BERT decoder, run on ONNX Runtime.
@@ -103,8 +105,14 @@ object MangaOcrEngine {
         }
     }
 
-    /** One encoder pass plus the greedy decode loop. Returns null when the model is not installed. */
-    private fun infer(context: Context, crop: Bitmap): String? {
+    /**
+     * One encoder pass plus the greedy decode loop. Returns null when the model is not installed.
+     *
+     * Suspending: [decode] checks cancellation between decoder steps, so an abandoned read stops
+     * before the next native call rather than decoding to the token cap. A call already running on
+     * the native side is never interrupted mid-inference.
+     */
+    private suspend fun infer(context: Context, crop: Bitmap): String? {
         val model = load(context) ?: return null
         val input = OcrPreprocess.toModelInput(crop)
 
@@ -126,11 +134,12 @@ object MangaOcrEngine {
      * stop at [EOS_TOKEN] or [MAX_TOKENS]. The start token is in the array it returns, where the
      * tokenizer drops it as special text.
      */
-    private fun decode(model: Loaded, hidden: OnnxTensor): LongArray {
+    private suspend fun decode(model: Loaded, hidden: OnnxTensor): LongArray {
         val ids = LongArray(MAX_TOKENS)
         ids[0] = START_TOKEN
         var length = 1
         while (length < MAX_TOKENS) {
+            coroutineContext.ensureActive()
             val next = nextToken(model, hidden, ids, length) ?: break
             if (next == EOS_TOKEN) break
             ids[length] = next

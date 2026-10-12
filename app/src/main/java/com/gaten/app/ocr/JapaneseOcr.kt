@@ -89,7 +89,12 @@ object JapaneseOcr {
         MangaOcrModel.installBundledIfPresent(context)
         if (!MangaOcrModel.isInstalled(context)) return null
         val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
-        return MangaOcrEngine.recognize(context, crop)
+        try {
+            return MangaOcrEngine.recognize(context, crop)
+        } finally {
+            // Recognition's synchronous native calls have finished before it returns or cancels.
+            if (crop !== bitmap) crop.recycle()
+        }
     }
 
     /**

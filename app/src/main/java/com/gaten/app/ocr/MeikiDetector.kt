@@ -13,8 +13,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
+import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
 
 /**
@@ -69,8 +72,12 @@ object MeikiDetector {
     /**
      * The text-line boxes meiki finds in [bitmap], in bitmap pixels, deduplicated across tiles.
      * Empty when the model is not packaged, cannot be loaded, or inference fails; never throws.
+     *
+     * Suspending: cancellation is checked between tiles, so a dismissed overlay stops before the
+     * next tile instead of finishing the whole pass. A tile already running to completion on the
+     * native side is never interrupted mid-inference.
      */
-    fun detect(context: Context, bitmap: Bitmap): List<Box> {
+    suspend fun detect(context: Context, bitmap: Bitmap): List<Box> {
         val started = SystemClock.elapsedRealtime()
         // The session is in use from here to the end of the pass, and the inference runs outside
         // [session]'s own lock, so [lock] is held for the whole of it: [release] waits here rather
@@ -82,12 +89,15 @@ object MeikiDetector {
                 return try {
                     val scored = ArrayList<DetectionMerge.ScoredBox>()
                     for (tile in DetectionMerge.planTiles(bitmap.width, bitmap.height)) {
+                        coroutineContext.ensureActive()
                         if (tile.width <= 0 || tile.height <= 0) continue
                         scored.addAll(detectTile(model, bitmap, tile))
                     }
                     val boxes = DetectionMerge.nms(scored, DetectionMerge.CROSS_TILE_IOU).map { it.box }
                     Log.d(TAG, "meiki: ${boxes.size} boxes, ${SystemClock.elapsedRealtime() - started} ms")
                     boxes
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "meiki inference failed", e)
                     emptyList()

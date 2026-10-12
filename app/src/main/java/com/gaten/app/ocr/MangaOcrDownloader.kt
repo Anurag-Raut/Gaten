@@ -111,6 +111,7 @@ class MangaOcrDownloader(
                     if (failure != null) return@withContext failure
                     staged.add(target to file)
                 }
+                coroutineContext.ensureActive()
                 if (cancelled) return@withContext Outcome.Cancelled
 
                 // Every file is on disk and the right size, so only now does the installed model
@@ -137,7 +138,7 @@ class MangaOcrDownloader(
      * Fetches one file to [target], following Hugging Face's redirects. Null when it is there and
      * complete, the failure otherwise.
      */
-    private fun fetch(
+    private suspend fun fetch(
         file: MangaOcrCatalog.File,
         index: Int,
         entry: MangaOcrCatalog.Entry,
@@ -147,6 +148,8 @@ class MangaOcrDownloader(
         var url = URI(file.url)
         var redirects = 0
         while (true) {
+            coroutineContext.ensureActive()
+            if (cancelled) return Outcome.Cancelled
             if (!allowedUrl(url)) {
                 return Outcome.Failed("${file.localName}: refusing to download from $url")
             }
@@ -174,8 +177,8 @@ class MangaOcrDownloader(
         }
     }
 
-    /** Streams the response body of [connection] into [target], checking the size as it goes. */
-    private fun copyBody(
+    /** Streams the body to [target], checking size and cancellation between blocking reads. */
+    private suspend fun copyBody(
         connection: HttpURLConnection,
         file: MangaOcrCatalog.File,
         index: Int,
@@ -196,8 +199,11 @@ class MangaOcrDownloader(
             target.outputStream().use { output ->
                 val buffer = ByteArray(BUFFER_BYTES)
                 while (true) {
+                    coroutineContext.ensureActive()
                     if (cancelled) return Outcome.Cancelled
                     val read = input.read(buffer)
+                    coroutineContext.ensureActive()
+                    if (cancelled) return Outcome.Cancelled
                     if (read < 0) break
                     output.write(buffer, 0, read)
                     written += read

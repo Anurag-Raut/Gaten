@@ -7,6 +7,7 @@
 package com.gaten.app.ocr
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -233,5 +234,29 @@ class MangaOcrDownloaderTest {
             downloader.cancel()
             assertEquals(MangaOcrDownloader.Outcome.Installed, downloader.download(entry(file("encoder.onnx", body))))
         }
+    }
+
+    /** Cancelling the owning coroutine stops chunk callbacks and leaves installed files intact. */
+    @Test
+    fun coroutineCancellationStopsBodyReadsAndPreservesTheInstalledModel() = runBlocking {
+        File(dir, "encoder.onnx").writeText("installed model")
+        val body = ByteArray(3 * 64 * 1024)
+        server.serve("/encoder.onnx", body)
+        var progressUpdates = 0
+        val job = launch {
+            val downloadJob = coroutineContext[Job]!!
+            downloader.download(entry(file("encoder.onnx", body))) {
+                progressUpdates++
+                downloadJob.cancel()
+            }
+        }
+
+        job.join()
+
+        assertTrue(job.isCancelled)
+        assertEquals("no more body chunks after cancellation", 1, progressUpdates)
+        assertEquals("installed model", File(dir, "encoder.onnx").readText())
+        assertFalse(File(dir, "catalog.txt").exists())
+        assertFalse(File(dir, ".part").exists())
     }
 }
