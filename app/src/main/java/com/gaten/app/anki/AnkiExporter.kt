@@ -51,16 +51,17 @@ internal enum class AddOutcome { DUPLICATE, ADDED, FAILED }
  *
  * [AddContentApi] talks to AnkiDroid's `flashcards` ContentProvider, not to a network service, so
  * Gaten keeps its no-INTERNET manifest. AnkiDroid must be declared in the manifest's `<queries>`
- * for that provider to be visible at all on Android 11+, and its `READ_WRITE_DATABASE` permission is
- * granted once by the user.
+ * for that provider to be visible at all on Android 11+, and a write needs its
+ * `READ_WRITE_DATABASE` permission. The overlay is drawn from the accessibility service, which can
+ * check that permission but never ask for it, so [shareFallback] is what covers the ungranted case.
  *
  * The deck and note type are created on first use and their ids cached in the app's settings file,
  * but every add re-checks that they still exist: AnkiDroid renumbers them when the user deletes a
  * deck or a note type, and a stale id makes the provider reject the note.
  */
 object AnkiExporter {
-    /** AnkiDroid's database permission, re-exported so the UI does not have to know the API library. */
-    val PERMISSION: String = AddContentApi.READ_WRITE_PERMISSION
+    /** AnkiDroid's database permission, checked before every write. */
+    private val PERMISSION: String = AddContentApi.READ_WRITE_PERMISSION
 
     /** The settings file shared with `ocr/OcrPreferences`. */
     private const val PREFS_NAME = "gaten_settings"
@@ -146,9 +147,10 @@ object AnkiExporter {
     }
 
     /**
-     * Hands [card] to AnkiDroid's own share handler: the fallback for a user who declined the
-     * database permission. AnkiDroid opens its "add note" screen with the word filled in and the
-     * user confirms it there, so this needs no permission from Gaten at all.
+     * Hands [card] to AnkiDroid's own share handler: the fallback for a word that cannot be written
+     * through the provider, because the user declined the database permission or because the
+     * overlay's service window has no way to ask for it. AnkiDroid opens its "add note" screen with
+     * the word filled in and the user confirms it there, so this needs no permission from Gaten.
      *
      * Returns false when nothing can handle the intent, so the caller can say so.
      */
@@ -156,6 +158,8 @@ object AnkiExporter {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             setPackage(ANKI_DROID_PACKAGE)
+            // Started from the accessibility service, never from an activity, so it needs a task.
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(Intent.EXTRA_SUBJECT, card.expression)
             putExtra(
                 Intent.EXTRA_TEXT,

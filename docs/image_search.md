@@ -6,7 +6,7 @@ This app captures a screenshot, lets the user draw a region, crops the bitmap, a
 
 ## Flow
 
-- Capture screenshot and display in `OverlayActivity`.
+- Capture screenshot and show it in the overlay window.
 - User draws a region; the stroke’s bounding box becomes the selection.
 - Crop the screenshot to the selection using `ImageUtils.cropBitmap`.
 - Upload the cropped bitmap via `ImageSearchUploader` to the chosen provider.

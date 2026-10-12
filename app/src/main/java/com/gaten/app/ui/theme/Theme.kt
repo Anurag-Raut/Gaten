@@ -7,7 +7,6 @@
 
 package com.gaten.app.ui.theme
 
-import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
 
 private val LightColorScheme = lightColorScheme(
     primary = LightPrimary,
@@ -85,8 +84,10 @@ fun GatenTheme(content: @Composable () -> Unit) {
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            val controller = WindowCompat.getInsetsController(window, view)
+            // Taken from the view, not from its context: the overlay is drawn in the accessibility
+            // service's window, which has no Activity to take a Window from. Null when the view is
+            // not attached yet, and on API 29 when there is no Activity either.
+            val controller = ViewCompat.getWindowInsetsController(view) ?: return@SideEffect
             controller.isAppearanceLightStatusBars = !darkTheme
             controller.isAppearanceLightNavigationBars = !darkTheme
         }

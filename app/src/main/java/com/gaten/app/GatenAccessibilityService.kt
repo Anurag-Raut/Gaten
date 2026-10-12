@@ -8,31 +8,39 @@
 package com.gaten.app
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import com.gaten.app.data.BitmapRepository
+import com.gaten.app.ui.overlay.OverlayWindowController
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 /**
  * Gaten' only use of the accessibility framework: screenshots the screen when a lookup is
- * triggered, stores the bitmap in [BitmapRepository] and opens [OverlayActivity].
+ * triggered, stores the bitmap in [BitmapRepository] and draws the lookup overlay in a window of
+ * its own — [OverlayWindowController], not an activity, so the app behind keeps playing.
  */
 class GatenAccessibilityService : AccessibilityService() {
 
     private val executor: Executor = Executors.newSingleThreadExecutor()
+    private lateinit var overlay: OverlayWindowController
 
     override fun onCreate() {
         super.onCreate()
+        overlay = OverlayWindowController(this)
         instance = this
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        // The window belongs to this service: without this it would stay on screen over everything
+        // after the service goes away.
+        overlay.hide()
         instance = null
     }
 
@@ -71,7 +79,9 @@ class GatenAccessibilityService : AccessibilityService() {
                         if (copy == null) return
 
                         BitmapRepository.setScreenshot(copy)
-                        launchOverlay()
+                        // takeScreenshot answers here, on the executor; the overlay is a window
+                        // and belongs to the main thread.
+                        Handler(Looper.getMainLooper()).post { showOverlay() }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to prepare the captured screenshot", e)
                     }
@@ -84,13 +94,20 @@ class GatenAccessibilityService : AccessibilityService() {
         )
     }
 
-    fun launchOverlay() {
-        Log.d(TAG, "AccessibilityService launching OverlayActivity")
-        val intent = Intent(this, OverlayActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+    /**
+     * Puts the capture the service just stored on screen.
+     *
+     * An activity used to do this and took the foreground, which stopped whatever was behind it;
+     * an accessibility overlay window leaves the app behind foreground instead.
+     */
+    private fun showOverlay() {
+        val bitmap = BitmapRepository.getScreenshot()
+        if (bitmap == null) {
+            Log.e(TAG, "No bitmap in Repository - not showing the overlay")
+            return
         }
-        startActivity(intent)
+        Log.d(TAG, "Bitmap loaded from Repository. Size: ${bitmap.width}x${bitmap.height}")
+        overlay.show(bitmap)
     }
 
     /** Nothing to observe: a lookup is always started explicitly from outside this service. */
@@ -109,7 +126,7 @@ class GatenAccessibilityService : AccessibilityService() {
          * trigger while the panel is up closes it instead of starting another lookup.
          */
         fun triggerCapture() {
-            if (OverlayActivity.closeIfShowing()) {
+            if (instance?.overlay?.hideIfShowing() == true) {
                 Log.d(TAG, "Lookup panel was open - closing it")
                 return
             }
