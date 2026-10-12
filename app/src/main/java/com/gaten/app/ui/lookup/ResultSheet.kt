@@ -517,7 +517,7 @@ private fun EmptyState(
         )
         Spacer(Modifier.height(Spacing.s))
         TextButton(onClick = onSelectAgain) {
-            Text(stringResource(R.string.lookup_select_again))
+            Text(stringResource(R.string.lookup_select_again), style = type.button)
         }
     }
 }
@@ -761,11 +761,14 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
 private fun OtherMatches(word: ScannedWord, type: SheetType, compact: Boolean) {
     var expanded by remember { mutableStateOf(false) }
     val extras = word.entries.drop(1)
+    val iconSize = if (compact) 18.dp else 24.dp
 
     Spacer(Modifier.height(if (compact) Spacing.s else Spacing.m))
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // clickable carries no minimum touch target of its own, unlike Surface and IconButton.
+            .heightIn(min = 48.dp)
             .clickable { expanded = !expanded }
             .padding(vertical = if (compact) Spacing.xs else Spacing.s),
         verticalAlignment = Alignment.CenterVertically
@@ -779,7 +782,8 @@ private fun OtherMatches(word: ScannedWord, type: SheetType, compact: Boolean) {
         Icon(
             imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(iconSize)
         )
     }
     if (expanded) {
