@@ -133,6 +133,13 @@ never queues behind them. Any line it cannot read (no model, a failure, a timeou
 keeps ML Kit's text, and the rest of the screen keeps being read behind the result sheet, so the next
 gesture usually needs no wait at all.
 
+The engines are not kept for the life of the process. Once no lookup has used them for 90 seconds —
+or when the system asks for memory, or when the accessibility service is torn down — Gaten releases
+them (manga-ocr's ONNX sessions, ML Kit's Japanese recognizer and the meiki detector). The next lookup
+builds them again from local files or APK assets, with no download; this first lookup may take longer.
+Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
+The memory reduction has not been measured on the current version.
+
 The model is ~117 MB, so it is never part of a release APK. There are three ways to get it onto a
 phone, and the app only reaches the network for the first one:
 
@@ -174,9 +181,10 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
   ML Kit's boxes by `DetectionMerge`), the full-screen text index (`ScreenText*`, `ScreenHits`) and
   `OcrRepair`. The reader is `ScreenLineReader` (the per-session cache that replaces each line's text
   as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
-  (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop) and
-  `OcrLinePolicy` (when an answer is kept). `MangaOcrCatalog` is the list of downloadable models and
-  `MangaOcrDownloader` the only network code in the app.
+  (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrModels`
+  (when the three OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
+  `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` the only network code
+  in the app.
 - `anki/` — the AnkiDroid instant-add export.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).

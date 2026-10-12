@@ -11,6 +11,7 @@ import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
 import android.app.Notification
 import android.content.BroadcastReceiver
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -37,6 +38,7 @@ import com.gaten.app.lifecycle.classifyWindowEvent
 import com.gaten.app.lifecycle.displayChanged
 import com.gaten.app.lifecycle.lookupAdmitted
 import com.gaten.app.media.MediaPauser
+import com.gaten.app.ocr.OcrModels
 import com.gaten.app.trigger.FloatingTriggerButton
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.overlay.OverlayWindowController
@@ -190,6 +192,10 @@ class GatenAccessibilityService : AccessibilityService() {
         unregisterDisplayListener()
         cancelLookup()
         floatingButton?.hide()
+        // A service on its way out does not need the OCR models, the largest thing the process
+        // holds; they are built again from disk on the next use. The release runs off the main
+        // thread, so nothing here waits for it.
+        OcrModels.releaseNow()
         return super.onUnbind(intent)
     }
 
@@ -206,6 +212,7 @@ class GatenAccessibilityService : AccessibilityService() {
         executor.shutdown()
         floatingButton?.hide()
         mediaPauser.release()
+        OcrModels.releaseNow()
         instance = null
     }
 
@@ -353,6 +360,22 @@ class GatenAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    /**
+     * Requests model cleanup on memory pressure; active recognition finishes before cleanup.
+     * UI_HIDDEN alone is ignored because a service overlay may still be in use. Trim callbacks
+     * vary by Android version, so the independent idle timer remains necessary.
+     */
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val low = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+        if (!low) return
+        Log.d(TAG, "Trim memory level $level: releasing the OCR models")
+        OcrModels.releaseNow()
+    }
 
     /**
      * Shows the floating trigger when the user has it enabled and it is not already up, hides it

@@ -17,6 +17,7 @@ import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -35,17 +36,22 @@ data class OcrLine(val text: String, val bounds: Box)
 object JapaneseOcr {
     private const val TAG = "GatenOcr"
 
-    /** ML Kit clients are expensive to build and safe to reuse; the model is app-lifetime. */
-    private val recognizer: TextRecognizer by lazy {
-        TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
-    }
+    /** The ML Kit client, kept across calls and dropped by [release] when the models go idle. */
+    private val mlKit = MlKitClient()
 
     /**
      * The raw ML Kit result for [bitmap], shared with callers that need a pass of their own
-     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place.
+     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place. The use is
+     * counted for as long as the pass runs — the [Task] completing ends it, not the coroutine
+     * returning, since cancelling the coroutine does not stop the native pass.
      */
-    internal suspend fun mlKitResult(bitmap: Bitmap): Text =
-        recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
+    internal suspend fun mlKitResult(bitmap: Bitmap): Text {
+        OcrModels.begin()
+        val task = mlKit.run(onComplete = OcrModels::end) { recognizer ->
+            recognizer.process(InputImage.fromBitmap(bitmap, 0))
+        }
+        return task.await()
+    }
 
     /**
      * The lines ML Kit reads in [bitmap], in the order it reported them. Never throws: a failed pass
@@ -86,6 +92,13 @@ object JapaneseOcr {
         return MangaOcrEngine.recognize(context, crop)
     }
 
+    /**
+     * Drops the ML Kit client so the system can take its memory back; the next pass builds a new
+     * one. A no-op while a pass is in flight, since closing the client under it would fail that
+     * call. True when there was a client to drop.
+     */
+    fun release(): Boolean = mlKit.release()
+
     /** Bridges an ML Kit [Task] into coroutines without kotlinx-coroutines-play-services. */
     private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
         addOnSuccessListener { result ->
@@ -97,5 +110,84 @@ object JapaneseOcr {
         addOnCanceledListener {
             if (continuation.isActive) continuation.cancel()
         }
+    }
+}
+
+/**
+ * The ML Kit text client and the passes pinning it.
+ *
+ * `process()` is asynchronous: it returns a [Task] that finishes on ML Kit's own thread, so a
+ * coroutine cancelled while awaiting it does not stop the native pass. The client therefore stays
+ * pinned from before `process()` until the [Task] has actually completed, in any of its outcomes —
+ * a coroutine returning or being cancelled is not the end of a use. [release], asked to drop the
+ * client for memory, skips while any pass is pinned rather than close it under one; the next call
+ * after a release builds a fresh client.
+ */
+internal class MlKitClient(
+    private val build: () -> TextRecognizer = {
+        TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+    }
+) {
+    /** Runs a completion listener on the thread that finishes the task, so no Looper is needed. */
+    private companion object {
+        val DIRECT = Executor { it.run() }
+    }
+
+    private val lock = Any()
+
+    /** The client, or null once [release] has dropped it. Guarded by [lock]. */
+    private var client: TextRecognizer? = null
+
+    /** Passes not yet completed; [release] skips while this is non-zero. Guarded by [lock]. */
+    private var users = 0
+
+    /**
+     * Builds or reuses the client, runs [block] against it and returns its task. [onComplete] runs,
+     * and the client unpins, exactly once: when the task completes (success, failure or cancel), or
+     * right away if [block] throws before a task exists or the client cannot be built. The count
+     * goes up only after the client is built, so a build that throws leaves nothing pinned.
+     */
+    fun <T> run(onComplete: () -> Unit = {}, block: (TextRecognizer) -> Task<T>): Task<T> {
+        val recognizer = try {
+            synchronized(lock) {
+                val current = client ?: build().also { client = it }
+                users++
+                current
+            }
+        } catch (e: Throwable) {
+            // No client was built, so nothing is pinned — but the caller's use still has to close.
+            onComplete()
+            throw e
+        }
+        val task = try {
+            block(recognizer)
+        } catch (e: Throwable) {
+            // `process()` threw before a task existed: nothing will complete, so unpin here.
+            finish(onComplete)
+            throw e
+        }
+        task.addOnCompleteListener(DIRECT) { finish(onComplete) }
+        return task
+    }
+
+    private fun finish(onComplete: () -> Unit) {
+        synchronized(lock) { if (users > 0) users-- }
+        onComplete()
+    }
+
+    /**
+     * Drops the client so the system can take its memory back; the next [run] builds a new one. A
+     * no-op while a pass is pinned, since closing the client under it would fail that call — the
+     * idle timer or the next memory-pressure callback retries. True when there was a client to drop.
+     */
+    fun release(): Boolean {
+        val dropped = synchronized(lock) {
+            if (users > 0) return false
+            val current = client
+            client = null
+            current
+        }
+        dropped?.close()
+        return dropped != null
     }
 }
