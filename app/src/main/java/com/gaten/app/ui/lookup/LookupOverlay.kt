@@ -125,7 +125,9 @@ private fun sheetExit(dock: SheetDock, fraction: Float): ExitTransition = when (
  *
  * On open the whole capture is detected and read once by ML Kit, in the background; the overlay is
  * usable the moment that index exists, and manga-ocr then reads its lines behind it
- * ([ScreenLineReader]), replacing each one's text as it lands. A tap or a lasso waits for the lines
+ * ([ScreenLineReader]), replacing each one's text as it lands. Ready is ML Kit's index: the
+ * optional meiki model runs afterwards, entirely behind the ready overlay, and the lines it finds
+ * beyond ML Kit's are appended to the live index and read like every other line. A tap or a lasso waits for the lines
  * it touched — and only those — before answering from the index, and the region OCR path stays as
  * the fallback while the scan runs and when it is unavailable. Words are tokenised against the
  * offline JMdict and shown in a bottom sheet. The dictionary is opened once and kept warm for the
@@ -230,6 +232,25 @@ fun LookupOverlay(
     LaunchedEffect(reader) {
         val current = screen ?: return@LaunchedEffect
         reader?.prefetch(prefetchOrder(current))
+    }
+
+    // Meiki is a second, slower pass over the capture, run entirely behind the ready overlay: the
+    // reader was built from ML Kit's index alone, and the lines meiki finds beyond it join that
+    // index here as empty placeholders (append is the only structural change the index takes, so
+    // the gesture line-indices already handed out stay valid). The effect is keyed to the reader,
+    // so a disposed reader — overlay closed, screenshot replaced — never receives them; when lines
+    // were added they are prefetched like the rest, and read or dropped by the same rules.
+    LaunchedEffect(reader, screenshot) {
+        val current = reader ?: return@LaunchedEffect
+        val index = scannedScreen ?: return@LaunchedEffect
+        val bmp = screenshot ?: return@LaunchedEffect
+        val added = withContext(Dispatchers.Default) {
+            ScreenTextScanner.meikiLines(context, bmp, index.lines)
+        }
+        if (added.isNotEmpty()) {
+            current.append(added)
+            current.prefetch(prefetchOrder(current.text.value))
+        }
     }
 
     // Open the offline dictionary once and keep it warm for the whole overlay lifetime.

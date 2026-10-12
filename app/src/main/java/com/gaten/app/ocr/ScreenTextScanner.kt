@@ -21,11 +21,13 @@ import kotlinx.coroutines.CancellationException
  * every line, with a box per character, so a tap or a lasso can be answered from the index
  * ([ScreenHits]) with no further recognition.
  *
- * ML Kit is the detector of record and reports the layout the index is made of; the optional
- * meiki model ([MeikiDetector]) is a second opinion on *where* the lines are, and the boxes it
- * finds beyond ML Kit's ([DetectionMerge]) become lines of their own. Those meiki-only lines start
- * as empty placeholders with no character boxes — unreachable by gestures until [ScreenLineReader]
- * reads them — and manga-ocr fills their text in; a line whose reading has no Japanese in it is
+ * ML Kit is the detector of record and reports the layout the index is made of: [scan] is ML Kit
+ * only, so the overlay goes ready the moment its index exists. The optional meiki model
+ * ([MeikiDetector]) is a second opinion on *where* the lines are, and the boxes it finds beyond ML
+ * Kit's ([DetectionMerge]) become lines of their own — [meikiLines] computes them, and the caller
+ * appends them to the live index ([ScreenLineReader.append]) once they are in. Those meiki-only
+ * lines start as empty placeholders with no character boxes — unreachable by gestures until
+ * [ScreenLineReader] reads them — and manga-ocr fills their text in; a line whose reading has no Japanese in it is
  * dropped like any other. With no manga-ocr model installed they simply stay empty and
  * unreachable, which is the same degradation every other manga-ocr path takes.
  *
@@ -42,8 +44,12 @@ object ScreenTextScanner {
     private const val TAG = "GatenOcr"
 
     /**
-     * Recognises the whole [bitmap] and returns its index: ML Kit's lines in the order it reported
-     * them, followed by the meiki-only lines ([MeikiDetector], [DetectionMerge]) as placeholders.
+     * Recognises the whole [bitmap] and returns its index: ML Kit's lines, in the order it reported
+     * them, each tightened onto its ink.
+     *
+     * Meiki is deliberately not part of this pass: the overlay goes ready as soon as ML Kit's
+     * layout exists, and the meiki-only lines arrive afterwards, through [meikiLines] and
+     * [ScreenLineReader.append].
      *
      * Returns null — i.e. [ScanState.Unavailable] for the caller — when recognition fails, or when
      * ML Kit read no line at all (meiki-only lines are appended after that check: without ML Kit's
@@ -64,13 +70,25 @@ object ScreenTextScanner {
         }
         if (lines.isEmpty()) return null
 
-        // Meiki sees the lettering ML Kit's line detector misses; only its boxes beyond ML Kit's
-        // become lines, and they go at the end so ML Kit's reading order is kept. A failed meiki
-        // pass is an empty list (the model is optional), so the index is exactly as before.
-        val meikiStartedAt = SystemClock.elapsedRealtime()
+        Log.d(TAG, "Indexed ${lines.size} ML Kit lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
+        return ScreenText(lines, bitmap.width, bitmap.height)
+    }
+
+    /**
+     * Runs meiki over the whole [bitmap] and returns the lines it found beyond [mlKitLines]' boxes
+     * — the lettering ML Kit's line detector missed — as empty placeholder [ScreenLine]s with no
+     * character boxes. The caller appends them to the live index ([ScreenLineReader.append]), and
+     * manga-ocr fills their text in there; until then they are unreachable by gestures, like any
+     * other empty line.
+     *
+     * A failed meiki pass is an empty list (the model is optional), so the caller appends nothing
+     * and the index is exactly as before. Never throws.
+     */
+    suspend fun meikiLines(context: Context, bitmap: Bitmap, mlKitLines: List<ScreenLine>): List<ScreenLine> {
+        val startedAt = SystemClock.elapsedRealtime()
         val meikiBoxes = MeikiDetector.detect(context, bitmap)
         val added = DetectionMerge.merge(
-            lines.map { it.bounds },
+            mlKitLines.map { it.bounds },
             meikiBoxes
         ).added
         val placeholderLines = added.map { box ->
@@ -84,11 +102,9 @@ object ScreenTextScanner {
         Log.d(
             TAG,
             "meiki: ${meikiBoxes.size} boxes, ${added.size} beyond ML Kit, " +
-                "${SystemClock.elapsedRealtime() - meikiStartedAt} ms"
+                "${SystemClock.elapsedRealtime() - startedAt} ms"
         )
-
-        Log.d(TAG, "Indexed ${lines.size + placeholderLines.size} lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
-        return ScreenText(lines + placeholderLines, bitmap.width, bitmap.height)
+        return placeholderLines
     }
 
     /** Margin, in px, the line is cropped with before the ink profile is read. */

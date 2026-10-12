@@ -69,22 +69,15 @@ object SelectionSnap {
     }
 
     /**
-     * The lines a selection points at: every line it overlaps, or — when the gesture landed between
-     * lines — the single line whose centre is closest, so a slightly off aim still returns something
-     * useful instead of "no text".
+     * The lines a selection points at: every line it overlaps, and nothing else.
+     *
+     * There is no nearest-line fallback on purpose: this is the circle path, where the answer must
+     * be only what was circled. When nothing overlaps — nothing recognised in the region, or a
+     * gesture between lines — the result is empty, and the caller answers with the box the user
+     * drew ([RegionReadPolicy.fallbackLines]) instead of text from somewhere else on the screen.
      */
-    fun selectLines(lines: List<OcrLine>, selection: Box): List<OcrLine> {
-        val overlapping = lines.filter { it.bounds.overlaps(selection) }
-        if (overlapping.isNotEmpty()) return overlapping
-        val nearest = lines.minByOrNull { squaredCentreDistance(it.bounds, selection) } ?: return emptyList()
-        return listOf(nearest)
-    }
-
-    private fun squaredCentreDistance(a: Box, b: Box): Int {
-        val dx = a.centreX - b.centreX
-        val dy = a.centreY - b.centreY
-        return dx * dx + dy * dy
-    }
+    fun selectLines(lines: List<OcrLine>, selection: Box): List<OcrLine> =
+        lines.filter { it.bounds.overlaps(selection) }
 
     private const val HORIZONTAL_MARGIN_RATIO = 0.5f
     private const val VERTICAL_MARGIN_RATIO = 0.35f

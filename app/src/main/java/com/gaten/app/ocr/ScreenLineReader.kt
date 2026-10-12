@@ -33,7 +33,9 @@ import java.util.concurrent.ConcurrentHashMap
  * The overlay's index is ML Kit's — boxes, lines and a first reading — and it is built instantly so
  * the overlay is usable at once. This class is what happens next: every line is read in the
  * background (see [prefetchOrder]) and [text] republishes the index with each line's text replaced
- * as it lands. A gesture asks for the lines it touched with [read], which waits for them and falls
+ * as it lands. The meiki-only lines join this index after the fact ([append], see
+ * [ScreenTextScanner.meikiLines]), and are read exactly like the lines the screen was scanned
+ * with. A gesture asks for the lines it touched with [read], which waits for them and falls
  * back to ML Kit's text when the model is missing, fails, or takes longer than [timeoutMillis] —
  * the reader must never be the reason a tap does nothing.
  *
@@ -76,11 +78,27 @@ class ScreenLineReader(
     val text: StateFlow<ScreenText> = _text.asStateFlow()
 
     /**
+     * Appends [lines] to the live index, in order, after the lines the screen was scanned with.
+     *
+     * This is how the meiki-only placeholders arrive (see [ScreenTextScanner.meikiLines]): the
+     * overlay went ready with ML Kit's index alone, and these lines join it once the meiki pass is
+     * over. Appending is the only structural change the index ever takes — lines are never
+     * inserted or removed, only dropped in place ([withDroppedLine]) — so a line index a gesture
+     * is holding stays valid forever, and every appended index is stable too. No-op for an empty
+     * list. The update is atomic on the flow's latest value, so it composes with the per-line text
+     * replacements already in flight.
+     */
+    fun append(lines: List<ScreenLine>) {
+        if (lines.isEmpty()) return
+        _text.update { it.copy(lines = it.lines + lines) }
+    }
+
+    /**
      * The text of line [lineIndex]: manga-ocr's when it read the line in time, ML Kit's otherwise.
      * Waits at most [timeoutMillis] for an answer, so a gesture can rely on it returning.
      */
     suspend fun read(lineIndex: Int): String {
-        val line = screen.lines.getOrNull(lineIndex) ?: return ""
+        val line = _text.value.lines.getOrNull(lineIndex) ?: return ""
         val alreadyRead = lineIndex in read
         val deferred = deferredFor(lineIndex) ?: return line.text
 
@@ -122,9 +140,13 @@ class ScreenLineReader(
     /**
      * The read of [lineIndex], started now if it has not been started. Null when there is no such
      * line.
+     *
+     * The line is resolved from the live index ([text]), not from the [screen] the reader was
+     * built with: the meiki-only placeholders are appended after construction
+     * ([append]), and they are read like every other line.
      */
     private fun deferredFor(lineIndex: Int): Deferred<String>? {
-        val line = screen.lines.getOrNull(lineIndex) ?: return null
+        val line = _text.value.lines.getOrNull(lineIndex) ?: return null
         return results.computeIfAbsent(lineIndex) { scope.async { readOnce(lineIndex, line) } }
     }
 

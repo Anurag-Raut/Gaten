@@ -41,7 +41,10 @@ class SelectionSnapTest {
     }
 
     @Test
-    fun aGestureBetweenLinesFallsBackToTheNearestLine() {
+    fun aGestureBetweenLinesSelectsNothing() {
+        // The circle path answers only with what was circled: text from outside the drawn box must
+        // not reach the dictionary, so nothing overlapping means an empty result — the caller falls
+        // back to reading the drawn box itself.
         val gesture = Box(0, 90, 300, 150) // in the gutter between the two lines
         val lines = listOf(
             line("上の行", 0, 10, 300, 80),
@@ -50,7 +53,7 @@ class SelectionSnapTest {
 
         val chosen = SelectionSnap.selectLines(lines, gesture)
 
-        assertEquals(listOf("上の行"), chosen.map { it.text })
+        assertTrue(chosen.isEmpty())
     }
 
     @Test
