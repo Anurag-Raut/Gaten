@@ -8,6 +8,7 @@
 package com.gaten.app
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
@@ -19,6 +20,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import com.gaten.app.data.BitmapRepository
 import com.gaten.app.media.MediaPauser
+import com.gaten.app.ocr.OcrModels
 import com.gaten.app.trigger.FloatingTriggerButton
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.overlay.OverlayWindowController
@@ -234,6 +236,32 @@ class GatenAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     override fun onInterrupt() {}
+
+    /**
+     * Frees the OCR models when the system is short on memory. They are the largest thing Gaten
+     * holds — the manga-ocr encoder alone is ~87 MB — and they can be built again from files already
+     * on disk, so they are the right thing to give up first.
+     *
+     * TRIM_MEMORY_UI_HIDDEN is not enough on its own: the overlay is a window of this service, not
+     * an activity, so the app going hidden says nothing about whether a lookup is on screen, and a
+     * user reading a page for a while is exactly who should keep the models. What this reacts to is
+     * the background level — releasing there is what keeps the process in the LRU list — and, for
+     * devices older than API 34, the running-low levels, which the system no longer sends. Releasing
+     * while a lookup is in flight is safe: the engines keep the model a use started with
+     * ([OcrModels.releaseNow]), and whatever a later use needs is built again.
+     */
+    // The two running-low levels are deprecated (not sent since API 34) but still arrive on older
+    // devices, which is the whole reason they are checked.
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val low = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+        if (!low) return
+        Log.d(TAG, "Trim memory level $level: releasing the OCR models")
+        OcrModels.releaseNow()
+    }
 
     companion object {
         private const val TAG = "Gaten"

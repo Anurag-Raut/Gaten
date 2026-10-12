@@ -44,9 +44,52 @@ object JapaneseOcr {
     /** Lines this region path reads with manga-ocr. Each is an encoder pass plus a decode. */
     private const val MAX_READ_LINES = 8
 
-    /** ML Kit clients are expensive to build and safe to reuse; the model is app-lifetime. */
-    private val recognizer: TextRecognizer by lazy {
-        TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+    /** Guards [client] and [clientUsers]: the client is built, used and dropped under it. */
+    private val clientLock = Any()
+
+    /**
+     * The ML Kit client, or null when nothing holds one. It is expensive to build, so it is kept
+     * across lookups — but not for the life of the process: [OcrModels] drops it once the models
+     * have been idle for a while ([release]), and the next call builds a new one.
+     */
+    private var client: TextRecognizer? = null
+
+    /** Calls currently inside [client]; [release] skips while one is, rather than close under it. */
+    private var clientUsers = 0
+
+    /**
+     * Runs [block] against the ML Kit client. The client stays pinned for the whole call, so a
+     * release — closing it under a `process()` that has not answered yet — can never land inside
+     * one: the timer that asks for it comes round again at the end of the use anyway.
+     */
+    private suspend fun <T> withClient(block: suspend (TextRecognizer) -> T): T {
+        val recognizer = synchronized(clientLock) {
+            clientUsers++
+            client ?: TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+                .also { client = it }
+        }
+        try {
+            return block(recognizer)
+        } finally {
+            synchronized(clientLock) { clientUsers-- }
+        }
+    }
+
+    /**
+     * Drops the ML Kit client so the system can take its memory back; the next call builds a new
+     * one. A no-op while a recognition is in flight, since closing the client under it would fail
+     * that call — the idle timer or the next memory-pressure callback retries. True when there was
+     * a client to drop.
+     */
+    fun release(): Boolean {
+        val dropped = synchronized(clientLock) {
+            if (clientUsers > 0) return false
+            val current = client
+            client = null
+            current
+        }
+        dropped?.close()
+        return dropped != null
     }
 
     /**
@@ -122,8 +165,14 @@ object JapaneseOcr {
         if (!OcrPreferences.mangaOcrEnabled(context)) return null
         MangaOcrModel.installBundledIfPresent(context)
         if (!MangaOcrModel.isInstalled(context)) return null
-        val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
-        return MangaOcrEngine.recognize(context, crop)
+        // The crop and the read are one use of the model as far as the idle timer is concerned.
+        OcrModels.touch()
+        try {
+            val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
+            return MangaOcrEngine.recognize(context, crop)
+        } finally {
+            OcrModels.touch()
+        }
     }
 
     /** The Tesseract engine's output as a single full-bitmap line; empty on failure or blank text. */
@@ -141,10 +190,20 @@ object JapaneseOcr {
 
     /**
      * The raw ML Kit result for [bitmap], shared with callers that need a pass of their own
-     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place.
+     * ([ScreenTextScanner]) so the client and the [Task] bridge stay in one place. The client is
+     * busy from here to the answered task, which [OcrModels] is told about so its idle timer cannot
+     * take the client away in the middle of the pass.
      */
-    internal suspend fun mlKitResult(bitmap: Bitmap): Text =
-        recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
+    internal suspend fun mlKitResult(bitmap: Bitmap): Text {
+        OcrModels.touch()
+        try {
+            return withClient { recognizer ->
+                recognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
+            }
+        } finally {
+            OcrModels.touch()
+        }
+    }
 
     private suspend fun runMlKit(bitmap: Bitmap): List<OcrLine> {
         val result: Text = mlKitResult(bitmap)

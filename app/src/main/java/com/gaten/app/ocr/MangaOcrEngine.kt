@@ -34,9 +34,11 @@ import java.nio.LongBuffer
  * callers read a bounded number of lines and fall back on a timeout; short lines never get near the
  * 300 token cap.
  *
- * The sessions are expensive to build (the encoder is ~87 MB) and are reused for the life of the
- * process. Every call takes [mutex], so two lookups cannot drive the same session at once, and the
- * pair is rebuilt when the model files change — a re-import or a remove is noticed on the next call.
+ * The sessions are expensive to build (the encoder is ~87 MB), so they are kept across lookups — but
+ * not for the life of the process: [OcrModels] releases them once the models have been idle for a
+ * while, and when the system asks for memory ([release]), and the next call builds them again. Every
+ * call takes [mutex], so two lookups cannot drive the same session at once, and the pair is rebuilt
+ * when the model files change — a re-import or a remove is noticed on the next call.
  */
 object MangaOcrEngine {
     private const val TAG = "GatenOcr"
@@ -77,17 +79,24 @@ object MangaOcrEngine {
      * from several coroutines: the calls are serialized on [mutex].
      */
     suspend fun recognize(context: Context, crop: Bitmap): String? = withContext(Dispatchers.Default) {
-        mutex.withLock {
-            try {
-                infer(context, crop)
-            } catch (e: Exception) {
-                Log.w(TAG, "manga-ocr inference failed", e)
-                null
-            } catch (e: OutOfMemoryError) {
-                // The encoder's working set is tens of megabytes; on a loaded device that can fail.
-                Log.w(TAG, "manga-ocr ran out of memory", e)
-                null
+        // The session is in use from here to the end of the call, so the idle timer must not run
+        // one out mid-inference: [OcrModels] is told on the way in and on the way out.
+        OcrModels.touch()
+        try {
+            mutex.withLock {
+                try {
+                    infer(context, crop)
+                } catch (e: Exception) {
+                    Log.w(TAG, "manga-ocr inference failed", e)
+                    null
+                } catch (e: OutOfMemoryError) {
+                    // The encoder's working set is tens of megabytes; on a loaded device that can fail.
+                    Log.w(TAG, "manga-ocr ran out of memory", e)
+                    null
+                }
             }
+        } finally {
+            OcrModels.touch()
         }
     }
 
@@ -181,13 +190,25 @@ object MangaOcrEngine {
 
         return try {
             val environment = OrtEnvironment.getEnvironment()
-            Loaded(
-                key = key,
-                environment = environment,
-                encoder = environment.createSession(encoderFile.path),
-                decoder = environment.createSession(decoderFile.path),
-                tokenizer = MangaOcrTokenizer.load(vocabFile)
-            ).also { loaded = it }
+            // Arena allocation and memory pattern optimisation both keep a session's working set
+            // alive for as long as the session lives. The models are idle between lookups now, and
+            // those arenas would hold the encoder's tens of megabytes of scratch space through that
+            // idle time, so both are off; the cost is a slower first inference after a load.
+            val options = OrtSession.SessionOptions().apply {
+                setCPUArenaAllocator(false)
+                setMemoryPatternOptimization(false)
+            }
+            // The options are only read while a session is created — the API snapshots them — so
+            // they go as soon as both sessions are up.
+            options.use { sessionOptions ->
+                Loaded(
+                    key = key,
+                    environment = environment,
+                    encoder = environment.createSession(encoderFile.path, sessionOptions),
+                    decoder = environment.createSession(decoderFile.path, sessionOptions),
+                    tokenizer = MangaOcrTokenizer.load(vocabFile)
+                ).also { session -> loaded = session }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Cannot load the manga-ocr model", e)
             null
@@ -204,6 +225,18 @@ object MangaOcrEngine {
             it.decoder.close()
         }
         loaded = null
+    }
+
+    /**
+     * Drops the sessions so the ~87 MB the encoder holds goes back to the system; the next
+     * [recognize] builds the pair again. [OcrModels] calls this once the models have been idle for a
+     * while, and when the system is short on memory. It waits on [mutex], so a call already inside
+     * [recognize] keeps sessions that are still open until it is done. True when a pair was dropped.
+     */
+    suspend fun release(): Boolean = mutex.withLock {
+        val had = loaded != null
+        close()
+        had
     }
 }
 
