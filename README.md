@@ -69,7 +69,8 @@ build fails early with a clear message if step 1 was skipped.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
-- `ui/` — Jetpack Compose UI: theme and the lasso overlay/dialog components.
+- `ui/` — Jetpack Compose UI: `home/` (setup screen), `lookup/` (lasso layer, result sheet and the
+  OCR + dictionary pipeline), `components/` (accessibility disclosure) and `theme/`.
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
 
