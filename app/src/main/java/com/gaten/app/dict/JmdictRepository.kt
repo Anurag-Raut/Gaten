@@ -72,7 +72,9 @@ class JmdictRepository private constructor(private val db: SQLiteDatabase) {
          * JMnedict name rows live in their own compact table. `term` is its primary key, which is
          * why a name match needs no dedupe pass.
          */
-        private const val NAME_LOOKUP_SQL = "SELECT term, gloss, kind FROM names WHERE term = ?"
+        // Column order matters: [lookup] reads column 0 as the kind and column 1 as the gloss, and
+        // the table is `names(term, rank, kind, gloss)`.
+        private const val NAME_LOOKUP_SQL = "SELECT kind, gloss FROM names WHERE term = ?"
 
         /** Serialises extraction so two concurrent [open] calls never write the same file twice. */
         private val extractionMutex = Mutex()

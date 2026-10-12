@@ -6,6 +6,7 @@
 
 package com.gaten.app.ui.lookup
 
+import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.dictionaryOf
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.ScreenHits
@@ -18,6 +19,39 @@ import org.junit.Test
 
 /** [lookupFromSelection] (a lasso) and [lookupFromTap] (a tap), answered from the screen index. */
 class ScreenLookupTest {
+
+    /** A repaired, inflected tap reuses hits and misses while the next tap starts a fresh cache. */
+    @Test
+    fun tapMemoizesRepeatedRepairAndInflectionQueriesForOneOperation() {
+        val screen = screenOf(screenLine("コーヒ一を注文します", top = 100))
+        val dictionary = dictionaryOf("コーヒー", "注文", "する")
+        val calls = mutableMapOf<String, Int>()
+        val lookup: (String) -> List<DictEntry> = { term ->
+            calls[term] = (calls[term] ?: 0) + 1
+            dictionary(term)
+        }
+
+        val first = lookupFromTap(screen, x = 60, y = 130, tolerancePx = 0, lookup = lookup)
+
+        assertNotNull(first)
+        assertEquals("コーヒーを注文します", first!!.result.ocrText)
+        assertEquals(listOf("コーヒー", "注文", "します"), first.result.words.map { it.surface })
+        assertEquals(listOf("コーヒー", "注文", "する"), first.result.words.map { it.baseForm })
+        assertEquals(listOf(0, 5, 7), first.result.words.map { it.start })
+        assertEquals(listOf(4, 7, 10), first.result.words.map { it.end })
+        assertTrue(first.result.words.all { it.context == "コーヒーを注文します" })
+        assertEquals(Box(0, 100, 160, 160), first.wordBox)
+        assertTrue(calls.keys.any { dictionary(it).isEmpty() })
+        // Both successful and failed terms are delegated at most once during repair + tap scans.
+        assertTrue(calls.values.all { it == 1 })
+
+        val firstCalls = calls.toMap()
+        val second = lookupFromTap(screen, x = 60, y = 130, tolerancePx = 0, lookup = lookup)
+
+        assertEquals(first, second)
+        assertEquals(firstCalls.keys, calls.keys)
+        assertTrue(firstCalls.keys.all { calls[it] == 2 })
+    }
 
     @Test
     fun aTapAfterTheTextWasReplacedAddressesTheNewText() {

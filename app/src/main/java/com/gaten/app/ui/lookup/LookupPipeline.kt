@@ -77,7 +77,10 @@ suspend fun runLookup(
         val lookup: (String) -> List<DictEntry> =
             if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
         val screen = index()
-        val supplement = if (screen != null) {
+        // An index with no lines at all (failed scan, or ML Kit read nothing) stands for "no index
+        // yet", so the crop's own ML Kit reading still supplements the circle. An index with lines
+        // that merely don't intersect the box does not: the index is the record of the screen.
+        val supplement = if (screen != null && screen.lines.isNotEmpty()) {
             lookupFromSelection(japaneseLines(screen), box, lookup)
         } else {
             cropIndex(crop)?.let {
@@ -111,9 +114,10 @@ fun mergeLookup(
     lookup: (String) -> List<DictEntry>,
     maxWords: Int = 24
 ): LookupResult {
-    val cropText = acceptedReading(cropReading)?.let { OcrRepair.repair(it, lookup) }
+    val cachedLookup = memoizedLookup(lookup)
+    val cropText = acceptedReading(cropReading)?.let { OcrRepair.repair(it, cachedLookup) }
     val cropWords = cropText?.let { text ->
-        WordScanner.scan(text, lookup).map { it.copy(context = text) }
+        WordScanner.scan(text, cachedLookup).map { it.copy(context = text) }
     }.orEmpty()
 
     val words = (cropWords + (index?.words ?: emptyList()))

@@ -51,9 +51,10 @@ object ScreenTextScanner {
      * layout exists, and the meiki-only lines arrive afterwards, through [meikiLines] and
      * [ScreenLineReader.append].
      *
-     * Returns null — i.e. [ScanState.Unavailable] for the caller — when recognition fails, or when
-     * ML Kit read no line at all (meiki-only lines are appended after that check: without ML Kit's
-     * layout there is nothing to index). On failure the region path still works, so nothing is
+     * Returns null — i.e. [ScanState.Unavailable] for the caller — only when recognition fails. A
+     * successful scan that read no line at all is still an index, an empty one: the overlay goes
+     * ready with it and the meiki-only lines are appended after it, so screens ML Kit's detector
+     * sees nothing on are still usable. On failure the region path still works, so nothing is
      * logged as a crash. Never throws.
      */
     suspend fun scan(context: Context, bitmap: Bitmap): ScreenText? {
@@ -68,8 +69,6 @@ object ScreenTextScanner {
             Log.w(TAG, "Full-screen OCR failed", e)
             return null
         }
-        if (lines.isEmpty()) return null
-
         Log.d(TAG, "Indexed ${lines.size} ML Kit lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
         return ScreenText(lines, bitmap.width, bitmap.height)
     }

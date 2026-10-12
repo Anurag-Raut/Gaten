@@ -17,6 +17,12 @@ import com.gaten.app.ocr.ScreenText
 /** A tap answered from the screen index: the words under the finger and the box to highlight. */
 data class TapLookup(val result: LookupResult, val wordBox: Box)
 
+/** Reuses exact-term results for one lookup operation, including empty results. */
+internal fun memoizedLookup(lookup: (String) -> List<DictEntry>): (String) -> List<DictEntry> {
+    val results = HashMap<String, List<DictEntry>>()
+    return { term -> results.getOrPut(term) { lookup(term) } }
+}
+
 /**
  * Answers a lasso from the pre-recognised screen index, with no further OCR.
  *
@@ -36,13 +42,14 @@ fun lookupFromSelection(
     val spans = ScreenHits.spansInSelection(screen, selection)
     if (spans.isEmpty()) return LookupResult(ocrText = "", words = emptyList())
 
+    val cachedLookup = memoizedLookup(lookup)
     val words = ArrayList<ScannedWord>()
     val selected = ArrayList<String>(spans.size)
     for (span in spans) {
-        val text = OcrRepair.repair(screen.lines[span.lineIndex].text, lookup)
+        val text = OcrRepair.repair(screen.lines[span.lineIndex].text, cachedLookup)
         selected.add(text.substring(span.start, span.endExclusive))
         words.addAll(
-            WordScanner.scanLine(text, span.start, span.endExclusive, lookup)
+            WordScanner.scanLine(text, span.start, span.endExclusive, cachedLookup)
                 .map { it.copy(context = text) }
         )
     }
@@ -68,9 +75,10 @@ fun lookupFromTap(
 ): TapLookup? {
     val hit = ScreenHits.hitTest(screen, x, y, tolerancePx) ?: return null
     val line = screen.lines[hit.lineIndex]
-    val text = OcrRepair.repair(line.text, lookup)
+    val cachedLookup = memoizedLookup(lookup)
+    val text = OcrRepair.repair(line.text, cachedLookup)
     val words = WordScanner
-        .scanFrom(text, resolveTapStart(text, hit.charIndex, lookup), lookup, maxWords)
+        .scanFrom(text, resolveTapStart(text, hit.charIndex, cachedLookup), cachedLookup, maxWords)
         .map { it.copy(context = text) }
 
     // No dictionary word on the line: the sheet answers "No dictionary words found", and the
