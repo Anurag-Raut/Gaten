@@ -16,6 +16,7 @@ import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import com.gaten.app.data.BitmapRepository
+import com.gaten.app.media.MediaPauser
 import com.gaten.app.ui.overlay.OverlayWindowController
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -32,7 +33,7 @@ class GatenAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        overlay = OverlayWindowController(this)
+        overlay = OverlayWindowController(this, MediaPauser(this))
         instance = this
     }
 

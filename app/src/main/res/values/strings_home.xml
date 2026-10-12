@@ -16,6 +16,9 @@
     <string name="home_status_on">Ready</string>
     <string name="home_action_turn_on">Turn on</string>
 
+    <!-- Media pause while looking up (shown only when notification access is missing) -->
+    <string name="home_media_access_title">Pause video while looking up</string>
+
     <!-- Start a lookup -->
     <string name="home_section_start">Start a lookup</string>
     <string name="home_start_tile_title">Quick Settings tile</string>
