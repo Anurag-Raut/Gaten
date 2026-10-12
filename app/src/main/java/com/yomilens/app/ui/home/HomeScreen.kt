@@ -329,7 +329,7 @@ private fun KeyMapperRow(onCopy: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP,
-                    style = MaterialTheme.typography.bodyMedium.copy(
+                    style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = FontFamily.Monospace
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
