@@ -13,11 +13,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -85,6 +90,28 @@ private sealed interface RepoState {
 
 /** The three states of one overlay session. */
 private enum class Phase { Selecting, Scanning, Result }
+
+/**
+ * The sheet slides in from its own docked edge and back out that way, over the same timings as
+ * ever. A side panel travels its own width — [fraction] of the screen — while the bottom panel
+ * keeps the full-screen slide it has always had, so the portrait animation is untouched.
+ */
+private fun sheetEnter(dock: SheetDock, fraction: Float): EnterTransition = when (dock) {
+    SheetDock.Bottom -> slideInVertically(tween(220, easing = FastOutSlowInEasing)) { it }
+    SheetDock.Left ->
+        slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -(it * fraction).toInt() }
+    SheetDock.Right ->
+        slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { (it * fraction).toInt() }
+}
+
+/** @see sheetEnter */
+private fun sheetExit(dock: SheetDock, fraction: Float): ExitTransition = when (dock) {
+    SheetDock.Bottom -> slideOutVertically(tween(150, easing = FastOutSlowInEasing)) { it }
+    SheetDock.Left ->
+        slideOutHorizontally(tween(150, easing = FastOutSlowInEasing)) { -(it * fraction).toInt() }
+    SheetDock.Right ->
+        slideOutHorizontally(tween(150, easing = FastOutSlowInEasing)) { (it * fraction).toInt() }
+}
 
 /**
  * Full-screen lasso selector plus the result sheet, shown over a frozen screenshot.
@@ -298,7 +325,9 @@ fun LookupOverlay(
         exit = fadeOut(tween(150)),
         modifier = Modifier.zIndex(3000f)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        // The constraints are the full-screen overlay in pixels — the same space the screenshot and
+        // the highlight boxes use — so the panel can be placed against the word it explains.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             LassoLayer(
                 screenshot = screenshot,
                 screen = (scanState as? ScanState.Ready)?.screen,
@@ -323,17 +352,32 @@ fun LookupOverlay(
                 StatusPill(phase = phase, scanState = scanState, onClose = { close() })
             }
 
+            // Chosen once per result, from the box this session highlighted, so the panel never
+            // jumps from one edge to the other while it is open.
+            val sheetLayout = remember(
+                result,
+                frozenBox,
+                constraints.maxWidth,
+                constraints.maxHeight
+            ) {
+                chooseSheetLayout(
+                    anchor = frozenBox,
+                    screenWidth = constraints.maxWidth.toFloat(),
+                    screenHeight = constraints.maxHeight.toFloat()
+                )
+            }
+
             AnimatedVisibility(
                 visible = phase == Phase.Result && result != null,
-                enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { it },
-                exit = slideOutVertically(tween(150, easing = FastOutSlowInEasing)) { it },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                enter = sheetEnter(sheetLayout.dock, sheetLayout.fraction),
+                exit = sheetExit(sheetLayout.dock, sheetLayout.fraction)
             ) {
                 result?.let { state ->
                     ResultSheet(
                         result = state,
                         onDismiss = { close() },
-                        onSelectAgain = { selectAgain() }
+                        onSelectAgain = { selectAgain() },
+                        layout = sheetLayout
                     )
                 }
             }
