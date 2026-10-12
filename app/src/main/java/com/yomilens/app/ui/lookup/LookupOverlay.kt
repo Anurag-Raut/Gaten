@@ -54,6 +54,7 @@ import androidx.compose.ui.zIndex
 import com.yomilens.app.R
 import com.yomilens.app.dict.JmdictRepository
 import com.yomilens.app.ui.theme.Spacing
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -145,10 +146,19 @@ fun LookupOverlay(
         frozenBox = box
         phase = Phase.Scanning
         scope.launch {
-            val repo = awaitRepo()
-            val lookup = runLookup(context, bmp, box, repo)
-            val failure = (repoState as? RepoState.Failed)?.message
-            result = if (failure != null) lookup.copy(error = failure) else lookup
+            result = try {
+                val repo = awaitRepo()
+                val lookup = runLookup(context, bmp, box, repo)
+                val failure = (repoState as? RepoState.Failed)?.message
+                if (failure != null) lookup.copy(error = failure) else lookup
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Dismissing mid-lookup closes the dictionary under the blocking query, which
+                // cannot be interrupted; the overlay is already going away, so just report it.
+                Log.w(TAG, "Lookup failed", e)
+                LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
+            }
             phase = Phase.Result
         }
     }
@@ -174,7 +184,7 @@ fun LookupOverlay(
                 points = points,
                 frozenTrail = frozenTrail,
                 frozenBox = frozenBox,
-                interactive = phase != Phase.Result,
+                interactive = phase == Phase.Selecting,
                 trailFading = phase == Phase.Result,
                 onLassoStart = { points = listOf(it) },
                 onLassoUpdate = { points = points + it },
