@@ -7,6 +7,7 @@
 package com.yomilens.app.ui.lookup
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -48,18 +49,32 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.yomilens.app.R
 import com.yomilens.app.dict.JmdictRepository
+import com.yomilens.app.ocr.Box
+import com.yomilens.app.ocr.ScanState
+import com.yomilens.app.ocr.ScreenHits
+import com.yomilens.app.ocr.ScreenTextScanner
 import com.yomilens.app.ui.theme.Spacing
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "YomiLens"
+
+/** How far from a character a tap may land and still hit it, converted to bitmap px. */
+private val TapTolerance = 24.dp
+
+/** [ocr.Box]'s bounds as the compose [Rect] the overlay highlights. */
+private fun Box.toRect(): Rect =
+    Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
 
 /** Lifecycle of the offline dictionary handle. */
 private sealed interface RepoState {
@@ -74,8 +89,10 @@ private enum class Phase { Selecting, Scanning, Result }
 /**
  * Full-screen lasso selector plus the result sheet, shown over a frozen screenshot.
  *
- * The user draws a freehand loop over the capture; the trail's bounding box is cropped, OCR'd
- * on-device, tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is
+ * On open the whole capture is recognised once in the background; from then on a tap on a
+ * character — or a lasso, whose box is answered from the index — needs no further OCR, and the
+ * region OCR path stays as the fallback while the scan runs and when it is unavailable. Words
+ * are tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is
  * opened once and kept warm for the whole overlay lifetime.
  */
 @Composable
@@ -85,6 +102,7 @@ fun LookupOverlay(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val tapTolerancePx = with(LocalDensity.current) { TapTolerance.toPx() }
 
     var visible by remember { mutableStateOf(false) }
     var phase by remember { mutableStateOf(Phase.Selecting) }
@@ -92,6 +110,27 @@ fun LookupOverlay(
     var frozenTrail by remember { mutableStateOf<Path?>(null) }
     var frozenBox by remember { mutableStateOf<Rect?>(null) }
     var result by remember { mutableStateOf<LookupResult?>(null) }
+
+    // One full-screen OCR pass on open, keyed to the screenshot so each new capture rescans. It
+    // answers taps and lassos from the index for the rest of the session; the region OCR path
+    // stays as the fallback while it runs and when it is unavailable.
+    val scanState by produceState<ScanState>(ScanState.Scanning, screenshot) {
+        val bmp = screenshot
+        if (bmp == null) {
+            value = ScanState.Unavailable
+            return@produceState
+        }
+        Log.d(TAG, "Screen scan started")
+        val startedAt = SystemClock.elapsedRealtime()
+        val screen = withContext(Dispatchers.Default) { ScreenTextScanner.scan(context, bmp) }
+        value = screen?.let { ScanState.Ready(it) } ?: ScanState.Unavailable
+        val elapsed = SystemClock.elapsedRealtime() - startedAt
+        if (screen == null) {
+            Log.d(TAG, "Screen scan unavailable in $elapsed ms")
+        } else {
+            Log.d(TAG, "Screen scan ready in $elapsed ms (${screen.lines.size} lines)")
+        }
+    }
 
     // Open the offline dictionary once and keep it warm for the whole overlay lifetime.
     val repoState by produceState<RepoState>(RepoState.Loading, context) {
@@ -148,7 +187,25 @@ fun LookupOverlay(
         scope.launch {
             result = try {
                 val repo = awaitRepo()
-                val lookup = runLookup(context, bmp, box, repo)
+                val screen = (scanState as? ScanState.Ready)?.screen
+                val lookup = if (screen == null) {
+                    Log.d(TAG, "Circle path: region")
+                    runLookup(context, bmp, box, repo)
+                } else {
+                    Log.d(TAG, "Circle path: index")
+                    withContext(Dispatchers.Default) {
+                        lookupFromSelection(
+                            screen,
+                            Box(
+                                box.left.toInt(),
+                                box.top.toInt(),
+                                box.right.toInt(),
+                                box.bottom.toInt()
+                            ),
+                            lookup = { term -> repo?.lookup(term) ?: emptyList() }
+                        )
+                    }
+                }
                 val failure = (repoState as? RepoState.Failed)?.message
                 if (failure != null) lookup.copy(error = failure) else lookup
             } catch (e: CancellationException) {
@@ -160,6 +217,69 @@ fun LookupOverlay(
                 LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
             }
             phase = Phase.Result
+        }
+    }
+
+    /** A tap while selecting: the word under the finger when the index is ready, dismiss otherwise. */
+    fun onTap(at: Offset) {
+        val bmp = screenshot
+        val screen = (scanState as? ScanState.Ready)?.screen
+        if (bmp == null || screen == null) {
+            close()
+            return
+        }
+        val x = at.x.toInt()
+        val y = at.y.toInt()
+        val tolerance = tapTolerancePx.toInt()
+        val hit = ScreenHits.hitTest(screen, x, y, tolerance)
+        if (hit == null) {
+            Log.d(TAG, "Tap missed: no character within $tolerance px")
+            close()
+            return
+        }
+        Log.d(TAG, "Tap hit line ${hit.lineIndex} char ${hit.charIndex}")
+        frozenTrail = null
+        // The tapped character's own box until the word around it has been resolved.
+        frozenBox = screen.lines[hit.lineIndex].charBoxes[hit.charIndex].toRect()
+        phase = Phase.Scanning
+        scope.launch {
+            val outcome: LookupResult? = try {
+                val repo = awaitRepo()
+                if (repo == null) {
+                    // Same as the lasso: a dictionary that failed to open is an error result.
+                    LookupResult(
+                        ocrText = "",
+                        words = emptyList(),
+                        error = (repoState as? RepoState.Failed)?.message
+                    )
+                } else {
+                    val tap = withContext(Dispatchers.Default) {
+                        lookupFromTap(
+                            screen,
+                            x,
+                            y,
+                            tolerance,
+                            lookup = { term -> repo.lookup(term) }
+                        )
+                    }
+                    if (tap == null) null else {
+                        frozenBox = tap.wordBox.toRect()
+                        tap.result
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Tap lookup failed", e)
+                LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
+            }
+            if (outcome == null) {
+                // Unreachable while the hit test above hit, but a miss is a dismissal, not a result.
+                close()
+            } else {
+                result = outcome
+                phase = Phase.Result
+            }
         }
     }
 
@@ -181,6 +301,7 @@ fun LookupOverlay(
         Box(modifier = Modifier.fillMaxSize()) {
             LassoLayer(
                 screenshot = screenshot,
+                screen = (scanState as? ScanState.Ready)?.screen,
                 points = points,
                 frozenTrail = frozenTrail,
                 frozenBox = frozenBox,
@@ -190,7 +311,7 @@ fun LookupOverlay(
                 onLassoUpdate = { points = points + it },
                 onLassoEnd = { startLookup() },
                 onLassoCancel = { points = emptyList() },
-                onTap = { close() }
+                onTap = { onTap(it) }
             )
 
             AnimatedVisibility(
@@ -199,7 +320,7 @@ fun LookupOverlay(
                 exit = fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.TopCenter)
             ) {
-                StatusPill(scanning = phase == Phase.Scanning, onClose = { close() })
+                StatusPill(phase = phase, scanState = scanState, onClose = { close() })
             }
 
             AnimatedVisibility(
@@ -220,9 +341,10 @@ fun LookupOverlay(
     }
 }
 
-/** The one pill at the top: instruction while selecting, "Reading…" with a spinner while scanning. */
+/** The one pill at the top: the ready hint once the index is in, the instruction before it, and "Reading…" with a spinner while a lookup or the scan itself runs. */
 @Composable
-private fun StatusPill(scanning: Boolean, onClose: () -> Unit) {
+private fun StatusPill(phase: Phase, scanState: ScanState, onClose: () -> Unit) {
+    val spinner = phase == Phase.Scanning || scanState == ScanState.Scanning
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
@@ -240,14 +362,20 @@ private fun StatusPill(scanning: Boolean, onClose: () -> Unit) {
             )
         ) {
             Text(
-                text = stringResource(if (scanning) R.string.lookup_reading else R.string.lookup_hint),
+                text = stringResource(
+                    when {
+                        phase == Phase.Scanning -> R.string.lookup_reading
+                        scanState is ScanState.Ready -> R.string.lookup_hint_ready
+                        else -> R.string.lookup_hint
+                    }
+                ),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(vertical = Spacing.s)
             )
             Spacer(Modifier.width(Spacing.s))
             Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-                if (scanning) {
+                if (spinner) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(14.dp),
                         strokeWidth = 2.dp,

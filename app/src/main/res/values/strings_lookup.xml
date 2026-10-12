@@ -10,6 +10,7 @@
 
     <!-- Lookup overlay -->
     <string name="lookup_hint">Circle Japanese text</string>
+    <string name="lookup_hint_ready">Tap a word or circle text</string>
     <string name="lookup_reading">Reading…</string>
     <string name="lookup_no_text">No text found</string>
     <string name="lookup_no_words">No dictionary words found</string>
