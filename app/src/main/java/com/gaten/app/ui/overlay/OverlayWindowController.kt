@@ -109,10 +109,13 @@ class OverlayWindowController(
 
     /** Takes the overlay down and drops the capture it was drawn from. */
     fun hide() {
-        // Gaten only pauses media it will resume; a resume with nothing paused does nothing.
-        mediaPauser.resume()
-        val current = showing ?: return
+        val current = showing
+        // Resume only when an overlay is really coming down. show() starts by calling hide(), so an
+        // unconditional resume here would undo the pipeline's pause on every open and the video
+        // would play on underneath the overlay.
+        if (current != null) mediaPauser.resume()
         showing = null
+        if (current == null) return
         windowManager.removeViewImmediate(current.view)
         current.host.onDestroy()
         BitmapRepository.clear()
