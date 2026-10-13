@@ -83,8 +83,8 @@ private const val TAG = "Gaten"
 private val TapTolerance = 24.dp
 
 /**
- * Lines one gesture waits for. A tap touches one line and a lasso two or three; beyond that the
- * wait would be longer than the answer is worth, and the rest keep ML Kit's text.
+ * Lines a circle waits for after reading its crop; beyond three the wait would be longer than
+ * the answer is worth, and the rest keep their indexed text.
  */
 private const val MAX_GESTURE_LINES = 3
 
@@ -127,11 +127,11 @@ private fun sheetExit(dock: SheetDock, fraction: Float): ExitTransition = when (
  * usable the moment that index exists, and manga-ocr then reads its lines behind it
  * ([ScreenLineReader]), replacing each one's text as it lands. Ready is ML Kit's index: the
  * optional meiki model runs afterwards, entirely behind the ready overlay, and the lines it finds
- * beyond ML Kit's are appended to the live index and read like every other line. A tap waits for the
- * line it touched — and only that one — before answering from the index. A circle is read from its
- * own crop first, whatever the index holds; the lines it covered are read after that, and only then,
- * and supplement the crop's words. Words are tokenised against the offline JMdict and shown in a
- * bottom sheet. The dictionary is opened once and kept warm for the whole overlay lifetime.
+ * beyond ML Kit's are appended to the live index and read like every other line. Both gestures read
+ * their exact crop first: the tapped line's bounds or the circle's selection. The index supplements
+ * that reading, restricted to the tapped line or the lines covered by the circle. Words are
+ * tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is opened once
+ * and kept warm for the whole overlay lifetime.
  */
 @Composable
 fun LookupOverlay(
@@ -358,7 +358,8 @@ fun LookupOverlay(
     /** Select the entire tapped text box when the index is ready; dismiss on a miss. */
     fun onTap(at: Offset) {
         val live = screen
-        if (screenshot == null || live == null) {
+        val bmp = screenshot
+        if (bmp == null || live == null) {
             close()
             return
         }
@@ -378,49 +379,33 @@ fun LookupOverlay(
         Log.d(TAG, "Tap hit line $lineIndex")
         frozenTrail = null
         // Select the entire visible box immediately, including while OCR is running.
-        frozenBox = mapping.toView(live.lines[lineIndex].bounds)
+        val selection = live.lines[lineIndex].bounds
+        frozenBox = mapping.toView(selection)
         phase = Phase.Scanning
         scope.launch {
-            val outcome: LookupResult? = try {
+            result = try {
                 val repo = awaitRepo()
-                if (repo == null) {
-                    // Same as the lasso: a dictionary that failed to open is an error result.
-                    LookupResult(
-                        ocrText = "",
-                        words = emptyList(),
-                        error = (repoState as? RepoState.Failed)?.message
-                    )
-                } else {
-                    // Read only the selected line and keep the lookup on it if OCR drops it,
-                    // rather than letting a nearby line take over the selection.
-                    val indexed = readGestureLines(live, listOf(lineIndex))
-                    val tap = withContext(Dispatchers.Default) {
-                        lookupFromTap(
-                            indexed.copy(lines = listOf(indexed.lines[lineIndex])),
-                            x,
-                            y,
-                            tolerance,
-                            lookup = { term -> repo.lookup(term) }
-                        )
-                    }
-                    if (tap == null) null else {
-                        frozenBox = mapping.toView(tap.selectionBox)
-                        tap.result
-                    }
+                val bitmapBox = Rect(
+                    selection.left.toFloat(),
+                    selection.top.toFloat(),
+                    selection.right.toFloat(),
+                    selection.bottom.toFloat()
+                )
+                // Use the circle's exact-crop OCR and acceptance rules. The live index only
+                // supplements the selected line; an overlapping neighbour must not ride along.
+                val lookup = runLookup(context, bmp, bitmapBox, repo) {
+                    val indexed = reader?.text?.value ?: live
+                    indexed.copy(lines = listOf(indexed.lines[lineIndex]))
                 }
+                val failure = (repoState as? RepoState.Failed)?.message
+                if (failure != null) lookup.copy(error = failure) else lookup
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Tap lookup failed", e)
                 LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
             }
-            if (outcome == null) {
-                // The reader dropped the selected line because it contained no Japanese.
-                close()
-            } else {
-                result = outcome
-                phase = Phase.Result
-            }
+            phase = Phase.Result
         }
     }
 

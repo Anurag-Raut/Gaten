@@ -24,7 +24,7 @@ import com.gaten.app.ocr.interpolateCharBoxes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Everything the result sheet needs after one lasso lookup. */
+/** Everything the result sheet needs after one selection lookup. */
 data class LookupResult(
     val ocrText: String,
     val words: List<ScannedWord>,
@@ -35,8 +35,8 @@ data class LookupResult(
 private val NO_LOOKUP: (String) -> List<DictEntry> = { emptyList() }
 
 /**
- * One circle lookup: the selection the reader drew is read by manga-ocr, and the index lines it
- * actually covered supplement that reading's words.
+ * One selection lookup: the exact crop is read by manga-ocr, and the selected index lines
+ * supplement that reading's words. A tap passes its line bounds; a circle passes its drawn bounds.
  *
  * The crop is read first and unconditionally — whatever the index found on the screen at large,
  * whether or not its lines have Japanese in them, and whether or not there is an index at all.
