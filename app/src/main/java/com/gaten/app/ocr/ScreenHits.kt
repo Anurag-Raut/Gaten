@@ -16,12 +16,31 @@ data class LineSpan(val lineIndex: Int, val start: Int, val endExclusive: Int)
  * Answers a gesture from the pre-recognised screen index instead of another OCR round-trip.
  *
  * A tap lands wherever the finger was, never on the character the reader meant, and a lasso is
- * drawn by hand — both are resolved against [ScreenText]'s per-character boxes: a tap with enough
- * slack that a near miss still yields the character that was pointed at, a lasso with none, because
- * what a circle reads is the crop the reader drew and the index only supplements it. The index is
+ * drawn by hand. Taps select the visible line bounds with enough slack for a near miss; character
+ * hit tests remain available for narrower selections. A lasso uses character boxes with no slack,
+ * because what a circle reads is the crop the reader drew and the index only supplements it. The index is
  * in bitmap pixels, so every decision here is arithmetic on integers; nothing touches Android.
  */
 object ScreenHits {
+
+    /**
+     * The visible line box under the tap, or the nearest one within [tolerancePx].
+     * Empty lines have no outline and are ignored; ties keep the earlier line.
+     */
+    fun hitTestLine(screen: ScreenText, x: Int, y: Int, tolerancePx: Int): Int? {
+        var hit: Int? = null
+        var bestDistance = Int.MAX_VALUE
+        screen.lines.forEachIndexed { lineIndex, line ->
+            if (line.charBoxes.isNotEmpty()) {
+                val distance = squaredPointDistance(x, y, line.bounds)
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    hit = lineIndex
+                }
+            }
+        }
+        return if (bestDistance <= tolerancePx * tolerancePx) hit else null
+    }
 
     /**
      * The character under `(x, y)`, or the nearest one no further than [tolerancePx] away

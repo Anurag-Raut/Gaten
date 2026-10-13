@@ -20,9 +20,9 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
    background and replaces each one's text as it lands, biggest boxes first (see *Optional
    stylized-text model* below). ML Kit's own reading stays for any line it cannot read: no model, a
    failure, or an answer slower than 2.5 s.
-5. **Tap or circle** — tap a word (a tap mid-word still finds the whole word) or circle some text.
-   A tap answers from the index, reading the line it touched first and only that one. A circle
-   always crops the exact rectangle that was drawn and attempts manga-ocr on it — index or no index,
+5. **Tap or circle** — tap a text box to select the entire box and all its words, or circle some text.
+   A tap highlights the whole box immediately and answers from the index, reading only that line.
+   A circle always crops the exact rectangle that was drawn and attempts manga-ocr on it — index or no index,
    Japanese in the index or not — and the index lines the loop actually covered then add the words
    they hold behind that reading, deduplicated. With no model installed the crop yields no reading,
    and the answer is those index lines' text — or, before the index exists, ML Kit's own reading of

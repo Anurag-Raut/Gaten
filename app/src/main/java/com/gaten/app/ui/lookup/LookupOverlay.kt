@@ -79,7 +79,7 @@ import kotlin.math.roundToInt
 
 private const val TAG = "Gaten"
 
-/** How far from a character a tap may land and still hit it, converted to bitmap px. */
+/** How far from a visible text box a tap may land and still hit it, converted to bitmap px. */
 private val TapTolerance = 24.dp
 
 /**
@@ -355,7 +355,7 @@ fun LookupOverlay(
         }
     }
 
-    /** A tap while selecting: the word under the finger when the index is ready, dismiss otherwise. */
+    /** Select the entire tapped text box when the index is ready; dismiss on a miss. */
     fun onTap(at: Offset) {
         val live = screen
         if (screenshot == null || live == null) {
@@ -368,18 +368,17 @@ fun LookupOverlay(
         val x = tapped.x.toInt()
         val y = tapped.y.toInt()
         val tolerance = tapTolerancePx
-        // Hit-tested against the index as it stands: the boxes are ML Kit's either way, and the
-        // line they name is the one to read before answering.
-        val hit = ScreenHits.hitTest(live, x, y, tolerance)
-        if (hit == null) {
-            Log.d(TAG, "Tap missed: no character within $tolerance px")
+        // Hit-test the same line bounds that the overlay outlines.
+        val lineIndex = ScreenHits.hitTestLine(live, x, y, tolerance)
+        if (lineIndex == null) {
+            Log.d(TAG, "Tap missed: no text box within $tolerance px")
             close()
             return
         }
-        Log.d(TAG, "Tap hit line ${hit.lineIndex} char ${hit.charIndex}")
+        Log.d(TAG, "Tap hit line $lineIndex")
         frozenTrail = null
-        // The tapped character's own box until the word around it has been resolved.
-        frozenBox = mapping.toView(live.lines[hit.lineIndex].charBoxes[hit.charIndex])
+        // Select the entire visible box immediately, including while OCR is running.
+        frozenBox = mapping.toView(live.lines[lineIndex].bounds)
         phase = Phase.Scanning
         scope.launch {
             val outcome: LookupResult? = try {
@@ -392,13 +391,12 @@ fun LookupOverlay(
                         error = (repoState as? RepoState.Failed)?.message
                     )
                 } else {
-                    // The tapped line is read first, and the tap is then resolved again against the
-                    // index that came back: its character offsets are the new text's, not the old
-                    // one's.
-                    val indexed = readGestureLines(live, listOf(hit.lineIndex))
+                    // Read only the selected line and keep the lookup on it if OCR drops it,
+                    // rather than letting a nearby line take over the selection.
+                    val indexed = readGestureLines(live, listOf(lineIndex))
                     val tap = withContext(Dispatchers.Default) {
                         lookupFromTap(
-                            indexed,
+                            indexed.copy(lines = listOf(indexed.lines[lineIndex])),
                             x,
                             y,
                             tolerance,
@@ -406,7 +404,7 @@ fun LookupOverlay(
                         )
                     }
                     if (tap == null) null else {
-                        frozenBox = mapping.toView(tap.wordBox)
+                        frozenBox = mapping.toView(tap.selectionBox)
                         tap.result
                     }
                 }
@@ -417,7 +415,7 @@ fun LookupOverlay(
                 LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
             }
             if (outcome == null) {
-                // Unreachable while the hit test above hit, but a miss is a dismissal, not a result.
+                // The reader dropped the selected line because it contained no Japanese.
                 close()
             } else {
                 result = outcome

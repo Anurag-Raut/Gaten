@@ -40,7 +40,7 @@ class ScreenLookupTest {
         assertEquals(listOf(0, 5, 7), first.result.words.map { it.start })
         assertEquals(listOf(4, 7, 10), first.result.words.map { it.end })
         assertTrue(first.result.words.all { it.context == "コーヒーを注文します" })
-        assertEquals(Box(0, 100, 160, 160), first.wordBox)
+        assertEquals(screen.lines.single().bounds, first.selectionBox)
         assertTrue(calls.keys.any { dictionary(it).isEmpty() })
         // Both successful and failed terms are delegated at most once during repair + tap scans.
         assertTrue(calls.values.all { it == 1 })
@@ -54,7 +54,7 @@ class ScreenLookupTest {
     }
 
     @Test
-    fun aTapAfterTheTextWasReplacedAddressesTheNewText() {
+    fun aTapAfterTheTextWasReplacedSelectsTheWholeBox() {
         // ML Kit read three characters of this line; manga-ocr read five, so the boxes were rebuilt.
         val line = screenLine("猫カド", top = 100).withText("猫がカード")
         val screen = screenOf(line)
@@ -69,10 +69,8 @@ class ScreenLookupTest {
         val tap = lookupFromTap(screen, 110, 130, 8, lookup)
 
         assertNotNull(tap)
-        assertEquals("カード", tap!!.result.words.first().surface)
-        // The word's box is the union of the new character boxes it spans: カ, squeezed by が, at
-        // 53..80, through ド at 97..120.
-        assertEquals(Box(53, 100, 120, 160), tap.wordBox)
+        assertEquals(listOf("猫", "カード"), tap!!.result.words.map { it.surface })
+        assertEquals(line.bounds, tap.selectionBox)
         assertEquals("猫がカード", tap.result.ocrText)
     }
 
@@ -139,7 +137,7 @@ class ScreenLookupTest {
     }
 
     @Test
-    fun tappingTheSecondCharacterOfAWordReturnsThatWordFirst() {
+    fun tappingTheSecondCharacterSelectsTheWholeBox() {
         val screen = screenOf(screenLine("コンピュータを使います", top = 100))
         val lookup = dictionaryOf("コンピュータ", "使う")
 
@@ -151,13 +149,14 @@ class ScreenLookupTest {
         assertEquals("コンピュータ", word.surface)
         assertEquals(0, word.start)
         assertEquals(6, word.end)
-        // The highlight is the union of the word's character boxes, not one character's.
-        assertEquals(Box(0, 100, 240, 160), tap.wordBox)
+        // The highlight includes the whole line, including the following word.
+        assertEquals(listOf("コンピュータ", "使います"), tap.result.words.map { it.surface })
+        assertEquals(screen.lines.single().bounds, tap.selectionBox)
         assertEquals("コンピュータを使います", tap.result.ocrText)
     }
 
     @Test
-    fun aTapOnALoneKanaParticleStepsToTheNextWord() {
+    fun aTapOnALoneKanaParticleIncludesWordsBeforeAndAfterIt() {
         val screen = screenOf(screenLine("猫を食べる", top = 100))
         val lookup = dictionaryOf("猫", "食べる")
 
@@ -165,9 +164,8 @@ class ScreenLookupTest {
         val tap = lookupFromTap(screen, x = 60, y = 130, tolerancePx = 0, lookup = lookup)
 
         assertNotNull(tap)
-        val word = tap!!.result.words.first()
-        assertEquals("食べる", word.surface)
-        assertEquals(2, word.start)
+        assertEquals(listOf("猫", "食べる"), tap!!.result.words.map { it.surface })
+        assertEquals(screen.lines.single().bounds, tap.selectionBox)
     }
 
     @Test
@@ -175,14 +173,6 @@ class ScreenLookupTest {
         val screen = screenOf(screenLine("猫を食べる", top = 100))
 
         assertNull(lookupFromTap(screen, x = 800, y = 1000, tolerancePx = 24, lookup = dictionaryOf("猫")))
-    }
-
-    @Test
-    fun theLongestCoverWinsAndTiesGoToTheEarliestStart() {
-        // 語 tapped at index 2: 本語です (1..5) covers more of the tap than 語 (2..3) does.
-        assertEquals(1, resolveTapStart("日本語です", 2, dictionaryOf("本語です", "語")))
-        // With only 本語 and 語 known, both covers end at 3 — the earlier start wins.
-        assertEquals(1, resolveTapStart("日本語です", 2, dictionaryOf("本語", "語")))
     }
 
     @Test
@@ -194,7 +184,7 @@ class ScreenLookupTest {
         val tap = lookupFromTap(screen, x = 20, y = 250, tolerancePx = 0, lookup = lookup)
 
         assertNotNull(tap)
-        assertEquals("水", tap!!.result.words.first().surface)
-        assertEquals(Box(0, 220, 40, 280), tap.wordBox)
+        assertEquals(listOf("猫", "水", "飲む"), tap!!.result.words.map { it.surface })
+        assertEquals(screen.lines.single().bounds, tap.selectionBox)
     }
 }
