@@ -322,3 +322,23 @@ Validation for this refinement is a debug build and a whitespace check; no addit
 | Put words nearest the tap first. | Tap results rank the identified candidates by distance to their character boxes. Each word's own OCR context is aligned to the tapped line using the existing alignment code. The first chip and default entry are the nearest candidate; ties preserve the previous order. Circle ordering, recognized text, dictionary entries and candidate limits remain. |
 
 Ranking runs off the main thread and adds no OCR or dictionary reads. Four existing tap-test expectations were updated for the requested ordering; no new tests were added. Validation is compilation of the debug APK and existing unit-test sources, plus a whitespace check; tests and device gestures were not run for this follow-up.
+
+## Pill placement and local tap OCR
+
+Implemented on `fix/tap-phrase-ocr` after the user approved the researched plan.
+
+| Change | Result |
+|---|---|
+| Pill safe area | Reserve hidden-status-bar and camera-cutout insets, then add a 16 dp gap; include horizontal cutouts in landscape. |
+| Local tap crop | Read a twelve-cell phrase around the nearest glyph in the chosen line, retaining whole shared glyphs and surrogate pairs. Restore original detector extent and add guarded margins before cutting the bitmap. |
+| Full-line results | Replace only the frozen phrase span with accepted local OCR; keep prefix/suffix text and geometry, then scan and rank the corrected full line. |
+| Candidate order | Rank before surface deduplication and the 24-word limit, preserving the nearest repeated occurrence; corrected-region words win distance ties. |
+| Failure behavior | Missing/rejected OCR and unusable crop geometry keep the indexed line. Full-line highlighting, cancellation guards, circle lookup and exact-crop/model caching remain. |
+
+The crop builder handles horizontal and vertical lines, line ends, unequal glyph widths, neighboring lines, and screenshot boundaries. Shared crop OCR is reused by tap and circle paths; native model/preprocessing settings are unchanged. Context and word offsets are derived from the corrected sentence rather than remapped onto an unchanged, possibly incorrect sentence.
+
+Validation: debug build and 108 focused unit tests passed, with zero failures/errors/skips. The 25 new tests cover crop geometry, glyph/Unicode boundaries, local corrections and changed lengths, surrounding words, repeated occurrences, late candidates beyond the old limit, distance ties, and rejected-read fallback. Existing lookup/cache/alignment/hit-test/preprocessing tests also passed. `git diff --check` passed.
+
+No phone gestures, installations, visual checks, or OCR accuracy comparisons were run. A representative failing screenshot was not provided, so the twelve-cell default and recognition improvement remain unverified on the user's failing scene. The user requested a commit and KDE Connect APK delivery to the Nord 6.
+
+Files changed: `ocr/ScreenText.kt`, `ocr/ScreenTextScanner.kt`, `ui/lookup/LookupOverlay.kt`, `ui/lookup/LookupPipeline.kt`, `ui/lookup/ScreenLookup.kt`, and the new `TapPhraseCropTest.kt` / `TapLookupResultTest.kt`, plus these notes.
