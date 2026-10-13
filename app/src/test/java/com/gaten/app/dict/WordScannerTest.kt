@@ -160,4 +160,17 @@ class WordScannerTest {
         assertEquals(listOf("使います", "コンピュータ"), words.map { it.surface })
         assertEquals("使う", words[0].baseForm)
     }
+
+    @Test
+    fun latinSurfacesAreDropped() {
+        val lookup = dictionaryOf("C", "言語")
+
+        // JMdict carries Latin headwords ("C" read シー); OCR reading a keyboard key must not find one.
+        assertTrue(WordScanner.scan("C", lookup).isEmpty())
+
+        // A Latin key next to real text must not shadow the Japanese word around it.
+        val words = WordScanner.scan("C言語", lookup)
+
+        assertEquals(listOf("言語"), words.map { it.surface })
+    }
 }

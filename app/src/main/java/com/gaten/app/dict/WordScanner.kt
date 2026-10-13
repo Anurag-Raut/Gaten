@@ -67,7 +67,7 @@ object WordScanner {
         var index = 0
         while (index < text.length && words.size < candidateLimit) {
             val word = matchAt(text, index, lookup)
-            if (word == null || isLoneKana(word.surface)) {
+            if (word == null || isLoneKana(word.surface) || !hasJapanese(word.surface)) {
                 index++
             } else {
                 words.add(word)
@@ -81,53 +81,6 @@ object WordScanner {
                     .thenBy { it.start }
             )
             .take(maxWords)
-    }
-
-    /**
-     * Scans [text] from a character the reader actually pointed at, the way a tap is answered.
-     *
-     * The first word must start exactly at [startIndex] — that is the word under the finger. When
-     * nothing in the dictionary starts there the scan steps forward to the first position that does,
-     * so tapping a particle (を, が) still reaches the word behind it instead of returning nothing.
-     * That first word is kept come what may, even a lone kana (the あ of あの): unlike in [scan],
-     * where single kana are noise, here the reader chose it. Everything after it follows [scan]'s
-     * rules — longest match, deinflection, single-kana surfaces dropped — and the list stays in text
-     * order rather than being re-ranked kanji-first, because the tapped word is the answer and the
-     * rest of the line is its context. At most [maxWords] are returned.
-     */
-    fun scanFrom(
-        text: String,
-        startIndex: Int,
-        lookup: (String) -> List<DictEntry>,
-        maxWords: Int = 24
-    ): List<ScannedWord> {
-        if (text.isEmpty() || maxWords <= 0 || startIndex >= text.length) return emptyList()
-
-        var first: ScannedWord? = null
-        var index = startIndex.coerceAtLeast(0)
-        while (index < text.length) {
-            val word = matchAt(text, index, lookup)
-            if (word != null) {
-                first = word
-                break
-            }
-            index++
-        }
-        val tapped = first ?: return emptyList()
-
-        val words = ArrayList<ScannedWord>(minOf(maxWords, 8))
-        words.add(tapped)
-        index = tapped.end
-        while (index < text.length && words.size < maxWords) {
-            val word = matchAt(text, index, lookup)
-            if (word == null || isLoneKana(word.surface)) {
-                index++
-            } else {
-                words.add(word)
-                index = word.end
-            }
-        }
-        return words
     }
 
     /**
@@ -154,6 +107,27 @@ object WordScanner {
             .filter { it.start < rangeEndExclusive && rangeStart < it.end }
             .take(maxWords)
     }
+
+    /**
+     * True when [surface] holds at least one Japanese character (kana or kanji). Dictionary
+     * headwords may be Latin (JMdict carries "C" as シー), but OCR only ever reads glyphs, so a
+     * surface of pure Latin is a keyboard key, not a word.
+     *
+     * The code ranges are duplicated from [com.gaten.app.ocr.JapaneseText]'s isJapanese rather
+     * than imported: dict must not depend on ocr.
+     */
+    private fun hasJapanese(surface: String): Boolean =
+        surface.any { char ->
+            val code = char.code
+            code in 0x3040..0x309F || // hiragana
+                code in 0x30A0..0x30FF ||     // katakana
+                code in 0x31F0..0x31FF ||     // katakana phonetic extensions
+                code in 0xFF66..0xFF9D ||     // half-width katakana
+                code in 0x4E00..0x9FFF ||     // CJK unified ideographs
+                code in 0x3400..0x4DBF ||     // CJK unified ideographs extension A
+                code == 0x3005 ||             // 々 iteration mark
+                code == 0x3006                // 〆
+        }
 
     /** True for a single kana character: a particle or auxiliary, never a useful lookup. */
     private fun isLoneKana(surface: String): Boolean {

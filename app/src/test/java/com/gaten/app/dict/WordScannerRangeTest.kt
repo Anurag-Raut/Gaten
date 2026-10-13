@@ -10,61 +10,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** [WordScanner.scanFrom] (a tap) and [WordScanner.scanLine] (a lasso), against the fake dictionary. */
+/** [WordScanner.scanLine], a lasso against the fake dictionary. */
 class WordScannerRangeTest {
-
-    @Test
-    fun theTappedWordComesFirstAndTheRestOfTheLineAfterIt() {
-        val text = "コンピュータを使います"
-        val lookup = dictionaryOf("コンピュータ", "使う", "する")
-
-        val words = WordScanner.scanFrom(text, startIndex = 0, lookup = lookup)
-
-        // scan() ranks 使います first; a tapped word keeps the place the reader pointed at.
-        assertEquals(listOf("コンピュータ", "使います"), words.map { it.surface })
-        assertEquals(listOf("コンピュータ", "使う"), words.map { it.baseForm })
-        assertEquals(0, words[0].start)
-        assertEquals(6, words[0].end)
-        assertEquals(7, words[1].start)
-        assertEquals(11, words[1].end)
-        // Filled in by whoever knows the line; the scanner never guesses.
-        assertEquals("", words[0].context)
-    }
-
-    @Test
-    fun aTapWithNoWordUnderItStepsForwardToTheFirstMatch() {
-        val text = "を日本語"
-        val lookup = dictionaryOf("日本語")
-
-        val words = WordScanner.scanFrom(text, startIndex = 0, lookup = lookup)
-
-        assertEquals(listOf("日本語"), words.map { it.surface })
-        assertEquals(1, words[0].start)
-        assertEquals(4, words[0].end)
-    }
-
-    @Test
-    fun aShortFirstWordIsKeptEvenThoughScanWouldDropIt() {
-        val text = "きれい"
-        val lookup = dictionaryOf("き", "れい")
-
-        val words = WordScanner.scanFrom(text, startIndex = 0, lookup = lookup)
-
-        assertEquals(listOf("き", "れい"), words.map { it.surface })
-        assertEquals(1, words[1].start)
-        assertEquals(3, words[1].end)
-        // Through scan() the same lone kana is noise, so only れい survives.
-        assertEquals(listOf("れい"), WordScanner.scan(text, lookup).map { it.surface })
-    }
-
-    @Test
-    fun aTapOnNothingYieldsNothing() {
-        val lookup = dictionaryOf("日本語")
-
-        assertTrue(WordScanner.scanFrom("あいうえお", startIndex = 2, lookup = lookup).isEmpty())
-        assertTrue(WordScanner.scanFrom("日本語", startIndex = 3, lookup = lookup).isEmpty())
-        assertTrue(WordScanner.scanFrom("日本語", startIndex = 0, lookup = lookup, maxWords = 0).isEmpty())
-    }
 
     @Test
     fun aWordStraddlingTheRangeEdgeIsKeptWhole() {

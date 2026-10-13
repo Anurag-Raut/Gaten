@@ -58,8 +58,8 @@ fun lookupFromSelection(
 
 /**
  * Selects the entire visible line box under a tap, with no further OCR.
- * The full line is repaired and scanned in reading order, including words before the tap.
- * The highlight stays on the line bounds even when no dictionary word matches.
+ * The full line is repaired and scanned complex-first — the reader picked a line, not a
+ * position — and the highlight stays on the line bounds even when no dictionary word matches.
  * Returns null when no visible box is within [tolerancePx].
  */
 fun lookupFromTap(
@@ -75,7 +75,7 @@ fun lookupFromTap(
     val cachedLookup = memoizedLookup(lookup)
     val text = OcrRepair.repair(line.text, cachedLookup)
     val words = WordScanner
-        .scanFrom(text, 0, cachedLookup, maxWords)
+        .scan(text, cachedLookup, maxWords)
         .map { it.copy(context = text) }
     return TapLookup(LookupResult(ocrText = text, words = words), line.bounds)
 }

@@ -35,10 +35,11 @@ class ScreenLookupTest {
 
         assertNotNull(first)
         assertEquals("コーヒーを注文します", first!!.result.ocrText)
-        assertEquals(listOf("コーヒー", "注文", "します"), first.result.words.map { it.surface })
-        assertEquals(listOf("コーヒー", "注文", "する"), first.result.words.map { it.baseForm })
-        assertEquals(listOf(0, 5, 7), first.result.words.map { it.start })
-        assertEquals(listOf(4, 7, 10), first.result.words.map { it.end })
+        // A tap answers with scan()'s complex-first ranking: 注文 (kanji) heads the line.
+        assertEquals(listOf("注文", "コーヒー", "します"), first.result.words.map { it.surface })
+        assertEquals(listOf("注文", "コーヒー", "する"), first.result.words.map { it.baseForm })
+        assertEquals(listOf(5, 0, 7), first.result.words.map { it.start })
+        assertEquals(listOf(7, 4, 10), first.result.words.map { it.end })
         assertTrue(first.result.words.all { it.context == "コーヒーを注文します" })
         assertEquals(screen.lines.single().bounds, first.selectionBox)
         assertTrue(calls.keys.any { dictionary(it).isEmpty() })
@@ -145,12 +146,13 @@ class ScreenLookupTest {
         val tap = lookupFromTap(screen, x = 60, y = 130, tolerancePx = 0, lookup = lookup)
 
         assertNotNull(tap)
+        // A tap ranks complex-first, so the kanji-bearing 使います heads the line.
         val word = tap!!.result.words.first()
-        assertEquals("コンピュータ", word.surface)
-        assertEquals(0, word.start)
-        assertEquals(6, word.end)
-        // The highlight includes the whole line, including the following word.
-        assertEquals(listOf("コンピュータ", "使います"), tap.result.words.map { it.surface })
+        assertEquals("使います", word.surface)
+        assertEquals(7, word.start)
+        assertEquals(11, word.end)
+        // The whole line comes back, ranked complex-first rather than in text order.
+        assertEquals(listOf("使います", "コンピュータ"), tap.result.words.map { it.surface })
         assertEquals(screen.lines.single().bounds, tap.selectionBox)
         assertEquals("コンピュータを使います", tap.result.ocrText)
     }
