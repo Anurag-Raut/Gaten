@@ -13,8 +13,10 @@ import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -289,6 +291,11 @@ fun ResultSheet(
                 modifier = modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    // Before heightIn: the panel's height tracks its content smoothly — a chip
+                    // selection whose entry has a different height would otherwise snap when the
+                    // crossfade ends. The first measurement is not animated, so the sheet never
+                    // resizes 0->full on open, and the cap still applies unchanged.
+                    .animateContentSize(tween(250, easing = FastOutSlowInEasing))
                     .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * layout.fraction)
                     // Dragged: the sheet rides the finger, past the physical bottom and back.
                     .graphicsLayer { translationY = sheetOffset },

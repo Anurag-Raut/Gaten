@@ -468,7 +468,19 @@ fun LookupOverlay(
                     indexed.copy(lines = listOf(indexed.lines[lineIndex]))
                 }
                 val failure = (repoState as? RepoState.Failed)?.message
-                if (failure != null) lookup.copy(error = failure) else lookup
+                val settled = if (failure != null) lookup.copy(error = failure) else lookup
+                // The tap asked for the word under the finger: rank the final answer nearest the
+                // tapped point first, against the tapped line's latest geometry. The circle path
+                // is deliberately left in the scan's order — a circle has no single point to rank
+                // by, and ranking it from an arbitrary centre would reorder it wrongly.
+                withContext(Dispatchers.Default) {
+                    val geometry = (reader?.text?.value ?: live).lines.getOrNull(lineIndex)
+                    if (geometry == null || geometry.charBoxes.isEmpty()) {
+                        settled
+                    } else {
+                        settled.copy(words = rankWordsByTapDistance(settled.words, geometry, x, y))
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

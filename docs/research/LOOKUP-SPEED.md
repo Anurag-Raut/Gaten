@@ -313,3 +313,12 @@ Android's [hardware acceleration guidance](https://developer.android.com/topic/p
 Dismissal blocks new selections while it completes, including a close during the opening animation. A completed downward dismiss drag stays at its released offset while the slide continues, rather than springing back during the exit. The original modal size, OCR behavior and keep-screen-on flag are preserved. The coordinator reviewed the changes and corrected the transition-idle checks and the handle's width-clamp import.
 
 Validation for this refinement is a debug build and a whitespace check; no additional unit tests, device gestures or FPS measurements were run. The user requested committing the accumulated changes and sending the arm64 debug APK to the paired Nord 6 through KDE Connect.
+
+### Follow-up: entry height and tap ordering
+
+| Request | Implemented behavior |
+|---|---|
+| Smooth height changes when selecting entries of different lengths. | The portrait panel animates measured content size over 250 ms while retaining its bottom anchor, height cap and insets. The first measurement is immediate; the existing content crossfade and landscape sizing remain. |
+| Put words nearest the tap first. | Tap results rank the identified candidates by distance to their character boxes. Each word's own OCR context is aligned to the tapped line using the existing alignment code. The first chip and default entry are the nearest candidate; ties preserve the previous order. Circle ordering, recognized text, dictionary entries and candidate limits remain. |
+
+Ranking runs off the main thread and adds no OCR or dictionary reads. Four existing tap-test expectations were updated for the requested ordering; no new tests were added. Validation is compilation of the debug APK and existing unit-test sources, plus a whitespace check; tests and device gestures were not run for this follow-up.
