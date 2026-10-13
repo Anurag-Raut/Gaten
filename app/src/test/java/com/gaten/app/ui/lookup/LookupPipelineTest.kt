@@ -10,10 +10,18 @@ import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.dictEntry
 import com.gaten.app.dict.dictionaryOf
 import com.gaten.app.ocr.OcrLinePolicy
+import com.gaten.app.ocr.Box
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * [mergeLookup], the one seam of the circle path that is pure: what the crop reading and the screen
@@ -25,6 +33,112 @@ import org.junit.Test
  */
 class LookupPipelineTest {
 
+    @Test
+    fun exactCropCacheReusesSuccessfulReadingAndRetriesNull() = runBlocking {
+        val cache = ExactCropOcrCache(maxResults = 2)
+        val box = Box(1, 2, 20, 30)
+        val calls = AtomicInteger()
+
+        assertEquals("猫", cache.read(box) { calls.incrementAndGet(); "猫" })
+        assertEquals("猫", cache.read(box) { calls.incrementAndGet(); "別" })
+        assertEquals(1, calls.get())
+
+        val nullBox = Box(2, 3, 20, 30)
+        assertEquals(null, cache.read(nullBox) { calls.incrementAndGet(); null })
+        assertEquals("犬", cache.read(nullBox) { calls.incrementAndGet(); "犬" })
+        assertEquals(3, calls.get())
+    }
+
+    @Test
+    fun exactCropCacheInvalidatesWhenModelRevisionChanges() = runBlocking {
+        val cache = ExactCropOcrCache(modelRevision = "one")
+        val box = Box(1, 2, 20, 30)
+        val calls = AtomicInteger()
+
+        cache.read(box) { calls.incrementAndGet(); "猫" }
+        cache.setModelRevision("two")
+        assertEquals("犬", cache.read(box) { calls.incrementAndGet(); "犬" })
+        assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun rejectedPrimaryKeepsSupplementText() {
+        val supplement = LookupResult(ocrText = "画面の文字", words = emptyList())
+
+        assertEquals("画面の文字", mergePrimary(LookupResult("", emptyList()), supplement).ocrText)
+    }
+
+    @Test
+    fun identicalCropsJoinOneInFlightRead() = runBlocking {
+        val cache = ExactCropOcrCache()
+        val box = Box(1, 2, 20, 30)
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val calls = AtomicInteger()
+
+        val first = launch {
+            assertEquals("猫", cache.read(box) {
+                calls.incrementAndGet()
+                started.complete(Unit)
+                release.await()
+                "猫"
+            })
+        }
+        withTimeout(1_000) { started.await() }
+        val second = launch {
+            assertEquals("猫", cache.read(box) { calls.incrementAndGet(); "犬" })
+        }
+        yield()
+        release.complete(Unit)
+        first.join()
+        second.join()
+        assertEquals(1, calls.get())
+    }
+
+    @Test
+    fun cancelledOwnerIsRemovedSoTheCropCanRetry() = runBlocking {
+        val cache = ExactCropOcrCache()
+        val box = Box(1, 2, 20, 30)
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val owner = launch {
+            cache.read(box) {
+                started.complete(Unit)
+                release.await()
+                "never"
+            }
+        }
+        withTimeout(1_000) { started.await() }
+        owner.cancelAndJoin()
+        assertEquals("再試行", cache.read(box) { "再試行" })
+    }
+
+    @Test
+    fun failedOwnerIsRemovedSoTheCropCanRetry() = runBlocking {
+        val cache = ExactCropOcrCache()
+        val box = Box(1, 2, 20, 30)
+        try {
+            cache.read(box) { error("temporary") }
+        } catch (_: IllegalStateException) {
+            // Expected: failures are never cached.
+        }
+        assertEquals("再試行", cache.read(box) { "再試行" })
+    }
+
+    @Test
+    fun cacheKeepsOnlyTheConfiguredNumberOfResults() = runBlocking {
+        val cache = ExactCropOcrCache(maxResults = 1)
+        val first = Box(1, 2, 20, 30)
+        val second = Box(2, 3, 20, 30)
+        val calls = AtomicInteger()
+
+        cache.read(first) { calls.incrementAndGet(); "一" }
+        cache.read(second) { calls.incrementAndGet(); "二" }
+        cache.read(first) { calls.incrementAndGet(); "一" }
+
+        assertEquals(3, calls.get())
+    }
+
     private fun word(surface: String, context: String, start: Int = 0) = ScannedWord(
         surface = surface,
         start = start,
@@ -33,6 +147,18 @@ class LookupPipelineTest {
         entries = listOf(dictEntry(surface)),
         context = context
     )
+
+    @Test
+    fun progressiveMergeKeepsTheCompleteCropAndSupplementResult() {
+        val lookup = dictionaryOf("猫", "水", "飲む", "犬")
+        val crop = "猫が水を飲む"
+        val supplement = LookupResult("猫と犬", listOf(word("猫", "猫と犬"), word("犬", "猫と犬", 2)))
+
+        assertEquals(
+            mergeLookup(crop, supplement, lookup),
+            mergePrimary(mergeLookup(crop, null, lookup), supplement)
+        )
+    }
 
     @Test
     fun theCropReadingIsTheTextWhateverTheIndexReadInstead() {

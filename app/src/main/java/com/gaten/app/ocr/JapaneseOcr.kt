@@ -85,12 +85,17 @@ object JapaneseOcr {
      * [OcrPreprocess]'s padding is clamped to that crop's edge and the read cannot reach the lines
      * beside the selection.
      */
-    suspend fun readLineWithMangaOcr(context: Context, bitmap: Bitmap, bounds: Box): String? {
+    suspend fun readLineWithMangaOcr(
+        context: Context,
+        bitmap: Bitmap,
+        bounds: Box,
+        priority: MangaOcrEngine.Priority = MangaOcrEngine.Priority.FOREGROUND
+    ): String? {
         MangaOcrModel.installBundledIfPresent(context)
         if (!MangaOcrModel.isInstalled(context)) return null
         val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
         try {
-            return MangaOcrEngine.recognize(context, crop)
+            return MangaOcrEngine.recognize(context, crop, priority)
         } finally {
             // Recognition's synchronous native calls have finished before it returns or cancels.
             if (crop !== bitmap) crop.recycle()

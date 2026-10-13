@@ -8,6 +8,8 @@ package com.gaten.app.ui.lookup
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
+import android.util.Log
 import androidx.compose.ui.geometry.Rect
 import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.JmdictRepository
@@ -15,6 +17,7 @@ import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.WordScanner
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
+import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.JapaneseText
 import com.gaten.app.ocr.OcrLinePolicy
 import com.gaten.app.ocr.OcrRepair
@@ -22,7 +25,12 @@ import com.gaten.app.ocr.ScreenLine
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.interpolateCharBoxes
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withContext
+import java.util.LinkedHashMap
+
+private const val LOOKUP_TAG = "GatenLookup"
 
 /** Everything the result sheet needs after one selection lookup. */
 data class LookupResult(
@@ -33,6 +41,85 @@ data class LookupResult(
 
 /** The dictionary accessor when the dictionary failed to open: every word list comes back empty. */
 private val NO_LOOKUP: (String) -> List<DictEntry> = { emptyList() }
+
+/**
+ * Screenshot-scoped cache for raw manga-ocr readings. Calls for the same crop join one read;
+ * failed, cancelled, and null reads are removed so a later lookup can retry. Create one instance
+ * per screenshot and call [setModelRevision] when the installed model changes.
+ */
+internal class ExactCropOcrCache(
+    modelRevision: String = "default",
+    maxResults: Int = 24
+) {
+    private data class Key(val left: Int, val top: Int, val right: Int, val bottom: Int, val revision: String)
+
+    private val lock = Any()
+    private val maxResults = maxResults.coerceAtLeast(1)
+    private val entries = LinkedHashMap<Key, CompletableDeferred<String?>>(0, 0.75f, true)
+    private var revision = modelRevision
+
+    /** Invalidates subsequent cache requests; in-flight callers finish their model snapshot. */
+    fun setModelRevision(value: String) {
+        synchronized(lock) {
+            if (revision == value) return
+            revision = value
+            entries.clear()
+        }
+    }
+
+    /** Returns a cached reading or runs [read] once for this exact, already-clamped crop. */
+    suspend fun read(box: Box, read: suspend () -> String?): String? {
+        val key: Key
+        val deferred: CompletableDeferred<String?>
+        val owner: Boolean
+        synchronized(lock) {
+            key = Key(box.left, box.top, box.right, box.bottom, revision)
+            val existing = entries[key]
+            if (existing != null) {
+                deferred = existing
+                owner = false
+            } else {
+                deferred = CompletableDeferred()
+                entries[key] = deferred
+                owner = true
+            }
+        }
+        if (!owner) return deferred.await()
+
+        try {
+            val result = read()
+            synchronized(lock) {
+                if (result == null) {
+                    if (entries[key] === deferred) entries.remove(key)
+                } else {
+                    deferred.complete(result)
+                    while (entries.values.count { it.isCompleted } > maxResults) {
+                        val completed = entries.entries.firstOrNull { it.value.isCompleted } ?: break
+                        entries.remove(completed.key)
+                    }
+                }
+            }
+            if (result == null) deferred.complete(null)
+            return result
+        } catch (e: CancellationException) {
+            synchronized(lock) { if (entries[key] === deferred) entries.remove(key) }
+            deferred.cancel(e)
+            throw e
+        } catch (e: Throwable) {
+            synchronized(lock) { if (entries[key] === deferred) entries.remove(key) }
+            deferred.completeExceptionally(e)
+            throw e
+        }
+    }
+
+    /** Releases screenshot results and cancels joined waiters; the overlay scope owns active reads. */
+    fun clear() {
+        synchronized(lock) {
+            entries.values.forEach { if (!it.isCompleted) it.cancel() }
+            entries.clear()
+        }
+    }
+}
 
 /**
  * One selection lookup: the exact crop is read by manga-ocr, and the selected index lines
@@ -55,11 +142,13 @@ private val NO_LOOKUP: (String) -> List<DictEntry> = { emptyList() }
  * [repo] is null when the dictionary failed to open; the caller turns that into [LookupResult.error],
  * and no words are produced — the text is still the crop's, or the Japanese the selection covered.
  */
-suspend fun runLookup(
+internal suspend fun runLookup(
     context: Context,
     screenshot: Bitmap,
     selection: Rect,
     repo: JmdictRepository?,
+    cache: ExactCropOcrCache? = null,
+    onPrimary: suspend (LookupResult) -> Unit = {},
     index: suspend () -> ScreenText?
 ): LookupResult {
     val box = Box(
@@ -68,27 +157,55 @@ suspend fun runLookup(
         selection.right.toInt(),
         selection.bottom.toInt()
     )
-    val crop = cropBitmap(screenshot, box)
+    val clamped = clampedBox(screenshot, box)
+    val crop = Bitmap.createBitmap(screenshot, clamped.left, clamped.top,
+        clamped.right - clamped.left, clamped.bottom - clamped.top)
     val reading = withContext(Dispatchers.Default) {
-        JapaneseOcr.readLineWithMangaOcr(context, crop, Box(0, 0, crop.width, crop.height))
+        cache?.setModelRevision(modelRevision(context))
+        val started = SystemClock.elapsedRealtime()
+        val read = suspend {
+            JapaneseOcr.readLineWithMangaOcr(context, crop, Box(0, 0, crop.width, crop.height))
+        }
+        (if (cache == null) read() else cache.read(clamped, read)).also {
+            Log.d(LOOKUP_TAG, "crop read=${SystemClock.elapsedRealtime() - started}ms")
+        }
     }
 
     return withContext(Dispatchers.Default) {
         val lookup: (String) -> List<DictEntry> =
             if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
+        val cachedLookup = memoizedLookup(lookup)
+        val primaryStarted = SystemClock.elapsedRealtime()
+        val primary = mergeLookup(reading, null, cachedLookup)
+        Log.d(LOOKUP_TAG, "primary dictionary=${SystemClock.elapsedRealtime() - primaryStarted}ms")
+        if (primary.ocrText.isNotEmpty() || primary.words.isNotEmpty()) onPrimary(primary)
+        val supplementStarted = SystemClock.elapsedRealtime()
         val screen = index()
         // An index with no lines at all (failed scan, or ML Kit read nothing) stands for "no index
         // yet", so the crop's own ML Kit reading still supplements the circle. An index with lines
         // that merely don't intersect the box does not: the index is the record of the screen.
         val supplement = if (screen != null && screen.lines.isNotEmpty()) {
-            lookupFromSelection(japaneseLines(screen), box, lookup)
+            lookupFromSelection(japaneseLines(screen), box, cachedLookup)
         } else {
             cropIndex(crop)?.let {
-                lookupFromSelection(japaneseLines(it), Box(0, 0, crop.width, crop.height), lookup)
+                lookupFromSelection(japaneseLines(it), Box(0, 0, crop.width, crop.height), cachedLookup)
             }
         }
-        mergeLookup(reading, supplement, lookup)
+        val result = if (supplement == null) primary else mergePrimary(primary, supplement)
+        Log.d(LOOKUP_TAG, "supplement=${SystemClock.elapsedRealtime() - supplementStarted}ms")
+        result
     }
+}
+
+internal fun mergePrimary(primary: LookupResult, supplement: LookupResult, maxWords: Int = 24): LookupResult =
+    primary.copy(
+        ocrText = primary.ocrText.ifEmpty { supplement.ocrText },
+        words = (primary.words + supplement.words).distinctBy { it.surface }.take(maxWords)
+    )
+
+private fun modelRevision(context: Context): String = MangaOcrModel.Slot.entries.joinToString("|") { slot ->
+    val file = MangaOcrModel.file(context, slot)
+    "${file.path}:${file.length()}:${file.lastModified()}"
 }
 
 /**
@@ -184,11 +301,10 @@ private suspend fun cropIndex(crop: Bitmap): ScreenText? {
     )
 }
 
-/** Crops [box] (bitmap px) out of the capture, clamped so the result is never empty. */
-private fun cropBitmap(screenshot: Bitmap, box: Box): Bitmap {
+private fun clampedBox(screenshot: Bitmap, box: Box): Box {
     val left = box.left.coerceIn(0, screenshot.width - 1)
     val top = box.top.coerceIn(0, screenshot.height - 1)
     val right = box.right.coerceIn(left + 1, screenshot.width)
     val bottom = box.bottom.coerceIn(top + 1, screenshot.height)
-    return Bitmap.createBitmap(screenshot, left, top, right - left, bottom - top)
+    return Box(left, top, right, bottom)
 }

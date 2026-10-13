@@ -114,6 +114,10 @@ fun EdgeOutline(busy: Boolean, modifier: Modifier = Modifier) {
         // stay level and meet at the top midpoint exactly when the reveal completes.
         rightMeasure.setPath(rightHalf, forceClosed = false)
         leftMeasure.setPath(leftHalf, forceClosed = false)
+        // getSegment appends the extracted contour to the destination, so each destination is
+        // cleared first — otherwise every drawn frame adds another half-ring to the path.
+        rightSegment.reset()
+        leftSegment.reset()
         if (rightMeasure.getSegment(0f, rightMeasure.length * progress, rightSegment, true)) {
             drawPath(rightSegment, brush = brush, style = Stroke(width = stroke))
         }

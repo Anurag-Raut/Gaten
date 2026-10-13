@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -80,16 +79,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gaten.app.R
@@ -102,6 +104,7 @@ import com.gaten.app.dict.alternativeHeadwordFor
 import com.gaten.app.dict.headwordFor
 import com.gaten.app.dict.notedForm
 import com.gaten.app.ui.theme.Spacing
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Dragging the handle toward the sheet's docked edge past this distance dismisses the overlay. */
@@ -208,7 +211,12 @@ fun ResultSheet(
     result: LookupResult,
     onDismiss: () -> Unit,
     onSelectAgain: () -> Unit,
-    layout: SheetLayout
+    layout: SheetLayout,
+    /**
+     * Applied only to the sheet Surface: the caller's enter/exit slide ([Modifier.animateEnterExit])
+     * rides on the measured panel itself. The scrim beside it stays fixed.
+     */
+    modifier: Modifier = Modifier
 ) {
     var selected by remember { mutableStateOf(0) }
     val dock = layout.dock
@@ -218,12 +226,13 @@ fun ResultSheet(
     var dragDistance by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     // Snapped while the finger is down, so the sheet tracks it exactly; springing back on release.
+    // Never read sheetOffset in composition: the drag spring would recompose the whole sheet per
+    // frame. It is read deferred in the Surface's graphicsLayer and inside HandleBar's layout.
     val sheetOffset by animateFloatAsState(
         targetValue = dragDistance,
         animationSpec = if (dragging) snap() else spring(),
         label = "sheetDrag"
     )
-    val dragProgress = (sheetOffset / dismissDragPx).coerceIn(0f, 1f)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim over the rest of the screen: a tap dismisses the overlay.
@@ -247,8 +256,8 @@ fun ResultSheet(
                     onDragEnd = {
                         dragging = false
                         val dragged = dragDistance
-                        dragDistance = 0f
-                        if (dragged > dismissDragPx) onDismiss()
+                        // Hold a completed dismiss drag in place while the exit continues it.
+                        if (dragged > dismissDragPx) onDismiss() else dragDistance = 0f
                     },
                     onDragCancel = {
                         dragging = false
@@ -277,7 +286,7 @@ fun ResultSheet(
 
         when (dock) {
             SheetDock.Bottom -> Surface(
-                modifier = Modifier
+                modifier = modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * layout.fraction)
@@ -295,7 +304,7 @@ fun ResultSheet(
                         // navigation strip, which stays transparent over it.
                         .windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
-                    HandleBar(dragProgress)
+                    HandleBar { (sheetOffset / dismissDragPx).coerceIn(0f, 1f) }
                     SheetBody(
                         result = result,
                         selected = selected,
@@ -309,7 +318,7 @@ fun ResultSheet(
             }
 
             SheetDock.Left, SheetDock.Right -> Surface(
-                modifier = Modifier
+                modifier = modifier
                     .align(
                         if (dock == SheetDock.Left) Alignment.CenterStart else Alignment.CenterEnd
                     )
@@ -361,10 +370,11 @@ fun ResultSheet(
 /**
  * The grip at the inner edge of the bottom dock: the horizontal pill the sheet has always drawn,
  * inside a 48dp touch target. [dragProgress] is how far a dismiss drag has come, 0 to 1: the pill
- * stretches with it, so the handle answers the finger before the sheet is let go.
+ * stretches with it, so the handle answers the finger before the sheet is let go. The lambda keeps
+ * the animated value out of composition — it is read only in the layout block below.
  */
 @Composable
-private fun HandleBar(dragProgress: Float = 0f) {
+private fun HandleBar(dragProgress: () -> Float) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -374,8 +384,18 @@ private fun HandleBar(dragProgress: Float = 0f) {
     ) {
         Box(
             modifier = Modifier
-                .width(HandleWidth + HandleStretch * dragProgress)
                 .height(4.dp)
+                .layout { measurable, constraints ->
+                    // Reading the progress here scopes each animation frame's invalidation to
+                    // this pill's measure alone; the sheet's composition never sees it.
+                    val width = constraints.constrainWidth(
+                        (HandleWidth + HandleStretch * dragProgress()).roundToPx()
+                    )
+                    val placeable = measurable.measure(
+                        constraints.copy(minWidth = width, maxWidth = width)
+                    )
+                    layout(width, placeable.height) { placeable.placeRelative(0, 0) }
+                }
                 .background(MaterialTheme.colorScheme.outline, CircleShape)
         )
     }
@@ -545,8 +565,9 @@ private fun EmptyState(
 /**
  * The scanned words as chips, the selected one filled primary. One horizontally scrolling row at
  * every dock — portrait bottom sheet and landscape side panel alike — so the words never wrap and
- * the panel's height cannot change with how many were scanned. A small arrow rides each edge and
- * fades in only while chips remain hidden past it, so the row itself says when it can scroll.
+ * the panel's height cannot change with how many were scanned. The paging arrows float over the
+ * row's clipped viewport: when visible they mask the chips sliding beneath them with the sheet's
+ * own surface colour, and hiding one leaves no slot, no padding and no layout change behind.
  */
 @Composable
 private fun ChipRow(
@@ -558,23 +579,29 @@ private fun ChipRow(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    // One paging animation at a time: a second tap cancels the first instead of the two
+    // coroutines fighting over the scroll position.
+    var pageJob by remember { mutableStateOf<Job?>(null) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = ChipRowHeight, max = ChipRowHeight)
+            .height(ChipRowHeight)
     ) {
         LazyRow(
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-            contentPadding = PaddingValues(horizontal = Spacing.l),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds()
         ) {
             itemsIndexed(words) { index, word ->
                 Chip(word, index == selected, { onSelect(index) }, type, compact)
             }
         }
 
+        // The arrows overlay the viewport's edges instead of measuring into its row, so their
+        // appearance never changes the layout — no snap, no shift, at either scroll boundary.
         ChipRowArrow(
             visible = listState.canScrollBackward,
             icon = Icons.Rounded.ChevronLeft,
@@ -582,19 +609,22 @@ private fun ChipRow(
             modifier = Modifier.align(Alignment.CenterStart)
         ) {
             // A tap pages the row by most of its width, a sweep's worth of words at a time.
-            scope.launch {
+            pageJob?.cancel()
+            pageJob = scope.launch {
                 val page = (listState.layoutInfo.viewportEndOffset -
                     listState.layoutInfo.viewportStartOffset).toFloat()
                 listState.animateScrollBy(-page * 0.85f)
             }
         }
+
         ChipRowArrow(
             visible = listState.canScrollForward,
             icon = Icons.Rounded.ChevronRight,
             description = R.string.lookup_cd_scroll_forward,
             modifier = Modifier.align(Alignment.CenterEnd)
         ) {
-            scope.launch {
+            pageJob?.cancel()
+            pageJob = scope.launch {
                 val page = (listState.layoutInfo.viewportEndOffset -
                     listState.layoutInfo.viewportStartOffset).toFloat()
                 listState.animateScrollBy(page * 0.85f)
@@ -603,35 +633,45 @@ private fun ChipRow(
     }
 }
 
-/** One paging arrow over the chip row's edge; a tap runs [onClick], which scrolls the row. */
+/**
+ * One paging arrow, floating over the chip viewport with an opaque sheet-coloured mask behind it:
+ * chips never show through under the control, and a hidden arrow leaves no slot or padding. Fade
+ * only — the overlay takes no part in the row's measurement, so there is no layout to animate.
+ */
 @Composable
 private fun ChipRowArrow(
     visible: Boolean,
     icon: ImageVector,
     @StringRes description: Int,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
+        enter = fadeIn(tween(120)),
+        exit = fadeOut(tween(120)),
         modifier = modifier
     ) {
-        Surface(
-            onClick = onClick,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        Box(
+            modifier = Modifier
+                .width(40.dp)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                icon,
-                contentDescription = stringResource(description),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .padding(Spacing.xs)
-                    .size(20.dp)
-            )
+            Surface(
+                onClick = onClick,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = stringResource(description),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(Spacing.xs).size(20.dp)
+                )
+            }
         }
     }
 }

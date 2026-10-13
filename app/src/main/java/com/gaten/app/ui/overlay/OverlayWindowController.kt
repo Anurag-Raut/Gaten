@@ -47,8 +47,15 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.media.MediaPauser
+import com.gaten.app.ocr.ScreenText
+import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ui.lookup.LookupOverlay
 import com.gaten.app.ui.theme.GatenTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 
 private const val TAG = "Gaten"
 
@@ -88,9 +95,13 @@ class OverlayWindowController(
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scanScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** The overlay on screen, if any. */
     private var showing: Showing? = null
+
+    /** The accepted capture's detector pass starts before the frozen-frame/UI transition. */
+    private var pendingScan: Deferred<ScreenText?>? = null
 
     /**
      * Puts [bitmap]'s capture on screen, replacing any overlay already up, and pauses the media
@@ -113,6 +124,19 @@ class OverlayWindowController(
             Log.d(TAG, "Screen off or locked - not showing the captured overlay")
             return false
         }
+
+        // Submit immediately after acceptance. The first frozen frame and Compose setup can now
+        // overlap ML Kit instead of making the detector wait behind them.
+        val scan = scanScope.async {
+            val startedAt = android.os.SystemClock.elapsedRealtime()
+            Log.d(TAG, "Early screen scan submitted" +
+                " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
+            val result = ScreenTextScanner.scan(context, bitmap)
+            Log.d(TAG, "Early screen scan ${if (result == null) "unavailable" else "ready"}" +
+                " in ${android.os.SystemClock.elapsedRealtime() - startedAt} ms")
+            result
+        }
+        pendingScan = scan
 
         val host = OverlayHost()
         val root = OverlayRoot(
@@ -171,10 +195,12 @@ class OverlayWindowController(
             // shown, so the caller is told and the host is discarded.
             Log.w(TAG, "Could not add the overlay window", e)
             host.onDestroy()
+            scan.cancel()
+            pendingScan = null
             return false
         }
         host.onResume()
-        val current = Showing(root, host, token)
+        val current = Showing(root, host, token, scan)
         showing = current
         Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture" +
             " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
@@ -229,7 +255,7 @@ class OverlayWindowController(
             // Scheduled first: composing the lookup UI below blocks this thread for a while.
             mediaPauser.pause(PauseAfterFreezeMs)
             root.addView(
-                lookupView(bitmap, mapping),
+                lookupView(bitmap, mapping, current.scan),
                 FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
             )
         }
@@ -243,7 +269,11 @@ class OverlayWindowController(
     }
 
     /** The lookup UI, transparent apart from what it draws over the capture beneath it. */
-    private fun lookupView(bitmap: Bitmap, mapping: ViewMapping) = ComposeView(context).apply {
+    private fun lookupView(
+        bitmap: Bitmap,
+        mapping: ViewMapping,
+        scan: Deferred<ScreenText?>
+    ) = ComposeView(context).apply {
         setContent {
             GatenTheme {
                 Surface(
@@ -254,6 +284,7 @@ class OverlayWindowController(
                     LookupOverlay(
                         screenshot = bitmap,
                         mapping = mapping,
+                        earlyScan = scan,
                         onDismiss = ::hide
                     )
                 }
@@ -304,6 +335,8 @@ class OverlayWindowController(
             if (resume) mediaPauser.resume() else mediaPauser.discard()
         }
         showing = null
+        pendingScan?.cancel()
+        pendingScan = null
         if (current != null) {
             try {
                 // The lifecycle goes even if the window refuses to leave, the way the floating
@@ -334,12 +367,19 @@ class OverlayWindowController(
      * OPAQUE rather than TRANSLUCENT, and the frozen frame is the whole display: the lookup UI is
      * composed into this same window, over the capture, so there is nothing left to see through it —
      * while a translucent window would let the app behind show wherever the capture is not opaque.
+     * Keeps the screen bright while the lookup window is visible; removing it restores normal
+     * screen timeout behavior.
      */
     private fun windowParams() = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            // Windows added via addView do not inherit the manifest's hardware acceleration
+            // (activities get it through PhoneWindow); without this flag the whole overlay
+            // renders on the software renderer.
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.OPAQUE
@@ -354,7 +394,12 @@ class OverlayWindowController(
     }
 
     /** The overlay on screen: the view to detach, the host its lifecycle runs on, its capture token. */
-    private class Showing(val view: View, val host: OverlayHost, val token: Long)
+    private class Showing(
+        val view: View,
+        val host: OverlayHost,
+        val token: Long,
+        val scan: Deferred<ScreenText?>
+    )
 }
 
 /**

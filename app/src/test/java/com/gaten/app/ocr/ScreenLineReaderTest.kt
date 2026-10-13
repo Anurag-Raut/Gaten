@@ -7,6 +7,8 @@
 package com.gaten.app.ocr
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -199,6 +201,57 @@ class ScreenLineReaderTest {
 
         assertTrue("the prefetch did not finish: asked=$asked", prefetchFinished.await(5, TimeUnit.SECONDS))
         assertEquals(listOf(2, 0, 1), asked)
+    }
+
+    @Test
+    fun aTapPromotesAnInFlightBackgroundRead() {
+        val screen = screenOf("描が水を飲む", "犬が走る")
+        val backgroundStarted = CountDownLatch(1)
+        val calls = Collections.synchronizedList(ArrayList<String>())
+        val reader = ScreenLineReader(
+            screen,
+            readLine = { calls.add("foreground"); "猫が水を飲む" },
+            timeoutMillis = 5_000,
+            onLog = {},
+            readLineBackground = { line ->
+                calls.add("background${screen.lines.indexOfFirst { it === line }}")
+                backgroundStarted.countDown()
+                if (line === screen.lines[0]) delay(5_000)
+                "猫"
+            }
+        )
+
+        reader.prefetch(listOf(0, 1))
+        assertTrue("background read did not start", backgroundStarted.await(5, TimeUnit.SECONDS))
+        assertEquals("猫が水を飲む", runBlocking { reader.read(0) })
+        Thread.sleep(200)
+        assertEquals(listOf("background0", "foreground", "background1"), calls)
+        reader.close()
+    }
+
+    @Test
+    fun concurrentForegroundReadsShareOneDeferred() {
+        val screen = screenOf("描が水を飲む")
+        val started = CountDownLatch(1)
+        val reader = ScreenLineReader(
+            screen,
+            readLine = {
+                started.countDown()
+                delay(100)
+                "猫が水を飲む"
+            },
+            timeoutMillis = 5_000,
+            onLog = {}
+        )
+
+        runBlocking {
+            val first = async(start = CoroutineStart.UNDISPATCHED) { reader.read(0) }
+            assertTrue("foreground read did not start", started.await(5, TimeUnit.SECONDS))
+            val second = async { reader.read(0) }
+            assertEquals("猫が水を飲む", first.await())
+            assertEquals("猫が水を飲む", second.await())
+        }
+        reader.close()
     }
 
     @Test

@@ -7,6 +7,7 @@
 package com.gaten.app.ocr
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,7 +59,8 @@ class ScreenLineReader(
     private val screen: ScreenText,
     private val readLine: suspend (ScreenLine) -> String?,
     private val timeoutMillis: Long = READ_TIMEOUT_MS,
-    private val onLog: (String) -> Unit = { message -> Log.d(TAG, message) }
+    private val onLog: (String) -> Unit = { message -> Log.d(TAG, message) },
+    private val readLineBackground: suspend (ScreenLine) -> String? = readLine
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -69,6 +73,9 @@ class ScreenLineReader(
 
     /** Lines whose read is over, so a later request can be reported as a cache hit. */
     private val read = ConcurrentHashMap.newKeySet<Int>()
+
+    /** In-flight reads explicitly promoted to foreground; concurrent taps join these. */
+    private val foregroundReads = ConcurrentHashMap.newKeySet<Int>()
 
     private var prefetchJob: Job? = null
 
@@ -100,7 +107,7 @@ class ScreenLineReader(
     suspend fun read(lineIndex: Int): String {
         val line = _text.value.lines.getOrNull(lineIndex) ?: return ""
         val alreadyRead = lineIndex in read
-        val deferred = deferredFor(lineIndex) ?: return line.text
+        val deferred = deferredFor(lineIndex, MangaOcrEngine.Priority.FOREGROUND) ?: return line.text
 
         val text = withTimeoutOrNull(timeoutMillis) { deferred.await() }
         if (text == null) {
@@ -116,16 +123,23 @@ class ScreenLineReader(
     /**
      * Reads [order] in the background, one line at a time and in that order. Calling it again
      * re-prioritises — the lines the reader just touched go first — while a read already under way
-     * is left to finish; lines already read are not read twice.
+     * is reused unless a foreground gesture promotes it; lines already read are not read twice.
      */
     fun prefetch(order: List<Int>) {
         prefetchJob?.cancel()
         prefetchJob = scope.launch {
             for (lineIndex in order) {
-                val deferred = deferredFor(lineIndex) ?: continue
+                val deferred = deferredFor(lineIndex, MangaOcrEngine.Priority.BACKGROUND) ?: continue
                 // Awaiting one before starting the next is what keeps a tap from queueing behind a
                 // whole screen's worth of reads.
-                deferred.await()
+                try {
+                    deferred.await()
+                } catch (cancelled: CancellationException) {
+                    currentCoroutineContext().ensureActive()
+                    // A tap may have promoted this line by cancelling its background Deferred.
+                    // Join the replacement, then keep the rest of the prefetch order alive.
+                    results[lineIndex]?.takeUnless { it === deferred }?.await()
+                }
             }
             onLog("manga-ocr prefetch finished (${order.size} lines)")
         }
@@ -145,20 +159,48 @@ class ScreenLineReader(
      * built with: the meiki-only placeholders are appended after construction
      * ([append]), and they are read like every other line.
      */
-    private fun deferredFor(lineIndex: Int): Deferred<String>? {
+    private fun deferredFor(
+        lineIndex: Int,
+        priority: MangaOcrEngine.Priority
+    ): Deferred<String>? {
         val line = _text.value.lines.getOrNull(lineIndex) ?: return null
-        return results.computeIfAbsent(lineIndex) { scope.async { readOnce(lineIndex, line) } }
+        return synchronized(results) {
+            results[lineIndex]?.let { existing ->
+                if (priority == MangaOcrEngine.Priority.FOREGROUND &&
+                    !existing.isCompleted && lineIndex !in foregroundReads
+                ) {
+                    existing.cancel()
+                } else {
+                    return@synchronized existing
+                }
+            }
+            if (priority == MangaOcrEngine.Priority.FOREGROUND) foregroundReads.add(lineIndex)
+            scope.async {
+                readOnce(
+                    lineIndex,
+                    line,
+                    priority,
+                    if (priority == MangaOcrEngine.Priority.BACKGROUND) readLineBackground else readLine
+                )
+            }.also { results[lineIndex] = it }
+        }
     }
 
     /** One read, with the model's answer guarded and logged. ML Kit's text when nothing is kept. */
-    private suspend fun readOnce(lineIndex: Int, line: ScreenLine): String {
+    private suspend fun readOnce(
+        lineIndex: Int,
+        line: ScreenLine,
+        priority: MangaOcrEngine.Priority,
+        reader: suspend (ScreenLine) -> String?
+    ): String {
         val startedAt = System.nanoTime()
         var timedOut = false
+        if (priority == MangaOcrEngine.Priority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
         val raw = mutex.withLock {
             try {
                 // withTimeout rather than withTimeoutOrNull: a read that returns nothing (the model
                 // is not installed) is not a timeout and is not logged.
-                withTimeout(timeoutMillis) { readLine(line) }
+                withTimeout(timeoutMillis) { reader(line) }
             } catch (_: TimeoutCancellationException) {
                 timedOut = true
                 null

@@ -32,9 +32,9 @@ import kotlin.math.roundToInt
  * The model (41 MB) ships inside the APK as the asset `meiki/detect.onnx`, fetched at build time by
  * the `fetchMeikiModel` Gradle task, and the session is built from it and reused across calls — but
  * not for the life of the process: [OcrModels] releases it once the models have been idle for a
- * while ([release]), and the next call builds it again from the asset. Every call takes [lock] for
- * the whole pass, so two lookups cannot drive the session at once and a release cannot close it
- * mid-inference.
+ * while ([release]), and the next call builds it again from the asset. Each tile takes [lock] and
+ * resolves its session while holding it, so inference cannot overlap a release. Between tiles,
+ * foreground lookups can pause this background work without holding the native session lock.
  *
  * A screenshot is taller or wider than the model's square input, so it is cut into overlapping
  * square tiles ([DetectionMerge.planTiles]) and each tile is letterboxed to 640x640 and run on its
@@ -79,32 +79,34 @@ object MeikiDetector {
      */
     suspend fun detect(context: Context, bitmap: Bitmap): List<Box> {
         val started = SystemClock.elapsedRealtime()
-        // The session is in use from here to the end of the pass, and the inference runs outside
-        // [session]'s own lock, so [lock] is held for the whole of it: [release] waits here rather
-        // than close the session under a run.
+        // OcrModels pins the session for this pass. The lock is acquired per tile so a foreground
+        // request can be observed between tiles; holding it across the whole screenshot would make
+        // a background pass impossible to pause promptly.
         OcrModels.begin()
         try {
-            synchronized(lock) {
-                val model = session(context) ?: return emptyList()
-                return try {
-                    val scored = ArrayList<DetectionMerge.ScoredBox>()
-                    for (tile in DetectionMerge.planTiles(bitmap.width, bitmap.height)) {
-                        coroutineContext.ensureActive()
-                        if (tile.width <= 0 || tile.height <= 0) continue
-                        scored.addAll(detectTile(model, bitmap, tile))
+            return try {
+                val scored = ArrayList<DetectionMerge.ScoredBox>()
+                for (tile in DetectionMerge.planTiles(bitmap.width, bitmap.height)) {
+                    coroutineContext.ensureActive()
+                    OcrPriority.awaitBackgroundTurn()
+                    if (tile.width <= 0 || tile.height <= 0) continue
+                    synchronized(lock) {
+                        session(context)?.let { model ->
+                            scored.addAll(detectTile(model, bitmap, tile))
+                        }
                     }
-                    val boxes = DetectionMerge.nms(scored, DetectionMerge.CROSS_TILE_IOU).map { it.box }
-                    Log.d(TAG, "meiki: ${boxes.size} boxes, ${SystemClock.elapsedRealtime() - started} ms")
-                    boxes
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "meiki inference failed", e)
-                    emptyList()
-                } catch (e: OutOfMemoryError) {
-                    Log.w(TAG, "meiki ran out of memory", e)
-                    emptyList()
                 }
+                val boxes = DetectionMerge.nms(scored, DetectionMerge.CROSS_TILE_IOU).map { it.box }
+                Log.d(TAG, "meiki: ${boxes.size} boxes, ${SystemClock.elapsedRealtime() - started} ms")
+                boxes
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "meiki inference failed", e)
+                emptyList()
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "meiki ran out of memory", e)
+                emptyList()
             }
         } finally {
             OcrModels.end()
@@ -137,8 +139,8 @@ object MeikiDetector {
     /**
      * Drops the session so the ~41 MB it holds goes back to the system; the next [detect] builds it
      * again from the packaged asset. [OcrModels] calls this once the models have been idle for a
-     * while, and when the system is short on memory. It waits on [lock], so a pass already inside
-     * [detect] keeps the session until it is done. True when a session was dropped.
+     * while, and when the system is short on memory. A pass is pinned by [OcrModels], and each tile
+     * reacquires [lock] before using its session. True when a session was dropped.
      */
     fun release(): Boolean = synchronized(lock) {
         val dropped = session

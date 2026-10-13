@@ -11,6 +11,7 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +66,8 @@ object MangaOcrEngine {
 
     private val mutex = Mutex()
 
+    enum class Priority { FOREGROUND, BACKGROUND }
+
     /** The loaded pair, together with the files it was built from. */
     private var loaded: Loaded? = null
 
@@ -81,26 +84,43 @@ object MangaOcrEngine {
      * model is not installed, cannot be loaded, or inference fails. Never throws, and safe to call
      * from several coroutines: the calls are serialized on [mutex].
      */
-    suspend fun recognize(context: Context, crop: Bitmap): String? = withContext(Dispatchers.Default) {
+    suspend fun recognize(
+        context: Context,
+        crop: Bitmap,
+        priority: Priority = Priority.FOREGROUND
+    ): String? = withContext(Dispatchers.Default) {
         // The pair is in use from here to the end of the call, so [OcrModels]' idle clock must not
         // run it out mid-inference: the use counts in on the way in and out on the way out.
         OcrModels.begin()
+        if (priority == Priority.FOREGROUND) OcrPriority.beginForeground()
         try {
-            mutex.withLock {
-                try {
-                    infer(context, crop)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "manga-ocr inference failed", e)
-                    null
-                } catch (e: OutOfMemoryError) {
-                    // The encoder's working set is tens of megabytes; on a loaded device that can fail.
-                    Log.w(TAG, "manga-ocr ran out of memory", e)
-                    null
+            val queueStarted = SystemClock.elapsedRealtime()
+            while (true) {
+                if (priority == Priority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
+                mutex.lock()
+                if (priority == Priority.BACKGROUND && OcrPriority.foregroundPending()) {
+                    mutex.unlock()
+                    continue
                 }
+                break
+            }
+            try {
+                val queueWait = SystemClock.elapsedRealtime() - queueStarted
+                if (queueWait > 0) Log.d(TAG, "manga-ocr queue wait=${queueWait}ms priority=$priority")
+                infer(context, crop)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "manga-ocr inference failed", e)
+                null
+            } catch (e: OutOfMemoryError) {
+                Log.w(TAG, "manga-ocr ran out of memory", e)
+                null
+            } finally {
+                mutex.unlock()
             }
         } finally {
+            if (priority == Priority.FOREGROUND) OcrPriority.endForeground()
             OcrModels.end()
         }
     }
@@ -113,8 +133,11 @@ object MangaOcrEngine {
      * the native side is never interrupted mid-inference.
      */
     private suspend fun infer(context: Context, crop: Bitmap): String? {
+        val started = SystemClock.elapsedRealtime()
         val model = load(context) ?: return null
+        val loadedAt = SystemClock.elapsedRealtime()
         val input = OcrPreprocess.toModelInput(crop)
+        val preprocessedAt = SystemClock.elapsedRealtime()
 
         OnnxTensor.createTensor(
             model.environment,
@@ -122,8 +145,12 @@ object MangaOcrEngine {
             longArrayOf(1, 3, MODEL_SIZE, MODEL_SIZE)
         ).use { pixelValues ->
             model.encoder.run(mapOf(ENCODER_INPUT to pixelValues)).use { encoded ->
+                val encodedAt = SystemClock.elapsedRealtime()
                 val hidden = encoded.get(ENCODER_OUTPUT).orElse(null) as? OnnxTensor ?: return null
                 val ids = decode(model, hidden)
+                val decodedAt = SystemClock.elapsedRealtime()
+                Log.d(TAG, "manga-ocr timing: load=${loadedAt - started}ms preprocess=${preprocessedAt - loadedAt}ms " +
+                    "encode=${encodedAt - preprocessedAt}ms decode=${decodedAt - encodedAt}ms tokens=${ids.size}")
                 return MangaOcrPostProcess.process(model.tokenizer.decode(ids, 0, ids.size))
             }
         }
