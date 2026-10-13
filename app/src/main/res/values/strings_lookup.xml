@@ -25,4 +25,6 @@
     <string name="lookup_cd_close">Close</string>
     <string name="lookup_cd_copy">Copy recognized text</string>
     <string name="lookup_cd_select_again">Select again</string>
+    <string name="lookup_cd_scroll_back">Show earlier words</string>
+    <string name="lookup_cd_scroll_forward">Show more words</string>
 </resources>

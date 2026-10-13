@@ -36,9 +36,12 @@ import com.gaten.app.ui.overlay.ViewMapping
 /** Degenerate gestures (a tap or a sliver) are ignored below this side length, in view px. */
 internal const val MIN_SELECTION_PX = 24f
 
-/** Stroke and corner radius of the faint outlines drawn around the indexed lines. */
+/** Stroke and corner radius of the outlines drawn around the indexed lines. */
 private val OutlineStrokeWidth = 1.5.dp
 private val OutlineCorner = 4.dp
+
+/** The dark casing under each line outline, so it reads on light pages too. */
+private val OutlineHaloWidth = 4.dp
 
 /** Debug layer ("Show text boxes"): line bounds in one colour, character boxes in another. */
 private val DebugLineColor = Color.Red.copy(alpha = 0.9f)
@@ -70,7 +73,8 @@ internal fun buildTrailPath(points: List<Offset>): Path = Path().apply {
  * Draws the dim-over-everything scrim (the selection box stays clear with a 2px outline), the
  * live lasso trail while the user is drawing, and the frozen trail fading out once the result
  * has arrived. While the screen index is ready and the user is selecting, every indexed line
- * gets a faint outline, fading in so the reader can see what a tap will now hit. Drag and tap
+ * gets an outline — a dark halo under the indigo core, so it reads on light and dark pages
+ * alike — fading in so the reader can see what a tap will now hit. Drag and tap
  * gestures are active only while [interactive]; the result sheet sits on top and handles its own
  * touches afterwards.
  *
@@ -175,8 +179,17 @@ fun LassoLayer(
                 // so it gets no outline either.
                 if (line.charBoxes.isEmpty()) continue
                 val bounds = mapping.toView(line.bounds)
+                // A dark casing under the core stroke, the way map routes are drawn: on a white
+                // speech bubble the halo carries the contrast, on a dark page the indigo does.
                 drawRoundRect(
-                    color = primary.copy(alpha = 0.45f * outlineAlpha),
+                    color = Color.Black.copy(alpha = 0.6f * outlineAlpha),
+                    topLeft = bounds.topLeft,
+                    size = bounds.size,
+                    cornerRadius = CornerRadius(OutlineCorner.toPx()),
+                    style = Stroke(width = OutlineHaloWidth.toPx())
+                )
+                drawRoundRect(
+                    color = primary.copy(alpha = outlineAlpha),
                     topLeft = bounds.topLeft,
                     size = bounds.size,
                     cornerRadius = CornerRadius(OutlineCorner.toPx()),

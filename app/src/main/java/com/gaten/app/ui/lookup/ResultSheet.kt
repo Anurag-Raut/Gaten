@@ -11,7 +11,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -19,6 +22,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -45,12 +49,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -75,6 +82,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -537,7 +545,8 @@ private fun EmptyState(
 /**
  * The scanned words as chips, the selected one filled primary. One horizontally scrolling row at
  * every dock — portrait bottom sheet and landscape side panel alike — so the words never wrap and
- * the panel's height cannot change with how many were scanned.
+ * the panel's height cannot change with how many were scanned. A small arrow rides each edge and
+ * fades in only while chips remain hidden past it, so the row itself says when it can scroll.
  */
 @Composable
 private fun ChipRow(
@@ -547,16 +556,82 @@ private fun ChipRow(
     type: SheetType,
     compact: Boolean
 ) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-        contentPadding = PaddingValues(horizontal = Spacing.l),
-        verticalAlignment = Alignment.CenterVertically,
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = ChipRowHeight, max = ChipRowHeight)
     ) {
-        itemsIndexed(words) { index, word ->
-            Chip(word, index == selected, { onSelect(index) }, type, compact)
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            contentPadding = PaddingValues(horizontal = Spacing.l),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            itemsIndexed(words) { index, word ->
+                Chip(word, index == selected, { onSelect(index) }, type, compact)
+            }
+        }
+
+        ChipRowArrow(
+            visible = listState.canScrollBackward,
+            icon = Icons.Rounded.ChevronLeft,
+            description = R.string.lookup_cd_scroll_back,
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            // A tap pages the row by most of its width, a sweep's worth of words at a time.
+            scope.launch {
+                val page = (listState.layoutInfo.viewportEndOffset -
+                    listState.layoutInfo.viewportStartOffset).toFloat()
+                listState.animateScrollBy(-page * 0.85f)
+            }
+        }
+        ChipRowArrow(
+            visible = listState.canScrollForward,
+            icon = Icons.Rounded.ChevronRight,
+            description = R.string.lookup_cd_scroll_forward,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            scope.launch {
+                val page = (listState.layoutInfo.viewportEndOffset -
+                    listState.layoutInfo.viewportStartOffset).toFloat()
+                listState.animateScrollBy(page * 0.85f)
+            }
+        }
+    }
+}
+
+/** One paging arrow over the chip row's edge; a tap runs [onClick], which scrolls the row. */
+@Composable
+private fun ChipRowArrow(
+    visible: Boolean,
+    icon: ImageVector,
+    @StringRes description: Int,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Icon(
+                icon,
+                contentDescription = stringResource(description),
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .padding(Spacing.xs)
+                    .size(20.dp)
+            )
         }
     }
 }
