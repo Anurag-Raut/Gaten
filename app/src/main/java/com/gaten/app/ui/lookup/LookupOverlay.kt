@@ -25,10 +25,17 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -443,7 +450,9 @@ fun LookupOverlay(
         Log.d(TAG, "Tap hit line $lineIndex")
         frozenTrail = null
         // Select the entire visible box immediately, including while OCR is running.
-        val selection = live.lines[lineIndex].bounds
+        val line = live.lines[lineIndex]
+        val selection = line.bounds
+        val phrase = tapPhraseCrop(live, lineIndex, x, y)
         val anchorBox = mapping.toView(selection)
         frozenBox = anchorBox
         lookupJob?.cancel()
@@ -455,32 +464,11 @@ fun LookupOverlay(
             val session = Any()
             val outcome = try {
                 val repo = awaitRepo()
-                val bitmapBox = Rect(
-                    selection.left.toFloat(),
-                    selection.top.toFloat(),
-                    selection.right.toFloat(),
-                    selection.bottom.toFloat()
-                )
-                // Use the circle's exact-crop OCR and acceptance rules. The live index only
-                // supplements the selected line; an overlapping neighbour must not ride along.
-                val lookup = runLookup(context, bmp, bitmapBox, repo, cache = cropCache) {
-                    val indexed = reader?.text?.value ?: live
-                    indexed.copy(lines = listOf(indexed.lines[lineIndex]))
-                }
+                // Keep this snapshot throughout the crop, correction and distance ranking;
+                // background line reads must not shift the phrase's text offsets midway.
+                val lookup = runTapLookup(context, bmp, line, phrase, x, y, repo, cropCache)
                 val failure = (repoState as? RepoState.Failed)?.message
-                val settled = if (failure != null) lookup.copy(error = failure) else lookup
-                // The tap asked for the word under the finger: rank the final answer nearest the
-                // tapped point first, against the tapped line's latest geometry. The circle path
-                // is deliberately left in the scan's order — a circle has no single point to rank
-                // by, and ranking it from an arbitrary centre would reorder it wrongly.
-                withContext(Dispatchers.Default) {
-                    val geometry = (reader?.text?.value ?: live).lines.getOrNull(lineIndex)
-                    if (geometry == null || geometry.charBoxes.isEmpty()) {
-                        settled
-                    } else {
-                        settled.copy(words = rankWordsByTapDistance(settled.words, geometry, x, y))
-                    }
-                }
+                if (failure != null) lookup.copy(error = failure) else lookup
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -604,13 +592,21 @@ fun LookupOverlay(
  * it has something to say, so it never covers the text the reader is selecting.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun StatusPill(text: Int, busy: Boolean) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         modifier = Modifier
-            .statusBarsPadding()
-            .padding(top = Spacing.m)
+            // Below whatever occupies the top band — the status bar even when the app behind
+            // hides it, and the camera cutout — plus one fixed gap. Horizontal sides ride along
+            // so a landscape side cutout cannot cover the pill either.
+            .windowInsetsPadding(
+                WindowInsets.statusBarsIgnoringVisibility
+                    .union(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+            )
+            .padding(top = Spacing.l)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

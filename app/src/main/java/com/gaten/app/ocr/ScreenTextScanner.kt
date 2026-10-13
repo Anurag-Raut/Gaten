@@ -150,7 +150,7 @@ object ScreenTextScanner {
         } else {
             fallbackCharBoxes(line, text, bounds, vertical)
         }
-        return ScreenLine(text, bounds, vertical, boxes)
+        return ScreenLine(text, bounds, vertical, boxes, detectorBounds = mlKit)
     }
 
     /** The line's [bounds] grown by [TIGHTEN_MARGIN] px and clamped to [bitmap]'s edges, or null. */

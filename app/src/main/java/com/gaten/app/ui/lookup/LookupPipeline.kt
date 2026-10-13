@@ -16,6 +16,7 @@ import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.WordScanner
 import com.gaten.app.ocr.Box
+import com.gaten.app.ocr.CharBoxAlign
 import com.gaten.app.ocr.JapaneseOcr
 import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.JapaneseText
@@ -24,6 +25,7 @@ import com.gaten.app.ocr.OcrRepair
 import com.gaten.app.ocr.ScreenLine
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.interpolateCharBoxes
+import com.gaten.app.ocr.withText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -123,7 +125,7 @@ internal class ExactCropOcrCache(
 
 /**
  * One selection lookup: the exact crop is read by manga-ocr, and the selected index lines
- * supplement that reading's words. A tap passes its line bounds; a circle passes its drawn bounds.
+ * supplement that reading's words. Circles pass their drawn bounds; taps use [runTapLookup].
  *
  * The crop is read first and unconditionally — whatever the index found on the screen at large,
  * whether or not its lines have Japanese in them, and whether or not there is an index at all.
@@ -160,16 +162,7 @@ internal suspend fun runLookup(
     val clamped = clampedBox(screenshot, box)
     val crop = Bitmap.createBitmap(screenshot, clamped.left, clamped.top,
         clamped.right - clamped.left, clamped.bottom - clamped.top)
-    val reading = withContext(Dispatchers.Default) {
-        cache?.setModelRevision(modelRevision(context))
-        val started = SystemClock.elapsedRealtime()
-        val read = suspend {
-            JapaneseOcr.readLineWithMangaOcr(context, crop, Box(0, 0, crop.width, crop.height))
-        }
-        (if (cache == null) read() else cache.read(clamped, read)).also {
-            Log.d(LOOKUP_TAG, "crop read=${SystemClock.elapsedRealtime() - started}ms")
-        }
-    }
+    val reading = readExactCrop(context, crop, clamped, cache)
 
     return withContext(Dispatchers.Default) {
         val lookup: (String) -> List<DictEntry> =
@@ -195,6 +188,91 @@ internal suspend fun runLookup(
         Log.d(LOOKUP_TAG, "supplement=${SystemClock.elapsedRealtime() - supplementStarted}ms")
         result
     }
+}
+
+/** Reads an already-cut bitmap with the same foreground OCR and screenshot cache for both gestures. */
+private suspend fun readExactCrop(
+    context: Context,
+    crop: Bitmap,
+    box: Box,
+    cache: ExactCropOcrCache?
+): String? = withContext(Dispatchers.Default) {
+    cache?.setModelRevision(modelRevision(context))
+    val started = SystemClock.elapsedRealtime()
+    val read = suspend {
+        JapaneseOcr.readLineWithMangaOcr(context, crop, Box(0, 0, crop.width, crop.height))
+    }
+    (if (cache == null) read() else cache.read(box, read)).also {
+        Log.d(LOOKUP_TAG, "crop read=${SystemClock.elapsedRealtime() - started}ms")
+    }
+}
+
+/** Reads a padded phrase, then answers the whole frozen line without waiting for background OCR. */
+internal suspend fun runTapLookup(
+    context: Context,
+    screenshot: Bitmap,
+    line: ScreenLine,
+    phrase: TapPhrase?,
+    x: Int,
+    y: Int,
+    repo: JmdictRepository?,
+    cache: ExactCropOcrCache
+): LookupResult = withContext(Dispatchers.Default) {
+    val reading = phrase?.let {
+        val box = clampedBox(screenshot, it.bounds)
+        val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
+        readExactCrop(context, crop, box, cache)
+    }
+    val lookup: (String) -> List<DictEntry> =
+        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
+    tapLookupResult(line, phrase, reading, x, y, lookup)
+}
+
+/**
+ * Corrects only the frozen phrase span, keeping surrounding text and geometry intact. Scanning the
+ * corrected sentence keeps word offsets and Anki context consistent, even when OCR inserts characters.
+ * Distance ranking precedes deduplication and the display cap so the tapped occurrence survives.
+ */
+internal fun tapLookupResult(
+    line: ScreenLine,
+    phrase: TapPhrase?,
+    reading: String?,
+    x: Int,
+    y: Int,
+    lookup: (String) -> List<DictEntry>,
+    maxWords: Int = 24
+): LookupResult {
+    val cachedLookup = memoizedLookup(lookup)
+    var corrected = line.withText(OcrRepair.repair(line.text, cachedLookup))
+    val region = phrase?.takeIf {
+        it.start >= 0 && it.endExclusive > it.start && it.endExclusive <= line.text.length &&
+            line.charBoxes.size == line.text.length && it.bounds.width > 0 && it.bounds.height > 0
+    }
+    val replacement = if (region == null) null else acceptedReading(reading)
+        ?.let { OcrRepair.repair(it, cachedLookup) }
+    if (region != null && replacement != null) {
+        val from = region.start
+        val to = region.endExclusive
+        val boxes = CharBoxAlign.align(
+            corrected.text.substring(from, to), corrected.charBoxes.subList(from, to),
+            replacement, region.bounds, line.vertical
+        )
+        corrected = corrected.copy(
+            text = corrected.text.replaceRange(from, to, replacement),
+            charBoxes = corrected.charBoxes.take(from) + boxes + corrected.charBoxes.drop(to)
+        )
+    }
+    if (maxWords <= 0) return LookupResult(corrected.text, emptyList())
+    val words = WordScanner.scan(corrected.text, cachedLookup, maxWords = maxOf(1, corrected.text.length))
+        .map { it.copy(context = corrected.text) }
+    val preferredStart = if (replacement != null && region != null) region.start else 0
+    val preferredEnd = preferredStart + (replacement?.length ?: 0)
+    return LookupResult(
+        ocrText = corrected.text,
+        words = rankWordsByTapDistance(words, corrected, x, y, preferredStart, preferredEnd)
+            .distinctBy { it.surface }
+            .take(maxWords)
+    )
 }
 
 internal fun mergePrimary(primary: LookupResult, supplement: LookupResult, maxWords: Int = 24): LookupResult =
