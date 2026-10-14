@@ -530,16 +530,19 @@ private fun ColumnScope.SheetBody(
                 compact = compact
             )
             Spacer(Modifier.height(if (compact) Spacing.xs else Spacing.s))
+            // Side dock: fill, so the scrolling entry stretches and the Add button lands on the
+            // panel's bottom edge however short the entry is. Bottom dock: hug, so the portrait
+            // sheet still grows to its content and the button sits directly under it.
             Crossfade(
                 targetState = selected,
                 animationSpec = tween(150),
                 label = "entry",
-                modifier = Modifier.weight(1f, fill = false)
+                modifier = Modifier.weight(1f, fill = compact)
             ) { index ->
                 EntryColumn(result.words[index], type, compact)
             }
-            // Pinned below the scrolling entry: the crossfade's weight(1f, fill = false) keeps
-            // short content hugging the button and lets long entries scroll over it.
+            // Pinned below the scrolling entry — outside it, so a long entry scrolls under the
+            // button instead of pushing it past the panel's bottom edge.
             AddToAnki(result.words[selected], type, compact)
         }
     }
@@ -905,6 +908,9 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
             }
         }
     }
+    // A little air under the button: in a side dock it would otherwise sit flush on the panel's
+    // bottom edge, since only the docked screen edge carries the system-bar inset.
+    Spacer(Modifier.height(Spacing.s))
 }
 
 /**
