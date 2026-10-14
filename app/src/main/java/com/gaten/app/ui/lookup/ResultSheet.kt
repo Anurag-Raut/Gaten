@@ -538,6 +538,9 @@ private fun ColumnScope.SheetBody(
             ) { index ->
                 EntryColumn(result.words[index], type, compact)
             }
+            // Pinned below the scrolling entry: the crossfade's weight(1f, fill = false) keeps
+            // short content hugging the button and lets long entries scroll over it.
+            AddToAnki(result.words[selected], type, compact)
         }
     }
 }
@@ -798,7 +801,6 @@ private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
         if (word.entries.size > 1) {
             OtherMatches(word, type, compact)
         }
-        AddToAnki(word, type, compact)
     }
 }
 
@@ -820,14 +822,15 @@ private sealed interface AnkiUiState {
  * ask for — hands the word to AnkiDroid's share handler instead. Hidden entirely when AnkiDroid is
  * not installed.
  *
- * The state lives with the entry it belongs to, so selecting another word chip starts from a fresh
- * button.
+ * The sheet pins this button below the scrolling entry. The state is keyed on the card and the
+ * AnkiDroid status, so selecting another word chip starts from a fresh button.
  */
 @Composable
 private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val status = remember { AnkiExporter.status(context) }
+
     val card = AnkiCard.from(word, sentence = word.context)
     var state by remember(card.expression, status) {
         mutableStateOf<AnkiUiState>(
