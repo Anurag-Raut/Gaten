@@ -32,8 +32,9 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
    database built from JMdict and JMnedict, and the overlay lists the matching entries.
 8. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to a
-   "Gaten" deck (word, reading, meaning and the full line it came from) through AnkiDroid's
-   instant-add API. The first add asks for AnkiDroid's database permission; no network is used.
+   deck of your choice (word, reading, meaning and the full line it came from) through AnkiDroid's
+   instant-add API. Configure it under **Anki → Customize cards** on the main screen; no network
+   is used for Anki export.
 
 Steps 2–7 are fully offline, and the app makes no network request of any kind until — and unless —
 the reader downloads the optional stylized-text model.
@@ -97,6 +98,30 @@ likely to need a real device to confirm.
 
    The trigger is a toggle: firing it while the panel is open closes the panel instead of starting
    another lookup.
+
+5. **Optional — customize Anki cards.** Open **Anki → Customize cards**. The default is the
+   existing Gaten deck and four-field note type. Enter a deck name (including nested names such
+   as `Japanese::Reading`) or allow AnkiDroid access to choose an existing deck. Add space-separated
+   tags if wanted. New decks and Gaten note types are created only when you export a word.
+   - Choose **Gaten cards (customizable)** to edit the front/back HTML and CSS. Available fields
+     are `{{Expression}}`, `{{Reading}}`, `{{Meaning}}`, and `{{Sentence}}`; the back can use
+     `{{FrontSide}}`. Conditional sections such as `{{#Reading}}…{{/Reading}}` are supported.
+     Changed layouts use a separate note type for future exports, leaving existing cards and
+     AnkiDroid template edits intact. Restoring defaults uses the original Gaten note type.
+   - Or choose an existing standard note type and map each of its fields to Expression, Reading,
+     Meaning, Sentence, or Leave empty. Its templates and styling remain managed in AnkiDroid.
+     Expression must appear somewhere, and the first field must have a value for each exported
+     word. Cloze note types are not supported. If fields change in AnkiDroid, select the note type
+     again and save the updated mapping.
+   - Duplicates are checked against the mapped first field within the selected note type across
+     all decks. A new layout creates a different note type, so its duplicate history is separate.
+   - Tap **Save** to apply your settings. Without database access, the lookup uses AnkiDroid's
+     share screen; choose the deck and note type there. Gaten settings apply to direct export.
+
+   The deck/note-type/field-mapping workflow follows established patterns in
+   [Yomitan](https://yomitan.wiki/anki/) and
+   [asbplayer](https://docs.asbplayer.dev/docs/reference/settings/). Gaten uses AnkiDroid's local
+   provider instead of their AnkiConnect transport; no code was copied from these projects.
 
 ## Building from source
 
