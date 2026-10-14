@@ -59,6 +59,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -91,12 +92,17 @@ private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSear
 private const val MEIKI_MODEL_URL = "https://huggingface.co/rtr46/meiki.text.detect.v0"
 
 /**
- * Home screen: service status, the two ways to start a lookup, the optional manga-ocr model and the
- * legal footer. The app is used from the overlay, so this stays a plain setup page.
+ * Home screen: service status, lookup triggers, the optional manga-ocr model, Anki settings, and
+ * the legal footer. The app is used from the overlay, so this stays a plain setup page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen() {
+    var showAnkiSettings by rememberSaveable { mutableStateOf(false) }
+    if (showAnkiSettings) {
+        AnkiSettingsScreen(onClose = { showAnkiSettings = false })
+        return
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboard = LocalClipboardManager.current
@@ -284,6 +290,18 @@ fun HomeScreen() {
                     OcrPreferences.setShowCharBoxes(context, checked)
                 }
             )
+
+            Spacer(modifier = Modifier.height(Spacing.xxl))
+            SectionLabel(text = stringResource(R.string.anki_settings_title))
+            Text(
+                text = stringResource(R.string.anki_settings_summary),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.s))
+            OutlinedButton(onClick = { showAnkiSettings = true }) {
+                Text(stringResource(R.string.anki_settings_open))
+            }
 
             Spacer(modifier = Modifier.height(Spacing.xxl))
             AboutFooter()

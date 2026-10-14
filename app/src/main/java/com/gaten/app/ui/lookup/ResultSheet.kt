@@ -101,6 +101,7 @@ import com.gaten.app.R
 import com.gaten.app.anki.AddResult
 import com.gaten.app.anki.AnkiCard
 import com.gaten.app.anki.AnkiExporter
+import com.gaten.app.anki.AnkiPreferences
 import com.gaten.app.anki.AnkiStatus
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.alternativeHeadwordFor
@@ -820,7 +821,7 @@ private sealed interface AnkiUiState {
 }
 
 /**
- * "Add to Anki" for [word]: an existing Gaten note is checked when this entry opens, then a tap
+ * "Add to Anki" for [word]: the configured note type is checked when this entry opens, then a tap
  * adds the card, or — when AnkiDroid's database permission is not granted, which the overlay cannot
  * ask for — hands the word to AnkiDroid's share handler instead. Hidden entirely when AnkiDroid is
  * not installed.
@@ -833,9 +834,10 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val status = remember { AnkiExporter.status(context) }
+    val settings = AnkiPreferences.load(context)
 
     val card = AnkiCard.from(word, sentence = word.context)
-    var state by remember(card.expression, status) {
+    var state by remember(card, status, settings) {
         mutableStateOf<AnkiUiState>(
             if (status == AnkiStatus.Ready) AnkiUiState.Checking else AnkiUiState.Idle
         )
@@ -843,9 +845,9 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
 
     if (status == AnkiStatus.NotInstalled) return
 
-    LaunchedEffect(card.expression, status) {
+    LaunchedEffect(card, status, settings) {
         if (status == AnkiStatus.Ready) {
-            state = if (AnkiExporter.isDuplicate(context, card)) {
+            state = if (AnkiExporter.isDuplicate(context, card, settings)) {
                 AnkiUiState.Done(R.string.anki_duplicate)
             } else {
                 AnkiUiState.Idle
@@ -855,7 +857,7 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
 
     suspend fun add() {
         state = AnkiUiState.Adding
-        when (val result = AnkiExporter.add(context, card)) {
+        when (val result = AnkiExporter.add(context, card, settings)) {
             AddResult.Added -> state = AnkiUiState.Done(R.string.anki_added)
             AddResult.Duplicate -> state = AnkiUiState.Done(R.string.anki_duplicate)
             is AddResult.Failed -> {
