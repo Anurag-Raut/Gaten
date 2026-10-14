@@ -20,8 +20,9 @@ import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 
 /**
- * Quick Settings tile: starts a lookup through [TileTriggerActivity], or opens accessibility
- * settings when the service is not enabled. Its state mirrors whether the service is enabled.
+ * Quick Settings tile: asks the connected accessibility service to dismiss the shade and start a
+ * lookup, or opens accessibility settings when the service is not enabled. Its state mirrors
+ * whether the service is enabled.
  */
 class LookupTileService : TileService() {
 
@@ -31,19 +32,17 @@ class LookupTileService : TileService() {
         Log.d(TAG, "Tile clicked. Service enabled: ${isAccessibilityServiceEnabled()}")
 
         if (isAccessibilityServiceEnabled()) {
-            // Launch the trigger activity which will collapse the shade and call the capture logic
-            val intent = Intent(this, TileTriggerActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (GatenAccessibilityService.instance == null) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.toast_tile_service_not_ready),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val pendingIntent = PendingIntent.getActivity(
-                    this, 0, intent, PendingIntent.FLAG_IMMUTABLE
-                )
-                startActivityAndCollapse(pendingIntent)
-            } else {
-                @Suppress("DEPRECATION")
-                startActivityAndCollapse(intent)
-            }
+            // The service dismisses Quick Settings and owns the capture pipeline, avoiding a
+            // temporary activity that can expose the launcher while the shade is collapsing.
+            GatenAccessibilityService.triggerCaptureFromTile()
         } else {
             // Guide user to enable accessibility
             Toast.makeText(this, getString(R.string.toast_enable_accessibility_tile), Toast.LENGTH_LONG).show()

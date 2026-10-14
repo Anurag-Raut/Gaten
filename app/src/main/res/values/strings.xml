@@ -17,6 +17,8 @@
 
     <!-- Toast Messages -->
     <string name="toast_enable_accessibility_tile">Please enable the Gaten Accessibility Service</string>
+    <string name="toast_tile_service_not_ready">Gaten accessibility service is not ready. Try again.</string>
+    <string name="toast_tile_collapse_failed">Could not close Quick Settings. Use another lookup trigger.</string>
 
     <!-- Accessibility Disclosure Dialog -->
     <string name="title_accessibility_permission">Grant Accessibility Permission</string>
