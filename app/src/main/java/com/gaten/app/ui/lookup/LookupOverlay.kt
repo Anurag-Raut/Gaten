@@ -525,7 +525,11 @@ fun LookupOverlay(
 
             // Pure drawing, over the selection canvas and under the pill: the ring around the edge
             // of the display, telling work apart from idle without ever taking a touch.
-            EdgeOutline(busy = busy, modifier = Modifier.fillMaxSize())
+            EdgeOutline(
+                busy = busy,
+                shown = phase != Phase.Result,
+                modifier = Modifier.fillMaxSize()
+            )
 
             AnimatedVisibility(
                 visible = busy || noticeUp,

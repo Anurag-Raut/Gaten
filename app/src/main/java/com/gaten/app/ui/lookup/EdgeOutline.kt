@@ -9,6 +9,7 @@ package com.gaten.app.ui.lookup
 import android.os.Build
 import android.view.RoundedCorner
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -40,6 +41,13 @@ private const val TRAVEL_MS = 2400
 private const val REVEAL_MS = 900
 
 /**
+ * How long it takes to leave again once the result sheet is up: the same animation backwards, but
+ * quicker and accelerating away, where the reveal was settling into place. The retract only has to
+ * clear the way for a sheet that is already sliding in.
+ */
+private const val RETRACT_MS = 420
+
+/**
  * The thin gradient ring around the whole overlay, over everything else in it.
  *
  * On open the ring draws itself in: two strokes leave the screen's bottom midpoint together, run
@@ -49,17 +57,30 @@ private const val REVEAL_MS = 900
  * runs primary -> tertiary -> primary along the diagonal and drifts along that diagonal while
  * [busy], so a lookup or the screen scan is visible at the very edge of the display; it holds
  * still when idle. Nothing here takes touches — it is drawing only.
+ *
+ * While [shown] is false the ring retracts: the reveal played backwards, so the two strokes leave
+ * the top midpoint last and meet again at the bottom midpoint. That is what happens when the result
+ * sheet comes up — the ring is the overlay's own frame, and a frame is not something the sheet
+ * should have to sit inside or cover. It draws itself back in on "Select again", the same way it
+ * arrived.
  */
 @Composable
-fun EdgeOutline(busy: Boolean, modifier: Modifier = Modifier) {
+fun EdgeOutline(busy: Boolean, shown: Boolean, modifier: Modifier = Modifier) {
     val view = LocalView.current
     val primary = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
     val tertiary = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f)
     val reveal = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        reveal.animateTo(1f, tween(REVEAL_MS, easing = FastOutSlowInEasing))
+    LaunchedEffect(shown) {
+        reveal.animateTo(
+            targetValue = if (shown) 1f else 0f,
+            animationSpec = tween(
+                durationMillis = if (shown) REVEAL_MS else RETRACT_MS,
+                easing = if (shown) FastOutSlowInEasing else FastOutLinearInEasing
+            )
+        )
     }
-    val sweep = if (busy) {
+    // Only while it is up: a retracted ring is not drawn, so there is nothing for the drift to show.
+    val sweep = if (busy && shown) {
         rememberInfiniteTransition(label = "edge outline").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
