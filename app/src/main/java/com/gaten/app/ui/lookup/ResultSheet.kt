@@ -141,11 +141,9 @@ private val ChipRowHeight = 40.dp
  * One sheet's whole text scale, so a dock only has to say whether it is compact.
  *
  * The bottom dock keeps the theme's own styles, only a step larger for the glosses (bodyLarge
- * 16sp -> 17sp) and the small muted lines (bodySmall 12sp -> 13sp). The side dock swaps in a tighter
- * copy of them: the headword drops from [MaterialTheme] displaySmall (32sp) to titleLarge (22sp),
- * the reading 16sp -> 15sp, the part-of-speech and badge line 12sp -> 11sp, the glosses to 14sp on a
- * 17sp line, the small muted lines to 12sp on a 15sp line, chips 14sp -> 12sp and the Add button's
- * label 14sp -> 12sp. Nothing here touches the theme.
+ * 16sp -> 17sp) and the small muted lines (bodySmall 12sp -> 13sp). The side dock uses a 24sp
+ * headword, 16sp readings, glosses and word chips, 12sp badges and 13sp labels. Its line heights keep the
+ * larger text readable within the compact panel. Nothing here touches the theme.
  */
 private data class SheetType(
     val header: TextStyle,
@@ -166,15 +164,15 @@ private fun sheetType(compact: Boolean): SheetType {
     return remember(compact, type) {
         if (compact) {
             SheetType(
-                header = type.bodyMedium.copy(fontSize = 12.sp),
-                headword = type.titleLarge,
-                reading = type.titleMedium.copy(fontSize = 15.sp, lineHeight = 20.sp),
-                small = type.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
-                gloss = type.bodyLarge.copy(fontSize = 14.sp, lineHeight = 17.sp),
-                chip = type.labelLarge.copy(fontSize = 12.sp),
-                menu = type.bodyMedium.copy(fontSize = 12.sp),
-                sub = type.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
-                button = type.labelSmall
+                header = type.bodyMedium.copy(fontSize = 13.sp),
+                headword = type.titleLarge.copy(fontSize = 24.sp),
+                reading = type.titleMedium.copy(fontSize = 16.sp, lineHeight = 22.sp),
+                small = type.labelSmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                gloss = type.bodyLarge.copy(fontSize = 16.sp, lineHeight = 20.sp),
+                chip = type.labelLarge.copy(fontSize = 16.sp),
+                menu = type.bodyMedium.copy(fontSize = 13.sp),
+                sub = type.bodySmall.copy(fontSize = 13.sp, lineHeight = 17.sp),
+                button = type.labelSmall.copy(fontSize = 13.sp)
             )
         } else {
             SheetType(
