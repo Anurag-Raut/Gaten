@@ -82,14 +82,6 @@
             </intent-filter>
         </service>
 
-        <activity
-            android:name=".TileTriggerActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:launchMode="singleInstance" />
-
         <receiver
             android:name=".LookupTriggerReceiver"
             android:exported="true">

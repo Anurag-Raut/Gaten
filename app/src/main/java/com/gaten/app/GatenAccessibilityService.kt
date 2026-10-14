@@ -26,6 +26,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 import com.gaten.app.data.BitmapRepository
 import com.gaten.app.lifecycle.CaptureToken
 import com.gaten.app.lifecycle.DisplayGeometry
@@ -64,6 +65,9 @@ private const val ShadeCollapseMs = 400L
  * being unbound or destroyed. Those dismissals end the lookup without playing the media back,
  * because the media was paused for a lookup that is over; the user's own dismissals — back, the
  * scrim, the trigger toggle — resume it as before.
+ *
+ * The Quick Settings tile calls the service directly after dismissing the shade, so no temporary
+ * activity can expose the launcher while the delayed screenshot is being requested.
  *
  * Every capture runs under a [CaptureToken], which is also the single-flight gate: the screenshot
  * answers on an executor while the trigger, the window and the calls that end it all live on the
@@ -694,6 +698,66 @@ class GatenAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "Trigger accepted (+${elapsedSinceTrigger()} ms since the trigger)")
                 service.startOrderedCapture(fromShade, token)
             }
+        }
+
+        /**
+         * Dismisses the Quick Settings shade from the connected service, then enters the normal
+         * single-flight capture pipeline. Some OEMs omit the shade-dismissal action, so a rejected
+         * action falls back to Back while handling the tile click. No activity or task is launched.
+         */
+        fun triggerCaptureFromTile() {
+            val service = instance
+            if (service == null) {
+                Log.d(TAG, "Tile trigger called but the accessibility service is not connected")
+                return
+            }
+            service.mainHandler.post {
+                if (!service.serviceConnected) {
+                    Log.d(TAG, "Tile trigger ignored: service is not connected")
+                    service.showTileToast(R.string.toast_tile_service_not_ready)
+                    return@post
+                }
+                if (!service.admissionAllowed()) {
+                    Log.d(TAG, "Tile trigger ignored: screen is off or locked")
+                    service.showTileToast(R.string.toast_tile_service_not_ready)
+                    service.syncFloatingButton()
+                    return@post
+                }
+                // A second click must not send Back after the first one already closed the shade.
+                if (service.captureToken.busy && !service.overlay.isShowing) {
+                    Log.d(TAG, "Tile capture already in flight - ignoring the new trigger")
+                    return@post
+                }
+
+                val collapsed = try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val dismissed = service.performGlobalAction(
+                            AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE
+                        )
+                        dismissed || run {
+                            Log.d(TAG, "Shade-dismissal action unavailable - closing Quick Settings with Back")
+                            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                        }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        service.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+                        true
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not dismiss the Quick Settings shade", e)
+                    false
+                }
+                if (!collapsed) {
+                    Log.w(TAG, "Quick Settings shade dismissal was rejected")
+                    service.showTileToast(R.string.toast_tile_collapse_failed)
+                    return@post
+                }
+                triggerCapture(fromShade = true)
+            }
+        }
+
+        private fun GatenAccessibilityService.showTileToast(messageResId: Int) {
+            Toast.makeText(this, messageResId, Toast.LENGTH_SHORT).show()
         }
     }
 }

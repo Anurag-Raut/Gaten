@@ -45,7 +45,7 @@ class SheetPlacementTest {
 
     @Test
     fun aWideLandscapeAnchorDocksTheSheetOnTheSideItCoversLess() {
-        // 300..2000 px: 809 px of it fall under the left panel against 337 px under the right one.
+        // 300..2000 px: 947 px of it fall under the left panel against 475 px under the right one.
         val anchor = Rect(300f, 100f, 2000f, 300f)
 
         val layout = chooseSheetLayout(anchor, landscapeWidth, landscapeHeight)
@@ -66,9 +66,8 @@ class SheetPlacementTest {
 
     @Test
     fun anAnchorBetweenThePanelsClearsBothSoTheFartherCentreWins() {
-        // In the gap at 1109..1663 neither panel is covered at all; the right panel's centre is
-        // 1016 px from the anchor's, the left panel's only 864 px.
-        val anchor = Rect(1200f, 100f, 1400f, 300f)
+        // Inside the gap between the panels, both are clear and the right panel's centre is farther.
+        val anchor = Rect(1300f, 100f, 1400f, 300f)
 
         val layout = chooseSheetLayout(anchor, landscapeWidth, landscapeHeight)
 
@@ -112,8 +111,8 @@ class SheetPlacementTest {
     }
 
     @Test
-    fun aSideDockTakesTwoFifthsOfTheWidthAndTheBottomDockThreeFifthsOfTheHeight() {
-        assertEquals(0.40f, SIDE_SHEET_WIDTH_FRACTION, 0f)
+    fun aSideDockTakesFortyFivePercentOfTheWidthAndTheBottomDockSixtyPercentOfTheHeight() {
+        assertEquals(0.45f, SIDE_SHEET_WIDTH_FRACTION, 0f)
         assertEquals(0.60f, BOTTOM_SHEET_HEIGHT_FRACTION, 0f)
         assertEquals(
             SIDE_SHEET_WIDTH_FRACTION,

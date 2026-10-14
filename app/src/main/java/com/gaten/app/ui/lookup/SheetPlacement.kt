@@ -10,10 +10,10 @@ import androidx.compose.ui.geometry.Rect
 import kotlin.math.sqrt
 
 /**
- * Share of the screen width a side-docked sheet occupies. Two fifths leaves the word the reader
- * picked — and the video it came from — visible beside the entry on a phone held sideways.
+ * Share of the screen width a side-docked sheet occupies. Slightly under half gives the larger
+ * text room while keeping the selected word and video visible beside the entry.
  */
-const val SIDE_SHEET_WIDTH_FRACTION = 0.40f
+const val SIDE_SHEET_WIDTH_FRACTION = 0.45f
 
 /**
  * Share of the screen height a bottom-docked sheet may occupy: the cap the portrait sheet has
