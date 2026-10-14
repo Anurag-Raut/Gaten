@@ -51,6 +51,7 @@ import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ui.lookup.LookupOverlay
 import com.gaten.app.ui.theme.GatenTheme
+import com.gaten.app.ui.theme.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -275,7 +276,11 @@ class OverlayWindowController(
         scan: Deferred<ScreenText?>
     ) = ComposeView(context).apply {
         setContent {
-            GatenTheme {
+            GatenTheme(
+                ThemePreferences.themeMode(context),
+                ThemePreferences.palette(context),
+                ThemePreferences.accent(context)
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent,

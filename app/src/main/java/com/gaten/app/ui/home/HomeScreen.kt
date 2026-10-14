@@ -22,10 +22,16 @@ import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +41,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -49,6 +56,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,6 +75,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -82,7 +95,12 @@ import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.OcrPreferences
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
+import com.gaten.app.ui.theme.AccentColor
+import com.gaten.app.ui.theme.Palette
 import com.gaten.app.ui.theme.Spacing
+import com.gaten.app.ui.theme.ThemeMode
+import com.gaten.app.ui.theme.accentRoles
+import com.gaten.app.ui.theme.paletteNeutrals
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -91,12 +109,20 @@ private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSear
 private const val MEIKI_MODEL_URL = "https://huggingface.co/rtr46/meiki.text.detect.v0"
 
 /**
- * Home screen: service status, the two ways to start a lookup, the optional manga-ocr model and the
- * legal footer. The app is used from the overlay, so this stays a plain setup page.
+ * Home screen: service status, the two ways to start a lookup, the optional manga-ocr model, the
+ * theme and accent choice and the legal footer. The app is used from the overlay, so this stays a
+ * plain setup page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    palette: Palette,
+    onPaletteChange: (Palette) -> Unit,
+    accent: AccentColor,
+    onAccentChange: (AccentColor) -> Unit
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboard = LocalClipboardManager.current
@@ -284,6 +310,16 @@ fun HomeScreen() {
                     OcrPreferences.setShowCharBoxes(context, checked)
                 }
             )
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            SectionLabel(text = stringResource(R.string.home_section_appearance))
+            val dark = themeMode.isDark(isSystemInDarkTheme())
+            ThemeRow(mode = themeMode, onChange = onThemeModeChange)
+            Spacer(modifier = Modifier.height(Spacing.m))
+            PaletteRow(dark = dark, selected = palette, onSelect = onPaletteChange)
+            Spacer(modifier = Modifier.height(Spacing.m))
+            AccentRow(dark = dark, selected = accent, onSelect = onAccentChange)
 
             Spacer(modifier = Modifier.height(Spacing.xxl))
             AboutFooter()
@@ -619,6 +655,232 @@ private fun DebugBoxesRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
         Spacer(modifier = Modifier.width(Spacing.m))
         Switch(checked = enabled, onCheckedChange = onToggle)
     }
+}
+
+/**
+ * The theme choice: follow the device, or force light or dark. Down here with the debug switch
+ * because the app is used from the overlay — this is a preference to find once, not a control to
+ * reach for. The choice is applied by the activity above this screen and stored by
+ * [com.gaten.app.ui.theme.ThemePreferences], which the overlay and the floating bubble read too.
+ */
+@Composable
+private fun ThemeRow(mode: ThemeMode, onChange: (ThemeMode) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
+    ) {
+        Text(
+            text = stringResource(R.string.home_theme_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(Spacing.xs))
+        Text(
+            text = stringResource(R.string.home_theme_support),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(Spacing.m))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            val modes = ThemeMode.entries
+            modes.forEachIndexed { index, entry ->
+                SegmentedButton(
+                    selected = entry == mode,
+                    onClick = { onChange(entry) },
+                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                    modifier = Modifier.weight(1f),
+                    label = { Text(stringResource(entry.labelRes())) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The accent: the one colour in the app, behind every dot, chip, button, outline and lasso. Each
+ * swatch is drawn in the accent's own tone for the current mode, so what is picked is what will be
+ * drawn. [dark] is the resolved mode rather than the reader's choice, so the swatches sit on the
+ * same light/dark decision the theme above them made.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AccentRow(dark: Boolean, selected: AccentColor, onSelect: (AccentColor) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
+    ) {
+        Text(
+            text = stringResource(R.string.home_accent_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(Spacing.xs))
+        Text(
+            text = stringResource(R.string.home_accent_support),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(Spacing.m))
+        // Wraps rather than scrolls: a narrow screen or a large display scale puts the last swatches
+        // on a second line instead of out of reach.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            verticalArrangement = Arrangement.spacedBy(Spacing.s)
+        ) {
+            for (accent in AccentColor.entries) {
+                val isSelected = accent == selected
+                val name = stringResource(accent.labelRes())
+                Box(
+                    modifier = Modifier
+                        .size(SwatchSize)
+                        .clip(CircleShape)
+                        // The ring sits in the swatch's own inset, so it is drawn beside the colour
+                        // rather than on top of it and stays readable on every accent.
+                        .then(
+                            if (isSelected) {
+                                Modifier.border(
+                                    width = 2.dp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    shape = CircleShape
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(SwatchInset)
+                        .clip(CircleShape)
+                        .background(accentRoles(accent, dark).primary)
+                        .selectable(
+                            selected = isSelected,
+                            role = Role.RadioButton,
+                            onClick = { onSelect(accent) }
+                        )
+                        .semantics { contentDescription = name }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The palette: the colour of the app's paper, and the accent that comes with it. Each swatch shows
+ * it — the palette's own paper with its accent in the middle, in the current mode — rather than
+ * naming it, so what is picked is what will be drawn. [dark] is the resolved mode, not the reader's
+ * choice, so the swatches sit on the same decision the theme above them made.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PaletteRow(dark: Boolean, selected: Palette, onSelect: (Palette) -> Unit) {
+    // Each palette's paper only has its lightness solved once per mode, not per drawn frame.
+    val swatches = remember(dark) {
+        Palette.entries.associateWith { entry ->
+            paletteNeutrals(entry, dark).background to
+                accentRoles(entry.defaultAccent, dark).primary
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
+    ) {
+        Text(
+            text = stringResource(R.string.home_palette_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(Spacing.xs))
+        Text(
+            text = stringResource(R.string.home_palette_support),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(Spacing.m))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            verticalArrangement = Arrangement.spacedBy(Spacing.s)
+        ) {
+            for (entry in Palette.entries) {
+                val isSelected = entry == selected
+                val name = stringResource(entry.labelRes())
+                val (paper, accentTone) = swatches.getValue(entry)
+                Box(
+                    modifier = Modifier
+                        .size(SwatchSize)
+                        .clip(CircleShape)
+                        .then(
+                            if (isSelected) {
+                                Modifier.border(
+                                    width = 2.dp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    shape = CircleShape
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(SwatchInset)
+                        .clip(CircleShape)
+                        .background(paper)
+                        .selectable(
+                            selected = isSelected,
+                            role = Role.RadioButton,
+                            onClick = { onSelect(entry) }
+                        )
+                        .semantics { contentDescription = name }
+                ) {
+                    // The accent, on the palette's paper.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(Spacing.s)
+                            .clip(CircleShape)
+                            .background(accentTone)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The name on each palette swatch; the enum itself is storage, not copy. */
+@StringRes
+private fun Palette.labelRes(): Int = when (this) {
+    Palette.Gaten -> R.string.home_palette_gaten
+    Palette.Mono -> R.string.home_palette_mono
+    Palette.Cool -> R.string.home_palette_cool
+    Palette.Warm -> R.string.home_palette_warm
+}
+
+/** One swatch, and the inset the selected ring and the colour circle share. */
+private val SwatchSize = 40.dp
+private val SwatchInset = 5.dp
+
+/** The name on each accent swatch; the enum itself is storage, not copy. */
+@StringRes
+private fun AccentColor.labelRes(): Int = when (this) {
+    AccentColor.Indigo -> R.string.home_accent_indigo
+    AccentColor.Blue -> R.string.home_accent_blue
+    AccentColor.Violet -> R.string.home_accent_violet
+    AccentColor.Teal -> R.string.home_accent_teal
+    AccentColor.Green -> R.string.home_accent_green
+    AccentColor.Rose -> R.string.home_accent_rose
+    AccentColor.Graphite -> R.string.home_accent_graphite
+}
+
+/** The label on each theme option; the enum itself is storage, not copy. */
+@StringRes
+private fun ThemeMode.labelRes(): Int = when (this) {
+    ThemeMode.System -> R.string.home_theme_system
+    ThemeMode.Light -> R.string.home_theme_light
+    ThemeMode.Dark -> R.string.home_theme_dark
 }
 
 /** "Installed: manga-ocr (int8) (117 MB)", "Installed (117 MB)", or "Not installed". */

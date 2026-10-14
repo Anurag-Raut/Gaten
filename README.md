@@ -190,7 +190,9 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
   and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
 - `ui/` — Jetpack Compose UI: `home/` (setup screen), `lookup/` (lasso layer, result sheet and the
-  OCR + dictionary pipeline), `components/` (accessibility disclosure) and `theme/`.
+  OCR + dictionary pipeline), `components/` (accessibility disclosure) and `theme/` (the palette,
+  the type scale and `ThemePreferences`, the stored dark/light, palette and accent choices the
+  overlay and the floating bubble read too).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
   which downloads the optional manga-ocr model for pushing to a device.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
