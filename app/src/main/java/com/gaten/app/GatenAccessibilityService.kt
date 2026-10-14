@@ -702,8 +702,8 @@ class GatenAccessibilityService : AccessibilityService() {
 
         /**
          * Dismisses the Quick Settings shade from the connected service, then enters the normal
-         * single-flight capture pipeline. The dismissal must be accepted before the capture is
-         * queued; otherwise a failed platform action could freeze the launcher or the shade.
+         * single-flight capture pipeline. Some OEMs omit the shade-dismissal action, so a rejected
+         * action falls back to Back while handling the tile click. No activity or task is launched.
          */
         fun triggerCaptureFromTile() {
             val service = instance
@@ -723,12 +723,21 @@ class GatenAccessibilityService : AccessibilityService() {
                     service.syncFloatingButton()
                     return@post
                 }
+                // A second click must not send Back after the first one already closed the shade.
+                if (service.captureToken.busy && !service.overlay.isShowing) {
+                    Log.d(TAG, "Tile capture already in flight - ignoring the new trigger")
+                    return@post
+                }
 
                 val collapsed = try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        service.performGlobalAction(
+                        val dismissed = service.performGlobalAction(
                             AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE
                         )
+                        dismissed || run {
+                            Log.d(TAG, "Shade-dismissal action unavailable - closing Quick Settings with Back")
+                            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                        }
                     } else {
                         @Suppress("DEPRECATION")
                         service.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
