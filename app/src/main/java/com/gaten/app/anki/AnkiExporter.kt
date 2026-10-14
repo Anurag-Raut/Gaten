@@ -147,6 +147,27 @@ object AnkiExporter {
     }
 
     /**
+     * Checks the existing Gaten note type for [card] without creating a deck or model. A provider
+     * failure is treated as "unknown" so the normal add path remains the final guard.
+     */
+    suspend fun isDuplicate(context: Context, card: AnkiCard): Boolean = withContext(Dispatchers.IO) {
+        if (!granted(context)) return@withContext false
+        try {
+            val api = AddContentApi(context)
+            val models = api.modelList.orEmpty()
+            val modelId = resolveId(cachedId(context, KEY_MODEL_ID), models.keys)
+                ?: models.entries.firstOrNull { it.value == DECK_AND_MODEL_NAME }?.key
+                ?: return@withContext false
+            !api.findDuplicateNotes(modelId, card.expression).isNullOrEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Checking for an existing AnkiDroid note failed", e)
+            false
+        }
+    }
+
+    /**
      * Hands [card] to AnkiDroid's own share handler: the fallback for a word that cannot be written
      * through the provider, because the user declined the database permission or because the
      * overlay's service window has no way to ask for it. AnkiDroid opens its "add note" screen with

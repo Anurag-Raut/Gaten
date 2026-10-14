@@ -74,6 +74,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -803,9 +804,11 @@ private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
     }
 }
 
-/** The add button's own state: nothing yet, working, or finished with the label it ended on. */
+/** The add button's own state: checking, nothing yet, working, or finished with its final label. */
 private sealed interface AnkiUiState {
     data object Idle : AnkiUiState
+
+    data object Checking : AnkiUiState
 
     data object Adding : AnkiUiState
 
@@ -814,9 +817,10 @@ private sealed interface AnkiUiState {
 }
 
 /**
- * "Add to Anki" for [word]: the tap adds the card, or — when AnkiDroid's database permission is not
- * granted, which the overlay cannot ask for — hands the word to AnkiDroid's share handler instead.
- * Hidden entirely when AnkiDroid is not installed.
+ * "Add to Anki" for [word]: an existing Gaten note is checked when this entry opens, then a tap
+ * adds the card, or — when AnkiDroid's database permission is not granted, which the overlay cannot
+ * ask for — hands the word to AnkiDroid's share handler instead. Hidden entirely when AnkiDroid is
+ * not installed.
  *
  * The state lives with the entry it belongs to, so selecting another word chip starts from a fresh
  * button.
@@ -826,10 +830,24 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val status = remember { AnkiExporter.status(context) }
-    var state by remember { mutableStateOf<AnkiUiState>(AnkiUiState.Idle) }
     val card = AnkiCard.from(word, sentence = word.context)
+    var state by remember(card.expression, status) {
+        mutableStateOf<AnkiUiState>(
+            if (status == AnkiStatus.Ready) AnkiUiState.Checking else AnkiUiState.Idle
+        )
+    }
 
     if (status == AnkiStatus.NotInstalled) return
+
+    LaunchedEffect(card.expression, status) {
+        if (status == AnkiStatus.Ready) {
+            state = if (AnkiExporter.isDuplicate(context, card)) {
+                AnkiUiState.Done(R.string.anki_duplicate)
+            } else {
+                AnkiUiState.Idle
+            }
+        }
+    }
 
     suspend fun add() {
         state = AnkiUiState.Adding
@@ -867,7 +885,7 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
         }
     ) {
         when (val current = state) {
-            AnkiUiState.Adding -> CircularProgressIndicator(
+            AnkiUiState.Checking, AnkiUiState.Adding -> CircularProgressIndicator(
                 modifier = Modifier.size(if (compact) 16.dp else 18.dp),
                 color = LocalContentColor.current,
                 strokeWidth = 2.dp
