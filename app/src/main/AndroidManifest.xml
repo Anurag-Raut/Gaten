@@ -13,15 +13,18 @@
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
     <!-- Reading is offline: the screenshot is recognised on-device, the dictionary is bundled and
-         the Anki export is local IPC. INTERNET is here for one thing only — downloading the optional
-         manga-ocr model (ocr/MangaOcrDownloader.kt) when the user taps Download on the settings
-         screen, having been shown the size. Nothing else in the app makes a request, and nothing
-         downloads without that tap.
+         the Anki export is local IPC. INTERNET is here for two things only, and neither happens
+         without the user asking for it: downloading the optional manga-ocr model
+         (ocr/MangaOcrDownloader.kt) when the user taps Download on the settings screen, having been
+         shown the size, and downloading ML Kit's optional translation models
+         (translate/SentenceTranslator.kt) when the user taps Download in the translation section.
+         Nothing else in the app makes a request, nothing downloads without that tap, and every
+         lookup after the models are in place runs offline.
 
          It also has to be declared rather than removed: ML Kit's transport library and ONNX Runtime
          both ask for it for their analytics and telemetry backends, and stripping it from the merged
          manifest would take the model download with it. ACCESS_NETWORK_STATE comes from
-         profileinstaller, ONNX Runtime and androidx; the app reads it to warn when the download would
+         profileinstaller, ONNX Runtime and androidx; the app reads it to warn when a download would
          run on mobile data. -->
     <uses-permission android:name="android.permission.INTERNET" />
 

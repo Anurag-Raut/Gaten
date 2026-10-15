@@ -30,6 +30,16 @@ ML Kit Text Recognition (Japanese)
 Licence: Google ML Kit terms of service
 https://developers.google.com/ml-kit/terms
 
+ML Kit On-Device Translation (Japanese -> English)
+--------------------------------------------------
+© Google LLC
+Licence: Google ML Kit terms of service; use is subject to the ML Kit on-device translation usage
+guidelines, which require Google Cloud Translation's attribution requirements to be met.
+https://developers.google.com/ml-kit/terms
+https://developers.google.com/ml-kit/language/translation
+https://developers.google.com/ml-kit/language/translation/translation-terms
+https://cloud.google.com/translate/attribution
+
 meiki.text.detect.v0 (model weights)
 ------------------------------------
 © rtr46 and contributors

@@ -107,6 +107,8 @@ import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.alternativeHeadwordFor
 import com.gaten.app.dict.headwordFor
 import com.gaten.app.dict.notedForm
+import com.gaten.app.ocr.SelectionText
+import com.gaten.app.translate.SentenceTranslation
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -193,8 +195,9 @@ private fun sheetType(compact: Boolean): SheetType {
 }
 
 /**
- * The result sheet drawn inside the overlay, on the edge [layout] picked: header, word chips and
- * dictionary entry.
+ * The result sheet drawn inside the overlay, on the edge [layout] picked: a header, and then one of
+ * two halves of the same lookup — the dictionary words, or the sentence the gesture selected and its
+ * translation.
  *
  * A side dock (landscape) fills the height and takes [SheetLayout.fraction] of the width, keeps its
  * content clear of the status bar, nav bar and camera cutout, and carries the same compact scale
@@ -205,8 +208,9 @@ private fun sheetType(compact: Boolean): SheetType {
  * Everything beside the sheet stays as scrim; tapping it dismisses the overlay, as does dragging
  * the handle — and the rest of the panel — toward the docked edge past [DISMISS_DRAG_DP]. While
  * dragged, the bottom sheet follows the finger and springs back if the drag was short. Chip
- * selection crossfades the entry; empty and error results collapse the body to one muted line plus
- * "Select again".
+ * selection crossfades the entry. Each half carries its own empty state — the dictionary failing to
+ * open or finding nothing is the words half's, never the sentence's — and only a lookup with
+ * neither text nor a sentence at all collapses the body to one muted line plus "Select again".
  */
 @Composable
 fun ResultSheet(
@@ -446,6 +450,10 @@ private fun ColumnScope.SheetBody(
 ) {
     val context = LocalContext.current
     val iconSize = if (compact) 18.dp else 20.dp
+    // Words first, as the sheet has always opened. The choice survives the later publications of
+    // the same lookup, because the sheet itself is keyed on the lookup's session; a new selection
+    // starts on words again.
+    var tab by remember { mutableStateOf(SheetTab.Words) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -500,52 +508,236 @@ private fun ColumnScope.SheetBody(
         }
     }
 
-    when {
-        result.error != null -> EmptyState(
-            message = stringResource(R.string.lookup_dict_error, result.error),
-            onSelectAgain = onSelectAgain,
-            type = type,
-            compact = compact
-        )
-
-        result.ocrText.isBlank() -> EmptyState(
+    // Neither half has anything to show: the sheet still collapses to one muted line, which is what
+    // it has always done when nothing was read at all.
+    if (result.ocrText.isBlank() && result.sentence?.text.isNullOrBlank()) {
+        EmptyState(
             message = stringResource(R.string.lookup_no_text),
             onSelectAgain = onSelectAgain,
             type = type,
             compact = compact
         )
+        return
+    }
 
-        result.words.isEmpty() -> EmptyState(
-            message = stringResource(R.string.lookup_no_words),
-            onSelectAgain = onSelectAgain,
-            type = type,
-            compact = compact
-        )
+    // Two halves, switched rather than merged. Where the body used to be replaced outright — the
+    // dictionary failed to open, or the selection held no dictionary word — that state now belongs
+    // to the words tab alone: a sentence was still read, and its translation is still worth showing.
+    SheetTabRow(tab = tab, onSelect = { tab = it }, type = type, compact = compact)
+    Spacer(Modifier.height(if (compact) Spacing.s else Spacing.m))
 
-        else -> {
-            ChipRow(
-                words = result.words,
-                selected = selected,
-                onSelect = onSelect,
+    when (tab) {
+        SheetTab.Words -> when {
+            result.error != null -> EmptyState(
+                message = stringResource(R.string.lookup_dict_error, result.error),
+                onSelectAgain = onSelectAgain,
                 type = type,
                 compact = compact
             )
-            Spacer(Modifier.height(if (compact) Spacing.xs else Spacing.s))
-            // Side dock: fill, so the scrolling entry stretches and the Add button lands on the
-            // panel's bottom edge however short the entry is. Bottom dock: hug, so the portrait
-            // sheet still grows to its content and the button sits directly under it.
-            Crossfade(
-                targetState = selected,
-                animationSpec = tween(150),
-                label = "entry",
-                modifier = Modifier.weight(1f, fill = compact)
-            ) { index ->
-                EntryColumn(result.words[index], type, compact)
+
+            result.words.isEmpty() -> EmptyState(
+                message = stringResource(R.string.lookup_no_words),
+                onSelectAgain = onSelectAgain,
+                type = type,
+                compact = compact
+            )
+
+            else -> {
+                ChipRow(
+                    words = result.words,
+                    selected = selected,
+                    onSelect = onSelect,
+                    type = type,
+                    compact = compact
+                )
+                Spacer(Modifier.height(if (compact) Spacing.xs else Spacing.s))
+                // Side dock: fill, so the scrolling entry stretches and the Add button lands on the
+                // panel's bottom edge however short the entry is. Bottom dock: hug, so the portrait
+                // sheet still grows to its content and the button sits directly under it.
+                Crossfade(
+                    targetState = selected,
+                    animationSpec = tween(150),
+                    label = "entry",
+                    modifier = Modifier.weight(1f, fill = compact)
+                ) { index ->
+                    EntryColumn(result.words[index], type, compact)
+                }
+                // Pinned below the scrolling entry — outside it, so a long entry scrolls under the
+                // button instead of pushing it past the panel's bottom edge.
+                AddToAnki(result.words[selected], type, compact)
             }
-            // Pinned below the scrolling entry — outside it, so a long entry scrolls under the
-            // button instead of pushing it past the panel's bottom edge.
-            AddToAnki(result.words[selected], type, compact)
         }
+
+        SheetTab.Sentence -> SentenceBody(
+            sentence = result.sentence,
+            translation = result.translation,
+            type = type,
+            compact = compact
+        )
+    }
+}
+
+/** Which half of one result the body shows: the words the dictionary matched, or the sentence. */
+private enum class SheetTab { Words, Sentence }
+
+/**
+ * The words/sentence switch: two segments drawn in the sheet's own chip idiom, the active one filled
+ * primary. Both are always offered, because the two halves fail independently — a kana-only sentence
+ * has no dictionary words, and a dictionary that would not open says nothing about what was read.
+ */
+@Composable
+private fun SheetTabRow(
+    tab: SheetTab,
+    onSelect: (SheetTab) -> Unit,
+    type: SheetType,
+    compact: Boolean
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        SheetTabSegment(
+            tab = SheetTab.Words,
+            label = stringResource(R.string.lookup_tab_words),
+            selected = tab,
+            onSelect = onSelect,
+            type = type,
+            compact = compact
+        )
+        SheetTabSegment(
+            tab = SheetTab.Sentence,
+            label = stringResource(R.string.lookup_tab_sentence),
+            selected = tab,
+            onSelect = onSelect,
+            type = type,
+            compact = compact
+        )
+    }
+}
+
+/** One segment of [SheetTabRow]; the selected one is filled, the other outlined, as a chip is. */
+@Composable
+private fun SheetTabSegment(
+    tab: SheetTab,
+    label: String,
+    selected: SheetTab,
+    onSelect: (SheetTab) -> Unit,
+    type: SheetType,
+    compact: Boolean
+) {
+    val active = tab == selected
+    Surface(
+        onClick = { onSelect(tab) },
+        shape = MaterialTheme.shapes.large,
+        color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+        border = if (active) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Text(
+            text = label,
+            style = type.chip,
+            color = if (active) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier.padding(
+                horizontal = if (compact) Spacing.m else Spacing.l,
+                vertical = if (compact) Spacing.xs else Spacing.s
+            )
+        )
+    }
+}
+
+/**
+ * The sentence half: the exact lines the gesture selected, and the translation of them.
+ *
+ * The source is always shown: a translation is only as trustworthy as the text it was made from,
+ * and that text is another machine's reading of an OCR pass. ML Kit's translation models are the
+ * casual ones, so the reader has to be able to see what was actually translated.
+ *
+ * Every state here is local to this tab and none of them is shared with the words: a sentence being
+ * read, no translation model installed, a translation in flight, one that landed, and one that
+ * failed. None of them can hide the source, and none of them can hide the words.
+ */
+@Composable
+private fun ColumnScope.SentenceBody(
+    sentence: SelectionText?,
+    translation: SentenceTranslation,
+    type: SheetType,
+    compact: Boolean
+) {
+    if (sentence == null) {
+        // The words are already on screen; this pass only ever arrives late.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(Spacing.s))
+            Text(
+                text = stringResource(R.string.lookup_sentence_reading),
+                style = type.small,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f, fill = compact)
+            .verticalScroll(rememberScrollState())
+            .padding(
+                top = if (compact) Spacing.xs else Spacing.s,
+                bottom = if (compact) Spacing.s else Spacing.l
+            )
+    ) {
+        Text(
+            text = sentence.text,
+            style = type.gloss,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(if (compact) Spacing.s else Spacing.m))
+        when (translation) {
+            SentenceTranslation.None -> Text(
+                text = stringResource(R.string.lookup_translation_missing),
+                style = type.small,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            SentenceTranslation.Translating -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(Spacing.s))
+                Text(
+                    text = stringResource(R.string.lookup_translating),
+                    style = type.small,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            is SentenceTranslation.Done -> Text(
+                text = translation.text,
+                style = type.gloss,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            is SentenceTranslation.Failed -> Text(
+                text = stringResource(R.string.lookup_translation_failed, translation.reason),
+                style = type.small,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // ML Kit's translation guidelines require the Google Translate attribution next to the
+        // result itself, not only in the settings screen's paragraph.
+        Spacer(Modifier.height(Spacing.s))
+        Text(
+            text = stringResource(R.string.lookup_translation_attribution),
+            style = type.small,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

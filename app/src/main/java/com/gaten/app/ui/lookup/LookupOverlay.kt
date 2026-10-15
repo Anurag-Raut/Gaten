@@ -74,7 +74,12 @@ import com.gaten.app.ocr.ScreenHits
 import com.gaten.app.ocr.ScreenLineReader
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
+import com.gaten.app.ocr.SelectionText
 import com.gaten.app.ocr.prefetchOrder
+import com.gaten.app.ocr.selectionOrder
+import com.gaten.app.ocr.selectionText
+import com.gaten.app.translate.SentenceTranslation
+import com.gaten.app.translate.SentenceTranslator
 import com.gaten.app.ui.overlay.ViewMapping
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.CancellationException
@@ -89,6 +94,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 private const val TAG = "Gaten"
@@ -101,6 +107,19 @@ private val TapTolerance = 24.dp
  * the answer is worth, and the rest keep their indexed text.
  */
 private const val MAX_GESTURE_LINES = 3
+
+/**
+ * Lines one sentence may be made of. A manga bubble sentence is a handful of lines; past six the
+ * per-line reads dominate and the reader has circled a page, whose translation ML Kit is not for.
+ */
+private const val MAX_SENTENCE_LINES = 6
+
+/**
+ * How long the sentence pass waits for its lines before composing them anyway. Lines that miss it
+ * keep the text the index already holds, so a sentence always arrives — it is the words that must
+ * never wait, and they are already published by the time this budget starts.
+ */
+private const val SENTENCE_READ_BUDGET_MS = 8_000L
 
 /** Lifecycle of the offline dictionary handle. */
 private sealed interface RepoState {
@@ -256,6 +275,11 @@ fun LookupOverlay(
     // Dropped when the overlay closes or a new screenshot replaces the index.
     DisposableEffect(reader) { onDispose { reader?.close() } }
 
+    // One translator client for this overlay, as ML Kit's lifecycle guidance asks. Building one
+    // touches nothing — no model, no network — and a lookup that finds no model just gets None.
+    val translator = remember { SentenceTranslator.newClient() }
+    DisposableEffect(translator) { onDispose { translator.close() } }
+
     val readFlow: StateFlow<ScreenText?> = remember(reader) { reader?.text ?: MutableStateFlow(null) }
     val readScreen by readFlow.collectAsState()
     val screen = readScreen ?: scannedScreen
@@ -346,6 +370,88 @@ fun LookupOverlay(
         return active.text.value
     }
 
+    /** One more publication of the lookup [session] is showing; a no-op once the sheet has moved on. */
+    suspend fun publishForSession(session: Any, value: LookupResult) {
+        withContext(Dispatchers.Main.immediate) {
+            currentCoroutineContext().ensureActive()
+            if (displayedResultSession === session) result = value
+        }
+    }
+
+    /**
+     * The sentence a gesture selected, and its translation, published behind the words.
+     *
+     * This runs in the lookup's own job, so every edge that cancels a lookup cancels it too, and it
+     * only ever writes through [publishForSession], so a stale selection's sentence can never
+     * replace a newer one's. [selectionLines] resolves the lines the gesture touched against the
+     * live index — which lines those are is a different question from what their text says, and
+     * only the index can answer it.
+     *
+     * The lines are read in reading order under [SENTENCE_READ_BUDGET_MS], and the sentence is the
+     * live index's own text afterwards: whole lines only, manga-ocr's where it landed and ML Kit's
+     * otherwise. Lines that miss the budget keep the text the index already holds, so a sentence
+     * always arrives. Only then does anything touch the translation model, and a model that was
+     * never downloaded is [SentenceTranslation.None] — never an error, and never a download: this
+     * path does not fetch anything.
+     */
+    suspend fun publishSentence(
+        session: Any,
+        fast: LookupResult,
+        selectionLines: (ScreenText) -> List<Int>
+    ) {
+        val index = reader?.text?.value ?: screen
+        val ordered = if (index == null) {
+            emptyList()
+        } else {
+            selectionOrder(index.lines, selectionLines(index)).take(MAX_SENTENCE_LINES)
+        }
+        val active = reader
+        if (active != null && ordered.isNotEmpty()) {
+            withTimeoutOrNull(SENTENCE_READ_BUDGET_MS) {
+                for (lineIndex in ordered) active.read(lineIndex)
+            }
+        }
+        // The index after the reads: the same lines, with whatever text has landed by now.
+        val live = reader?.text?.value ?: index
+        val composed = if (live == null) SelectionText("", emptyList()) else selectionText(live.lines, ordered)
+        val sentence = when {
+            composed.text.isNotBlank() -> composed
+            // Nothing addressable came back — no index at all, or the lines were dropped as
+            // non-Japanese. The fast answer is all there is, and it carries no line structure.
+            fast.ocrText.isNotBlank() -> SelectionText(fast.ocrText, emptyList())
+            else -> return
+        }
+        val installed = SentenceTranslator.isInstalled()
+        publishForSession(
+            session,
+            fast.copy(
+                sentence = sentence,
+                translation = if (installed) SentenceTranslation.Translating else SentenceTranslation.None
+            )
+        )
+        if (!installed) return
+        val translation = SentenceTranslator.translate(translator, sentence.text)
+        publishForSession(session, fast.copy(sentence = sentence, translation = translation))
+    }
+
+    /**
+     * The sentence pass, with its failures kept to itself: the words are on screen by the time this
+     * runs, so a line read or a model that throws must not take the overlay down with it.
+     */
+    suspend fun publishSentenceSafely(
+        session: Any,
+        fast: LookupResult,
+        selectionLines: (ScreenText) -> List<Int>
+    ) {
+        try {
+            publishSentence(session, fast, selectionLines)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Sentence pass failed", e)
+        }
+    }
+
     /** Turn a finished lasso into a lookup; degenerate gestures are ignored. */
     fun startLookup() {
         if (closing) return
@@ -367,18 +473,20 @@ fun LookupOverlay(
         phase = Phase.Scanning
         sheetState.targetState = false
         val startedAt = SystemClock.elapsedRealtime()
+        // The gesture's selection in the capture's pixels: runLookup crops from the drawn box, and
+        // the sentence pass asks the index which whole lines that box covered.
+        val selection = Box(
+            bitmapBox.left.toInt(),
+            bitmapBox.top.toInt(),
+            bitmapBox.right.toInt(),
+            bitmapBox.bottom.toInt()
+        )
         lookupJob = scope.launch {
             // One identity per lookup: the primary and the final publication belong to the same
             // session, so the sheet keyed on it survives both without resetting its state.
             val session = Any()
             val outcome = try {
                 val repo = awaitRepo()
-                val selection = Box(
-                    bitmapBox.left.toInt(),
-                    bitmapBox.top.toInt(),
-                    bitmapBox.right.toInt(),
-                    bitmapBox.bottom.toInt()
-                )
                 // The circle is read from its own crop inside runLookup, index or no index, before
                 // anything else. The lines it touched are handed over as a callback and read only
                 // once the crop is in, so the answer never waits on the lines beside it; which
@@ -422,6 +530,10 @@ fun LookupOverlay(
             phase = Phase.Result
             sheetState.targetState = true
             Log.d(TAG, "Circle complete in ${SystemClock.elapsedRealtime() - startedAt} ms")
+            // The sentence the circle selected, behind the answer already on screen.
+            publishSentenceSafely(session, outcome) { liveIndex ->
+                ScreenHits.linesInSelection(liveIndex, selection)
+            }
         }
     }
 
@@ -482,6 +594,9 @@ fun LookupOverlay(
             phase = Phase.Result
             sheetState.targetState = true
             Log.d(TAG, "Tap complete in ${SystemClock.elapsedRealtime() - startedAt} ms")
+            // The tapped line, whole: this path never reads it with the model itself, so the
+            // sentence pass is what waits for it — behind the words, which are already published.
+            publishSentenceSafely(session, outcome) { listOf(lineIndex) }
         }
     }
 

@@ -305,12 +305,18 @@ dependencies {
     // On-device Japanese OCR (bundled models, offline, free, no API key)
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 
-    // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and Gaten
-    // still needs no INTERNET permission.
+    // On-device Japanese -> English sentence translation (translate/SentenceTranslator.kt). The
+    // language models are downloaded on demand, only when the reader taps Download on the home
+    // screen; nothing else here reaches the network.
+    implementation("com.google.mlkit:translate:17.0.3")
+
+    // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and involves
+    // no network at all.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
     // ONNX Runtime Mobile, for the optional manga-ocr second pass (ocr/MangaOcrEngine.kt). The
-    // library asks for INTERNET in its manifest, which the app manifest removes; the model itself
-    // is never bundled in a release APK (see fetchMangaOcrModel above).
+    // library asks for INTERNET in its manifest; the app manifest keeps the permission for the two
+    // explicit model downloads (see AndroidManifest.xml) and the model itself is never bundled in
+    // a release APK (see fetchMangaOcrModel above).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
 }

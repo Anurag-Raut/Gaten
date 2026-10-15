@@ -35,7 +35,7 @@
     <string name="home_manga_status_installed_unknown">Installed (%1$s)</string>
     <string name="home_manga_status_missing">Not installed</string>
     <string name="home_manga_builtin_reader">The built-in reader (ML Kit) is reading your screen. Installing a model below makes the stylized lettering it misreads readable.</string>
-    <string name="home_manga_help">ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads — outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read (no model, a failure, or a slow answer) keeps ML Kit&#8217;s text. Everything runs on the device: the only network request Gaten makes is downloading a model here, and only when you ask for one. A model already on your phone can be imported instead.</string>
+    <string name="home_manga_help">ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads — outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read (no model, a failure, or a slow answer) keeps ML Kit&#8217;s text. Everything runs on the device: the only network requests Gaten makes are downloading an optional model, here or below, and only when you ask for one. A model already on your phone can be imported instead.</string>
     <string name="home_manga_entry_size">~%1$d MB</string>
     <string name="home_manga_download">Download</string>
     <string name="home_manga_installed_chip">Installed</string>
@@ -54,6 +54,23 @@
     <string name="home_manga_remove">Remove</string>
     <string name="home_manga_import_ok">manga-ocr model installed</string>
     <string name="home_manga_import_failed">Import failed: encoder, decoder and vocab files are all needed</string>
+
+    <!-- Sentence translation (ML Kit on-device, models downloaded from Google on request) -->
+    <string name="home_section_translation">Sentence translation (optional)</string>
+    <string name="home_translation_status_installed">Installed</string>
+    <string name="home_translation_status_missing">Not installed</string>
+    <string name="home_translation_help">Gaten can translate the lines you select into English on the device, and shows the selected text next to the translation. The language models are downloaded from Google when you tap Download, and then work offline — in airplane mode included. This is the app&#8217;s second network request, and it happens only when you ask for it.</string>
+    <string name="home_translation_size">~%1$d MB, both languages</string>
+    <string name="home_translation_download">Download</string>
+    <string name="home_translation_downloading">Downloading the translation models…</string>
+    <string name="home_translation_downloading_note">No progress is reported for this download, and it cannot be cancelled from here once it starts.</string>
+    <string name="home_translation_confirm_title">Download translation models?</string>
+    <string name="home_translation_confirm_body">About %1$d MB will be downloaded from Google. Use Wi-Fi if you can.</string>
+    <string name="home_translation_confirm_metered">You are on mobile data. About %1$d MB will be downloaded from Google — use Wi-Fi if you can.</string>
+    <string name="home_translation_download_ok">Translation models installed</string>
+    <string name="home_translation_download_failed">Download failed: %1$s</string>
+    <string name="home_translation_remove">Remove the models</string>
+    <string name="home_translation_attribution">Translations are produced by Google Translate&#8217;s on-device models. THIS SERVICE MAY CONTAIN TRANSLATIONS POWERED BY GOOGLE. GOOGLE DISCLAIMS ALL WARRANTIES RELATED TO THE TRANSLATIONS, EXPRESS OR IMPLIED, INCLUDING ANY WARRANTIES OF ACCURACY, RELIABILITY, AND ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.</string>
 
     <!-- Debug -->
     <string name="home_debug_boxes">Show text boxes (debug)</string>

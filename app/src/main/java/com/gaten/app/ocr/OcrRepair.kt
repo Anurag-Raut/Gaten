@@ -59,11 +59,13 @@ object OcrRepair {
     private fun containsConfusable(text: String): Boolean = text.any { it in CONFUSABLES }
 
     /**
-     * The dictionary-free pass. Every position is judged on the characters of [text] alone, so a
-     * repair never confirms the next one and the result does not depend on the order of the repairs.
-     * Returns [text] itself when nothing changed.
+     * The dictionary-free pass, exposed for callers that must produce text without a dictionary
+     * handle — the sentence a gesture selected ([com.gaten.app.ocr.selectionText]). Every position
+     * is judged on the characters of [text] alone, so a repair never confirms the next one and the
+     * result does not depend on the order of the repairs. Returns [text] itself when nothing
+     * changed. 1 char -> 1 char, so offsets into the result stay valid.
      */
-    private fun scriptRepair(text: String): String {
+    internal fun scriptRepair(text: String): String {
         var repaired: StringBuilder? = null
         for (position in text.indices) {
             val replacement = scriptReplacement(text, position) ?: continue

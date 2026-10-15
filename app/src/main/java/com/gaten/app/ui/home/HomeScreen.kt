@@ -54,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +82,7 @@ import com.gaten.app.ocr.MangaOcrCatalog
 import com.gaten.app.ocr.MangaOcrDownloader
 import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.OcrPreferences
+import com.gaten.app.translate.SentenceTranslator
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
 import com.gaten.app.ui.theme.Spacing
@@ -124,6 +126,37 @@ fun HomeScreen() {
     var downloading by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
     var downloadProgress by remember { mutableStateOf<MangaOcrDownloader.Progress?>(null) }
     val downloader = remember { MangaOcrDownloader(MangaOcrModel.dir(context)) }
+
+    // The translation models are ML Kit's own: they have no progress to report and no cancel, so
+    // this is a flag rather than an entry, and the section says so.
+    var translationInstalled by remember { mutableStateOf(false) }
+    var translationDownloading by remember { mutableStateOf(false) }
+    var confirmTranslation by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { translationInstalled = SentenceTranslator.isInstalled() }
+
+    /**
+     * Downloads the translation models the user confirmed, on Wi-Fi unless they confirmed it on
+     * mobile data. Nothing else in the app starts this download, and the overlay never does.
+     */
+    fun startTranslationDownload() {
+        confirmTranslation = false
+        translationDownloading = true
+        scope.launch {
+            val failure = SentenceTranslator.download(requireWifi = !isMetered(context))
+            translationDownloading = false
+            translationInstalled = SentenceTranslator.isInstalled()
+            Toast.makeText(
+                context,
+                if (failure == null) {
+                    context.getString(R.string.home_translation_download_ok)
+                } else {
+                    context.getString(R.string.home_translation_download_failed, failure)
+                },
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     fun refreshMangaModel() {
         mangaInstalled = MangaOcrModel.isInstalled(context)
@@ -292,6 +325,20 @@ fun HomeScreen() {
             )
 
             Spacer(modifier = Modifier.height(Spacing.xxl))
+            SectionLabel(text = stringResource(R.string.home_section_translation))
+            TranslationSection(
+                installed = translationInstalled,
+                downloading = translationDownloading,
+                onDownload = { confirmTranslation = true },
+                onRemove = {
+                    scope.launch {
+                        SentenceTranslator.remove()
+                        translationInstalled = SentenceTranslator.isInstalled()
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.xxl))
             SectionLabel(text = stringResource(R.string.anki_settings_title))
             Text(
                 text = stringResource(R.string.anki_settings_summary),
@@ -324,6 +371,37 @@ fun HomeScreen() {
                 }
             },
             onDismiss = { showDisclosure = false }
+        )
+    }
+
+    // The size and the host are shown before anything is fetched; on mobile data the wording says so.
+    if (confirmTranslation) {
+        val metered = remember { isMetered(context) }
+        AlertDialog(
+            onDismissRequest = { confirmTranslation = false },
+            title = { Text(stringResource(R.string.home_translation_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        if (metered) {
+                            R.string.home_translation_confirm_metered
+                        } else {
+                            R.string.home_translation_confirm_body
+                        },
+                        SentenceTranslator.APPROX_SIZE_MB
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { startTranslationDownload() }) {
+                    Text(stringResource(R.string.home_translation_download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmTranslation = false }) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
         )
     }
 
@@ -610,6 +688,93 @@ private fun MangaOcrSection(
                 }
             }
         }
+    }
+}
+
+/**
+ * The optional sentence translation: what it does, what it costs to install, and the two actions.
+ *
+ * ML Kit's own download reports neither progress nor cancellation, so this section shows an
+ * indeterminate bar and says outright that it cannot be cancelled — better than a progress bar that
+ * lies about being one. The Google attribution and disclaimer live here, beside the action that
+ * fetches the models; the sheet carries the short attribution next to every translation.
+ */
+@Composable
+private fun TranslationSection(
+    installed: Boolean,
+    downloading: Boolean,
+    onDownload: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
+    ) {
+        Text(
+            text = stringResource(
+                if (installed) {
+                    R.string.home_translation_status_installed
+                } else {
+                    R.string.home_translation_status_missing
+                }
+            ),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(Spacing.xs))
+        Text(
+            text = stringResource(R.string.home_translation_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (!installed) {
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = stringResource(R.string.home_translation_size, SentenceTranslator.APPROX_SIZE_MB),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (downloading) {
+            Spacer(Modifier.height(Spacing.m))
+            Text(
+                text = stringResource(R.string.home_translation_downloading),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(Spacing.s))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                text = stringResource(R.string.home_translation_downloading_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Spacer(Modifier.height(Spacing.m))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (installed) {
+                    OutlinedButton(onClick = onRemove) {
+                        Text(stringResource(R.string.home_translation_remove))
+                    }
+                } else {
+                    Button(onClick = onDownload) {
+                        Text(stringResource(R.string.home_translation_download))
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(Spacing.m))
+        Text(
+            text = stringResource(R.string.home_translation_attribution),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

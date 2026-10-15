@@ -15,6 +15,15 @@
     <string name="lookup_no_words">No dictionary words found</string>
     <string name="lookup_dict_error">Dictionary unavailable: %1$s</string>
     <string name="lookup_select_again">Select again</string>
+
+    <!-- The two halves of one result: the dictionary words, or the selected sentence -->
+    <string name="lookup_tab_words">Words</string>
+    <string name="lookup_tab_sentence">Sentence</string>
+    <string name="lookup_sentence_reading">Reading the selected lines…</string>
+    <string name="lookup_translating">Translating…</string>
+    <string name="lookup_translation_missing">Translation is not installed. Add the offline translation models in Gaten.</string>
+    <string name="lookup_translation_failed">Translation unavailable: %1$s</string>
+    <string name="lookup_translation_attribution">Translated with Google Translate</string>
     <string name="lookup_other_matches">Other matches (%1$d)</string>
     <string name="lookup_base_form">from %1$s</string>
     <string name="lookup_common">common</string>

@@ -4,8 +4,9 @@ Gaten is an Android app for reading Japanese on screen. When you hit a word you 
 in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the text, and Gaten
 shows the words it recognises, their kana readings and English meanings from an offline
 dictionary. Reading runs entirely on the device: there is no account and no server, and it works
-in airplane mode. The only thing Gaten ever uses the network for is downloading the optional
-stylized-text model, and only when the reader taps Download (see *Optional stylized-text model*).
+in airplane mode. The only thing Gaten ever uses the network for is downloading an optional model —
+the stylized-text reader, or the sentence-translation models — and only when the reader taps
+Download (see *Optional stylized-text model* and *Optional sentence translation*).
 
 ## How it works
 
@@ -37,7 +38,7 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
    is used for Anki export.
 
 Steps 2–7 are fully offline, and the app makes no network request of any kind until — and unless —
-the reader downloads the optional stylized-text model.
+the reader downloads an optional model.
 
 ### Closing the lookup
 
@@ -171,8 +172,8 @@ phone, and the app only reaches the network for the first one:
 - **Download it in the app** — Gaten → *Stylized-text model (manga-ocr, optional)* → **Download**.
   The size is shown first and has to be confirmed (with a warning when the phone is on mobile data),
   the download runs with a progress bar and a Cancel button, and the only hosts it talks to are
-  `huggingface.co` and the CDN it redirects to, over HTTPS. This is the app's only network request:
-  nothing is fetched until that button is tapped. The files come from
+  `huggingface.co` and the CDN it redirects to, over HTTPS. This request is one of the app's only
+  two, and nothing is fetched until that button is tapped. The files come from
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
   (`encoder_model_int8.onnx`, `decoder_model_int8.onnx`) and
   [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base) (`vocab.txt`).
@@ -197,6 +198,47 @@ of output arg ... does not match expected type (tensor(float))`). The fp16 encod
 image identically to int8, but its accuracy on real manga has not been measured, so it is not offered
 either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
+## Optional sentence translation (ML Kit)
+
+The result sheet has two halves, switched by a **Words / Sentence** control above the body. *Words* is
+what Gaten has always shown: the dictionary entries for the words the OCR found. *Sentence* shows the
+whole lines the gesture selected, as one text, and — when the translation models are installed — their
+English translation underneath.
+
+The sentence is not the same string as the header's. A tap's header text is ML Kit's line with the
+model's reading of the tapped phrase corrected inside it, and a circle's is the model's reading of the
+drawn crop; the sentence is built from **whole lines of the screen index**, in reading order (rows top
+to bottom, tategaki columns right to left), read by manga-ocr where it could read them and ML Kit's own
+text otherwise. Nothing is stitched and nothing is fragmented: the lines a gesture covered are taken
+entire, joined with newlines, and that is what is translated. Both halves are independent — a
+dictionary that will not open, or a kana-only sentence with no dictionary word in it, leaves the other
+half showing.
+
+The English comes from **ML Kit's on-device translation** (`com.google.mlkit:translate`,
+`translate/SentenceTranslator.kt`), which is the same set of models Google Translate's offline mode
+uses. Nothing is sent anywhere: the recognised text is translated on the phone, in airplane mode
+included. The models are not in the APK — Gaten → *Sentence translation (optional)* → **Download**
+fetches them, and that is the app's second and only other network request. The models are about
+30 MB per language, and Japanese → English needs both, so the settings screen warns about ~60 MB
+before anything is fetched, with the same mobile-data warning the manga-ocr download has. ML Kit's
+download reports no progress and cannot be cancelled, which the settings screen says in as many words
+rather than showing a bar that would be a lie. **Remove the models** deletes them again; translation
+then degrades to the sentence text alone, with no error and no request.
+
+Directions beyond Japanese → English, and any language other than English on either side, are not
+offered: ML Kit's models are trained to and from English, so a pair like Japanese → Spanish pivots
+through English and loses quality, and Gaten is a Japanese reading aid.
+
+Two obligations come with the API, and the app meets both visibly:
+
+- **Attribution.** ML Kit's [usage guidelines](https://developers.google.com/ml-kit/language/translation/translation-terms)
+  require the Cloud Translation [attribution requirements](https://cloud.google.com/translate/attribution),
+  so every translation in the sheet carries *Translated with Google Translate* beneath it, and the
+  settings screen carries the Google disclaimer in full. Gaten's name does not use Google's marks, and
+  the app claims no affiliation.
+- **Restriction.** The API may only be used on personal computing devices — phones, tablets and
+  computers — without Google's written permission, which is what this is.
+
 ## Project layout
 
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
@@ -208,8 +250,12 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
   as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
   (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrModels`
   (when the three OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
-  `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` the only network code
-  in the app.
+  `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` the app's own network
+  code — Gaten's one other request is ML Kit's, made from `translate/`. `SelectionText` is the sentence
+  contract: the whole lines a gesture selected, in reading order, with the offsets that address each
+  of them.
+- `translate/` — the optional sentence translation: `SentenceTranslator` (the ML Kit client, the
+  models' presence, their download and deletion) and the `SentenceTranslation` state the sheet shows.
 - `anki/` — the AnkiDroid instant-add export.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).
@@ -222,12 +268,15 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
 ## Privacy
 
-Reading is offline and stays offline. Gaten holds `INTERNET` for exactly one request — the optional
-stylized-text model the reader downloads by tapping Download — and that request goes to
-`huggingface.co` and the CDN it redirects to, over HTTPS, and nowhere else (`ocr/MangaOcrDownloader.kt`
-enforces that allow-list, redirects included). Nothing is fetched in the background, and the
-screenshot never leaves the device: it stays in memory, is never uploaded, never shared and never
-written to disk. There is no analytics, no account and no server.
+Reading is offline and stays offline. Gaten holds `INTERNET` for exactly two requests — the optional
+stylized-text model and the optional sentence-translation models, each downloaded only by tapping
+Download in its own section. The first goes to `huggingface.co` and the CDN it redirects to, over
+HTTPS, and nowhere else (`ocr/MangaOcrDownloader.kt` enforces that allow-list, redirects included);
+the second is ML Kit's own model download, which fetches the Japanese and English translation models
+and nothing else. Nothing is fetched in the background, and the screenshot never leaves the device:
+it stays in memory, is never uploaded, never shared and never written to disk. There is no analytics,
+no account and no server. Translation runs on the device once those models are in place, so a lookup
+in airplane mode is translated like any other.
 
 The only notifications Gaten looks at are the accessibility events Android already sends it for a
 posted notification, and it reads **metadata only**: whether an incoming call (`CallStyle`, incoming
@@ -258,6 +307,11 @@ left implicit.
   <https://www.edrdg.org/>.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
   lines and reads them when no manga-ocr model is installed.
+- **Sentence translation** — [ML Kit on-device translation](https://developers.google.com/ml-kit/language/translation)
+  (Google, ML Kit terms), the models Google Translate's offline mode uses. They are downloaded by the
+  user, never shipped in the APK, and the app attributes translations to Google Translate as its
+  [usage guidelines](https://developers.google.com/ml-kit/language/translation/translation-terms)
+  require.
 - **Text-line detection** — [meiki.text.detect.v0](https://huggingface.co/rtr46/meiki.text.detect.v0)
   (rtr46 and contributors, LGPL-3.0), a second line finder shipped in the APK alongside ML Kit for
   the lettering ML Kit's detector misses.

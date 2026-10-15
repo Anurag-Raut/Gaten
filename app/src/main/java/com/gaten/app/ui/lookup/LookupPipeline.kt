@@ -24,8 +24,10 @@ import com.gaten.app.ocr.OcrLinePolicy
 import com.gaten.app.ocr.OcrRepair
 import com.gaten.app.ocr.ScreenLine
 import com.gaten.app.ocr.ScreenText
+import com.gaten.app.ocr.SelectionText
 import com.gaten.app.ocr.interpolateCharBoxes
 import com.gaten.app.ocr.withText
+import com.gaten.app.translate.SentenceTranslation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -34,11 +36,22 @@ import java.util.LinkedHashMap
 
 private const val LOOKUP_TAG = "GatenLookup"
 
-/** Everything the result sheet needs after one selection lookup. */
+/**
+ * Everything the result sheet needs after one selection lookup.
+ *
+ * [sentence] and [translation] are the result of a second, later pass over the same gesture: the
+ * whole lines it selected, and their translation. Both are absent from the fast answer — they need
+ * line reads and a model the reader must not wait for — and arrive as further publications of the
+ * same lookup. [ocrText] keeps its own meaning and may differ from [SelectionText.text]: it is the
+ * crop's reading for a circle and the tapped line with the model's reading of the tapped phrase
+ * spliced in for a tap.
+ */
 data class LookupResult(
     val ocrText: String,
     val words: List<ScannedWord>,
-    val error: String? = null
+    val error: String? = null,
+    val sentence: SelectionText? = null,
+    val translation: SentenceTranslation = SentenceTranslation.None
 )
 
 /** The dictionary accessor when the dictionary failed to open: every word list comes back empty. */
