@@ -56,9 +56,6 @@ class MainActivity : ComponentActivity() {
                         onPaletteChange = { picked ->
                             palette = picked
                             ThemePreferences.setPalette(this, picked)
-                            // A palette brings its own accent; the row below can still change it.
-                            accent = picked.defaultAccent
-                            ThemePreferences.setAccent(this, picked.defaultAccent)
                         },
                         accent = accent,
                         onAccentChange = { picked ->

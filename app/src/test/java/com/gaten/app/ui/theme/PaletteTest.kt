@@ -173,21 +173,17 @@ class PaletteTest {
         }
     }
 
-    /**
-     * Mono's ladder is the shipped one — dark mode is already pure grey there — so the palette is
-     * carried entirely by its accent, and that accent has to be the colourless one.
-     */
     @Test
-    fun monoCarriesItsColourlessAccent() {
+    fun graphiteIsColourless() {
         for (dark in listOf(false, true)) {
-            val primary = accentRoles(Palette.Mono.defaultAccent, dark).primary
+            val primary = accentRoles(AccentColor.Graphite, dark).primary
             assertTrue(
-                "Mono's accent is not grey: $primary (dark=$dark)",
+                "Graphite's accent is not grey: $primary (dark=$dark)",
                 primary.red == primary.green && primary.green == primary.blue
             )
             assertNotEquals(
-                "Mono's accent is the shipped one (dark=$dark)",
-                accentRoles(Palette.Gaten.defaultAccent, dark).primary,
+                "Graphite's accent is the shipped one (dark=$dark)",
+                accentRoles(AccentColor.Indigo, dark).primary,
                 primary
             )
         }

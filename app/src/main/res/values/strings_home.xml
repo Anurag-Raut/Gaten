@@ -16,13 +16,18 @@
     <string name="home_status_on">Ready</string>
     <string name="home_action_turn_on">Turn on</string>
 
-    <!-- Media pause while looking up (shown only when notification access is missing) -->
-    <string name="home_media_access_title">Pause video while looking up</string>
-
     <!-- Start a lookup -->
     <string name="home_section_start">Start a lookup</string>
     <string name="home_start_tile_title">Quick Settings tile</string>
-    <string name="home_start_tile_support">Add the Gaten tile from your quick settings editor.</string>
+    <string name="home_start_tile_support">Add Gaten to Quick Settings to look up from the notification shade.</string>
+    <string name="home_start_tile_added">Added to Quick Settings</string>
+    <string name="home_start_tile_add">Add tile</string>
+    <string name="home_start_tile_remove_help">To remove it, open the Quick Settings editor and drag Gaten out.</string>
+    <string name="home_start_tile_add_failed">Could not add the tile. Try the Quick Settings editor.</string>
+    <string name="home_start_tile_manual">Open the Quick Settings editor and drag Gaten into your tiles.</string>
+    <string name="home_options_hide">Hide</string>
+    <string name="home_model_options">Model options</string>
+    <string name="home_key_setup">Set up</string>
     <string name="home_start_floating_title">Floating button</string>
     <string name="home_start_floating_support">Tap the bubble on screen to look up.</string>
     <string name="home_start_key_title">Hardware key (Key Mapper)</string>
@@ -55,9 +60,6 @@
     <string name="home_manga_import_ok">manga-ocr model installed</string>
     <string name="home_manga_import_failed">Import failed: encoder, decoder and vocab files are all needed</string>
 
-    <!-- Debug -->
-    <string name="home_debug_boxes">Show text boxes (debug)</string>
-
     <!-- Appearance -->
     <string name="home_section_appearance">Appearance</string>
     <string name="home_theme_title">Theme</string>
@@ -66,7 +68,8 @@
     <string name="home_theme_light">Light</string>
     <string name="home_theme_dark">Dark</string>
     <string name="home_palette_title">Palette</string>
-    <string name="home_palette_support">The colour of Gaten&#8217;s paper. Each one comes with its own accent, changeable below.</string>
+    <string name="home_palette_support">The colour of Gaten&#8217;s paper. Your selected accent stays unchanged.</string>
+    <string name="home_palette_sample" translatable="false">Aa</string>
     <string name="home_palette_gaten">Gaten</string>
     <string name="home_palette_mono">Mono</string>
     <string name="home_palette_cool">Cool</string>
@@ -86,5 +89,4 @@
     <string name="home_about_version">Gaten %1$s</string>
     <string name="home_about_dict">Dictionary: JMdict &amp; JMnedict (EDRDG), CC BY-SA 4.0</string>
     <string name="home_about_license">Open-source under GPL-3.0 &#183; based on CircleToSearch by AKS-Labs</string>
-    <string name="home_about_meiki">meiki text detector — LGPL-3.0</string>
 </resources>

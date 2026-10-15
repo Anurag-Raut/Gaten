@@ -12,6 +12,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.SharedPreferences
 import android.graphics.drawable.Icon as TileIcon
 import android.net.ConnectivityManager
 import android.net.Uri
@@ -60,12 +61,14 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -88,11 +91,9 @@ import com.gaten.app.LookupTileService
 import com.gaten.app.LookupTriggerReceiver
 import com.gaten.app.R
 import com.gaten.app.GatenAccessibilityService
-import com.gaten.app.media.hasNotificationAccess
 import com.gaten.app.ocr.MangaOcrCatalog
 import com.gaten.app.ocr.MangaOcrDownloader
 import com.gaten.app.ocr.MangaOcrModel
-import com.gaten.app.ocr.OcrPreferences
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
 import com.gaten.app.ui.theme.AccentColor
@@ -106,11 +107,10 @@ import kotlin.math.roundToInt
 
 private const val EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch"
-private const val MEIKI_MODEL_URL = "https://huggingface.co/rtr46/meiki.text.detect.v0"
 
 /**
- * Home screen: service status, the two ways to start a lookup, the optional manga-ocr model, the
- * theme and accent choice and the legal footer. The app is used from the overlay, so this stays a
+ * Home screen: service status, lookup triggers, Anki card customization, the optional manga-ocr
+ * model, appearance choices and the legal footer. The app is used from the overlay, so this stays a
  * plain setup page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -127,18 +127,19 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    var showAnkiSettings by rememberSaveable { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     // Service state, re-read on every resume because the user grants it in Settings.
     var serviceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
-    var notificationAccess by remember { mutableStateOf(hasNotificationAccess(context)) }
     var showDisclosure by remember { mutableStateOf(false) }
     var floatingEnabled by remember {
         mutableStateOf(TriggerPreferences.floatingButtonEnabled(context))
     }
+    var tileAdded by remember { mutableStateOf(TriggerPreferences.tileAdded(context)) }
     var mangaInstalled by remember { mutableStateOf(MangaOcrModel.isInstalled(context)) }
     var mangaSizeBytes by remember { mutableStateOf(MangaOcrModel.installedSizeBytes(context)) }
     var mangaCatalogId by remember { mutableStateOf(MangaOcrModel.installedCatalogId(context)) }
-    var showCharBoxes by remember { mutableStateOf(OcrPreferences.showCharBoxes(context)) }
     // The entry the confirm dialog is asking about, the one downloading, and its progress.
     var confirmDownload by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
     var downloading by remember { mutableStateOf<MangaOcrCatalog.Entry?>(null) }
@@ -194,12 +195,24 @@ fun HomeScreen(
         }
     }
 
+    // Tile callbacks can arrive while this screen remains open under the Quick Settings shade.
+    DisposableEffect(context) {
+        val preferences = context.getSharedPreferences("gaten_settings", Context.MODE_PRIVATE)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == TriggerPreferences.KEY_TILE_ADDED) {
+                tileAdded = TriggerPreferences.tileAdded(context)
+            }
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 serviceEnabled = isAccessibilityServiceEnabled(context)
-                notificationAccess = hasNotificationAccess(context)
                 floatingEnabled = TriggerPreferences.floatingButtonEnabled(context)
+                tileAdded = TriggerPreferences.tileAdded(context)
                 refreshMangaModel()
             }
         }
@@ -207,12 +220,17 @@ fun HomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    if (showAnkiSettings) {
+        AnkiSettingsScreen(onClose = { showAnkiSettings = false })
+        return
+    }
+
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = Spacing.xl)
         ) {
             Spacer(modifier = Modifier.height(Spacing.xxl))
@@ -236,25 +254,6 @@ fun HomeScreen(
                 onTurnOn = { showDisclosure = true }
             )
 
-            if (!notificationAccess) {
-                Spacer(modifier = Modifier.height(Spacing.m))
-                MediaAccessRow(
-                    onGrant = {
-                        try {
-                            context.startActivity(
-                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                            )
-                        } catch (_: Exception) {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.toast_notification_settings_error),
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                )
-            }
-
             Spacer(modifier = Modifier.height(Spacing.xl))
 
             SectionLabel(text = stringResource(R.string.home_section_start))
@@ -272,18 +271,37 @@ fun HomeScreen(
                 }
             )
             Spacer(modifier = Modifier.height(Spacing.m))
-            TileRow()
-            HorizontalDivider(
-                modifier = Modifier.fillMaxWidth(),
-                thickness = 1.dp,
-                color = MaterialTheme.colorScheme.outline
-            )
+            TileRow(added = tileAdded, onAdded = {
+                tileAdded = true
+                TriggerPreferences.setTileAdded(context, true)
+            })
+            Spacer(modifier = Modifier.height(Spacing.m))
             KeyMapperRow(
                 onCopy = {
                     clipboard.setText(AnnotatedString(LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP))
                 }
             )
 
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            SectionLabel(text = stringResource(R.string.anki_settings_title))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = Spacing.l, vertical = Spacing.m)
+            ) {
+                Text(
+                    text = stringResource(R.string.anki_settings_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(Spacing.s))
+                OutlinedButton(onClick = { showAnkiSettings = true }) {
+                    Text(stringResource(R.string.anki_settings_open))
+                }
+            }
             Spacer(modifier = Modifier.height(Spacing.xl))
 
             SectionLabel(text = stringResource(R.string.home_section_manga))
@@ -299,15 +317,6 @@ fun HomeScreen(
                 onRemove = {
                     MangaOcrModel.remove(context)
                     refreshMangaModel()
-                }
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.m))
-            DebugBoxesRow(
-                enabled = showCharBoxes,
-                onToggle = { checked ->
-                    showCharBoxes = checked
-                    OcrPreferences.setShowCharBoxes(context, checked)
                 }
             )
 
@@ -419,33 +428,6 @@ private fun StatusRow(enabled: Boolean, onTurnOn: () -> Unit) {
 }
 
 /**
- * Shown only while notification access is missing: the system answers media-session reads only
- * for a granted listener, so without this the overlay cannot stop the video playing behind it.
- */
-@Composable
-private fun MediaAccessRow(onGrant: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = Spacing.l, vertical = Spacing.m),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.home_media_access_title),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(Spacing.m))
-        Button(onClick = onGrant) {
-            Text(stringResource(R.string.home_action_turn_on))
-        }
-    }
-}
-
-/**
  * Start-a-lookup row: the on-screen floating bubble. The switch only records the choice; the
  * accessibility service owns the window and reacts to [TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED].
  */
@@ -473,7 +455,15 @@ private fun FloatingButtonRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
             )
         }
         Spacer(modifier = Modifier.width(Spacing.m))
-        Switch(checked = enabled, onCheckedChange = onToggle)
+        Switch(
+            checked = enabled,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                uncheckedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
     }
 }
 
@@ -502,6 +492,7 @@ private fun MangaOcrSection(
     onRemove: () -> Unit
 ) {
     val installedLabel = MangaOcrCatalog.byId(installedId)?.label
+    var expanded by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -522,6 +513,10 @@ private fun MangaOcrSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        TextButton(onClick = { expanded = !expanded }, enabled = downloading == null) {
+            Text(stringResource(if (expanded) R.string.home_options_hide else R.string.home_model_options))
+        }
+        if (!expanded && downloading == null) return@Column
         Spacer(modifier = Modifier.height(Spacing.s))
         Text(
             text = stringResource(R.string.home_manga_help),
@@ -632,33 +627,7 @@ private fun MangaOcrSection(
 }
 
 /**
- * Debug aid: draws the recognised boxes - every line's bounds and every character box - over the
- * frozen frame, so a box that is off its text is visible. The accessibility service reads the
- * preference for each overlay it opens, so a toggle here applies to the next lookup.
- */
-@Composable
-private fun DebugBoxesRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = Spacing.l, vertical = Spacing.m),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.home_debug_boxes),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(Spacing.m))
-        Switch(checked = enabled, onCheckedChange = onToggle)
-    }
-}
-
-/**
- * The theme choice: follow the device, or force light or dark. Down here with the debug switch
+ * The theme choice: follow the device, or force light or dark. Kept near the bottom
  * because the app is used from the overlay — this is a preference to find once, not a control to
  * reach for. The choice is applied by the activity above this screen and stored by
  * [com.gaten.app.ui.theme.ThemePreferences], which the overlay and the floating bubble read too.
@@ -769,20 +738,15 @@ private fun AccentRow(dark: Boolean, selected: AccentColor, onSelect: (AccentCol
 }
 
 /**
- * The palette: the colour of the app's paper, and the accent that comes with it. Each swatch shows
- * it — the palette's own paper with its accent in the middle, in the current mode — rather than
- * naming it, so what is picked is what will be drawn. [dark] is the resolved mode, not the reader's
- * choice, so the swatches sit on the same decision the theme above them made.
+ * Named paper-and-ink previews for each palette in the resolved [dark] mode. No accent is drawn:
+ * the palette controls neutrals only, and its preview must not look like another accent picker.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PaletteRow(dark: Boolean, selected: Palette, onSelect: (Palette) -> Unit) {
-    // Each palette's paper only has its lightness solved once per mode, not per drawn frame.
+    // Solve each palette's neutral colours once per mode, not per drawn frame.
     val swatches = remember(dark) {
-        Palette.entries.associateWith { entry ->
-            paletteNeutrals(entry, dark).background to
-                accentRoles(entry.defaultAccent, dark).primary
-        }
+        Palette.entries.associateWith { entry -> paletteNeutrals(entry, dark) }
     }
     Column(
         modifier = Modifier
@@ -810,39 +774,46 @@ private fun PaletteRow(dark: Boolean, selected: Palette, onSelect: (Palette) -> 
             for (entry in Palette.entries) {
                 val isSelected = entry == selected
                 val name = stringResource(entry.labelRes())
-                val (paper, accentTone) = swatches.getValue(entry)
-                Box(
+                val tones = swatches.getValue(entry)
+                Column(
                     modifier = Modifier
-                        .size(SwatchSize)
-                        .clip(CircleShape)
-                        .then(
-                            if (isSelected) {
-                                Modifier.border(
-                                    width = 2.dp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    shape = CircleShape
-                                )
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .padding(SwatchInset)
-                        .clip(CircleShape)
-                        .background(paper)
                         .selectable(
                             selected = isSelected,
                             role = Role.RadioButton,
                             onClick = { onSelect(entry) }
                         )
-                        .semantics { contentDescription = name }
+                        .semantics { contentDescription = name },
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // The accent, on the palette's paper.
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(Spacing.s)
-                            .clip(CircleShape)
-                            .background(accentTone)
+                            .size(width = 64.dp, height = 48.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.outline
+                                },
+                                shape = MaterialTheme.shapes.small
+                            )
+                            .padding(4.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(tones.background),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_palette_sample),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = tones.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -924,32 +895,16 @@ private fun SectionLabel(text: String) {
     Spacer(modifier = Modifier.height(Spacing.s))
 }
 
-/**
- * First lookup row: offers adding the Quick Settings tile. On API 33+ it asks the system to show
- * the tile-add dialog; below 33 there is no such API, so the row is inert.
- */
+/** Tile presence comes from platform callbacks; Android owns removal in its Quick Settings editor. */
 @Composable
-private fun TileRow() {
+private fun TileRow(added: Boolean, onAdded: () -> Unit) {
     val context = LocalContext.current
-    val clickModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Modifier.clickable {
-            val statusBarManager = context.getSystemService(StatusBarManager::class.java)
-            statusBarManager.requestAddTileService(
-                ComponentName(context, LookupTileService::class.java),
-                context.getString(R.string.tile_label),
-                TileIcon.createWithResource(context, R.drawable.ic_qs_lookup),
-                context.mainExecutor
-            ) { _ -> }
-        }
-    } else {
-        Modifier
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(clickModifier)
-            .padding(vertical = Spacing.l),
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -960,53 +915,97 @@ private fun TileRow() {
             )
             Spacer(modifier = Modifier.height(Spacing.xs))
             Text(
-                text = stringResource(R.string.home_start_tile_support),
+                text = stringResource(
+                    if (added) R.string.home_start_tile_added else R.string.home_start_tile_support
+                ),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (added) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Text(
+                    text = stringResource(R.string.home_start_tile_remove_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Text(
+                    text = stringResource(R.string.home_start_tile_manual),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (!added && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Spacer(modifier = Modifier.width(Spacing.m))
+            OutlinedButton(onClick = {
+                context.getSystemService(StatusBarManager::class.java).requestAddTileService(
+                    ComponentName(context, LookupTileService::class.java),
+                    context.getString(R.string.tile_label),
+                    TileIcon.createWithResource(context, R.drawable.ic_qs_lookup),
+                    context.mainExecutor
+                ) { result ->
+                    when (result) {
+                        StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED,
+                        StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> onAdded()
+                        StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> Unit
+                        else -> Toast.makeText(
+                            context, R.string.home_start_tile_add_failed, Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }) {
+                Text(stringResource(R.string.home_start_tile_add))
+            }
         }
     }
 }
 
-/** Second lookup row: the broadcast action a key remapper must send, with a copy button. */
+/** Optional hardware-key instructions stay collapsed until the reader needs the broadcast action. */
 @Composable
 private fun KeyMapperRow(onCopy: () -> Unit) {
-    Row(
+    var expanded by remember { mutableStateOf(false) }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = Spacing.l),
-        verticalAlignment = Alignment.CenterVertically
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = stringResource(R.string.home_start_key_title),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.height(Spacing.xs))
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(stringResource(if (expanded) R.string.home_options_hide else R.string.home_key_setup))
+            }
+        }
+        if (!expanded) return@Column
+        Spacer(modifier = Modifier.height(Spacing.xs))
+        Text(
+            text = stringResource(R.string.home_start_key_support),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(Spacing.s))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = stringResource(R.string.home_start_key_support),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.height(Spacing.s))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
+            IconButton(onClick = onCopy) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = stringResource(R.string.home_cd_copy_action),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
-                IconButton(onClick = onCopy) {
-                    Icon(
-                        imageVector = Icons.Filled.ContentCopy,
-                        contentDescription = stringResource(R.string.home_cd_copy_action),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
             }
         }
     }
@@ -1043,13 +1042,6 @@ private fun AboutFooter() {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.clickable { openUrl(context, CIRCLETOSEARCH_URL) }
-    )
-    Spacer(modifier = Modifier.height(Spacing.s))
-    Text(
-        text = stringResource(R.string.home_about_meiki),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.clickable { openUrl(context, MEIKI_MODEL_URL) }
     )
 }
 

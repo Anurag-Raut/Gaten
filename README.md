@@ -14,14 +14,16 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
 2. **Capture** — the accessibility service calls `takeScreenshot()` and freezes the current screen.
    Surfaces marked `FLAG_SECURE` (DRM video) come back blank; Gaten never tries to bypass them.
 3. **Detect** — as soon as the overlay opens, ML Kit finds the lines on the whole screen and indexes
-   each one with a box per character. That index is what makes the overlay usable; the faint
-   outlines fade in as soon as it exists, usually in well under a second.
+   each one with a box per character for hit testing. Those boxes are not drawn: only your own
+   selection is highlighted, so the frozen screen stays uncluttered.
 4. **Read** — with the optional manga-ocr model installed, it then reads those lines in the
    background and replaces each one's text as it lands, biggest boxes first (see *Optional
    stylized-text model* below). ML Kit's own reading stays for any line it cannot read: no model, a
    failure, or an answer slower than 2.5 s.
-5. **Tap or circle** — tap a text box to select the entire box and all its words, or circle some text.
+5. **Tap or circle** — tap text to select its entire indexed line and all its words, or circle some text.
    A tap highlights the whole box immediately and answers from the index, reading only that line.
+   The lasso trail is visible only while drawing and disappears on finger lift; the selected region
+   stays marked while the lookup runs and the result is shown.
    A circle always crops the exact rectangle that was drawn and attempts manga-ocr on it — index or no index,
    Japanese in the index or not — and the index lines the loop actually covered then add the words
    they hold behind that reading, deduplicated. With no model installed the crop yields no reading,
@@ -31,12 +33,20 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
    カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
    database built from JMdict and JMnedict, and the overlay lists the matching entries.
-8. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to a
-   "Gaten" deck (word, reading, meaning and the full line it came from) through AnkiDroid's
-   instant-add API. The first add asks for AnkiDroid's database permission; no network is used.
+8. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to your
+   configured deck and note type through AnkiDroid's instant-add API. Open **Anki → Customize cards**
+   on the home screen to choose the deck, tags, field mapping and card layout. Export stays on-device.
 
 Steps 2–7 are fully offline, and the app makes no network request of any kind until — and unless —
 the reader downloads the optional stylized-text model.
+
+Appearance settings near the bottom of the setup screen let you choose the light/dark theme,
+paper palette and accent independently. Changing the palette keeps your selected accent.
+Palette previews show each palette's paper and text colours with its name, without an accent dot.
+
+The home screen groups lookup triggers first, then Anki customization, the optional OCR model,
+Appearance and About. Hardware-key instructions and OCR model options are collapsed until needed.
+The floating-button switch has a visible off-state thumb and border in both themes.
 
 ### Closing the lookup
 
@@ -61,11 +71,6 @@ that stops being true, and a trigger that cannot start one is refused:
 - **The accessibility service is unbound or destroyed, or the app's task is finished** (including
   being taken off recents, where the platform chooses whether to deliver the callback).
 
-The media that was paused for the lookup is left **paused** for all of these: the reader should not
-hear a video resume under a call, and a player that has already raised its controls must not be
-started again behind them. The reader's own dismissals — back, the scrim, the trigger toggle — play
-it back as before.
-
 Foreground app changes during capture cancel the pending lookup. Each callback is tied to its
 capture, so a late success or failure cannot reopen a closed lookup or alter a newer request.
 
@@ -80,7 +85,10 @@ likely to need a real device to confirm.
 1. **Install the APK** for your ABI (`arm64-v8a` on modern phones).
 2. **Enable the accessibility service**: Settings → Accessibility → Gaten → On. The main screen
    has a button that opens the right settings page.
-3. **Add the Quick Settings tile**: open the Quick Settings panel, tap edit, and drag Gaten in.
+3. **Add the Quick Settings tile**: on Android 13+, tap **Add tile** on the home screen and confirm
+   Android's dialog. On older versions, add Gaten through the Quick Settings editor. The home row
+   reflects **Added** and returns to **Add tile** when Android reports removal. Removal itself
+   belongs to the Quick Settings editor; Android provides no app-side remove-tile API.
    Tapping the tile starts a lookup; if the accessibility service is not enabled, it opens
    accessibility settings instead.
 4. **Optional — bind the Plus Key.** The OnePlus Plus Key is intercepted by OxygenOS before apps
@@ -97,6 +105,26 @@ likely to need a real device to confirm.
 
    The trigger is a toggle: firing it while the panel is open closes the panel instead of starting
    another lookup.
+
+5. **Optional — customize Anki cards.** Open **Anki → Customize cards**. The default is the
+   existing Gaten deck and four-field note type. Enter a deck name (including nested names such
+   as `Japanese::Reading`) or allow AnkiDroid access to choose an existing deck. Add space-separated
+   tags if wanted. New decks and Gaten note types are created only when you export a word.
+   - Choose **Gaten cards (customizable)** to edit front/back HTML and CSS. Available fields
+     are `{{Expression}}`, `{{Reading}}`, `{{Meaning}}`, and `{{Sentence}}`; the back can use
+     `{{FrontSide}}`. Conditional sections such as `{{#Reading}}…{{/Reading}}` are supported.
+     Changed layouts use a separate note type for future exports, leaving existing cards and
+     AnkiDroid template edits intact. Restoring defaults uses the original Gaten note type.
+   - Or choose an existing standard note type and map its fields to Expression, Reading,
+     Meaning, Sentence, or Leave empty. Its templates and styling remain managed in AnkiDroid.
+     Expression must appear somewhere, and the first field must have a value for each exported
+     word. Cloze note types are not supported. If fields change in AnkiDroid, select the note type
+     again and save the updated mapping.
+   - Duplicates use the mapped first field within the selected note type across all decks.
+     A new layout creates a different note type with separate duplicate history.
+   - Tap **Save** to apply settings. Without database access, export uses AnkiDroid's share
+     screen; choose the deck and note type there. Gaten settings apply to direct export.
+
 
 ## Building from source
 
@@ -135,8 +163,8 @@ gesture usually needs no wait at all.
 
 The engines are not kept for the life of the process. Once no lookup has used them for 90 seconds —
 or when the system asks for memory, or when the accessibility service is torn down — Gaten releases
-them (manga-ocr's ONNX sessions, ML Kit's Japanese recognizer and the meiki detector). The next lookup
-builds them again from local files or APK assets, with no download; this first lookup may take longer.
+them (manga-ocr's ONNX sessions and ML Kit's Japanese recognizer). The next lookup builds them again
+from local files or APK assets, with no download; this first lookup may take longer.
 Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
 The memory reduction has not been measured on the current version.
 
@@ -176,16 +204,15 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
   Settings tile, accessibility service.
-- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the optional meiki
-  text-line detector (`meiki.text.detect.v0`, shipped in the APK alongside ML Kit and merged into
-  ML Kit's boxes by `DetectionMerge`), the full-screen text index (`ScreenText*`, `ScreenHits`) and
+- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the full-screen text index
+  (`ScreenText*`, `ScreenHits`) and
   `OcrRepair`. The reader is `ScreenLineReader` (the per-session cache that replaces each line's text
   as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
   (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrModels`
-  (when the three OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
+  (when the OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
   `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` the only network code
   in the app.
-- `anki/` — the AnkiDroid instant-add export.
+- `anki/` — AnkiDroid export plus deck, tags, field-mapping and card-template preferences.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
@@ -213,10 +240,8 @@ closes for those before their own window appears. No notification title, text or
 read, kept, logged or stored. This needs no extra permission; it is a side effect of the
 accessibility service's event subscription.
 
-The optional notification-listener access the home screen offers is separate and is used for one
-thing only: reading the active media sessions so the video behind the overlay can be paused and
-resumed. It deliberately reads nothing from the notifications it is handed, and declining it leaves
-every lookup feature working (only the session-based pause gives way to a media key press).
+Gaten does not control media playback or request notification-listener access. Pause a video
+yourself before looking up if needed; closing the lookup does not resume it.
 
 ML Kit's transport library and ONNX Runtime also declare `INTERNET` for their own analytics and
 telemetry backends. Gaten's code never calls those, but while the permission is in the merged
@@ -235,9 +260,6 @@ left implicit.
   <https://www.edrdg.org/>.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
   lines and reads them when no manga-ocr model is installed.
-- **Text-line detection** — [meiki.text.detect.v0](https://huggingface.co/rtr46/meiki.text.detect.v0)
-  (rtr46 and contributors, LGPL-3.0), a second line finder shipped in the APK alongside ML Kit for
-  the lettering ML Kit's detector misses.
 - **Optional stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
   Apache-2.0) through the ONNX export at
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),

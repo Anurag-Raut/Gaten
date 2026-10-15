@@ -40,22 +40,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.gaten.app.ocr.ScreenText
-import com.gaten.app.ui.overlay.ViewMapping
 
 /** Degenerate gestures (a tap or a sliver) are ignored below this side length, in view px. */
 internal const val MIN_SELECTION_PX = 24f
-
-/** Stroke and corner radius of the outlines drawn around the indexed lines. */
-private val OutlineStrokeWidth = 1.5.dp
-private val OutlineCorner = 4.dp
-
-/** The dark casing under each line outline, so it reads on light pages too. */
-private val OutlineHaloWidth = 4.dp
-
-/** Debug layer ("Show text boxes"): line bounds in one colour, character boxes in another. */
-private val DebugLineColor = Color.Red.copy(alpha = 0.9f)
-private val DebugCharColor = Color.Cyan.copy(alpha = 0.9f)
 
 /*
  * The lasso trail is three passes over one smoothed path, the way a route is drawn on a map: a
@@ -63,8 +50,8 @@ private val DebugCharColor = Color.Cyan.copy(alpha = 0.9f)
  * core inside it. The core is the theme's indigo - primary drifting to tertiary and back, the same
  * two tones the edge outline uses - and the casing under it is deliberately NOT a theme role: the
  * theme's dark-mode roles flip polarity, so a role-derived casing would vanish on one kind of page
- * or the other. A fixed dark casing is the file's existing convention (the line halos, the scrim),
- * and it is what makes the stroke read on a white manga page and on a dark game UI alike.
+ * or the other. A fixed dark casing keeps the stroke readable on a white manga page and on a
+ * dark game UI alike.
  */
 private val TrailBloomWidth = 14.dp
 private val TrailCasingWidth = 5.5.dp
@@ -84,7 +71,7 @@ private val SelectionCorner = 12.dp
 private const val ScrimAlpha = 0.35f
 
 /**
- * What the trail and the selection edge are cut back to once the result sheet is up: still there,
+ * What the selection edge is cut back to once the result sheet is up: still there,
  * marking the region the answer came from, but no longer the subject of the screen.
  */
 private const val ResultEmphasis = 0.4f
@@ -127,22 +114,16 @@ internal fun trailInto(path: Path, points: List<Offset>) {
     if (points.size > 1) path.lineTo(points.last().x, points.last().y)
 }
 
-/** Polyline through the sampled drag points; the allocating form, for callers outside a draw scope. */
-internal fun buildTrailPath(points: List<Offset>): Path = Path().apply { trailInto(this, points) }
-
 /**
  * The full-screen selection canvas over the frozen screenshot.
  *
  * Draws the dim-over-everything scrim as one even-odd fill — the whole canvas less a rounded hole
  * at the selection, so the clear region the reader chose has soft corners — then the selection's
- * own edge, the live lasso trail while the user is drawing, and the frozen one once the result is
- * in. While the screen index is ready and the user is selecting, every indexed line gets an
- * outline — a dark halo under the indigo core, so it reads on light and dark pages alike — fading
- * in so the reader can see what a tap will now hit. Drag and tap gestures are active only while
- * [interactive]; the result sheet sits on top and handles its own touches afterwards.
+ * own edge and the live lasso trail only while the user is drawing. Drag and tap gestures are active
+ * only while [interactive]; the result sheet sits on top and handles its own touches afterwards.
  *
- * The trail and the selection edge are cut back rather than removed once the result is up
- * ([ResultEmphasis]): the reader can still see which region was read while the sheet explains it.
+ * The selection edge is cut back once the result is up ([ResultEmphasis]): the reader can still
+ * see which region was read while the sheet explains it. The trail disappears on finger lift.
  *
  * The points themselves are hoisted into [LookupOverlay] so the lasso can survive recomposition
  * and be reset on "select again"; [onLassoEnd] reads that state at call time.
@@ -150,16 +131,10 @@ internal fun buildTrailPath(points: List<Offset>): Path = Path().apply { trailIn
 @Composable
 fun LassoLayer(
     screenshot: Bitmap?,
-    screen: ScreenText?,
-    /** Capture pixels -> view pixels: how every box is placed on the frozen frame. */
-    mapping: ViewMapping,
-    /** Debug: outline every indexed line and every character box of [screen]. */
-    showCharBoxes: Boolean,
     points: List<Offset>,
-    frozenTrail: Path?,
     frozenBox: Rect?,
     interactive: Boolean,
-    trailFading: Boolean,
+    showingResult: Boolean,
     onLassoStart: (Offset) -> Unit,
     onLassoUpdate: (Offset) -> Unit,
     onLassoEnd: () -> Unit,
@@ -176,23 +151,9 @@ fun LassoLayer(
     val liveBox = remember(points) { boundingBoxOf(points) }
     val box = frozenBox ?: liveBox
 
-    // The frozen lasso stays put while the scan runs and fades out once the result shows.
-    val trailAlpha by animateFloatAsState(
-        targetValue = if (trailFading) 0f else 1f,
-        animationSpec = tween(420),
-        label = "trailAlpha"
-    )
-
-    // The line outlines fade in once the screen index is ready, and out again while it is in use.
-    val outlineAlpha by animateFloatAsState(
-        targetValue = if (screen != null && interactive) 1f else 0f,
-        animationSpec = tween(250),
-        label = "outlineAlpha"
-    )
-
     // The selection keeps a quieter edge under the sheet, so the region that was read stays marked.
     val edgeEmphasis by animateFloatAsState(
-        targetValue = if (trailFading) ResultEmphasis else 1f,
+        targetValue = if (showingResult) ResultEmphasis else 1f,
         animationSpec = tween(220),
         label = "edgeEmphasis"
     )
@@ -269,20 +230,19 @@ fun LassoLayer(
                 }
             }
     ) {
-        // One pass set for the trail, drawn the same way for the frozen stroke and the live one.
-        fun DrawScope.drawTrail(path: Path, alpha: Float) {
-            if (alpha <= 0f) return
-            drawPath(path, primary.copy(alpha = TrailBloomAlpha * alpha), style = trailBloomStroke)
+        // Bloom, dark casing and themed core for the live stroke.
+        fun DrawScope.drawTrail(path: Path) {
+            drawPath(path, primary.copy(alpha = TrailBloomAlpha), style = trailBloomStroke)
             drawPath(
                 path,
-                Color.Black.copy(alpha = TrailCasingAlpha * alpha),
+                Color.Black.copy(alpha = TrailCasingAlpha),
                 style = trailCasingStroke
             )
             val brush = trailBrush
             if (brush != null) {
-                drawPath(path, brush, alpha = alpha, style = trailCoreStroke)
+                drawPath(path, brush, style = trailCoreStroke)
             } else {
-                drawPath(path, primary.copy(alpha = alpha), style = trailCoreStroke)
+                drawPath(path, primary, style = trailCoreStroke)
             }
         }
 
@@ -310,61 +270,9 @@ fun LassoLayer(
                 style = edgeCoreStroke
             )
         }
-        // Faint outlines over every indexed line, so the reader can see what a tap now hits. The
-        // debug layer below draws the same lines in its own colours, so one or the other, not both.
-        if (screen != null && outlineAlpha > 0f && !showCharBoxes) {
-            for (line in screen.lines) {
-                // A line with no character boxes has been dropped: it is not text on the screen,
-                // so it gets no outline either.
-                if (line.charBoxes.isEmpty()) continue
-                val bounds = mapping.toView(line.bounds)
-                // A dark casing under the core stroke, the way map routes are drawn: on a white
-                // speech bubble the halo carries the contrast, on a dark page the indigo does.
-                drawRoundRect(
-                    color = Color.Black.copy(alpha = 0.6f * outlineAlpha),
-                    topLeft = bounds.topLeft,
-                    size = bounds.size,
-                    cornerRadius = CornerRadius(OutlineCorner.toPx()),
-                    style = Stroke(width = OutlineHaloWidth.toPx())
-                )
-                drawRoundRect(
-                    color = primary.copy(alpha = outlineAlpha),
-                    topLeft = bounds.topLeft,
-                    size = bounds.size,
-                    cornerRadius = CornerRadius(OutlineCorner.toPx()),
-                    style = Stroke(width = OutlineStrokeWidth.toPx())
-                )
-            }
-        }
-        // Debug: every line's bounds and every character box as the index has them, placed through
-        // the same mapping as the frozen frame. Drawn on every recomposition, so the boxes follow
-        // the index as the reader replaces ML Kit's text line by line.
-        if (showCharBoxes && screen != null) {
-            for (line in screen.lines) {
-                if (line.charBoxes.isEmpty()) continue
-                val bounds = mapping.toView(line.bounds)
-                drawRoundRect(
-                    color = DebugLineColor,
-                    topLeft = bounds.topLeft,
-                    size = bounds.size,
-                    style = Stroke(width = OutlineStrokeWidth.toPx())
-                )
-                for (charBox in line.charBoxes) {
-                    val char = mapping.toView(charBox)
-                    drawRect(
-                        color = DebugCharColor,
-                        topLeft = char.topLeft,
-                        size = char.size,
-                        style = Stroke(width = OutlineStrokeWidth.toPx())
-                    )
-                }
-            }
-        }
-        // The frozen lasso trail: cut back and fading out once the result is in.
-        frozenTrail?.let { drawTrail(it, trailAlpha) }
         // The user's own stroke while drawing. A single sample — the first event of a drag — is a
         // dot, so the gesture is answered by the first move rather than by the second.
-        if (points.size == 1) {
+        if (interactive && points.size == 1) {
             val center = points[0]
             drawCircle(
                 Color.Black.copy(alpha = TrailCasingAlpha),
@@ -372,8 +280,8 @@ fun LassoLayer(
                 center
             )
             drawCircle(primary, trailCoreStroke.width / 2f, center)
-        } else if (points.size > 1) {
-            drawTrail(liveTrail, 1f)
+        } else if (interactive && points.size > 1) {
+            drawTrail(liveTrail)
         }
     }
 }

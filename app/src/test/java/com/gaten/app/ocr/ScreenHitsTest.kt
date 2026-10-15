@@ -127,17 +127,15 @@ class ScreenHitsTest {
     }
 
     @Test
-    fun aLineWithNoCharacterBoxesIsOfferedWhenItsOwnBoxIsCovered() {
-        // A meiki-only placeholder: a box, no text and no characters until manga-ocr reads it.
+    fun aLineWithNoCharacterBoxesIsNotOffered() {
+        // A line without character geometry cannot contribute to the selection.
         val screen = screenOf(
             line("日本語", top = 100),
             ScreenLine("", Box(0, 200, 400, 260), vertical = false, charBoxes = emptyList())
         )
 
-        // Offered to the reader, but with no characters to contribute to a span.
-        assertEquals(listOf(1), ScreenHits.linesInSelection(screen, Box(0, 210, 100, 250)))
+        assertTrue(ScreenHits.linesInSelection(screen, Box(0, 210, 100, 250)).isEmpty())
         assertTrue(ScreenHits.spansInSelection(screen, Box(0, 210, 100, 250)).isEmpty())
-        // A placeholder the loop never reached is not offered.
         assertTrue(ScreenHits.linesInSelection(screen, Box(0, 400, 100, 450)).isEmpty())
     }
 

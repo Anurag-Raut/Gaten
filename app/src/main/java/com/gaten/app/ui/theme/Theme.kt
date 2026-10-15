@@ -109,7 +109,7 @@ private const val MAX_FONT_SCALE = 1.3f
 fun GatenTheme(
     mode: ThemeMode = ThemeMode.System,
     palette: Palette = Palette.Gaten,
-    accent: AccentColor = palette.defaultAccent,
+    accent: AccentColor = AccentColor.Indigo,
     content: @Composable () -> Unit
 ) {
     val darkTheme = mode.isDark(isSystemInDarkTheme())

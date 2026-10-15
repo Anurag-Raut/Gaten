@@ -120,7 +120,7 @@ private val GreenDark = tones(0xFF56BE83, 0xFF14492B, 0xFFD9F0E3, 0xFF9BD9B6, da
 private val RoseLight = tones(0xFF9A365B, 0xFFF6E7EC, 0xFF5C132E, 0xFFC76F8F, dark = false)
 private val RoseDark = tones(0xFFD899B0, 0xFF74203F, 0xFFF6E7EC, 0xFFE8C2D0, dark = true)
 
-/** The colourless accent, for the [Palette.Mono] palette: no hue at all, the same luminance. */
+/** The colourless accent: no hue at all, the same luminance. */
 private val GraphiteLight = tones(0xFF5A5A5A, 0xFFEAEAEA, 0xFF303030, 0xFF8A8A8A, dark = false)
 private val GraphiteDark = tones(0xFFAAAAAA, 0xFF404040, 0xFFEAEAEA, 0xFFCBCBCB, dark = true)
 
@@ -139,22 +139,20 @@ fun accentRoles(accent: AccentColor, dark: Boolean): AccentRoles = when (accent)
 
 /**
  * The palettes the reader can pick between. A palette recolours the neutral ladder — paper, its
- * hairline and the ink written on it — and brings an accent with it, which the Accent row can still
- * change afterwards.
+ * hairline and the ink written on it — without changing the reader's selected accent.
  *
  * [Gaten] carries no tone: its ladder is the one the app shipped with, written out, and no single
  * (hue, saturation) pair reproduces it — its light paper is warm while its ink is neutral, and its
  * dark ladder is pure grey. Every other palette is that ladder retinted.
  */
 enum class Palette(
-    val defaultAccent: AccentColor,
     private val lightTone: PaletteTone?,
     private val darkTone: PaletteTone?
 ) {
-    Gaten(AccentColor.Indigo, null, null),
-    Mono(AccentColor.Graphite, PaletteTone(0f, 0f, 0f), PaletteTone(0f, 0f, 0f)),
-    Cool(AccentColor.Blue, PaletteTone(215f, 0.30f, 0.10f), PaletteTone(215f, 0.25f, 0.12f)),
-    Warm(AccentColor.Rose, PaletteTone(45f, 0.45f, 0.10f), PaletteTone(45f, 0.30f, 0.12f));
+    Gaten(null, null),
+    Mono(PaletteTone(0f, 0f, 0f), PaletteTone(0f, 0f, 0f)),
+    Cool(PaletteTone(215f, 0.30f, 0.10f), PaletteTone(215f, 0.25f, 0.12f)),
+    Warm(PaletteTone(45f, 0.45f, 0.10f), PaletteTone(45f, 0.30f, 0.12f));
 
     internal fun tone(dark: Boolean): PaletteTone? = if (dark) darkTone else lightTone
 }

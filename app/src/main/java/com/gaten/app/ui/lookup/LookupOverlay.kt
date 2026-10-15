@@ -57,7 +57,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -68,7 +67,6 @@ import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
 import com.gaten.app.ocr.MangaOcrEngine
-import com.gaten.app.ocr.OcrPreferences
 import com.gaten.app.ocr.ScanState
 import com.gaten.app.ocr.ScreenHits
 import com.gaten.app.ocr.ScreenLineReader
@@ -136,9 +134,7 @@ private fun sheetExit(dock: SheetDock): ExitTransition = when (dock) {
  *
  * On open the whole capture is detected and read once by ML Kit, in the background; the overlay is
  * usable the moment that index exists, and manga-ocr then reads its lines behind it
- * ([ScreenLineReader]), replacing each one's text as it lands. Ready is ML Kit's index: the
- * optional meiki model runs afterwards, entirely behind the ready overlay, and the lines it finds
- * beyond ML Kit's are appended to the live index and read like every other line. Both gestures read
+ * ([ScreenLineReader]), replacing each one's text as it lands. Both gestures read
  * their exact crop first: the tapped line's bounds or the circle's selection. The index supplements
  * that reading, restricted to the tapped line or the lines covered by the circle. Words are
  * tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is opened once
@@ -162,9 +158,6 @@ fun LookupOverlay(
     val tapTolerancePx = with(LocalDensity.current) {
         (TapTolerance.toPx() / mapping.minScale).roundToInt()
     }
-    // Debug aid, read for each overlay: the recognised boxes themselves, over the frozen frame.
-    val showCharBoxes = OcrPreferences.showCharBoxes(context)
-
     // The overlay's fade and the sheet's slide are coordinated through these two transition
     // states: dismissals await the real transitions (a MutableTransitionState's currentState only
     // settles once every nested enter/exit child — the sheet's animateEnterExit slide included —
@@ -175,7 +168,6 @@ fun LookupOverlay(
     var closing by remember { mutableStateOf(false) }
     var phase by remember { mutableStateOf(Phase.Selecting) }
     var points by remember { mutableStateOf(emptyList<Offset>()) }
-    var frozenTrail by remember { mutableStateOf<Path?>(null) }
     var frozenBox by remember { mutableStateOf<Rect?>(null) }
     var result by remember { mutableStateOf<LookupResult?>(null) }
     // The lookup session the displayed result belongs to, and the anchor box (view px) its dock
@@ -266,25 +258,6 @@ fun LookupOverlay(
         reader?.prefetch(prefetchOrder(current))
     }
 
-    // Meiki is a second, slower pass over the capture, run entirely behind the ready overlay: the
-    // reader was built from ML Kit's index alone, and the lines meiki finds beyond it join that
-    // index here as empty placeholders (append is the only structural change the index takes, so
-    // the gesture line-indices already handed out stay valid). The effect is keyed to the reader,
-    // so a disposed reader — overlay closed, screenshot replaced — never receives them; when lines
-    // were added they are prefetched like the rest, and read or dropped by the same rules.
-    LaunchedEffect(reader, screenshot) {
-        val current = reader ?: return@LaunchedEffect
-        val index = scannedScreen ?: return@LaunchedEffect
-        val bmp = screenshot ?: return@LaunchedEffect
-        val added = withContext(Dispatchers.Default) {
-            ScreenTextScanner.meikiLines(context, bmp, index.lines)
-        }
-        if (added.isNotEmpty()) {
-            current.append(added)
-            current.prefetch(prefetchOrder(current.text.value))
-        }
-    }
-
     // Open the offline dictionary once and keep it warm for the whole overlay lifetime.
     val repoState by produceState<RepoState>(RepoState.Loading, context) {
         value = try {
@@ -361,7 +334,6 @@ fun LookupOverlay(
         // The trail is drawn in view pixels; the index, the hit tests and the selection crop are all in
         // the capture's pixels, so the selection is converted on the way in.
         val bitmapBox = mapping.toBitmap(box)
-        frozenTrail = buildTrailPath(drawn)
         frozenBox = box
         lookupJob?.cancel()
         phase = Phase.Scanning
@@ -440,7 +412,7 @@ fun LookupOverlay(
         val x = tapped.x.toInt()
         val y = tapped.y.toInt()
         val tolerance = tapTolerancePx
-        // Hit-test the same line bounds that the overlay outlines.
+        // Hit-test the indexed line bounds without drawing screen-wide box outlines.
         val lineIndex = ScreenHits.hitTestLine(live, x, y, tolerance)
         if (lineIndex == null) {
             Log.d(TAG, "Tap missed: no text box within $tolerance px")
@@ -448,7 +420,6 @@ fun LookupOverlay(
             return
         }
         Log.d(TAG, "Tap hit line $lineIndex")
-        frozenTrail = null
         // Select the entire visible box immediately, including while OCR is running.
         val line = live.lines[lineIndex]
         val selection = line.bounds
@@ -485,11 +456,10 @@ fun LookupOverlay(
         }
     }
 
-    /** Fresh lasso: drop the frozen trail, back to selecting. The result stays for the exit. */
+    /** Fresh lasso: drop the selection, back to selecting. The result stays for the exit. */
     fun selectAgain() {
         if (closing) return
         lookupJob?.cancel()
-        frozenTrail = null
         frozenBox = null
         phase = Phase.Selecting
         sheetState.targetState = false
@@ -508,14 +478,10 @@ fun LookupOverlay(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             LassoLayer(
                 screenshot = screenshot,
-                screen = screen,
-                mapping = mapping,
-                showCharBoxes = showCharBoxes,
                 points = points,
-                frozenTrail = frozenTrail,
                 frozenBox = frozenBox,
                 interactive = phase == Phase.Selecting && !closing,
-                trailFading = phase == Phase.Result,
+                showingResult = phase == Phase.Result,
                 onLassoStart = { points = listOf(it) },
                 onLassoUpdate = { points = points + it },
                 onLassoEnd = { startLookup() },
