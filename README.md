@@ -62,13 +62,16 @@ that stops being true, and a trigger that cannot start one is refused:
 - **The accessibility service is unbound or destroyed, or the app's task is finished** (including
   being taken off recents, where the platform chooses whether to deliver the callback).
 
-The media that was paused for the lookup is left **paused** for all of these: the reader should not
-hear a video resume under a call, and a player that has already raised its controls must not be
+The media the lookup paused is left **paused** for all of these — and so is a pause that was still
+landing when the lookup ended, because the frozen frame had already asked for it. The reader should
+not hear a video play on under a call, and a player that has already raised its controls must not be
 started again behind them. The reader's own dismissals — back, the scrim, the trigger toggle — play
-it back as before.
+it back as before, and a close that beats the pause cancels it.
 
-Foreground app changes during capture cancel the pending lookup. Each callback is tied to its
-capture, so a late success or failure cannot reopen a closed lookup or alter a newer request.
+Foreground app changes cancel a capture that is still on its way to the screen. Once the frozen frame
+is up, the app beneath it is behind an opaque window, so a window event from it no longer ends the
+lookup. Each callback is tied to its capture, so a late success or failure cannot reopen a closed
+lookup or alter a newer request.
 
 What this does **not** promise: the power menu, an OEM dialer's in-call screen, or a clock's alarm
 screen each have their own window class names, and only the ones listed above are recognised; an

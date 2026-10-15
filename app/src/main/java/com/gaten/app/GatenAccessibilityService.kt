@@ -303,7 +303,14 @@ class GatenAccessibilityService : AccessibilityService() {
                     source != "com.oneplus.systemui" &&
                     (source != packageName || event.className?.toString() == MainActivity::class.java.name)
                 ) {
-                    if (captureToken.busy && capturePackage != null && capturePackage != source) {
+                    // Only a capture still on its way to the screen can be invalidated by a
+                    // foreground change. Once the frozen frame is up, the app beneath it is behind an
+                    // opaque window: a window event from that app is the screen Gaten already froze,
+                    // not a new one, so ending the lookup there would drop a lookup the reader is
+                    // using - and with it the pause the overlay has already asked for.
+                    if (!overlay.isShowing && captureToken.busy &&
+                        capturePackage != null && capturePackage != source
+                    ) {
                         Log.d(TAG, "Foreground app changed while capturing - ending the lookup")
                         cancelLookup()
                         syncFloatingButton()

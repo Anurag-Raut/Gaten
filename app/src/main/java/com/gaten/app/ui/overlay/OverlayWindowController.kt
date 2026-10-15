@@ -65,6 +65,9 @@ private const val PauseAfterFreezeMs = 100L
 /** Longest the overlay waits for its frozen first frame to reach the display. */
 private const val FreezeTimeoutMs = 250L
 
+/** How long a lost window focus has to stay away before the overlay treats it as the user leaving. */
+private const val FocusBounceMs = 200L
+
 /**
  * The lookup overlay, drawn in a window owned by the accessibility service.
  *
@@ -152,12 +155,14 @@ class OverlayWindowController(
             // Posted: the window is not taken down from inside its own focus dispatch. A window
             // that lost focus to something else - home, recents, another app, the shade, the power
             // menu - is not a dismissal the user made, so the media stays paused for whatever took
-            // the screen.
-            onFocusLost = {
+            // the screen. A window that has just been added can lose focus for a beat without the
+            // user having gone anywhere (the system settling as the window comes up, the player
+            // raising its controls as the pause lands), so the dismissal waits for the focus to stay
+            // away: one that is handed back is not a dismissal at all.
+            onFocusLost = { view ->
                 mainHandler.post {
-                    if (showing?.view === it) {
-                        Log.d(TAG, "Overlay lost window focus - the user went elsewhere, closing it")
-                        dismissAutomatically()
+                    if (showing?.view === view) {
+                        mainHandler.postDelayed({ closeIfFocusStayedAway(view) }, FocusBounceMs)
                     }
                 }
             }
@@ -290,6 +295,17 @@ class OverlayWindowController(
                 }
             }
         }
+    }
+
+    /**
+     * Closes the overlay for a focus loss that was not handed back within [FocusBounceMs]. Checked
+     * again here rather than acted on at once, so the transient focus changes that a window sees
+     * while it is coming up cannot dismiss a lookup the reader just opened.
+     */
+    private fun closeIfFocusStayedAway(view: View) {
+        if (showing?.view !== view || view.hasWindowFocus()) return
+        Log.d(TAG, "Overlay lost window focus - the user went elsewhere, closing it")
+        dismissAutomatically()
     }
 
     /** Takes the overlay down when it is up; true when there was one to take down. */

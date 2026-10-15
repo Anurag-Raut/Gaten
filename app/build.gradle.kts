@@ -70,6 +70,15 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // The classes under test log through android.util.Log, whose stub jar method throws by
+            // default. The alternative is threading a logger through every one of them just so a
+            // JVM test can run the state machine that has nothing to do with Android.
+            isReturnDefaultValues = true
+        }
+    }
+
     lint {
         // The AnkiDroid API library ships its own lint checks. Its DuplicateCrowdInStrings is an
         // error there and flags two of our intentional duplicates — the app name repeated across
