@@ -79,6 +79,27 @@ class MediaPauserTest {
     }
 
     @Test
+    fun aLookupAfterAnInterruptionStillStopsAndPlaysBack() {
+        val youtube = FakeSession("com.google.android.youtube", playing)
+        val fixture = Fixture(listOf(youtube))
+
+        fixture.pauser.pause(delayMs = 100)
+        fixture.pauser.discard()
+        fixture.runPending()
+        assertEquals(1, youtube.pauseCalls)
+
+        // The cycle after an interruption has to record what it stopped as usual, or the media would
+        // be left stopped with nothing to play it back.
+        fixture.pauser.pause()
+        fixture.runPending()
+        fixture.pauser.resume()
+        fixture.runPending()
+
+        assertEquals(2, youtube.pauseCalls)
+        assertEquals(1, youtube.playCalls)
+    }
+
+    @Test
     fun theUsersOwnCloseBeforeThePauseFiresCancelsIt() {
         val youtube = FakeSession("com.google.android.youtube", playing)
         val fixture = Fixture(listOf(youtube))
