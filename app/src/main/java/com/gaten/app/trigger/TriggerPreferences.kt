@@ -9,14 +9,15 @@ package com.gaten.app.trigger
 import android.content.Context
 
 /**
- * The floating trigger bubble's setting and its last on-screen position, stored in the app's single
- * settings file (the same one [com.gaten.app.ocr.OcrPreferences] uses) so both survive process death.
+ * Floating trigger settings, position and Quick Settings tile presence, stored in the app's
+ * settings file so they survive process death.
  */
 object TriggerPreferences {
     private const val PREFS_NAME = "gaten_settings"
     private const val KEY_FLOATING_BUTTON = "floating_button"
     private const val KEY_FLOATING_BUTTON_X = "floating_button_x"
     private const val KEY_FLOATING_BUTTON_Y = "floating_button_y"
+    const val KEY_TILE_ADDED = "tile_added"
 
     /** Sentinel for "never dragged"; a real window coordinate is never this. */
     private const val NO_POSITION = Int.MIN_VALUE
@@ -29,6 +30,13 @@ object TriggerPreferences {
 
     fun setFloatingButtonEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_FLOATING_BUTTON, enabled).apply()
+    }
+
+    fun tileAdded(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_TILE_ADDED, false)
+
+    fun setTileAdded(context: Context, added: Boolean) {
+        prefs(context).edit().putBoolean(KEY_TILE_ADDED, added).apply()
     }
 
     /** The bubble's last dragged top-left in window pixels, or null when it was never moved. */

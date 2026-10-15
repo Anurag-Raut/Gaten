@@ -43,10 +43,6 @@ object CharBoxAlign {
      * [newText] the second reader's string, [bounds] the line's own box that a character with no
      * counterpart is placed inside of, and [vertical] the line's axis. When the boxes do not
      * describe [oldText] at all there is nothing to align to and the even split is the fallback.
-     *
-     * A placeholder line from the second detector ([ScreenTextScanner]) has no reading and no boxes
-     * at all: there is no geometry to keep, so the reader's own text is simply tiled over the
-     * line's box, one character per even slice.
      */
     fun align(
         oldText: String,
@@ -55,8 +51,7 @@ object CharBoxAlign {
         bounds: Box,
         vertical: Boolean
     ): List<Box> {
-        // A meiki-only placeholder: no reading, no boxes, nothing to align to — the new text is
-        // tiled over the whole line box exactly as [interpolateCharBoxes] does it.
+        // With no original reading there is no character geometry to align to.
         if (oldText.isEmpty()) return interpolateCharBoxes(newText, bounds, vertical)
         if (oldBoxes.size != oldText.length) return interpolateCharBoxes(newText, bounds, vertical)
         // Nothing has to move: the boxes already address this text, exactly as the detector drew

@@ -85,7 +85,7 @@ object AnkiExporter {
     /** AnkiDroid's database permission, checked before every read and write. */
     private val PERMISSION: String = AddContentApi.READ_WRITE_PERMISSION
 
-    /** The settings file shared with `ocr/OcrPreferences` and [AnkiPreferences]. */
+    /** The app's settings file shared with [AnkiPreferences]. */
     private const val PREFS_NAME = "gaten_settings"
 
     /** Deck id cache, kept only while AnkiDroid still reports that id under the configured deck name. */

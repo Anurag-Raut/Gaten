@@ -79,13 +79,13 @@ internal interface MediaKeys {
  * back only the sessions this instance paused, and only when they were playing at the time, so a
  * session the user had paused themselves is never started.
  *
- * **A pause, once armed, is committed.** [pause] is called the moment the frozen frame is on screen,
+ * **A pause survives automatic dismissal.** [pause] is called the moment the frozen frame is on screen,
  * so from that instant the lookup has asked for the pause and nothing that later ends the lookup
  * un-asks it: [discard] — the path every automatic dismissal takes — drops the record of what to play
  * back, leaving the media paused for whatever took the screen, and [pauseNow] runs to completion even
- * when the lookup it belonged to is already gone. Only a resume — the user closing the overlay —
- * cancels a pause that has not fired yet, which is what keeps a close from stopping the media after
- * the overlay is gone. [release] tears the worker thread down, dropping anything still queued with it.
+ * when the lookup it belonged to is already gone. A newer lookup supersedes a pending pause, and
+ * a resume — the user closing the overlay — cancels it, so an old task cannot stop playback after
+ * the new lookup closes. [release] tears the worker thread down, dropping anything still queued with it.
  *
  * Without that access the session list is unavailable, so [pause] falls back to dispatching a media
  * pause key event and [resume] a media play one. `AudioManager.dispatchMediaKeyEvent` is public
@@ -117,7 +117,7 @@ class MediaPauser internal constructor(
         audio = AndroidMediaKeys(context)
     )
 
-    /** The delayed pause not yet run, which [resume] cancels; touched on the caller's thread only. */
+    /** The delayed pause, retained across [discard] so [pause] or [resume] can cancel it; caller-thread only. */
     private var pendingPause: ScheduledFuture<*>? = null
 
     /**
@@ -146,6 +146,8 @@ class MediaPauser internal constructor(
      * to be current by then.
      */
     fun pause(delayMs: Long = 0) {
+        // A new lookup owns the pending pause, including one left armed by discard().
+        pendingPause?.cancel(false)
         val token = generation.get()
         val requestedNanos = System.nanoTime()
         pendingPause = executor.schedule(
@@ -181,7 +183,6 @@ class MediaPauser internal constructor(
      */
     fun discard() {
         generation.incrementAndGet()
-        pendingPause = null
         executor.execute { forget() }
     }
 

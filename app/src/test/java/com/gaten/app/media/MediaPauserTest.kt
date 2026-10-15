@@ -100,6 +100,40 @@ class MediaPauserTest {
     }
 
     @Test
+    fun aNewLookupSupersedesAnAbandonedPendingPauseAndResumesPlayback() {
+        val youtube = FakeSession("com.google.android.youtube", playing).apply {
+            stateAfterPause = paused
+        }
+        val fixture = Fixture(listOf(youtube))
+
+        fixture.pauser.pause(delayMs = 100)
+        fixture.pauser.discard()
+        fixture.pauser.pause(delayMs = 100)
+        fixture.runPending()
+
+        assertEquals(1, youtube.pauseCalls)
+        fixture.pauser.resume()
+        fixture.runPending()
+
+        assertEquals(1, youtube.playCalls)
+    }
+
+    @Test
+    fun closingANewLookupBeforeItsPauseCancelsTheAbandonedPauseToo() {
+        val youtube = FakeSession("com.google.android.youtube", playing)
+        val fixture = Fixture(listOf(youtube))
+
+        fixture.pauser.pause(delayMs = 100)
+        fixture.pauser.discard()
+        fixture.pauser.pause(delayMs = 100)
+        fixture.pauser.resume()
+        fixture.runPending()
+
+        assertEquals(0, youtube.pauseCalls)
+        assertEquals(0, youtube.playCalls)
+    }
+
+    @Test
     fun theUsersOwnCloseBeforeThePauseFiresCancelsIt() {
         val youtube = FakeSession("com.google.android.youtube", playing)
         val fixture = Fixture(listOf(youtube))

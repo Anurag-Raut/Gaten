@@ -143,9 +143,11 @@ object WordScanner {
      * The longest dictionary word starting at [start], or null when nothing at this position is in
      * the dictionary.
      *
-     * Direct hits are preferred over deinflected ones and longer spans over shorter ones, so the
-     * search runs two passes over every span length: first dictionary forms (including the
-     * katakana-folded reading), then inflected readings.
+     * Spans are probed longest first, and every reading of a span — dictionary form, katakana fold,
+     * inflected — is tried before the next shorter span. A longer inflected reading therefore beats
+     * a shorter dictionary form, because that shorter form is usually this word's own stem (振り
+     * inside 振り返った, 話し inside 話した). At equal length the dictionary form still wins, so
+     * した stays 下 and きた stays 北.
      */
     private fun matchAt(text: String, start: Int, lookup: (String) -> List<DictEntry>): ScannedWord? {
         val maxLength = minOf(MAX_MATCH_LENGTH, text.length - start)
@@ -163,12 +165,8 @@ object WordScanner {
                     return ScannedWord(surface, start, start + length, folded, foldedEntries)
                 }
             }
-        }
-
-        for (length in maxLength downTo 1) {
-            val surface = text.substring(start, start + length)
             val hit = lookupDeinflected(surface, lookup)
-                ?: foldKatakanaToHiragana(surface)
+                ?: folded
                     .takeIf { it != surface }
                     ?.let { lookupDeinflected(it, lookup) }
             if (hit != null) {
@@ -188,6 +186,11 @@ object WordScanner {
         lookup: (String) -> List<DictEntry>
     ): Pair<String, List<DictEntry>>? {
         for (candidate in Deinflector.candidates(variant)) {
+            // A candidate the span opens with is not an inflection of it but a shorter word the span
+            // happens to start with: the copula rules strip です / だった and would otherwise turn
+            // 学生です into one 学生 span. The direct lookup above already tried that word at its own
+            // length.
+            if (candidate.length < variant.length && variant.startsWith(candidate)) continue
             val entries = lookup(candidate)
             if (entries.isNotEmpty()) return candidate to entries
             val folded = foldKatakanaToHiragana(candidate)

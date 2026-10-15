@@ -317,41 +317,6 @@ class ScreenLineReaderTest {
     }
 
     @Test
-    fun anAppendedPlaceholderLineIsReadLikeAnyOther() {
-        // The meiki-only placeholders join the index after construction (append); a gesture must be
-        // able to read one by its appended index, and the reading must land in the live index with
-        // its boxes re-aligned like every other line's.
-        val screen = screenOf("猫が水を飲む")
-        val reader = readerAnswering(screen, "犬")
-        val placeholder = ScreenLine("", Box(0, 500, 120, 620), vertical = false, charBoxes = emptyList())
-
-        runBlocking {
-            reader.append(listOf(placeholder))
-            assertEquals("犬", reader.read(1))
-        }
-
-        assertEquals(2, reader.text.value.lines.size)
-        val line = reader.text.value.lines[1]
-        assertEquals("犬", line.text)
-        assertEquals(line.text.length, line.charBoxes.size)
-        assertEquals(placeholder.bounds, line.bounds)
-        // The appended index is additive: the line that was there before is untouched.
-        assertEquals("猫が水を飲む", reader.text.value.lines[0].text)
-        reader.close()
-    }
-
-    @Test
-    fun appendingNothingChangesNothing() {
-        val screen = screenOf("猫が水を飲む")
-        val reader = readerAnswering(screen, "犬")
-
-        reader.append(emptyList())
-
-        assertEquals(screen, reader.text.value)
-        reader.close()
-    }
-
-    @Test
     fun anUnknownLineIsNotReadAndYieldsNothing() {
         val screen = screenOf("猫が水を飲む")
 

@@ -51,6 +51,7 @@ import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ui.lookup.LookupOverlay
 import com.gaten.app.ui.theme.GatenTheme
+import com.gaten.app.ui.theme.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -134,7 +135,7 @@ class OverlayWindowController(
             val startedAt = android.os.SystemClock.elapsedRealtime()
             Log.d(TAG, "Early screen scan submitted" +
                 " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
-            val result = ScreenTextScanner.scan(context, bitmap)
+            val result = ScreenTextScanner.scan(bitmap)
             Log.d(TAG, "Early screen scan ${if (result == null) "unavailable" else "ready"}" +
                 " in ${android.os.SystemClock.elapsedRealtime() - startedAt} ms")
             result
@@ -280,7 +281,11 @@ class OverlayWindowController(
         scan: Deferred<ScreenText?>
     ) = ComposeView(context).apply {
         setContent {
-            GatenTheme {
+            GatenTheme(
+                ThemePreferences.themeMode(context),
+                ThemePreferences.palette(context),
+                ThemePreferences.accent(context)
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Transparent,

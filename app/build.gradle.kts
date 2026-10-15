@@ -9,7 +9,6 @@
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
-import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.android.application)
@@ -111,14 +110,6 @@ android {
     }
     buildFeatures {
         compose = true
-    }
-
-    sourceSets {
-        // `models/meiki/detect.onnx` is fetched here (and gitignored) by fetchMeikiModel below; the
-        // directory itself is the assets root, so the model lands in the APK as `meiki/detect.onnx`.
-        getByName("main") {
-            assets.srcDir("models")
-        }
     }
 }
 
@@ -234,63 +225,6 @@ if (bundleMangaOcr) {
     tasks.matching { it.name == "mergeDebugAssets" }.configureEach {
         dependsOn(fetchMangaOcrModel)
     }
-}
-
-/** Lowercase hex SHA-256 of [file], streamed so a 40 MB model is never held in memory twice. */
-fun sha256(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { input ->
-        val buffer = ByteArray(64 * 1024)
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            digest.update(buffer, 0, read)
-        }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-}
-
-// The optional meiki text-line detector (~41 MB) IS shipped in every APK, so unlike manga-ocr it is
-// not gated behind a property: Gradle fetches it once into this gitignored asset directory and the
-// merge steps package `meiki/detect.onnx`. Up to date while the file is there and matches the SHA-256
-// published by Hugging Face, so only the first build (or a corrupted download) hits the network.
-val meikiModelFile = layout.projectDirectory.file("models/meiki/detect.onnx")
-val meikiModelSha256 = "3b702a7e7c9328ff461ed22ed6efc71505798ec1f44b76564e467d08fd042ce0"
-val meikiModelUrl =
-    "https://huggingface.co/rtr46/meiki.text.detect.v0/resolve/main/meiki.text.detect.small.v0.onnx"
-
-val fetchMeikiModel by tasks.registering {
-    val target = meikiModelFile.asFile
-    description = "Downloads the meiki text-line detector into ${meikiModelFile.asFile.relativeTo(projectDir)}."
-    outputs.upToDateWhen { target.isFile && sha256(target) == meikiModelSha256 }
-    doLast {
-        if (target.isFile && sha256(target) == meikiModelSha256) {
-            logger.lifecycle("meiki: ${target.name} is already there, skipping")
-            return@doLast
-        }
-        target.parentFile.mkdirs()
-        logger.lifecycle("meiki: downloading $meikiModelUrl")
-        try {
-            downloadFollowingRedirects(meikiModelUrl, target)
-        } catch (e: Exception) {
-            error("Could not download $meikiModelUrl: ${e.message} — remove ${target.path} and retry")
-        }
-        val actual = sha256(target)
-        if (actual != meikiModelSha256) {
-            target.delete()
-            error("meiki: SHA-256 mismatch for $meikiModelUrl (expected $meikiModelSha256, got $actual)")
-        }
-        logger.lifecycle("meiki: wrote ${target.name} (${target.length() / 1024 / 1024} MB)")
-    }
-}
-
-tasks.named("preBuild") {
-    dependsOn(fetchMeikiModel)
-}
-
-// Every variant packages the model, so every per-variant asset merge must wait for the download.
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
-    dependsOn(fetchMeikiModel)
 }
 
 dependencies {
