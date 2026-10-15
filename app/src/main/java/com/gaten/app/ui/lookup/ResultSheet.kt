@@ -10,6 +10,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -76,6 +77,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -108,6 +110,9 @@ import com.gaten.app.dict.alternativeHeadwordFor
 import com.gaten.app.dict.headwordFor
 import com.gaten.app.dict.notedForm
 import com.gaten.app.ui.theme.Spacing
+import com.gaten.app.ui.wanikani.KanjiStrip
+import com.gaten.app.ui.wanikani.WaniKaniDetailPanel
+import com.gaten.app.wanikani.WaniKaniTarget
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -147,7 +152,7 @@ private val ChipRowHeight = 40.dp
  * headword, 16sp readings, glosses and word chips, 12sp badges and 13sp labels. Its line heights keep the
  * larger text readable within the compact panel. Nothing here touches the theme.
  */
-private data class SheetType(
+internal data class SheetType(
     val header: TextStyle,
     val headword: TextStyle,
     val reading: TextStyle,
@@ -161,7 +166,7 @@ private data class SheetType(
 
 /** The scale for one sheet: the theme's own when [compact] is false, the tighter copy when true. */
 @Composable
-private fun sheetType(compact: Boolean): SheetType {
+internal fun sheetType(compact: Boolean): SheetType {
     val type = MaterialTheme.typography
     return remember(compact, type) {
         if (compact) {
@@ -221,6 +226,16 @@ fun ResultSheet(
     modifier: Modifier = Modifier
 ) {
     var selected by remember { mutableStateOf(0) }
+    // The WaniKani pages open over the entry, and a radical opens over the kanji it came from: a
+    // stack, so Back walks the pages down to the dictionary entry with no further lookup, and the
+    // selected word never has to be read again. Back is handled here — after the overlay's own
+    // handler, which closes the lookup — so it unwinds the pages first and only then the overlay.
+    val wanikani = remember { mutableStateListOf<WaniKaniTarget>() }
+    // Guarded: the back handler and the page's own back button can both arrive in one frame.
+    fun closeWaniKaniPage() {
+        if (wanikani.isNotEmpty()) wanikani.removeAt(wanikani.lastIndex)
+    }
+    BackHandler(enabled = wanikani.isNotEmpty()) { closeWaniKaniPage() }
     val dock = layout.dock
     val compact = dock != SheetDock.Bottom
     val type = sheetType(compact)
@@ -315,9 +330,19 @@ fun ResultSheet(
                     SheetBody(
                         result = result,
                         selected = selected,
-                        onSelect = { selected = it },
+                        onSelect = {
+                            selected = it
+                            wanikani.clear()
+                        },
                         onDismiss = onDismiss,
-                        onSelectAgain = onSelectAgain,
+                        onSelectAgain = {
+                            wanikani.clear()
+                            onSelectAgain()
+                        },
+                        target = wanikani.lastOrNull(),
+                        onKanji = { wanikani.add(WaniKaniTarget.Kanji(it)) },
+                        onRadical = { wanikani.add(WaniKaniTarget.Radical(it)) },
+                        onWaniKaniBack = { closeWaniKaniPage() },
                         type = type,
                         compact = false
                     )
@@ -360,9 +385,19 @@ fun ResultSheet(
                         SheetBody(
                             result = result,
                             selected = selected,
-                            onSelect = { selected = it },
+                            onSelect = {
+                                selected = it
+                                wanikani.clear()
+                            },
                             onDismiss = onDismiss,
-                            onSelectAgain = onSelectAgain,
+                            onSelectAgain = {
+                                wanikani.clear()
+                                onSelectAgain()
+                            },
+                            target = wanikani.lastOrNull(),
+                            onKanji = { wanikani.add(WaniKaniTarget.Kanji(it)) },
+                            onRadical = { wanikani.add(WaniKaniTarget.Radical(it)) },
+                            onWaniKaniBack = { closeWaniKaniPage() },
                             type = type,
                             compact = true
                         )
@@ -441,6 +476,11 @@ private fun ColumnScope.SheetBody(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
     onSelectAgain: () -> Unit,
+    /** The WaniKani page open over the entry, or null while the entry itself is showing. */
+    target: WaniKaniTarget?,
+    onKanji: (String) -> Unit,
+    onRadical: (Int) -> Unit,
+    onWaniKaniBack: () -> Unit,
     type: SheetType,
     compact: Boolean
 ) {
@@ -531,20 +571,34 @@ private fun ColumnScope.SheetBody(
                 compact = compact
             )
             Spacer(Modifier.height(if (compact) Spacing.xs else Spacing.s))
-            // Side dock: fill, so the scrolling entry stretches and the Add button lands on the
-            // panel's bottom edge however short the entry is. Bottom dock: hug, so the portrait
-            // sheet still grows to its content and the button sits directly under it.
-            Crossfade(
-                targetState = selected,
-                animationSpec = tween(150),
-                label = "entry",
-                modifier = Modifier.weight(1f, fill = compact)
-            ) { index ->
-                EntryColumn(result.words[index], type, compact)
+            if (target != null) {
+                // A WaniKani page replaces the entry, and with it the Add to Anki button: the word
+                // chips stay, so another word is still one tap away, and Back brings the entry —
+                // and then the button — straight back.
+                WaniKaniDetailPanel(
+                    target = target,
+                    onBack = onWaniKaniBack,
+                    onRadical = onRadical,
+                    type = type,
+                    compact = compact,
+                    modifier = Modifier.weight(1f, fill = compact)
+                )
+            } else {
+                // Side dock: fill, so the scrolling entry stretches and the Add button lands on the
+                // panel's bottom edge however short the entry is. Bottom dock: hug, so the portrait
+                // sheet still grows to its content and the button sits directly under it.
+                Crossfade(
+                    targetState = selected,
+                    animationSpec = tween(150),
+                    label = "entry",
+                    modifier = Modifier.weight(1f, fill = compact)
+                ) { index ->
+                    EntryColumn(result.words[index], type, compact, onKanji)
+                }
+                // Pinned below the scrolling entry — outside it, so a long entry scrolls under the
+                // button instead of pushing it past the panel's bottom edge.
+                AddToAnki(result.words[selected], type, compact)
             }
-            // Pinned below the scrolling entry — outside it, so a long entry scrolls under the
-            // button instead of pushing it past the panel's bottom edge.
-            AddToAnki(result.words[selected], type, compact)
         }
     }
 }
@@ -719,7 +773,12 @@ private fun Chip(
 
 /** Dictionary entry for the selected word's first match; scrolls when long. */
 @Composable
-private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
+private fun EntryColumn(
+    word: ScannedWord,
+    type: SheetType,
+    compact: Boolean,
+    onKanji: (String) -> Unit
+) {
     val entry = word.entries.firstOrNull()
     Column(
         modifier = Modifier
@@ -740,10 +799,11 @@ private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
             return
         }
 
+        val headword = headwordFor(word, entry)
         val alsoWritten = notedForm(word, entry)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = headwordFor(word, entry),
+                text = headword,
                 style = type.headword,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -771,6 +831,10 @@ private fun EntryColumn(word: ScannedWord, type: SheetType, compact: Boolean) {
                 color = MaterialTheme.colorScheme.primary
             )
         }
+        // The kanji of the headword, each one a tap from its WaniKani page (ui/wanikani). Drawn
+        // from the headword, so a kana-only word has nothing to offer, and shown for every word:
+        // what WaniKani covers is not known before the tap.
+        KanjiStrip(headword = headword, onKanji = onKanji, type = type)
         if (alsoWritten != null) {
             Text(
                 text = stringResource(R.string.lookup_also_written, alsoWritten),
@@ -836,7 +900,7 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
     val status = remember { AnkiExporter.status(context) }
     val settings = AnkiPreferences.load(context)
 
-    val card = AnkiCard.from(word, sentence = word.context)
+    val card = AnkiCard.from(word)
     var state by remember(card, status, settings) {
         mutableStateOf<AnkiUiState>(
             if (status == AnkiStatus.Ready) AnkiUiState.Checking else AnkiUiState.Idle

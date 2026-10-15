@@ -46,8 +46,10 @@ Sources, both from `jmdict-simplified` release `3.6.2+20261005200550`, both SHA-
 - `jmdict-eng-3.6.2+20261005200550.json.tgz` (11.5 MB) — words
 - `jmnedict-all-3.6.2+20261005200550.json.tgz` (13.5 MB) — proper nouns, which JMdict almost
   entirely lacks (池袋, 新宿, 秋葉原 are all absent there)
-`PRAGMA user_version` is stamped with the dictionary date; the app compares it (and the rest of the
-SQLite header) to decide whether its extracted copy is still current.
+`PRAGMA user_version` is stamped with the schema version (3 = the tables below; 1 was the same
+`entries`/`terms`/`names` set and 2 added an `examples` table while the Anki export carried an example
+sentence). The app compares it (and the rest of the SQLite header) to decide whether its extracted copy
+is still current, and `app/build.gradle.kts` refuses to build against an asset of another version.
 Frozen schema (S3 queries exactly this):
 ```sql
 CREATE TABLE entries(

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+
+    <!-- Home entry point -->
+    <string name="wk_settings_title">WaniKani</string>
+    <string name="wk_settings_summary">WaniKani&#8217;s meanings, readings, radicals and mnemonics for the kanji you tap.</string>
+    <string name="wk_settings_open">WaniKani settings</string>
+
+    <!-- Settings screen -->
+    <string name="wk_settings_back">Back</string>
+    <string name="wk_settings_explain">WaniKani is reference content: its meanings, readings, radicals and mnemonics for the kanji you tap in a lookup. Connecting checks your token with WaniKani, and every page you open is kept on this device so it stays readable offline. Gaten reads no lessons, reviews or statistics, and never changes anything in your account.</string>
+    <string name="wk_settings_coverage">WaniKani&#8217;s pages cover the kanji and radicals of its own curriculum, so a kanji outside it has no page here: Gaten says so instead of inventing content. Radical names are WaniKani&#8217;s own, not linguistic definitions.</string>
+    <string name="wk_settings_attribution">WaniKani and its content belong to Tofugu LLC. These pages are an unofficial third-party reference, not affiliated with or endorsed by WaniKani, and nothing from WaniKani is bundled with Gaten or exported to Anki.</string>
+    <string name="wk_settings_token_label">Personal access token</string>
+    <string name="wk_settings_token_placeholder">Paste your token</string>
+    <string name="wk_settings_token_help">Create a token with read-only access on WaniKani and paste it here. It is kept on this device only — encrypted, outside backups — and is sent only to api.wanikani.com. Gaten never shows it again.</string>
+    <string name="wk_settings_token_page">Open WaniKani token settings</string>
+    <string name="wk_settings_connect">Save and connect</string>
+    <string name="wk_settings_recheck">Recheck connection</string>
+    <string name="wk_settings_disconnect">Disconnect</string>
+    <string name="wk_settings_checking">Checking…</string>
+    <string name="wk_settings_status_none">Not connected. Kanji pages say what to do until you connect.</string>
+    <string name="wk_settings_status_saved">Connected: a token is saved on this device.</string>
+    <string name="wk_settings_connected">Connected. Gaten can read WaniKani&#8217;s reference content.</string>
+    <string name="wk_settings_connected_levels">Connected. Your account covers WaniKani&#8217;s first %1$d levels; kanji beyond them are shown as outside your subscription.</string>
+    <string name="wk_settings_invalid">WaniKani rejected that token. Check it was copied in full.</string>
+    <string name="wk_settings_unreachable">Could not connect to WaniKani: %1$s</string>
+    <string name="wk_settings_disconnected">Disconnected. The saved token and every cached page were removed.</string>
+    <string name="wk_settings_disconnect_failed">Some of the saved token or cached pages could not be removed. Disconnect again.</string>
+
+    <!-- Kanji strip in the result sheet -->
+    <string name="wk_strip_label">WaniKani kanji</string>
+    <string name="wk_cd_kanji">WaniKani details for %1$s</string>
+    <string name="wk_cd_radical">WaniKani details for the radical %1$s</string>
+
+    <!-- Kanji and radical pages -->
+    <string name="wk_cd_back">Close these details</string>
+    <string name="wk_cd_open">Open this page on WaniKani</string>
+    <string name="wk_cd_refresh">Refresh this page from WaniKani</string>
+    <string name="wk_radical">Radical</string>
+    <string name="wk_meaning">Meaning</string>
+    <string name="wk_onyomi">On&#8217;yomi</string>
+    <string name="wk_kunyomi">Kun&#8217;yomi</string>
+    <string name="wk_radicals">Radicals</string>
+    <string name="wk_meaning_mnemonic">WaniKani&#8217;s meaning mnemonic</string>
+    <string name="wk_reading_mnemonic">WaniKani&#8217;s reading mnemonic</string>
+    <string name="wk_saved">Saved on this device: readable offline.</string>
+    <string name="wk_not_saved">Some details could not be saved for offline use.</string>
+    <string name="wk_stale">Showing the saved copy — WaniKani could not be reached just now.</string>
+    <string name="wk_loading">Looking up WaniKani…</string>
+    <string name="wk_retry">Retry</string>
+    <string name="wk_open_app">Open Gaten</string>
+    <string name="wk_no_entry_kanji">WaniKani has no entry for %1$s.</string>
+    <string name="wk_no_entry_radical">WaniKani has no entry for this radical.</string>
+    <string name="wk_restricted_kanji">%1$s is above the levels your WaniKani account includes.</string>
+    <string name="wk_restricted_radical">This radical is above the levels your WaniKani account includes.</string>
+    <string name="wk_needs_token">Connect a WaniKani personal access token in the Gaten app to see kanji and radical pages here.</string>
+    <string name="wk_auth">WaniKani rejected the saved token. Open Gaten to connect again.</string>
+    <string name="wk_unreachable">Could not load this page from WaniKani: %1$s.</string>
+
+    <!-- Why a WaniKani request could not be answered -->
+    <string name="wk_failure_offline">no connection</string>
+    <string name="wk_failure_timeout">the request timed out</string>
+    <string name="wk_failure_rate_limited">WaniKani is limiting requests just now</string>
+    <string name="wk_failure_server">WaniKani reported a server error</string>
+    <string name="wk_failure_too_large">the answer was too large to keep</string>
+    <string name="wk_failure_malformed">WaniKani sent something Gaten could not read</string>
+    <string name="wk_failure_storage">this device could not save the answer</string>
+</resources>

@@ -24,6 +24,15 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,13 +106,16 @@ import com.gaten.app.ocr.MangaOcrCatalog
 import com.gaten.app.ocr.MangaOcrDownloader
 import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.trigger.TriggerPreferences
+import com.gaten.app.ui.anki.AnkiReviewScreen
 import com.gaten.app.ui.components.AccessibilityDisclosureDialog
 import com.gaten.app.ui.theme.AccentColor
+import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.Palette
 import com.gaten.app.ui.theme.Spacing
 import com.gaten.app.ui.theme.ThemeMode
 import com.gaten.app.ui.theme.accentRoles
 import com.gaten.app.ui.theme.paletteNeutrals
+import com.gaten.app.ui.wanikani.WaniKaniSettingsScreen
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -111,9 +123,17 @@ private const val EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 private const val CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch"
 
 /**
- * Home screen: service status, lookup triggers, Anki card customization, the optional manga-ocr
- * model, appearance choices and the legal footer. The app is used from the overlay, so this stays a
- * plain setup page.
+ * The page [HomeScreen] shows: home itself, or one of the full screens that opens over it.
+ *
+ * The `rememberSaveable` flags stay the source of truth for what is up — this is only what the screen
+ * transition animates between, and the flags are read in one order so exactly one screen is ever up.
+ */
+private enum class HomePage { Home, AnkiSettings, AnkiReview, WaniKaniSettings }
+
+/**
+ * Home screen: service status, lookup triggers, Anki card customization, WaniKani settings, the
+ * optional manga-ocr model, appearance choices and the legal footer. The app is used from the
+ * overlay, so this stays a plain setup page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,6 +150,15 @@ fun HomeScreen(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var showAnkiSettings by rememberSaveable { mutableStateOf(false) }
+    var showAnkiReview by rememberSaveable { mutableStateOf(false) }
+    var showWaniKaniSettings by rememberSaveable { mutableStateOf(false) }
+    // What those flags add up to, for the transition below to move between.
+    val page = when {
+        showAnkiSettings -> HomePage.AnkiSettings
+        showAnkiReview -> HomePage.AnkiReview
+        showWaniKaniSettings -> HomePage.WaniKaniSettings
+        else -> HomePage.Home
+    }
     val scrollState = rememberScrollState()
 
     // Service state, re-read on every resume because the user grants it in Settings.
@@ -222,11 +251,6 @@ fun HomeScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    if (showAnkiSettings) {
-        AnkiSettingsScreen(onClose = { showAnkiSettings = false })
-        return
     }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
@@ -326,6 +350,30 @@ fun HomeScreen(
                 OutlinedButton(onClick = { showAnkiSettings = true }) {
                     Text(stringResource(R.string.anki_settings_open))
                 }
+                Spacer(modifier = Modifier.height(Spacing.s))
+                OutlinedButton(onClick = { showAnkiReview = true }) {
+                    Text(stringResource(R.string.ankireview_open))
+                }
+            }
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            SectionLabel(text = stringResource(R.string.wk_settings_title))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = Spacing.l, vertical = Spacing.m)
+            ) {
+                Text(
+                    text = stringResource(R.string.wk_settings_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(Spacing.s))
+                OutlinedButton(onClick = { showWaniKaniSettings = true }) {
+                    Text(stringResource(R.string.wk_settings_open))
+                }
             }
             Spacer(modifier = Modifier.height(Spacing.xl))
 
@@ -358,6 +406,44 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(Spacing.xxl))
             AboutFooter()
             Spacer(modifier = Modifier.height(Spacing.xl))
+        }
+    }
+
+    // A screen slides in from the right edge over home, and leaves the same way, so closing reads as
+    // returning to what was there. Emitted after the home content because both are children of
+    // MainActivity's Surface, a Box that draws its children in the order they are declared — the
+    // screen has to be the later one to land on top of the page it covers, which also stays still
+    // rather than sliding with it.
+    AnimatedContent(
+        targetState = page,
+        transitionSpec = {
+            if (targetState == HomePage.Home) {
+                // Closing: home is already there, so only the leaving screen animates.
+                EnterTransition.None togetherWith (
+                    slideOutHorizontally(
+                        animationSpec = tween(Motion.LONG, easing = Motion.emphasizedAccelerate)
+                    ) { it } + fadeOut(tween(Motion.LONG, easing = Motion.emphasizedAccelerate))
+                )
+            } else {
+                // Opening: the screen arrives from that edge and settles over home.
+                (
+                    slideInHorizontally(
+                        animationSpec = tween(Motion.LONG, easing = Motion.emphasizedDecelerate)
+                    ) { it } + fadeIn(tween(Motion.LONG, easing = Motion.emphasizedDecelerate))
+                ) togetherWith ExitTransition.None
+            }
+        },
+        label = "homeScreen",
+        modifier = Modifier.fillMaxSize()
+    ) { screen ->
+        when (screen) {
+            // Home is the content underneath, so this transition has nothing of its own to draw.
+            HomePage.Home -> Unit
+            HomePage.AnkiSettings -> AnkiSettingsScreen(onClose = { showAnkiSettings = false })
+            HomePage.AnkiReview -> AnkiReviewScreen(onClose = { showAnkiReview = false })
+            HomePage.WaniKaniSettings -> WaniKaniSettingsScreen(
+                onClose = { showWaniKaniSettings = false }
+            )
         }
     }
 
@@ -526,10 +612,10 @@ private fun FloatingButtonRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
  * There is no switch: manga-ocr is the reader as soon as its model is on the phone. With no model
  * installed the built-in reader (ML Kit) reads the screen, and the card says so.
  *
- * Downloading is the app's only network request, and it only happens after the size has been shown
- * and confirmed ([confirmDownload] in the screen above); importing opens a document picker for a
- * phone that has no network or a model fetched elsewhere. Both end up in the same place, and Remove
- * takes the model off again.
+ * Downloading is one of the app's two network uses (the other is the optional WaniKani reference
+ * pages), and it only happens after the size has been shown and confirmed ([confirmDownload] in the
+ * screen above); importing opens a document picker for a phone that has no network or a model
+ * fetched elsewhere. Both end up in the same place, and Remove takes the model off again.
  */
 @Composable
 private fun MangaOcrSection(

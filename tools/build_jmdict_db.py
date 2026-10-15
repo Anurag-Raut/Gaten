@@ -57,6 +57,13 @@ NAMES_ARCHIVE_SHA256 = "9a6a36209eb400ef0bd2704445d383de3834c7a7e883cd959f409f64
 #: Rows asserted to exist in `names` after the build.
 NAME_PROBES = ("池袋", "新宿", "秋葉原")
 
+# Schema version stamped as `PRAGMA user_version`, and checked by `app/build.gradle.kts` before an
+# APK is built. 1 was `entries`/`terms`/`names`, 2 added an `examples` table while the Anki export
+# carried an example sentence, and 3 removed it again. The number only ever moves forward: an asset
+# built for another schema is refused by the build rather than reaching a device whose queries expect
+# something else.
+SCHEMA_VERSION = 3
+
 #: Longest stored name gloss; keeps the table at ~21 MB for ~624k terms.
 NAME_GLOSS_CHARS = 40
 
@@ -282,7 +289,12 @@ def add_names(db_path, names_json_path):
 
 
 def set_user_version(db_path, version):
-    """Stamp the build date as `user_version` so the app can tell two assets apart."""
+    """Stamp the schema version as `user_version`.
+
+    Two readers depend on it: `app/build.gradle.kts` refuses to build against an asset of another
+    version, and the app compares the whole 100-byte SQLite header (which holds this field) with the
+    packaged asset's, so a copy extracted from an older APK is replaced instead of queried.
+    """
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(f"PRAGMA user_version = {version}")
@@ -385,6 +397,7 @@ def write_data_md(archive_path, archive_sha, names_archive_path, names_archive_s
     lines.append(f"| Release tag | {RELEASE_TAG} |")
     lines.append(f"| Dictionary version | {DICT_VERSION} |")
     lines.append(f"| Dictionary date | {DICT_DATE} |")
+    lines.append(f"| Schema version (`PRAGMA user_version`) | {SCHEMA_VERSION} |")
     lines.append(f"| Archive file | {os.path.basename(archive_path)} |")
     lines.append(f"| Archive size | {_size(os.path.getsize(archive_path))} bytes |")
     lines.append(f"| Archive SHA-256 | `{archive_sha}` |")
@@ -467,7 +480,7 @@ def main():
         name_count = add_names(db_path, names_json_path)
         print(f"names: {name_count}")
 
-        set_user_version(db_path, int(DICT_DATE.replace("-", "")))
+        set_user_version(db_path, SCHEMA_VERSION)
 
         copy_asset(db_path, ASSET_PATH)
         asset_sha = sha256_file(ASSET_PATH)

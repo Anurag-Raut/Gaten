@@ -21,7 +21,6 @@ enum class AnkiField {
     EXPRESSION,
     READING,
     MEANING,
-    SENTENCE,
 
     /** Leave the field empty on every note Gaten adds. */
     EMPTY
@@ -63,20 +62,21 @@ data class AnkiSettings(
         /** Front of Gaten's note type: the word alone. */
         const val DEFAULT_FRONT = "{{Expression}}"
 
-        /** Back: reading, meaning and the sentence, under the front's own rendering. */
-        const val DEFAULT_BACK =
-            "{{FrontSide}}<hr id=answer>{{Reading}}<br>{{Meaning}}<br><small>{{Sentence}}</small>"
+        /** Back: reading and meaning, under the front's own rendering. */
+        const val DEFAULT_BACK = "{{FrontSide}}<hr id=answer>{{Reading}}<br>{{Meaning}}"
 
-        /** Centred and readable; Anki puts the `.nightMode` class on the card in dark mode. */
+        /**
+         * Centred and sized, never coloured: the text colour follows the theme of whichever app
+         * renders the card — Gaten's review screen paints its own surface and injects the theme's
+         * text colour, and AnkiDroid's night mode sets its own. A colour here would fight both.
+         */
         val DEFAULT_CSS = """
-            .card { font-family: sans-serif; font-size: 24px; text-align: center; color: #111; background: #fff; }
-            .nightMode .card { color: #eee; background: #222; }
-            small { font-size: 16px; color: #666; }
-            .nightMode small { color: #aaa; }
+            .card { font-family: sans-serif; font-size: 24px; text-align: center; }
+            small { font-size: 16px; }
         """.trimIndent()
 
         /** The fields Gaten's own note type is created with, in Anki's order. */
-        val NOTE_FIELDS = listOf("Expression", "Reading", "Meaning", "Sentence")
+        val NOTE_FIELDS = listOf("Expression", "Reading", "Meaning")
 
         /** Limits the customise screen tells the user about; Anki itself is far more permissive. */
         private const val MAX_DECK_NAME = 200
@@ -119,16 +119,16 @@ data class AnkiSettings(
     fun tagSet(): Set<String> = tags.split(TAG_SEPARATOR).filterTo(LinkedHashSet()) { it.isNotEmpty() }
 
     /**
-     * [card]'s values in the order the target note type expects them: Gaten's four fields in Anki's
+     * [card]'s values in the order the target note type expects them: Gaten's three fields in Anki's
      * order, or one value per mapped field of a chosen note type.
      *
      * The duplicate check and the added note both serialize this same array, so both see the same
      * values, and the character AnkiDroid joins note fields with cannot survive inside a value —
-     * a word's OCR sentence may contain one.
+     * dictionary text read off a scanned line may still contain one.
      */
     fun fields(card: AnkiCard): Array<String> {
         val values = if (modelId == null) {
-            listOf(card.expression, card.reading, card.meaning, card.sentence)
+            listOf(card.expression, card.reading, card.meaning)
         } else {
             fieldSources.map { source -> fieldValue(source, card) }
         }
@@ -150,7 +150,6 @@ data class AnkiSettings(
         AnkiField.EXPRESSION -> card.expression
         AnkiField.READING -> card.reading
         AnkiField.MEANING -> card.meaning
-        AnkiField.SENTENCE -> card.sentence
         AnkiField.EMPTY -> ""
     }
 
@@ -302,9 +301,11 @@ private fun splitFieldNames(names: String): List<String> =
     if (names.isEmpty()) emptyList() else names.split(ANKI_FIELD_SEPARATOR)
 
 /**
- * The mapping as persisted: [AnkiField] names. A name this build does not know — a downgrade, or a
- * hand-edited file — drops out and leaves the mapping shorter than the field list, which
- * [AnkiSettings.validationError] reports rather than papering over.
+ * The mapping as persisted: [AnkiField] names. A name this build does not know — a downgrade, a
+ * hand-edited file, or a source this build no longer offers like the removed sentence — drops out and
+ * leaves the mapping shorter than the field list, which [AnkiSettings.validationError] reports
+ * instead of papering over. Nothing is rewritten: a note goes out under the mapping the user saved, or
+ * under none at all.
  */
-private fun splitFieldSources(sources: String): List<AnkiField> =
+internal fun splitFieldSources(sources: String): List<AnkiField> =
     sources.split(',').mapNotNull { name -> AnkiField.entries.firstOrNull { it.name == name } }

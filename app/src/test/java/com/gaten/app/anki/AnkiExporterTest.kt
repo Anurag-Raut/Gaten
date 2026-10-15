@@ -111,4 +111,40 @@ class AnkiExporterTest {
         assertEquals(name, managedModelName(custom.copy(deckName = "JLPT", tags = "n5")))
         assertNotEquals(name, managedModelName(other))
     }
+
+    @Test
+    fun sharedTextCarriesTheCardsFieldsWithoutTheirMarkup() {
+        val card = AnkiCard(
+            expression = "食べる",
+            reading = "たべる",
+            meaning = "to eat<br><small>Ichidan verb</small>"
+        )
+
+        assertEquals("たべる\nto eat\nIchidan verb", shareText(card))
+    }
+
+    @Test
+    fun sharedTextDecodesTheFieldsEscapingExactlyOnce() {
+        val card = AnkiCard(
+            expression = "猫",
+            reading = "",
+            meaning = "a&lt;b &amp; c&gt;d &amp;lt;"
+        )
+
+        // "<", ">" and "&" reach the sheet as themselves; a literal "&lt;" in the dictionary text
+        // stays "&lt;", which is what decoding the ampersand last is for.
+        assertEquals("a<b & c>d &lt;", shareText(card))
+    }
+
+    @Test
+    fun sharedTextLeavesOutTheFieldsTheCardDoesNotHave() {
+        assertEquals(
+            "cat",
+            shareText(AnkiCard(expression = "猫", reading = "", meaning = "cat"))
+        )
+        assertEquals(
+            "",
+            shareText(AnkiCard(expression = "猫", reading = "", meaning = ""))
+        )
+    }
 }

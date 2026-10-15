@@ -19,35 +19,32 @@ class AnkiSettingsTest {
     private val card = AnkiCard(
         expression = "食べる",
         reading = "たべる",
-        meaning = "to eat",
-        sentence = "毎日<b>食べる</b>。"
+        meaning = "to eat"
     )
 
     private val mapped = AnkiSettings(
         modelId = 5L,
         modelFields = listOf("Expression", "Reading", "Meaning"),
-        fieldSources = listOf(AnkiField.SENTENCE, AnkiField.EMPTY, AnkiField.EXPRESSION)
+        fieldSources = listOf(AnkiField.MEANING, AnkiField.EMPTY, AnkiField.EXPRESSION)
     )
 
     @Test
-    fun defaultsAreTheNoteTypeOlderGatenCreated() {
-        // A new Gaten writes exactly the note type the previous release did, so an installed one is
-        // reused and every card already in the collection keeps rendering as it did.
+    fun defaultsAreTheNoteTypeGatenCreates() {
+        // The layout a fresh install writes: the word alone on the front, its reading and meaning on
+        // the back, and no sentence field to leave empty.
         assertEquals("{{Expression}}", AnkiSettings.DEFAULT_FRONT)
         assertEquals(
-            "{{FrontSide}}<hr id=answer>{{Reading}}<br>{{Meaning}}<br><small>{{Sentence}}</small>",
+            "{{FrontSide}}<hr id=answer>{{Reading}}<br>{{Meaning}}",
             AnkiSettings.DEFAULT_BACK
         )
         assertEquals(
             """
-            .card { font-family: sans-serif; font-size: 24px; text-align: center; color: #111; background: #fff; }
-            .nightMode .card { color: #eee; background: #222; }
-            small { font-size: 16px; color: #666; }
-            .nightMode small { color: #aaa; }
+            .card { font-family: sans-serif; font-size: 24px; text-align: center; }
+            small { font-size: 16px; }
             """.trimIndent(),
             AnkiSettings.DEFAULT_CSS
         )
-        assertEquals(listOf("Expression", "Reading", "Meaning", "Sentence"), AnkiSettings.NOTE_FIELDS)
+        assertEquals(listOf("Expression", "Reading", "Meaning"), AnkiSettings.NOTE_FIELDS)
         assertEquals("Gaten", AnkiSettings().deckName)
         assertNull(AnkiSettings().validationError())
         assertTrue(AnkiSettings().isDefaultTemplates())
@@ -56,7 +53,7 @@ class AnkiSettingsTest {
     @Test
     fun builtInFieldsFollowTheCardsOwnOrder() {
         assertArrayEquals(
-            arrayOf("食べる", "たべる", "to eat", "毎日<b>食べる</b>。"),
+            arrayOf("食べる", "たべる", "to eat"),
             AnkiSettings().fields(card)
         )
     }
@@ -64,34 +61,33 @@ class AnkiSettingsTest {
     @Test
     fun mappedFieldsFollowTheMappingAndLeaveEmptiesBlank() {
         assertArrayEquals(
-            arrayOf("毎日<b>食べる</b>。", "", "食べる"),
+            arrayOf("to eat", "", "食べる"),
             mapped.fields(card)
         )
     }
 
     @Test
     fun duplicateKeyIsTheFirstMappedField() {
-        assertEquals(card.sentence, duplicateKey(mapped.fields(card)))
+        assertEquals(card.meaning, duplicateKey(mapped.fields(card)))
         assertEquals(card.expression, duplicateKey(AnkiSettings().fields(card)))
 
-        val sentenceLast = mapped.copy(fieldSources = listOf(AnkiField.EXPRESSION, AnkiField.EMPTY, AnkiField.SENTENCE))
-        assertEquals(card.expression, duplicateKey(sentenceLast.fields(card)))
+        val meaningLast = mapped.copy(fieldSources = listOf(AnkiField.EXPRESSION, AnkiField.EMPTY, AnkiField.MEANING))
+        assertEquals(card.expression, duplicateKey(meaningLast.fields(card)))
     }
 
     @Test
     fun aFieldValueCannotCarryAnkiDroidsFieldSeparator() {
         val hostile = AnkiCard(
-            expression = "食べる",
+            expression = "食べる\u001f",
             reading = "たべる",
-            meaning = "to eat\u0000and drink",
-            sentence = "毎日\u001f食べる"
+            meaning = "to eat\u0000and drink"
         )
         assertArrayEquals(
-            arrayOf("食べる", "たべる", "to eat and drink", "毎日 食べる"),
+            arrayOf("食べる ", "たべる", "to eat and drink"),
             AnkiSettings().fields(hostile)
         )
         // The duplicate key is serialized the same way as the note it is checked against.
-        assertEquals("食べる", duplicateKey(AnkiSettings().fields(hostile)))
+        assertEquals("食べる ", duplicateKey(AnkiSettings().fields(hostile)))
     }
 
     @Test
@@ -185,6 +181,34 @@ class AnkiSettingsTest {
         assertEquals(AnkiSettingsError.CSS, AnkiSettings(css = "a".repeat(32001)).validationError())
         assertEquals(AnkiSettingsError.CSS, AnkiSettings(css = ".card\u0000{}").validationError())
         assertEquals(AnkiSettingsError.CSS, AnkiSettings(css = ".card\u001f{}").validationError())
+    }
+
+    @Test
+    fun aMappingSavedForTheRemovedSentenceFieldIsRefusedNotRewritten() {
+        // What an install that mapped the (now removed) sentence source has in its settings file:
+        // "SENTENCE" names nothing any more, so it drops out and the mapping no longer covers the
+        // note type's fields. Validation refuses it, and nothing is ever written behind the user.
+        val loaded = splitFieldSources("SENTENCE,EMPTY,EXPRESSION")
+
+        assertEquals(listOf(AnkiField.EMPTY, AnkiField.EXPRESSION), loaded)
+        assertEquals(
+            AnkiSettingsError.MAPPING,
+            AnkiSettings(
+                modelId = 5L,
+                modelFields = listOf("Expression", "Reading", "Meaning"),
+                fieldSources = loaded
+            ).validationError()
+        )
+        // Even a note type with as many fields as the shortened mapping has is refused, because the
+        // first field — the one AnkiDroid checks duplicates on — would be empty.
+        assertEquals(
+            AnkiSettingsError.MAPPING,
+            AnkiSettings(
+                modelId = 5L,
+                modelFields = listOf("Expression", "Reading"),
+                fieldSources = loaded
+            ).validationError()
+        )
     }
 
     @Test

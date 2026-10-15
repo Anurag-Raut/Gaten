@@ -131,14 +131,35 @@ androidComponents {
 }
 
 // The JMdict database is generated (and gitignored), so a fresh clone builds an APK with no
-// dictionary at all unless someone remembers to run the builder. Fail early instead: the wording
-// below is the exact command that fixes it.
+// dictionary at all unless someone remembers to run the builder. Two ways to get that wrong are
+// caught here, because both would only show up on a device: a missing asset, and an asset from
+// before the current schema — the lookup LEFT JOINs tables an older file never wrote. The builder
+// stamps `PRAGMA user_version` with the schema version (tools/build_jmdict_db.py, SCHEMA_VERSION)
+// and SQLite keeps it at bytes 60-63 of the file header, so reading those 64 bytes is enough.
+val dictionarySchemaVersion = 3
 val verifyDictionaryAsset by tasks.registering {
     val asset = layout.projectDirectory.file("src/main/assets/db/jmdict.sqlite")
-    description = "Fails the build when the generated JMdict asset is missing."
+    description = "Fails the build when the generated JMdict asset is missing or of another schema version."
     doLast {
-        if (!asset.asFile.isFile) {
+        val file = asset.asFile
+        if (!file.isFile) {
             error("Missing app/src/main/assets/db/jmdict.sqlite — generate it with: python3 tools/build_jmdict_db.py")
+        }
+        val header = ByteArray(64)
+        val read = file.inputStream().use { input -> input.read(header) }
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        val version = if (read == header.size && header.copyOfRange(0, magic.size).contentEquals(magic)) {
+            ((header[60].toLong() and 0xFF) shl 24) or ((header[61].toLong() and 0xFF) shl 16) or
+                ((header[62].toLong() and 0xFF) shl 8) or (header[63].toLong() and 0xFF)
+        } else {
+            -1L
+        }
+        if (version != dictionarySchemaVersion.toLong()) {
+            error(
+                "app/src/main/assets/db/jmdict.sqlite is of schema version $version, " +
+                    "this build needs $dictionarySchemaVersion — regenerate it with: " +
+                    "python3 tools/build_jmdict_db.py"
+            )
         }
     }
 }
@@ -230,6 +251,7 @@ if (bundleMangaOcr) {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -237,6 +259,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     testImplementation(libs.junit)
+    // android.jar ships org.json as a stub whose every method throws, so a local unit test cannot
+    // decode anything with the platform's copy. This gives the JVM tests a real implementation to
+    // run the WaniKani response decoding against; the app itself still uses the platform's org.json,
+    // and nothing about this reaches the APK.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -248,8 +275,10 @@ dependencies {
     // On-device Japanese OCR (bundled models, offline, free, no API key)
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 
-    // AnkiDroid's instant-add API: a ContentProvider, so adding words stays offline and Gaten
-    // still needs no INTERNET permission.
+    // AnkiDroid's instant-add API: a ContentProvider, so an export reads and writes on-device and
+    // needs no network — nor does anything a card carries: glosses and parts of speech both come from
+    // the bundled dictionary in assets/db. The app's INTERNET permission is for the optional OCR
+    // model download and the optional WaniKani pages, nothing here.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
     // ONNX Runtime Mobile, for the optional manga-ocr second pass (ocr/MangaOcrEngine.kt). The

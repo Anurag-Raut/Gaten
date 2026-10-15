@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+
+    <!-- Entry point on the home screen -->
+    <string name="ankireview_open">Review cards</string>
+
+    <!-- Review screen -->
+    <string name="ankireview_title">Review cards</string>
+    <string name="ankireview_back">Back</string>
+    <string name="ankireview_finish">Finish</string>
+    <string name="ankireview_change_deck">Change deck</string>
+    <string name="ankireview_starting">Reading AnkiDroid…</string>
+    <string name="ankireview_choose_deck">Choose a deck</string>
+    <string name="ankireview_start">Start reviewing</string>
+    <string name="ankireview_no_decks">AnkiDroid has no decks yet.</string>
+    <string name="ankireview_deck_counts">%1$d new &#183; %2$d learning &#183; %3$d to review</string>
+    <string name="ankireview_deck_filtered">filtered</string>
+    <string name="ankireview_show_answer">Show answer</string>
+    <string name="ankireview_saving">Saving to AnkiDroid…</string>
+    <string name="ankireview_nothing_due">Nothing is due in %1$s.</string>
+    <string name="ankireview_card_cd">Card</string>
+
+    <!-- Ratings: the four the scheduler reports intervals for, in its own order -->
+    <string name="ankireview_rating_again">Again</string>
+    <string name="ankireview_rating_hard">Hard</string>
+    <string name="ankireview_rating_good">Good</string>
+    <string name="ankireview_rating_easy">Easy</string>
+
+    <!-- Honest notes about what this reviewer cannot show -->
+    <string name="ankireview_media">This card uses %1$d images or sounds. AnkiDroid does not share media files with other apps, so they are not shown here.</string>
+    <string name="ankireview_media_open">Open AnkiDroid</string>
+    <string name="ankireview_typed">This card expects typed input. Gaten shows the answer as AnkiDroid renders it, but the interactive comparison is not supported here, so rate it yourself.</string>
+    <string name="ankireview_after_grade_failure">AnkiDroid may or may not have saved that answer, so Gaten will not send it again.</string>
+
+    <!-- States where review cannot run -->
+    <string name="ankireview_not_installed">AnkiDroid is not installed, so there is nothing here to review.</string>
+    <string name="ankireview_permission">Gaten needs AnkiDroid&#8217;s database access to read and answer cards.</string>
+    <string name="ankireview_grant">Allow AnkiDroid access</string>
+    <string name="ankireview_not_set_up">AnkiDroid has not set up its collection yet. Open AnkiDroid once and come back.</string>
+    <string name="ankireview_not_found">That card is no longer in AnkiDroid.</string>
+    <string name="ankireview_provider_error">AnkiDroid could not do that: %1$s</string>
+    <string name="ankireview_provider_generic">AnkiDroid could not complete that request.</string>
+    <string name="ankireview_malformed">AnkiDroid sent something Gaten could not read.</string>
+    <string name="ankireview_retry">Retry</string>
+    <string name="ankireview_next_card">Next card</string>
+
+    <!-- Leaving a screen with something unsaved -->
+    <string name="ankireview_leave_title">Leave the review session?</string>
+    <string name="ankireview_leave_body">Nothing is graded by leaving. The card you are on stays unanswered, and the session view closes.</string>
+    <string name="ankireview_leave_leave">Leave</string>
+    <string name="ankireview_leave_stay">Stay</string>
+    <string name="anki_settings_discard_title">Discard changes?</string>
+    <string name="anki_settings_discard_body">Your deck, tags, field mapping and template edits are not saved yet.</string>
+    <string name="anki_settings_discard_leave">Discard</string>
+    <string name="anki_settings_discard_stay">Keep editing</string>
+</resources>
