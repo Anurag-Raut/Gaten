@@ -46,6 +46,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.gaten.app.GatenAccessibilityService
+import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ui.lookup.LookupOverlay
@@ -59,8 +60,14 @@ import kotlinx.coroutines.async
 
 private const val TAG = "Gaten"
 
+/** How long the frozen frame is on screen before the media behind it is paused. */
+private const val PauseAfterFreezeMs = 100L
+
 /** Longest the overlay waits for its frozen first frame to reach the display. */
 private const val FreezeTimeoutMs = 250L
+
+/** How long a lost window focus has to stay away before the overlay treats it as the user leaving. */
+private const val FocusBounceMs = 200L
 
 /**
  * The lookup overlay, drawn in a window owned by the accessibility service.
@@ -79,12 +86,13 @@ private const val FreezeTimeoutMs = 250L
  */
 class OverlayWindowController(
     private val context: Context,
+    private val mediaPauser: MediaPauser,
     /** The overlay is down and the capture behind it is over. */
     private val onHidden: (Long) -> Unit,
     /**
-     * Runs on the main thread when the overlay took itself down. The service drops the capture it
-     * was drawn from here, so a dismissal that raced the screenshot's delivery can never put that
-     * lookup back up. Never runs for a dismissal the user asked for.
+     * Runs on the main thread when the overlay took itself down and the media must stay paused. The
+     * service drops the capture it was drawn from here, so a dismissal that raced the screenshot's
+     * delivery can never put that lookup back up. Never runs for a dismissal the user asked for.
      */
     private val onAutoDismiss: () -> Unit
 ) {
@@ -100,16 +108,19 @@ class OverlayWindowController(
     private var pendingScan: Deferred<ScreenText?>? = null
 
     /**
-     * Puts [bitmap]'s capture on screen, replacing any overlay already up. False when nothing could
-     * be shown, so the caller can release the capture it prepared.
+     * Puts [bitmap]'s capture on screen, replacing any overlay already up, and pauses the media
+     * behind it once the frozen frame is really showing. False when nothing could be shown, so the
+     * caller can release the capture it prepared.
      *
      * The window goes up holding nothing but the capture, so its first frame - the freeze - is as
      * cheap as a frame can be; the lookup UI is composed into it only after that frame is on screen.
+     * The pause waits [PauseAfterFreezeMs] past the same point: a player raises its controls the
+     * moment it pauses, and paused any earlier they flash up before the freeze covers them.
      *
      * [token] is the capture this window belongs to; it travels with the overlay so its teardown can
      * end exactly that capture (see [onHidden]). [admission] is re-checked on the main thread here
-     * and again before the lookup UI is composed: the capture may have been taken while the screen
-     * was still on and resolved only after the screen went off or the phone locked.
+     * and again before the media is paused: the capture may have been taken while the screen was
+     * still on and resolved only after the screen went off or the phone locked.
      */
     fun show(bitmap: Bitmap, token: Long, admission: () -> Boolean): Boolean {
         hide()
@@ -144,12 +155,15 @@ class OverlayWindowController(
             },
             // Posted: the window is not taken down from inside its own focus dispatch. A window
             // that lost focus to something else - home, recents, another app, the shade, the power
-            // menu - ends the lookup and invalidates its capture.
-            onFocusLost = {
+            // menu - is not a dismissal the user made, so the media stays paused for whatever took
+            // the screen. A window that has just been added can lose focus for a beat without the
+            // user having gone anywhere (the system settling as the window comes up, the player
+            // raising its controls as the pause lands), so the dismissal waits for the focus to stay
+            // away: one that is handed back is not a dismissal at all.
+            onFocusLost = { view ->
                 mainHandler.post {
-                    if (showing?.view === it) {
-                        Log.d(TAG, "Overlay lost window focus - the user went elsewhere, closing it")
-                        dismissAutomatically()
+                    if (showing?.view === view) {
+                        mainHandler.postDelayed({ closeIfFocusStayedAway(view) }, FocusBounceMs)
                     }
                 }
             }
@@ -234,23 +248,25 @@ class OverlayWindowController(
 
         var frozen = false
         val onFrozen = Runnable {
-            // A dismissal or a newer capture beat the frame here: nothing may be composed.
+            // A dismissal or a newer capture beat the frame here: nothing may be composed or paused.
             if (frozen || showing !== current) return@Runnable
             if (!admission()) {
-                Log.d(TAG, "Screen off or locked before the frozen frame - closing the lookup")
+                Log.d(TAG, "Screen off or locked before the frozen frame - closing without resuming")
                 dismissAutomatically()
                 return@Runnable
             }
             frozen = true
             Log.d(TAG, "Frozen frame on screen" +
                 " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
+            // Scheduled first: composing the lookup UI below blocks this thread for a while.
+            mediaPauser.pause(PauseAfterFreezeMs)
             root.addView(
                 lookupView(bitmap, mapping, current.scan),
                 FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
             )
         }
         // Committed, then one vsync more: the frame is on the display. The timeout covers a frame
-        // that is never drawn (screen off); admission is checked again before composing the UI.
+        // that is never drawn (screen off) so the lookup still opens and the media still pauses.
         root.viewTreeObserver.registerFrameCommitCallback {
             mainHandler.post { Choreographer.getInstance().postFrameCallback { onFrozen.run() } }
         }
@@ -286,6 +302,17 @@ class OverlayWindowController(
         }
     }
 
+    /**
+     * Closes the overlay for a focus loss that was not handed back within [FocusBounceMs]. Checked
+     * again here rather than acted on at once, so the transient focus changes that a window sees
+     * while it is coming up cannot dismiss a lookup the reader just opened.
+     */
+    private fun closeIfFocusStayedAway(view: View) {
+        if (showing?.view !== view || view.hasWindowFocus()) return
+        Log.d(TAG, "Overlay lost window focus - the user went elsewhere, closing it")
+        dismissAutomatically()
+    }
+
     /** Takes the overlay down when it is up; true when there was one to take down. */
     fun hideIfShowing(): Boolean {
         if (showing == null) return false
@@ -298,24 +325,36 @@ class OverlayWindowController(
         get() = showing != null
 
     /**
-     * Takes the overlay down and drops the capture it was drawn from.
-     * The path for every dismissal the user made: back, the scrim, the trigger toggle.
+     * Takes the overlay down and drops the capture it was drawn from, playing back what the overlay
+     * paused. The path for every dismissal the user made: back, the scrim, the trigger toggle.
      */
-    fun hide() = close(notifyService = false)
-
-    /** Ends a lookup because the screen or a window outside it changed. */
-    fun dismissAutomatically() = close(notifyService = true)
+    fun hide() = close(resume = true, notifyService = false)
 
     /**
-     * Takes the overlay down and drops the capture it was drawn from. [notifyService] tells the
-     * service the dismissal was not the user's, so the capture token moves on and a late screenshot
-     * cannot reopen the lookup.
-     *
-     * show() starts by calling this with no overlay up: no callback fires and the capture the new
-     * show is about to use is never touched.
+     * Takes the overlay down without playing anything back. The path for a dismissal nobody asked
+     * for - the screen going off, a call, an alarm, the power menu, the app going away - so the
+     * media it paused is left for whatever interrupted to deal with.
      */
-    private fun close(notifyService: Boolean) {
+    fun hideWithoutResume() = close(resume = false, notifyService = true)
+
+    /** The overlay closing itself because the screen or a window outside it changed. */
+    private fun dismissAutomatically() = close(resume = false, notifyService = true)
+
+    /**
+     * Takes the overlay down and drops the capture it was drawn from. [resume] plays back what the
+     * overlay paused; [notifyService] tells the service the dismissal was not the user's, so the
+     * capture token moves on and a late screenshot cannot reopen the lookup.
+     *
+     * show() starts by calling this with no overlay up, so every branch is a no-op then: nothing is
+     * resumed, no callback fires and the capture the new show is about to use is never touched.
+     */
+    private fun close(resume: Boolean, notifyService: Boolean) {
         val current = showing
+        // Only when an overlay is really coming down: show() starts by calling hide(), and one
+        // closed before its delayed pause fired has nothing to resume or discard.
+        if (current != null) {
+            if (resume) mediaPauser.resume() else mediaPauser.discard()
+        }
         showing = null
         pendingScan?.cancel()
         pendingScan = null
@@ -330,7 +369,7 @@ class OverlayWindowController(
             current.host.onDestroy()
         }
         if (current == null) return
-        Log.d(TAG, "Overlay window removed")
+        Log.d(TAG, "Overlay window removed (resumed=$resume)")
         // A dismissal the user did not make: the service drops the capture this was drawn from, so
         // the screenshot that may still be on its way can never bring the lookup back.
         if (notifyService) onAutoDismiss()

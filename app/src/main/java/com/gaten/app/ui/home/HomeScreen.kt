@@ -92,6 +92,7 @@ import com.gaten.app.LookupTileService
 import com.gaten.app.LookupTriggerReceiver
 import com.gaten.app.R
 import com.gaten.app.GatenAccessibilityService
+import com.gaten.app.media.hasNotificationAccess
 import com.gaten.app.ocr.MangaOcrCatalog
 import com.gaten.app.ocr.MangaOcrDownloader
 import com.gaten.app.ocr.MangaOcrModel
@@ -133,6 +134,7 @@ fun HomeScreen(
 
     // Service state, re-read on every resume because the user grants it in Settings.
     var serviceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
+    var notificationAccess by remember { mutableStateOf(hasNotificationAccess(context)) }
     var showDisclosure by remember { mutableStateOf(false) }
     var floatingEnabled by remember {
         mutableStateOf(TriggerPreferences.floatingButtonEnabled(context))
@@ -212,6 +214,7 @@ fun HomeScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 serviceEnabled = isAccessibilityServiceEnabled(context)
+                notificationAccess = hasNotificationAccess(context)
                 floatingEnabled = TriggerPreferences.floatingButtonEnabled(context)
                 tileAdded = TriggerPreferences.tileAdded(context)
                 refreshMangaModel()
@@ -254,6 +257,27 @@ fun HomeScreen(
                 enabled = serviceEnabled,
                 onTurnOn = { showDisclosure = true }
             )
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            if (!notificationAccess) {
+                Spacer(modifier = Modifier.height(Spacing.m))
+                MediaAccessRow(
+                    onGrant = {
+                        try {
+                            context.startActivity(
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            )
+                        } catch (_: Exception) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.toast_notification_settings_error),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(Spacing.xl))
 
@@ -424,6 +448,33 @@ private fun StatusRow(enabled: Boolean, onTurnOn: () -> Unit) {
             Button(onClick = onTurnOn) {
                 Text(stringResource(R.string.home_action_turn_on))
             }
+        }
+    }
+}
+
+/**
+ * Shown only while notification access is missing: the system answers media-session reads only
+ * for a granted listener, so without this the overlay cannot stop the video playing behind it.
+ */
+@Composable
+private fun MediaAccessRow(onGrant: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = Spacing.l, vertical = Spacing.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.home_media_access_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(Spacing.m))
+        Button(onClick = onGrant) {
+            Text(stringResource(R.string.home_action_turn_on))
         }
     }
 }

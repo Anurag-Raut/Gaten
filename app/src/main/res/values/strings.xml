@@ -27,4 +27,5 @@
     <!-- Quick Settings Tile -->
     <string name="tile_label">Gaten</string>
     <string name="qs_tile_label">Gaten</string>
+    <string name="toast_notification_settings_error">Could not open Notification Access settings</string>
 </resources>
