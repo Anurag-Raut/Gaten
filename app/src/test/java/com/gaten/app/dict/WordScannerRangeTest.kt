@@ -55,6 +55,35 @@ class WordScannerRangeTest {
     }
 
     @Test
+    fun anInflectedCompoundInsideTheRangeIsKeptWhole() {
+        val text = "振り返った"
+        val lookup = dictionaryOf("振り", "返る", "振り返る")
+
+        // The range holds only った; the whole line is read as context, so the lasso gets the verb
+        // rather than the った->う reading the shorter match used to leave behind.
+        val words = WordScanner.scanLine(text, rangeStart = 3, rangeEndExclusive = 5, lookup = lookup)
+
+        assertEquals(listOf("振り返った"), words.map { it.surface })
+        assertEquals("振り返る", words[0].baseForm)
+        assertEquals(0, words[0].start)
+        assertEquals(5, words[0].end)
+    }
+
+    @Test
+    fun aRangeOnTheTailFindsTheDeinflectedWord() {
+        // The range holds only た, which on its own is nothing; seen behind 話し it is 話す.
+        val words = WordScanner.scanLine(
+            "話した",
+            rangeStart = 2,
+            rangeEndExclusive = 3,
+            lookup = dictionaryOf("話し", "話す")
+        )
+
+        assertEquals(listOf("話した"), words.map { it.surface })
+        assertEquals("話す", words[0].baseForm)
+    }
+
+    @Test
     fun aRangeOverTheWholeLineIsTheWholeScan() {
         val text = "コンピュータを使います"
         val lookup = dictionaryOf("コンピュータ", "使う", "する")
