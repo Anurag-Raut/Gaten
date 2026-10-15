@@ -74,6 +74,7 @@ class AnkiExporterTest {
         val decks = mapOf(1L to "Default", 3L to "Gaten", 4L to "Gaten::JLPT")
         assertEquals(3L, resolveDeckId(cachedId = null, decks = decks, deckName = "Gaten"))
         assertEquals(4L, resolveDeckId(cachedId = 1L, decks = decks, deckName = "Gaten::JLPT"))
+        // A deck the settings no longer name is not a match, however similar.
         assertNull(resolveDeckId(cachedId = 1L, decks = decks, deckName = "Gaten::JLPT N5"))
     }
 
@@ -99,11 +100,14 @@ class AnkiExporterTest {
     fun eachLayoutGetsItsOwnNoteTypeName() {
         val custom = defaults.copy(front = "{{Expression}}<br>{{Reading}}")
         val other = defaults.copy(css = ".card { text-align: left; }")
+
         val name = managedModelName(custom)
         assertTrue(name.startsWith("Gaten "))
         assertNotEquals("Gaten", name)
+        // Enough of the digest to recognise, and all of it hex.
         assertEquals(16, name.removePrefix("Gaten ").length)
         assertTrue(name.removePrefix("Gaten ").all { it in "0123456789abcdef" })
+        // Same templates, same name; a different layout, a different one.
         assertEquals(name, managedModelName(custom.copy(deckName = "JLPT", tags = "n5")))
         assertNotEquals(name, managedModelName(other))
     }
