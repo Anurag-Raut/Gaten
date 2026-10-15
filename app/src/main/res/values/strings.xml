@@ -13,7 +13,6 @@
     <!-- General -->
     <string name="btn_cancel">Cancel</string>
     <string name="toast_accessibility_settings_error">Could not open Accessibility Settings</string>
-    <string name="toast_notification_settings_error">Could not open Notification Access settings</string>
 
     <!-- Toast Messages -->
     <string name="toast_enable_accessibility_tile">Please enable the Gaten Accessibility Service</string>

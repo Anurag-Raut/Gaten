@@ -14,9 +14,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.gaten.app.ui.home.HomeScreen
 import com.gaten.app.ui.theme.GatenTheme
+import com.gaten.app.ui.theme.ThemePreferences
 
 /**
  * The setup screen.
@@ -31,12 +36,33 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            GatenTheme {
+            // Hoisted here, not read inside HomeScreen: the theme is applied above it, so the
+            // choices have to come from outside the content they change.
+            var themeMode by remember { mutableStateOf(ThemePreferences.themeMode(this)) }
+            var palette by remember { mutableStateOf(ThemePreferences.palette(this)) }
+            var accent by remember { mutableStateOf(ThemePreferences.accent(this)) }
+            GatenTheme(themeMode, palette, accent) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    HomeScreen()
+                    HomeScreen(
+                        themeMode = themeMode,
+                        onThemeModeChange = { mode ->
+                            themeMode = mode
+                            ThemePreferences.setThemeMode(this, mode)
+                        },
+                        palette = palette,
+                        onPaletteChange = { picked ->
+                            palette = picked
+                            ThemePreferences.setPalette(this, picked)
+                        },
+                        accent = accent,
+                        onAccentChange = { picked ->
+                            accent = picked
+                            ThemePreferences.setAccent(this, picked)
+                        }
+                    )
                 }
             }
         }

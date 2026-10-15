@@ -9,6 +9,7 @@ package com.gaten.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -16,51 +17,78 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 
-private val LightColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    primaryContainer = LightPrimaryContainer,
-    onPrimaryContainer = LightOnPrimaryContainer,
-    background = LightBackground,
-    onBackground = LightOnSurface,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    surfaceContainer = LightSurfaceContainer,
-    surfaceContainerHigh = LightSurfaceContainerHigh,
-    surfaceContainerHighest = LightSurfaceContainerHighest,
-    outline = LightOutline,
-    error = LightError,
-    errorContainer = LightErrorContainer,
-    onErrorContainer = LightOnErrorContainer
-)
-
-private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    primaryContainer = DarkPrimaryContainer,
-    onPrimaryContainer = DarkOnPrimaryContainer,
-    background = DarkBackground,
-    onBackground = DarkOnSurface,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceContainer = DarkSurfaceContainer,
-    surfaceContainerHigh = DarkSurfaceContainerHigh,
-    surfaceContainerHighest = DarkSurfaceContainerHighest,
-    outline = DarkOutline,
-    error = DarkError,
-    errorContainer = DarkErrorContainer,
-    onErrorContainer = DarkOnErrorContainer
-)
+/**
+ * The palette for one palette, accent and mode: the accent's own tones, the palette's neutral
+ * ladder, and the Material roles Gaten never draws aliased onto the accent's — a component reaching
+ * for `secondaryContainer` or `tertiaryContainer` lands on the accent rather than on the library's
+ * baseline purple, which is the one hue this palette never shows.
+ */
+private fun gatenColorScheme(palette: Palette, accent: AccentColor, dark: Boolean): ColorScheme {
+    val tone = accentRoles(accent, dark)
+    val neutral = paletteNeutrals(palette, dark)
+    return if (dark) {
+        darkColorScheme(
+            primary = tone.primary,
+            onPrimary = tone.onPrimary,
+            primaryContainer = tone.primaryContainer,
+            onPrimaryContainer = tone.onPrimaryContainer,
+            tertiary = tone.tertiary,
+            secondary = tone.primary,
+            onSecondary = tone.onPrimary,
+            secondaryContainer = tone.primaryContainer,
+            onSecondaryContainer = tone.onPrimaryContainer,
+            tertiaryContainer = tone.primaryContainer,
+            onTertiaryContainer = tone.onPrimaryContainer,
+            background = neutral.background,
+            onBackground = neutral.onSurface,
+            surface = neutral.surface,
+            onSurface = neutral.onSurface,
+            surfaceVariant = neutral.surfaceVariant,
+            onSurfaceVariant = neutral.onSurfaceVariant,
+            surfaceContainer = neutral.surfaceContainer,
+            surfaceContainerHigh = neutral.surfaceContainerHigh,
+            surfaceContainerHighest = neutral.surfaceContainerHighest,
+            outline = neutral.outline,
+            error = DarkError,
+            errorContainer = DarkErrorContainer,
+            onErrorContainer = DarkOnErrorContainer
+        )
+    } else {
+        lightColorScheme(
+            primary = tone.primary,
+            onPrimary = tone.onPrimary,
+            primaryContainer = tone.primaryContainer,
+            onPrimaryContainer = tone.onPrimaryContainer,
+            tertiary = tone.tertiary,
+            secondary = tone.primary,
+            onSecondary = tone.onPrimary,
+            secondaryContainer = tone.primaryContainer,
+            onSecondaryContainer = tone.onPrimaryContainer,
+            tertiaryContainer = tone.primaryContainer,
+            onTertiaryContainer = tone.onPrimaryContainer,
+            background = neutral.background,
+            onBackground = neutral.onSurface,
+            surface = neutral.surface,
+            onSurface = neutral.onSurface,
+            surfaceVariant = neutral.surfaceVariant,
+            onSurfaceVariant = neutral.onSurfaceVariant,
+            surfaceContainer = neutral.surfaceContainer,
+            surfaceContainerHigh = neutral.surfaceContainerHigh,
+            surfaceContainerHighest = neutral.surfaceContainerHighest,
+            outline = neutral.outline,
+            error = LightError,
+            errorContainer = LightErrorContainer,
+            onErrorContainer = LightOnErrorContainer
+        )
+    }
+}
 
 private val GatenShapes = Shapes(
     small = RoundedCornerShape(8.dp),
@@ -72,13 +100,23 @@ private val GatenShapes = Shapes(
 private const val MAX_FONT_SCALE = 1.3f
 
 /**
- * The app's only theme: the Gaten palette and type scale, following the system dark/light
- * setting. Dynamic colour is deliberately not used — the brand is the indigo accent.
+ * The app's only theme: the Gaten palette and type scale. Dark or light comes from [mode], the
+ * neutral ladder from [palette] and the accent from [accent] — all three the reader's choice in
+ * Settings, defaulting to the system setting and to the shipped palette. Dynamic colour is
+ * deliberately not used: the colours are chosen here, not taken from a wallpaper.
  */
 @Composable
-fun GatenTheme(content: @Composable () -> Unit) {
-    val darkTheme = isSystemInDarkTheme()
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+fun GatenTheme(
+    mode: ThemeMode = ThemeMode.System,
+    palette: Palette = Palette.Gaten,
+    accent: AccentColor = AccentColor.Indigo,
+    content: @Composable () -> Unit
+) {
+    val darkTheme = mode.isDark(isSystemInDarkTheme())
+    // Built once per choice rather than once per screen recomposition.
+    val colorScheme = remember(palette, accent, darkTheme) {
+        gatenColorScheme(palette, accent, darkTheme)
+    }
 
     // System bars stay transparent (edge-to-edge); only the icon contrast is decided here.
     val view = LocalView.current

@@ -2,6 +2,8 @@
 
 Research date: 2026-10-13. Initial app source inspected at `155d7b6`. The initial research findings below describe that baseline; subsequent implementation and verification are recorded at the end.
 
+Current-state note (2026-10-14): the meiki detector and its extra-line indexing path have been removed. Full-screen detection now uses ML Kit lines only, while optional manga-ocr reading remains. Earlier detector timings, alternatives, and implementation details below describe historical work, not a live model dependency or pending detector work.
+
 | User context | Finding |
 |---|---|
 | Detection | Boxes usually appear in about one second or less. |
@@ -256,7 +258,7 @@ Work continues uncommitted on `perf/lookup-speed`, from the same `155d7b6` basel
 | Foreground OCR priority | Background manga reads yield before acquiring the engine, re-check priority after locking, and resume afterward. Meiki yields between tiles and resolves its session under the native lock. Touched supplemental lines promote background reads without cancelling concurrent foreground callers. | `OcrPriority.kt`, `MangaOcrEngine.kt`, `JapaneseOcr.kt`, `ScreenLineReader.kt`, `MeikiDetector.kt` |
 | Exact-crop cache | The overlay owns a bounded cache of raw readings keyed by clamped crop and model file revision. Identical requests join; null, failed and cancelled reads remain retryable. New captures use a new cache. | `LookupPipeline.kt`, `LookupOverlay.kt` |
 | Early circle results | The primary crop's repaired text/words appear before supplemental line OCR. Complete results append/deduplicate supplementary words and preserve fallback text. Select-again/dismiss cancels the pending lookup; Main publications check cancellation. | `LookupPipeline.kt`, `LookupOverlay.kt` |
-| Earlier box detection | The accepted screenshot starts one detector Deferred before window/frame/Compose setup. The overlay awaits that same pass; hide/replacement/add-window failure cancels it. Freeze/media ordering stays intact. | `OverlayWindowController.kt`, `LookupOverlay.kt` |
+| Earlier box detection | The accepted screenshot starts one detector Deferred before window/frame/Compose setup. The overlay awaits that same pass; hide/replacement/add-window failure cancels it. Frozen-frame ordering stays intact; lookup no longer pauses or resumes media. | `OverlayWindowController.kt`, `LookupOverlay.kt` |
 
 No model, image preprocessing, crop padding, decoder output, thread budget, or dictionary ranking change was introduced. Existing native calls finish safely: this iteration does not preempt a running manga line or Meiki tile midway. Timing logs now expose queue, model load, preprocess, encoder, decoder, primary dictionary, supplementation and primary/complete gesture intervals.
 

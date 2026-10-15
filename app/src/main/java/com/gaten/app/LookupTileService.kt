@@ -18,6 +18,7 @@ import android.service.quicksettings.TileService
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
+import com.gaten.app.trigger.TriggerPreferences
 
 /**
  * Quick Settings tile: asks the connected accessibility service to dismiss the shade and start a
@@ -25,6 +26,16 @@ import android.widget.Toast
  * whether the service is enabled.
  */
 class LookupTileService : TileService() {
+
+    override fun onTileAdded() {
+        super.onTileAdded()
+        TriggerPreferences.setTileAdded(this, true)
+    }
+
+    override fun onTileRemoved() {
+        super.onTileRemoved()
+        TriggerPreferences.setTileAdded(this, false)
+    }
 
     override fun onClick() {
         super.onClick()
@@ -63,6 +74,8 @@ class LookupTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        // Also covers tiles added before this version started tracking their presence.
+        TriggerPreferences.setTileAdded(this, true)
         updateTileState()
     }
 

@@ -100,23 +100,9 @@ object ScreenHits {
         return spans
     }
 
-    /**
-     * The lines a lasso should be read for, in index order and without duplicates.
-     *
-     * That is the lines whose characters it covered ([spansInSelection]), plus any line with no
-     * character boxes yet whose own box it covers: a meiki-only placeholder has no characters to
-     * intersect, and it is offered to the reader here so manga-ocr can fill it in. A line whose
-     * boxes are present is judged on the boxes alone, so a box the loop did not reach is never
-     * read for the sake of its line's loose bounds.
-     */
-    fun linesInSelection(screen: ScreenText, selection: Box): List<Int> {
-        val lines = ArrayList<Int>()
-        spansInSelection(screen, selection).forEach { lines.add(it.lineIndex) }
-        screen.lines.forEachIndexed { lineIndex, line ->
-            if (line.charBoxes.isEmpty() && line.bounds.overlaps(selection)) lines.add(lineIndex)
-        }
-        return lines.distinct().sorted()
-    }
+    /** The lines whose characters a lasso covered, in index order and without duplicates. */
+    fun linesInSelection(screen: ScreenText, selection: Box): List<Int> =
+        spansInSelection(screen, selection).map { it.lineIndex }
 
     /** Distance from the point to the box, 0 when it is inside it. */
     private fun squaredPointDistance(x: Int, y: Int, box: Box): Int {

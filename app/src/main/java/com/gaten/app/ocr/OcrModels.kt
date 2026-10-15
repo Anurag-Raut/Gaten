@@ -18,12 +18,12 @@ import kotlinx.coroutines.launch
 /**
  * When the OCR models go back to the system.
  *
- * Counts actual recognition work with [begin] and [end], then releases all three engines after
+ * Counts actual recognition work with [begin] and [end], then releases both engines after
  * [IDLE_TIMEOUT_MS] idle. [releaseNow] skips that delay once active work finishes. Released models
  * are rebuilt from local files or APK assets on the next call.
  *
  * A release never lands inside a use: each engine refuses to close a model a pass is still inside
- * (manga-ocr and meiki hold their inference locks, ML Kit skips while a pass is pinned).
+ * (manga-ocr holds its inference lock, ML Kit skips while a pass is pinned).
  */
 object OcrModels {
     private const val TAG = "GatenOcr"
@@ -46,7 +46,7 @@ object OcrModels {
     fun releaseNow() = idle.releaseNow()
 
     /**
-     * Hands the three engines back, one at a time: a failure releasing one is logged and the others
+     * Hands both engines back, one at a time: a failure releasing one is logged and the others
      * are still tried, so one bad close cannot leave another engine resident. A
      * [CancellationException] is held back until the rest are tried, so cancelling the release job
      * still propagates.
@@ -65,7 +65,6 @@ object OcrModels {
         }
         release { MangaOcrEngine.release() }
         release { JapaneseOcr.release() }
-        release { MeikiDetector.release() }
         if (released) Log.i(TAG, "Released the idle OCR models")
         cancelled?.let { throw it }
     }

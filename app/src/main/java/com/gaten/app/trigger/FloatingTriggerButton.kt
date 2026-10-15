@@ -23,10 +23,8 @@ import android.view.WindowManager
 import android.widget.ImageView
 import androidx.compose.ui.graphics.toArgb
 import com.gaten.app.R
-import com.gaten.app.ui.theme.DarkOnPrimary
-import com.gaten.app.ui.theme.DarkPrimary
-import com.gaten.app.ui.theme.LightOnPrimary
-import com.gaten.app.ui.theme.LightPrimary
+import com.gaten.app.ui.theme.ThemePreferences
+import com.gaten.app.ui.theme.accentRoles
 import kotlin.math.hypot
 
 private const val TAG = "Gaten"
@@ -180,14 +178,19 @@ class FloatingTriggerButton(
     }
 
     /**
-     * A round [ImageView]: primary-coloured oval behind the tiled lookup glyph, tinted `onPrimary`
-     * so it reads on that fill in both light and dark themes.
+     * A round [ImageView]: accent-coloured oval behind the tiled lookup glyph, tinted `onPrimary`
+     * so it reads on that fill in both light and dark modes. The theme is the app's own choice
+     * ([ThemePreferences]), not the device's: this window has no composition to read it from, so
+     * the preferences are read here and resolved against the system setting the same way.
      */
     private fun buildBubble(): ImageView {
-        val night = (context.resources.configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val primary = (if (night) DarkPrimary else LightPrimary).toArgb()
-        val onPrimary = (if (night) DarkOnPrimary else LightOnPrimary).toArgb()
+        val dark = ThemePreferences.themeMode(context).isDark(
+            (context.resources.configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        )
+        val tone = accentRoles(ThemePreferences.accent(context), dark)
+        val primary = tone.primary.toArgb()
+        val onPrimary = tone.onPrimary.toArgb()
 
         val circle = GradientDrawable().apply {
             shape = GradientDrawable.OVAL

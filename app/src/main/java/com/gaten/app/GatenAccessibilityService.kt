@@ -38,7 +38,6 @@ import com.gaten.app.lifecycle.classifyNotificationEvent
 import com.gaten.app.lifecycle.classifyWindowEvent
 import com.gaten.app.lifecycle.displayChanged
 import com.gaten.app.lifecycle.lookupAdmitted
-import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.OcrModels
 import com.gaten.app.trigger.FloatingTriggerButton
 import com.gaten.app.trigger.TriggerPreferences
@@ -62,9 +61,8 @@ private const val ShadeCollapseMs = 400L
  * A lookup is only ever useful on the screen the user is looking at, so the service watches for the
  * ways that stops being true: the screen going off or the keyguard locking, a call, a firing alarm
  * or the power menu arriving, the display rotating under a frozen frame, and the service itself
- * being unbound or destroyed. Those dismissals end the lookup without playing the media back,
- * because the media was paused for a lookup that is over; the user's own dismissals — back, the
- * scrim, the trigger toggle — resume it as before.
+ * being unbound or destroyed. Those dismissals invalidate pending captures and release the frame,
+ * just as the user's own dismissals — back, the scrim, the trigger toggle — end the lookup.
  *
  * The Quick Settings tile calls the service directly after dismissing the shade, so no temporary
  * activity can expose the launcher while the delayed screenshot is being requested.
@@ -82,7 +80,6 @@ class GatenAccessibilityService : AccessibilityService() {
     // and closes that result after the image-copy executor has been shut down.
     private val screenshotCallbacks = Executor { callback -> mainHandler.post(callback) }
     private lateinit var overlay: OverlayWindowController
-    private lateinit var mediaPauser: MediaPauser
     private var floatingButton: FloatingTriggerButton? = null
     /** True once the system has connected the service; only then may a window be added. */
     private var serviceConnected = false
@@ -140,13 +137,11 @@ class GatenAccessibilityService : AccessibilityService() {
         }
     }
 
-    /** Creates the window and media owners; windows remain unavailable until the service connects. */
+    /** Creates the window owner; windows remain unavailable until the service connects. */
     override fun onCreate() {
         super.onCreate()
-        mediaPauser = MediaPauser(this)
         overlay = OverlayWindowController(
             this,
-            mediaPauser,
             // onHidden: the capture is over and the overlay is down; the in-flight token ends here,
             // so the next trigger is accepted, and the button comes back where the state allows.
             onHidden = { token ->
@@ -183,11 +178,7 @@ class GatenAccessibilityService : AccessibilityService() {
         syncFloatingButton()
     }
 
-    /**
-     * A service that loses its binding must leave no window behind, and must never resume the media
-     * for a lookup the user is no longer in: the dismissal is automatic, so the playback stays for
-     * whatever took the screen.
-     */
+    /** A service that loses its binding must leave no window or pending capture behind. */
     override fun onUnbind(intent: Intent?): Boolean {
         // Down before anything is hidden: the overlay's own onHidden is then the teardown path, and
         // a service that is on its way out can never re-show the button.
@@ -215,7 +206,6 @@ class GatenAccessibilityService : AccessibilityService() {
         // not be able to reach the repository or the window of a service that is gone.
         executor.shutdown()
         floatingButton?.hide()
-        mediaPauser.release()
         OcrModels.releaseNow()
         instance = null
     }
@@ -347,19 +337,13 @@ class GatenAccessibilityService : AccessibilityService() {
         syncFloatingButton()
     }
 
-    /** Invalidates capture callbacks and closes without resuming playback or retaining the frame. */
+    /** Invalidates capture callbacks and closes without retaining the frame. */
     private fun cancelLookup() {
         captureToken.abort()
         pendingGeometry = null
         overlayGeometry = null
         capturePackage = null
-        if (overlay.isShowing) {
-            overlay.hideWithoutResume()
-        } else {
-            // A manual close may already have queued a resume. An interruption cancels that too,
-            // even when its window has just disappeared.
-            mediaPauser.discard()
-        }
+        if (overlay.isShowing) overlay.dismissAutomatically()
         BitmapRepository.clear()
     }
 
@@ -412,9 +396,7 @@ class GatenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * The ordered trigger pipeline: screenshot the screen, show it, and only then pause the media -
-     * the overlay does that once the frozen frame is on screen, so whatever the player does when it
-     * pauses - raising its controls, moving its subtitles - happens underneath and is never seen.
+     * The ordered trigger pipeline: screenshot the screen and show the frozen frame.
      * Nothing on screen needs to settle first, so the capture runs at once unless something of our
      * own is still in the way: the collapsing shade after [fromShade], or the floating button.
      */

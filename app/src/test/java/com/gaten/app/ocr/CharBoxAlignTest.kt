@@ -147,8 +147,7 @@ class CharBoxAlignTest {
 
     @Test
     fun anEmptyDetectorReadingTilesTheLineEvenly() {
-        // A meiki placeholder line has no text and no boxes; everything the reader returns is an
-        // insertion, so each character takes an even slice of the line along its axis.
+        // With no original text or boxes, each new character takes an even slice along the axis.
         val horizontal = CharBoxAlign.align("", emptyList(), "猫が水を飲む", bounds, vertical = false)
         assertEquals(
             interpolateCharBoxes("猫が水を飲む", bounds, vertical = false),
