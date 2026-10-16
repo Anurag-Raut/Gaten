@@ -16,20 +16,18 @@ class AnkiCardTest {
     @Test
     fun kanjiWordTakesTheFirstEntrysDisplayFormAndReading() {
         val card = AnkiCard.from(
-            word(listOf(entry(primary = "猫", kana = listOf("ねこ", "ネコ"), glosses = listOf("cat", "feline")))),
-            sentence = ""
+            word(listOf(entry(primary = "猫", kana = listOf("ねこ", "ネコ"), glosses = listOf("cat", "feline"))))
         )
 
         assertEquals("猫", card.expression)
         assertEquals("ねこ", card.reading)
-        assertEquals("cat; feline", card.meaning)
+        assertEquals("cat; feline<br><small>n</small>", card.meaning)
     }
 
     @Test
     fun kanaOnlyWordUsesItsOwnFormAsTheExpression() {
         val card = AnkiCard.from(
-            word(entries = listOf(entry(primary = "ねこ", kana = listOf("ねこ"))), surface = "ねこ"),
-            sentence = ""
+            word(entries = listOf(entry(primary = "ねこ", kana = listOf("ねこ"))), surface = "ねこ")
         )
 
         assertEquals("ねこ", card.expression)
@@ -37,72 +35,48 @@ class AnkiCardTest {
     }
 
     @Test
-    fun onlyTheFirstFiveGlossesAreKept() {
+    fun meaningKeepsTheFirstFiveGlossesAndThePartOfSpeech() {
         val glosses = (1..8).map { "gloss$it" }
 
-        val card = AnkiCard.from(word(listOf(entry(glosses = glosses))), sentence = "")
+        val card = AnkiCard.from(word(listOf(entry(glosses = glosses, pos = listOf("noun", "verb")))))
 
-        assertEquals("gloss1; gloss2; gloss3; gloss4; gloss5", card.meaning)
+        assertEquals("gloss1; gloss2; gloss3; gloss4; gloss5<br><small>noun, verb</small>", card.meaning)
+    }
+
+    @Test
+    fun meaningWithoutAPartOfSpeechIsJustTheGlosses() {
+        val card = AnkiCard.from(word(listOf(entry(pos = emptyList()))))
+
+        assertEquals("cat", card.meaning)
     }
 
     @Test
     fun htmlMetacharactersAreEscaped() {
         val card = AnkiCard.from(
-            word(listOf(entry(primary = "a<b", kana = listOf("a&b"), glosses = listOf("<&>")))),
-            sentence = ""
+            word(
+                listOf(
+                    entry(
+                        primary = "a<b",
+                        kana = listOf("a&b"),
+                        glosses = listOf("<&>"),
+                        pos = listOf("a>")
+                    )
+                )
+            )
         )
 
         assertEquals("a&lt;b", card.expression)
         assertEquals("a&amp;b", card.reading)
-        assertEquals("&lt;&amp;&gt;", card.meaning)
-    }
-
-    @Test
-    fun sentenceBoldsTheSurfaceItContains() {
-        val card = AnkiCard.from(word(surface = "猫"), sentence = "猫が水を飲む")
-
-        assertEquals("<b>猫</b>が水を飲む", card.sentence)
-    }
-
-    @Test
-    fun sentenceBoldsOnlyTheFirstOccurrence() {
-        val card = AnkiCard.from(word(surface = "猫"), sentence = "猫と猫")
-
-        assertEquals("<b>猫</b>と猫", card.sentence)
-    }
-
-    @Test
-    fun sentenceWithoutTheSurfaceIsKeptAsIs() {
-        val card = AnkiCard.from(word(surface = "猫"), sentence = "犬が走る")
-
-        assertEquals("犬が走る", card.sentence)
-    }
-
-    @Test
-    fun sentenceIsEscapedAroundTheBoldWord() {
-        val card = AnkiCard.from(word(surface = "猫"), sentence = "a<b>猫</b>c")
-
-        assertEquals("a&lt;b&gt;<b>猫</b>&lt;/b&gt;c", card.sentence)
-    }
-
-    @Test
-    fun missingSentenceStaysEmpty() {
-        val card = AnkiCard.from(word(surface = "猫"), sentence = "")
-
-        assertEquals("", card.sentence)
+        assertEquals("&lt;&amp;&gt;<br><small>a&gt;</small>", card.meaning)
     }
 
     @Test
     fun wordWithoutEntriesFallsBackToItsBaseForm() {
-        val card = AnkiCard.from(
-            word(surface = "飲ん", baseForm = "飲む", entries = emptyList()),
-            sentence = "水を飲んだ"
-        )
+        val card = AnkiCard.from(word(surface = "飲ん", baseForm = "飲む", entries = emptyList()))
 
         assertEquals("飲む", card.expression)
         assertEquals("", card.reading)
         assertEquals("", card.meaning)
-        assertEquals("水を<b>飲ん</b>だ", card.sentence)
     }
 
     private fun word(
@@ -120,14 +94,15 @@ class AnkiCardTest {
     private fun entry(
         primary: String = "猫",
         kana: List<String> = listOf("ねこ"),
-        glosses: List<String> = listOf("cat")
+        glosses: List<String> = listOf("cat"),
+        pos: List<String> = listOf("n")
     ) = DictEntry(
         id = 1,
         primary = primary,
         kanji = listOf(primary),
         kana = kana,
         glosses = glosses,
-        pos = listOf("n"),
+        pos = pos,
         common = true
     )
 }

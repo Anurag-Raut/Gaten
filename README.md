@@ -4,8 +4,10 @@ Gaten is an Android app for reading Japanese on screen. When you hit a word you 
 in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the text, and Gaten
 shows the words it recognises, their kana readings and English meanings from an offline
 dictionary. Reading runs entirely on the device: there is no account and no server, and it works
-in airplane mode. The only thing Gaten ever uses the network for is downloading the optional
-stylized-text model, and only when the reader taps Download (see *Optional stylized-text model*).
+in airplane mode. Gaten uses the network for exactly two things, and only after the reader asks for
+them: downloading the optional stylized-text model (see *Optional stylized-text model*), and WaniKani
+— connecting a personal access token, and fetching the reference page for a kanji the reader taps
+(see *Optional WaniKani reference pages*).
 
 ## How it works
 
@@ -33,12 +35,18 @@ stylized-text model, and only when the reader taps Download (see *Optional styli
    カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
    database built from JMdict and JMnedict, and the overlay lists the matching entries.
-8. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to your
+8. **WaniKani** (optional) — with a token connected, the kanji of the looked-up word appear as tiles
+   under its entry. Tapping one shows WaniKani's page for that kanji inside the sheet — meanings,
+   on'yomi and kun'yomi, the radicals it is made of, and WaniKani's mnemonics — and tapping one of
+   those radicals opens that radical's own page. Each page is cached, so it stays readable offline,
+   and a button opens the real page on wanikani.com (see *Optional WaniKani reference pages*).
+9. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to your
    configured deck and note type through AnkiDroid's instant-add API. Open **Anki → Customize cards**
    on the home screen to choose the deck, tags, field mapping and card layout. Export stays on-device.
 
-Steps 2–7 are fully offline, and the app makes no network request of any kind until — and unless —
-the reader downloads the optional stylized-text model.
+Steps 2–7 are fully offline. Gaten makes no network request of any kind until — and unless — the
+reader downloads the optional stylized-text model, or connects WaniKani (which checks the token) and
+opens a kanji.
 
 Appearance settings near the bottom of the setup screen let you choose the light/dark theme,
 paper palette and accent independently. Changing the palette keeps your selected accent.
@@ -115,16 +123,18 @@ likely to need a real device to confirm.
    another lookup.
 
 5. **Optional — customize Anki cards.** Open **Anki → Customize cards**. The default is the
-   existing Gaten deck and four-field note type. Enter a deck name (including nested names such
+   existing Gaten deck and three-field note type. Enter a deck name (including nested names such
    as `Japanese::Reading`) or allow AnkiDroid access to choose an existing deck. Add space-separated
    tags if wanted. New decks and Gaten note types are created only when you export a word.
    - Choose **Gaten cards (customizable)** to edit the front/back HTML and CSS. Available fields
-     are `{{Expression}}`, `{{Reading}}`, `{{Meaning}}`, and `{{Sentence}}`; the back can use
-     `{{FrontSide}}`. Conditional sections such as `{{#Reading}}…{{/Reading}}` are supported.
-     Changed layouts use a separate note type for future exports, leaving existing cards and
-     AnkiDroid template edits intact. Restoring defaults uses the original Gaten note type.
+     are `{{Expression}}`, `{{Reading}}`, and `{{Meaning}}`; the back can use `{{FrontSide}}`.
+     Conditional sections such as `{{#Reading}}…{{/Reading}}` are supported. Changed layouts use a
+     separate note type for future exports, leaving existing cards and AnkiDroid template edits
+     intact. Restoring defaults uses the original Gaten note type.
+   - The card is the word, its reading and its meaning — the glosses over their parts of speech. No
+     sentence is exported: neither a dictionary example nor the line the word was read from.
    - Or choose an existing standard note type and map each of its fields to Expression, Reading,
-     Meaning, Sentence, or Leave empty. Its templates and styling remain managed in AnkiDroid.
+     Meaning, or Leave empty. Its templates and styling remain managed in AnkiDroid.
      Expression must appear somewhere, and the first field must have a value for each exported
      word. Cloze note types are not supported. If fields change in AnkiDroid, select the note type
      again and save the updated mapping.
@@ -132,11 +142,18 @@ likely to need a real device to confirm.
      all decks. A new layout creates a different note type, so its duplicate history is separate.
    - Tap **Save** to apply your settings. Without database access, the lookup uses AnkiDroid's
      share screen; choose the deck and note type there. Gaten settings apply to direct export.
+   - **Anki → Review cards** on the home screen then reviews these decks inside Gaten, with
+     AnkiDroid doing the scheduling (see *Reviewing Anki cards in Gaten*).
 
    The deck/note-type/field-mapping workflow follows established patterns in
    [Yomitan](https://yomitan.wiki/anki/) and
    [asbplayer](https://docs.asbplayer.dev/docs/reference/settings/). Gaten uses AnkiDroid's local
    provider instead of their AnkiConnect transport; no code was copied from these projects.
+
+6. **Optional — connect WaniKani.** Open **WaniKani → WaniKani settings** on the main screen, create
+   a personal access token on WaniKani (read-only is enough), and paste it in. Gaten checks the token
+   against WaniKani before storing it, and keeps it outside the backup set. **Disconnect** removes the
+   token and every cached page. See *Optional WaniKani reference pages*.
 
 ## Building from source
 
@@ -186,8 +203,9 @@ phone, and the app only reaches the network for the first one:
 - **Download it in the app** — Gaten → *Stylized-text model (manga-ocr, optional)* → **Download**.
   The size is shown first and has to be confirmed (with a warning when the phone is on mobile data),
   the download runs with a progress bar and a Cancel button, and the only hosts it talks to are
-  `huggingface.co` and the CDN it redirects to, over HTTPS. This is the app's only network request:
-  nothing is fetched until that button is tapped. The files come from
+  `huggingface.co` and the CDN it redirects to, over HTTPS. Nothing is fetched until that button is
+  tapped; the optional WaniKani pages are the app's only other network use, and only once a token is
+  connected and a kanji is tapped. The files come from
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
   (`encoder_model_int8.onnx`, `decoder_model_int8.onnx`) and
   [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base) (`vocab.txt`).
@@ -212,6 +230,91 @@ of output arg ... does not match expected type (tensor(float))`). The fp16 encod
 image identically to int8, but its accuracy on real manga has not been measured, so it is not offered
 either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
+## Optional WaniKani reference pages
+
+Gaten is an offline reader, so none of this is on by default. Connect a WaniKani personal access
+token and the kanji of a looked-up word get a second layer: WaniKani's own reference content, fetched
+for the one character that was tapped and kept on the device.
+
+**What it shows.** Under the entry for a looked-up word, each distinct kanji of its headword is a
+tile. Tapping one opens WaniKani's page for that kanji inside the sheet — its meanings, its on'yomi
+and kun'yomi, the radicals it is made of, and WaniKani's meaning and reading mnemonics — with the
+dictionary entry one Back away. Tapping a radical in that composition opens the radical's own page,
+drawing included: the radicals no font has are rendered from the SVG WaniKani serves for them. A
+button on either page opens the real page on `wanikani.com` in the browser.
+
+**What it does not do.** No learning progress is involved. Gaten never reads or shows a level,
+lessons, reviews, assignments or statistics, and never writes anything to a WaniKani account. The
+only account call is `GET /v2/user`, read for the subscription's own entitlement, so content above
+the account's levels is marked as such rather than shown (a free account covers levels 1–3). The Anki
+export is untouched: nothing from WaniKani goes into a note, and no Anki card gains a WaniKani view.
+
+**Connecting.** Create a token on WaniKani's *Personal access tokens* page — read-only is enough — and
+paste it into **WaniKani → WaniKani settings** on the main screen. Gaten checks it against `/v2/user`
+before storing it, so a token on the device is always one WaniKani accepted, and the field is cleared
+the moment it is saved: the token is never shown or logged again, and it is sent only to
+`api.wanikani.com` — the image requests to `cdn.wanikani.com` carry no token at all. It is stored in
+app-private storage outside the backup set, encrypted with an Android Keystore key, so it is in
+neither a cloud backup nor a device-to-device transfer. **Disconnect** deletes the token and every
+cached page.
+
+**Offline and caching.** A page is cached as it is fetched; from then on the saved copy answers
+without touching the network at all, and the sheet says so. A miss while offline says exactly that,
+and **Retry** asks WaniKani again. Nothing is prefetched: a request is made only when you connect,
+recheck, or open a kanji or radical.
+
+**Coverage limits.** WaniKani's content covers its own curriculum — large, but not every kanji. A
+kanji outside it has no page, and Gaten says so rather than inventing meanings, readings or
+mnemonics; a radical above the account's level says that too. Radical names are WaniKani's own
+mnemonics, not linguistic definitions. Every kanji of a word stays tappable either way, and each of
+these outcomes is stated in the sheet instead of leaving an empty page.
+
+**The token cannot be typed in the overlay.** The lookup overlay belongs to the accessibility
+service and cannot offer a keyboard reliably, so a kanji page with no token connected — or with a
+token WaniKani has rejected — explains that and offers **Open Gaten**, which brings this app up over
+the overlay.
+
+**Requests.** Connecting and rechecking ask WaniKani for the account (`GET /user`), sending the token
+in an `Authorization` header; opening a kanji or one of its radicals sends that character or that
+subject id, with a kanji's composition adding its own radicals' ids. All of it goes to
+`api.wanikani.com` over HTTPS, plus `cdn.wanikani.com` for the SVG of a radical that has no
+character. Redirects are refused outright and the token is never logged. The scanned sentence, the
+other words of the lookup and the screenshot are never sent, and no study progress is requested, kept
+or shown.
+
+**Attribution.** WaniKani and its content belong to [Tofugu LLC](https://www.wanikani.com/). Gaten's
+WaniKani pages are an unofficial third-party reference: Gaten is not affiliated with or endorsed by
+WaniKani, and no WaniKani content is bundled in the APK or exported to Anki — each page is fetched
+through the public API when the reader asks, and cached on that device.
+
+## Reviewing Anki cards in Gaten
+
+**Anki → Review cards** on the home screen reviews AnkiDroid's own decks without leaving Gaten.
+AnkiDroid still does everything that decides when a card comes back: Gaten asks it for the next due
+card, shows the question, reveals the answer, and sends the rating you pick back to it through the
+same content provider AnkiDroid shares with other apps. Nothing is scheduled, counted or remembered
+on Gaten's side, and no network is involved — this is on-device provider access, like the export.
+
+- **Decks.** Every deck AnkiDroid reports is listed with AnkiDroid's own counts, and the deck Gaten
+  is configured to export to is preselected. The deck's queue, its limits and its scheduler are
+  AnkiDroid's; Gaten never invents a card order.
+- **Cards.** The question and answer are rendered by AnkiDroid, styling included, in a WebView that
+  runs no JavaScript and has no file, content or network access. Gaten's own chrome is the reveal
+  button, the rating buttons (each labelled with the interval AnkiDroid reports for it), and, on the
+  answer side, the WaniKani kanji of the note's own fields — the question side never shows them, so
+  the answer cannot leak through a kanji page.
+- **Ratings.** One tap sends one rating: Again, Hard, Good or Easy, in the order AnkiDroid's intervals
+  arrive. The buttons are disabled while a rating is in flight, and a rating whose outcome AnkiDroid
+  did not confirm is never sent a second time (the provider applies every update it receives and
+  offers no undo), so the screen then only offers the next card.
+- **Nothing due** is a finished deck, shown as such, and kept apart from any failure.
+- **What Gaten cannot show.** AnkiDroid serves media files to other apps for *insertion* only, so
+  images and sounds in a card do not appear here; the screen says how many the card uses and offers
+  **Open AnkiDroid** for cards whose media really matters. A card with a typed answer shows the answer
+  as AnkiDroid renders it, without the interactive comparison, so the rating stays the reader's own —
+  which is how Anki grades anyway. MathJax and any other script-driven rendering do not run either,
+  for the same reason: no JavaScript.
+
 ## Project layout
 
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
@@ -222,14 +325,20 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
   as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
   (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrModels`
   (when the OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
-  `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` the only network code
-  in the app.
-- `anki/` — AnkiDroid export plus deck, tags, field-mapping and card-template preferences.
+  `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` is the model
+  download itself; the app's only other network code is the optional WaniKani client in `wanikani/`.
+- `anki/` — AnkiDroid export plus deck, tags, field-mapping and card-template preferences, and the
+  provider reader behind the in-app review screen (queue, rendered card HTML, rating).
+- `wanikani/` — the optional WaniKani client: the token (Keystore-encrypted, stored off the backup
+  set), the API calls to `api.wanikani.com` under the account's level entitlement, and the on-device
+  cache of subjects and radical images.
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
   and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
 - `ui/` — Jetpack Compose UI: `home/` (setup screen), `lookup/` (lasso layer, result sheet and the
-  OCR + dictionary pipeline), `components/` (accessibility disclosure) and `theme/` (the palette,
+  OCR + dictionary pipeline), `wanikani/` (the WaniKani settings screen, the kanji tiles under a
+  result, and the kanji and radical pages drawn inside the sheet), `anki/` (the review screen that
+  drives AnkiDroid's decks), `components/` (accessibility disclosure) and `theme/` (the palette,
   the type scale and `ThemePreferences`, the stored dark/light, palette and accent choices the
   overlay and the floating bubble read too).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
@@ -238,12 +347,35 @@ either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
 
 ## Privacy
 
-Reading is offline and stays offline. Gaten holds `INTERNET` for exactly one request — the optional
-stylized-text model the reader downloads by tapping Download — and that request goes to
-`huggingface.co` and the CDN it redirects to, over HTTPS, and nowhere else (`ocr/MangaOcrDownloader.kt`
-enforces that allow-list, redirects included). Nothing is fetched in the background, and the
-screenshot never leaves the device: it stays in memory, is never uploaded, never shared and never
-written to disk. There is no analytics, no account and no server.
+Reading is offline and stays offline. Gaten makes network requests for exactly two things, both of
+them started by the reader and neither of them in the background:
+
+- **The optional stylized-text model**, downloaded by tapping Download, goes to `huggingface.co` and
+  the CDN it redirects to, over HTTPS, and nowhere else (`ocr/MangaOcrDownloader.kt` enforces that
+  allow-list, redirects included).
+- **WaniKani**, once a token is connected: connecting and rechecking send the token to
+  `api.wanikani.com` for `GET /user` (the one account call, read only for the subscription's level
+  entitlement), and opening a kanji sends that character — a radical, its id, a kanji's composition
+  the ids of its own radicals — in the request for that one page. `cdn.wanikani.com` is asked only
+  for the SVG of a radical that has no character. All over HTTPS, with redirects refused. The scanned
+  sentence, the other words, the screenshot and everything else looked up stay on the device, and
+  nothing about lessons, reviews, assignments or progress is requested or kept. Nothing is
+  prefetched: with the network gone the saved pages still answer, and nothing else happens.
+
+The WaniKani personal access token lives in app-private storage outside the backup set
+(`noBackupFilesDir`), encrypted with an Android Keystore key: it is not in a cloud backup and not in
+a device-to-device transfer. It is never logged, never shown again after it is saved, and Disconnect
+deletes it along with every cached page — reporting it if any of that could not be removed. Of the
+account itself Gaten reads the subscription's level entitlement — plan, level and expiry — and
+nothing else: no lessons, no reviews, no assignments, no statistics, and no write of any kind. That
+entitlement is all the cache holds about the account, and it is used only to refuse a subject above
+the account's levels.
+
+Nothing else is fetched, and the screenshot never leaves the device: it stays in memory, is never
+uploaded, never shared and never written to disk. Reviewing Anki cards changes nothing here either:
+it reads and answers cards through AnkiDroid's own local content provider, on the device, and asks
+AnkiDroid for every scheduling decision. There is no analytics, no account of Gaten's own and no
+server.
 
 The only notifications Gaten looks at are the accessibility events Android already sends it for a
 posted notification, and it reads **metadata only**: whether an incoming call (`CallStyle`, incoming
@@ -259,9 +391,9 @@ every lookup feature working (only the session-based pause gives way to a media 
 
 ML Kit's transport library and ONNX Runtime also declare `INTERNET` for their own analytics and
 telemetry backends. Gaten's code never calls those, but while the permission is in the merged
-manifest the OS no longer blocks them — removing it would block them and the model download with it.
-That is the trade the download costs, and it is why the permission is documented here rather than
-left implicit.
+manifest the OS no longer blocks them — removing it would block them, the model download and the
+WaniKani client with it. That is the trade the two features cost, and it is why the permission is
+documented here rather than left implicit.
 
 ## Credits and licences
 
@@ -272,6 +404,10 @@ left implicit.
   (EDRDG), used under
   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see
   <https://www.edrdg.org/>.
+- **WaniKani reference content** — [WaniKani](https://www.wanikani.com/) (Tofugu LLC), read through
+  its [public API](https://docs.api.wanikani.com/20170710) under WaniKani's own terms when the reader
+  connects a token. Nothing from WaniKani is bundled with the app: each kanji or radical page is
+  fetched on request and cached on the reader's device, and Gaten is not affiliated with WaniKani.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
   lines and reads them when no manga-ocr model is installed.
 - **Optional stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,

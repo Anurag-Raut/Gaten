@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -102,12 +103,23 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
     var loadingFields by remember { mutableStateOf(false) }
     var readFailed by remember { mutableStateOf(false) }
+    // What is on disk, to tell an edited draft from an untouched one. The draft itself is
+    // saveable, so this comparison survives a rotation the same way the edits do.
+    val saved = remember { AnkiPreferences.load(context) }
+    val dirty = draft != saved
+    var confirmDiscard by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         status = AnkiExporter.status(context)
         refresh++
         if (!it) Toast.makeText(context, R.string.anki_error_permission, Toast.LENGTH_LONG).show()
     }
-    BackHandler(onBack = onClose)
+
+    /** Leaves, asking first only when the draft differs from what is saved. */
+    fun leave() {
+        if (dirty) confirmDiscard = true else onClose()
+    }
+
+    BackHandler(onBack = { leave() })
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -140,7 +152,7 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
             TopAppBar(
                 title = { Text(stringResource(R.string.anki_settings_open)) },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = { leave() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.anki_settings_back))
                     }
                 },
@@ -296,6 +308,27 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
             Spacer(Modifier.height(Spacing.xl))
         }
     }
+
+    // The draft is lost on leaving, so an edited one asks first: Save is the only way it is kept,
+    // and discarding is the reader's decision, never the back button's.
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text(stringResource(R.string.anki_settings_discard_title)) },
+            text = { Text(stringResource(R.string.anki_settings_discard_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    onClose()
+                }) { Text(stringResource(R.string.anki_settings_discard_leave)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) {
+                    Text(stringResource(R.string.anki_settings_discard_stay))
+                }
+            }
+        )
+    }
 }
 
 /** Picker shared by the deck, note type, and per-field source rows. */
@@ -333,7 +366,6 @@ private fun fieldLabel(field: AnkiField): Int = when (field) {
     AnkiField.EXPRESSION -> R.string.anki_settings_expression
     AnkiField.READING -> R.string.anki_settings_reading
     AnkiField.MEANING -> R.string.anki_settings_meaning
-    AnkiField.SENTENCE -> R.string.anki_settings_sentence
     AnkiField.EMPTY -> R.string.anki_settings_empty
 }
 

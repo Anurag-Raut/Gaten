@@ -181,8 +181,8 @@ class JmdictRepository private constructor(private val db: SQLiteDatabase) {
      *
      * [term] must be a dictionary form as stored in the database — inflected surfaces go through
      * [Deinflector] first (see [WordScanner]). Entries reachable from several matching rows are
-     * returned once. Name entries come last on purpose: they exist to make a circled place or
-     * person name resolvable, not to outrank the word the user probably wants.
+     * returned once. Name entries come last on purpose: they exist to make a circled place or person
+     * name resolvable, not to outrank the word the user probably wants.
      */
     fun lookup(term: String, limit: Int = 8): List<DictEntry> {
         if (term.isEmpty() || limit <= 0) return emptyList()

@@ -43,11 +43,10 @@
     <string name="anki_settings_existing_help">This note type keeps its own templates and styling from AnkiDroid. Cloze note types require cloze text and are not supported.</string>
     <string name="anki_settings_expression">Expression</string>
     <string name="anki_settings_reading">Reading</string>
-    <string name="anki_settings_meaning">Meaning</string>
-    <string name="anki_settings_sentence">Sentence</string>
+    <string name="anki_settings_meaning">Meaning and part of speech</string>
     <string name="anki_settings_empty">Leave empty</string>
     <string name="anki_settings_templates">Edit front, back, and styling</string>
-    <string name="anki_settings_template_help">Use {{Expression}}, {{Reading}}, {{Meaning}}, and {{Sentence}} in HTML. {{FrontSide}} repeats the front on the back. Conditional sections such as {{#Reading}}…{{/Reading}} are supported. New layouts apply to future exports; existing cards keep their note type. Duplicates are checked within the active note type.</string>
+    <string name="anki_settings_template_help">Use {{Expression}}, {{Reading}}, and {{Meaning}} in HTML. {{FrontSide}} repeats the front on the back. Conditional sections such as {{#Reading}}…{{/Reading}} are supported. {{Meaning}} carries the word’s glosses and part of speech. New layouts apply to future exports; existing cards keep their note type. Duplicates are checked within the active note type.</string>
     <string name="anki_settings_front">Front (HTML)</string>
     <string name="anki_settings_back_template">Back (HTML)</string>
     <string name="anki_settings_css">Styling (CSS)</string>

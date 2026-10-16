@@ -67,9 +67,10 @@ data class AnkiCollection(
  * Adds looked-up words to AnkiDroid through its instant-add API.
  *
  * [AddContentApi] talks to AnkiDroid's `flashcards` ContentProvider, not to a network service: the
- * export stays on-device, and the app's INTERNET permission is only ever used to download the
- * optional OCR model. AnkiDroid must be declared in the manifest's `<queries>` for that provider to
- * be visible at all on Android 11+, and a write needs its `READ_WRITE_DATABASE` permission. The
+ * export stays on-device, and the app's INTERNET permission is only ever used for the optional OCR
+ * model download and the optional WaniKani reference pages (see the README). AnkiDroid must be
+ * declared in the manifest's `<queries>` for that provider to be visible at all on Android 11+, and
+ * a write needs its `READ_WRITE_DATABASE` permission. The
  * overlay is drawn from the accessibility service, which can check that permission but never ask for
  * it, so [shareFallback] is what covers the ungranted case.
  *
@@ -297,10 +298,7 @@ object AnkiExporter {
             // Started from the accessibility service, never from an activity, so it needs a task.
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(Intent.EXTRA_SUBJECT, card.expression)
-            putExtra(
-                Intent.EXTRA_TEXT,
-                listOf(card.reading, card.meaning).filter { it.isNotEmpty() }.joinToString("\n")
-            )
+            putExtra(Intent.EXTRA_TEXT, shareText(card))
         }
         if (context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) == null) {
             return false
@@ -502,10 +500,29 @@ internal fun resolveDeckId(cachedId: Long?, decks: Map<Long, String>, deckName: 
 /**
  * The value AnkiDroid matches a duplicate note against: the first field of the note
  * (`AddContentApi.findDuplicateNotes`). [AnkiSettings.fields] puts the first mapped field first, so
- * the sentence can be the duplicate key of a chosen note type. Pure, and shared by an add and a
- * duplicate check so the two cannot disagree.
+ * whichever source the user mapped there is the duplicate key of a chosen note type. Pure, and shared
+ * by an add and a duplicate check so the two cannot disagree.
  */
 internal fun duplicateKey(fields: Array<String>): String = fields.firstOrNull().orEmpty()
+
+/**
+ * [card] as AnkiDroid's share sheet takes it: the fields the card carries, one per line, without the
+ * HTML Anki renders them with.
+ *
+ * The share sheet is plain text, so the inline markup comes off and the escaping Anki fields need is
+ * undone — `&lt;` in a gloss is a printed "<", which is exactly what this text has to show. `&amp;`
+ * is decoded last so that decoding happens once: turning it into `&` first would make a literal
+ * "&lt;" in the dictionary text come out as "<". Empty fields are left out, as with the note itself.
+ */
+internal fun shareText(card: AnkiCard): String =
+    listOf(card.reading, card.meaning)
+        .filter { it.isNotEmpty() }
+        .joinToString("\n")
+        .replace("<br>", "\n")
+        .replace(Regex("<[^>]+>"), "")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 
 /**
  * The name a new note type for [settings]'s layout gets: "Gaten" while the templates are the defaults,

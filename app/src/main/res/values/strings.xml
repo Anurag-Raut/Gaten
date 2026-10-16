@@ -21,7 +21,7 @@
 
     <!-- Accessibility Disclosure Dialog -->
     <string name="title_accessibility_permission">Grant Accessibility Permission</string>
-    <string name="body_accessibility_permission">Gaten uses the accessibility service to capture a screenshot when you start a lookup and detect interruptions so the lookup closes automatically. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service does not read notification messages or type for you.</string>
+    <string name="body_accessibility_permission">Gaten uses the accessibility service to capture a screenshot when you start a lookup and detect interruptions so the lookup closes automatically. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service does not read notification messages or type for you.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character\'s page. Your selected sentence, the other words and the screenshot stay on the device. No WaniKani study progress is read.</string>
     <string name="label_accessibility_agree">I understand how this permission will be used and agree to proceed</string>
 
     <!-- Quick Settings Tile -->

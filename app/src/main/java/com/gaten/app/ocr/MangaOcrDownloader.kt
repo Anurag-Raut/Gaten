@@ -17,8 +17,9 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * Fetches one [MangaOcrCatalog] entry over HTTPS and installs it, for the Download button on the
- * settings screen. This is the only network code in the app, and nothing calls it on its own: the
- * user picks an entry and confirms its size first.
+ * settings screen. This is one of the app's two network paths — the other is the optional WaniKani
+ * client in `wanikani/` — and nothing calls it on its own: the user picks an entry and confirms its
+ * size first.
  *
  * How it behaves:
  *  - Only Hugging Face over HTTPS is ever contacted ([DownloadPolicy]), for the URL in the catalog
