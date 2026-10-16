@@ -85,6 +85,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -417,28 +418,33 @@ fun HomeScreen(
     AnimatedContent(
         targetState = page,
         transitionSpec = {
+            // No size animation in either direction: the home branch draws a full-size (empty)
+            // Box and the transform is disabled, so the container never shrinks toward an
+            // emptier child while a screen is leaving. Slides are opaque — no fades — so the
+            // leaving screen cannot turn translucent over the page it covers.
             if (targetState == HomePage.Home) {
                 // Closing: home is already there, so only the leaving screen animates.
                 EnterTransition.None togetherWith (
                     slideOutHorizontally(
                         animationSpec = tween(Motion.LONG, easing = Motion.emphasizedAccelerate)
-                    ) { it } + fadeOut(tween(Motion.LONG, easing = Motion.emphasizedAccelerate))
-                )
+                    ) { it }
+                ) using null
             } else {
                 // Opening: the screen arrives from that edge and settles over home.
                 (
                     slideInHorizontally(
                         animationSpec = tween(Motion.LONG, easing = Motion.emphasizedDecelerate)
-                    ) { it } + fadeIn(tween(Motion.LONG, easing = Motion.emphasizedDecelerate))
-                ) togetherWith ExitTransition.None
+                    ) { it }
+                ) togetherWith ExitTransition.None using null
             }
         },
         label = "homeScreen",
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().clipToBounds()
     ) { screen ->
         when (screen) {
-            // Home is the content underneath, so this transition has nothing of its own to draw.
-            HomePage.Home -> Unit
+            // Home is the content underneath: an empty full-size child so the container's size
+            // never changes while a screen slides away over it.
+            HomePage.Home -> Box(modifier = Modifier.fillMaxSize())
             HomePage.AnkiSettings -> AnkiSettingsScreen(onClose = { showAnkiSettings = false })
             HomePage.AnkiReview -> AnkiReviewScreen(onClose = { showAnkiReview = false })
             HomePage.WaniKaniSettings -> WaniKaniSettingsScreen(
