@@ -11,9 +11,9 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.util.Log
 import android.view.Choreographer
 import android.view.Gravity
@@ -39,9 +39,6 @@ private const val EDGE_MARGIN_DP = 8
 /** Distance the finger must travel before a press becomes a drag instead of a tap. */
 private const val TOUCH_SLOP_DP = 8f
 
-/** Longest press still counted as a tap; a slower release never fires the lookup. */
-private const val TAP_TIMEOUT_MS = 250L
-
 /** Where the bubble starts vertically: a little above the middle, clear of both screen edges. */
 private const val DEFAULT_HEIGHT_FRACTION = 0.45f
 
@@ -58,6 +55,16 @@ private const val GONE_TIMEOUT_MS = 150L
  * `FLAG_NOT_TOUCH_MODAL`, so a touch anywhere else falls through to the app behind instead of
  * being swallowed by an invisible full-screen window. The bubble is a plain [ImageView] because
  * this window is added from the accessibility service — there is no composition to host Compose.
+ *
+ * The window does not fit the system bars ([WindowManager.LayoutParams.setFitInsetsTypes] cleared,
+ * `FLAG_LAYOUT_IN_SCREEN` below API 30), so its `x`/`y` are display coordinates: the position asked
+ * for, the one persisted, the one a drag moves on from and the one the window reports all mean the
+ * same place on screen. Left at the default, such a window is laid out inside the inset-adjusted
+ * parent frame, whose origin sits under the status bar — the bubble then draws, is stored and is
+ * reported one status-bar height away from the display position it was given, which is what a tap
+ * aimed with those numbers misses. Every position this class takes in — restored, dragged,
+ * re-clamped — is clamped into the display area its own context reports, so the bubble can never be
+ * stored outside the area it can be touched in.
  *
  * [show]/[hide] are idempotent and hop to the main thread themselves, since adding or removing a
  * window anywhere else throws.
@@ -82,7 +89,6 @@ class FloatingTriggerButton(
     private var downRawY = 0f
     private var downX = 0
     private var downY = 0
-    private var downTime = 0L
     private var dragging = false
 
     val isShowing: Boolean
@@ -216,17 +222,30 @@ class FloatingTriggerButton(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            // Below API 30 this is what keeps the window out of the inset-fitted parent frame;
+            // from 30 on, fitInsetsTypes = 0 below is the supported spelling of the same thing and
+            // this flag is ignored.
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.TOP or Gravity.START
+        // Do not fit the system bars: x/y are then display coordinates, the same space the stored
+        // position and the default below are computed in. See the class comment.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            fitInsetsTypes = 0
+        }
         x = position.first
         y = position.second
     }
 
-    /** The last dragged position, or a sensible first one: near the right edge at ~45% height. */
+    /**
+     * The last dragged position, or a sensible first one: near the right edge at ~45% height. A
+     * stored position is clamped too, so one written at another orientation (or by an older build
+     * that did not clamp) cannot put the bubble where it can be neither seen nor touched.
+     */
     private fun restoredOrDefaultPosition(): Pair<Int, Int> {
-        TriggerPreferences.floatingButtonPosition(context)?.let { return it }
+        TriggerPreferences.floatingButtonPosition(context)?.let { return clampToDisplay(it) }
         val metrics = context.resources.displayMetrics
         val x = (metrics.widthPixels - bubblePx - edgeMarginPx).coerceAtLeast(0)
         val y = (metrics.heightPixels * DEFAULT_HEIGHT_FRACTION).toInt().coerceAtLeast(0)
@@ -234,9 +253,41 @@ class FloatingTriggerButton(
     }
 
     /**
+     * Moves the showing bubble back inside the display, for a rotation or a resize that left its
+     * position outside the new one. The window manager clips the frame it draws, but the position
+     * kept here is what the next drag moves on from: off-display, that drag only resumes once the
+     * finger has travelled back past the clipped distance.
+     */
+    fun reclampToDisplay() = onMain {
+        val layoutParams = params ?: return@onMain
+        val (x, y) = clampToDisplay(layoutParams.x to layoutParams.y)
+        if (x == layoutParams.x && y == layoutParams.y) return@onMain
+        layoutParams.x = x
+        layoutParams.y = y
+        view?.let { windowManager.updateViewLayout(it, layoutParams) }
+        TriggerPreferences.setFloatingButtonPosition(context, x, y)
+    }
+
+    /**
+     * A position with the whole bubble inside the display. The box is this context's own display
+     * metrics, which stop at the status and navigation bars rather than at the screen edges, so a
+     * clamped bubble is never left under a system bar where the system's own gesture would take the
+     * touch. [bubblePx] may exceed a tiny display; the box then collapses to its origin.
+     */
+    private fun clampToDisplay(position: Pair<Int, Int>): Pair<Int, Int> {
+        val metrics = context.resources.displayMetrics
+        val maxX = (metrics.widthPixels - bubblePx).coerceAtLeast(0)
+        val maxY = (metrics.heightPixels - bubblePx).coerceAtLeast(0)
+        return position.first.coerceIn(0, maxX) to position.second.coerceIn(0, maxY)
+    }
+
+    /**
      * Press handling, kept on this view's own bounds by the wrap-content window: past the touch
-     * slop the press becomes a drag that moves the window, and only a release under the slop and
-     * inside [TAP_TIMEOUT_MS] counts as a tap.
+     * slop the press becomes a drag that moves the window, and a release that never got there is a
+     * tap. Movement is the whole test — a timer on top of it only adds a second way for a press on
+     * this bubble to do nothing at all, and nothing here is bound to a long press to deserve one. A
+     * drag is clamped into the display, so a released position is always one the bubble can be seen
+     * and touched at.
      */
     private fun handleTouch(touched: View, event: MotionEvent): Boolean {
         val layoutParams = params ?: return false
@@ -246,7 +297,6 @@ class FloatingTriggerButton(
                 downRawY = event.rawY
                 downX = layoutParams.x
                 downY = layoutParams.y
-                downTime = SystemClock.uptimeMillis()
                 dragging = false
             }
 
@@ -255,8 +305,9 @@ class FloatingTriggerButton(
                 val dy = event.rawY - downRawY
                 if (!dragging && hypot(dx, dy) > touchSlopPx) dragging = true
                 if (dragging) {
-                    layoutParams.x = downX + dx.toInt()
-                    layoutParams.y = downY + dy.toInt()
+                    val (x, y) = clampToDisplay(downX + dx.toInt() to downY + dy.toInt())
+                    layoutParams.x = x
+                    layoutParams.y = y
                     windowManager.updateViewLayout(touched, layoutParams)
                 }
             }
@@ -266,7 +317,7 @@ class FloatingTriggerButton(
                     TriggerPreferences.setFloatingButtonPosition(
                         context, layoutParams.x, layoutParams.y
                     )
-                } else if (SystemClock.uptimeMillis() - downTime <= TAP_TIMEOUT_MS) {
+                } else {
                     onTrigger()
                 }
             }
