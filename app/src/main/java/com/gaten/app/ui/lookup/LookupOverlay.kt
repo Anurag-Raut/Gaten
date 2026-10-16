@@ -73,6 +73,8 @@ import com.gaten.app.ocr.ScreenLineReader
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ocr.prefetchOrder
+import com.gaten.app.ui.FeedbackHaptic
+import com.gaten.app.ui.rememberFeedback
 import com.gaten.app.ui.overlay.ViewMapping
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.CancellationException
@@ -153,6 +155,7 @@ fun LookupOverlay(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val feedback = rememberFeedback()
     // The hit tests are in the capture's pixels, so the tolerance is too: one view pixel is worth
     // mapping.minScale of them, and the same physical slack has to follow the window's scale.
     val tapTolerancePx = with(LocalDensity.current) {
@@ -175,6 +178,14 @@ fun LookupOverlay(
     // its layout even after selectAgain clears the frozen selection, and the sheet instance
     // survives the primary->final publication of one lookup.
     var displayedResultSession by remember { mutableStateOf<Any?>(null) }
+    var feedbackSession by remember { mutableStateOf<Any?>(null) }
+    LaunchedEffect(displayedResultSession, result?.words?.isNotEmpty()) {
+        val session = displayedResultSession
+        if (session != null && result?.words?.isNotEmpty() == true && feedbackSession !== session) {
+            feedbackSession = session
+            feedback.haptic(FeedbackHaptic.Lookup)
+        }
+    }
     var resultAnchor by remember { mutableStateOf<Rect?>(null) }
     var lookupJob by remember { mutableStateOf<Job?>(null) }
     val cropCache = remember(screenshot) { ExactCropOcrCache() }
@@ -205,7 +216,19 @@ fun LookupOverlay(
     // the text last shown, so the pill still has something to draw while it fades out.
     var pillText by remember { mutableStateOf(R.string.lookup_reading) }
     var noticeUp by remember { mutableStateOf(false) }
+    var noticeJob by remember { mutableStateOf<Job?>(null) }
     val busy = phase == Phase.Scanning || scanState == ScanState.Scanning
+
+    // Restart the hint's lifetime on each miss so an earlier notice cannot hide the new one.
+    fun showNotice(text: Int) {
+        noticeJob?.cancel()
+        pillText = text
+        noticeUp = true
+        noticeJob = scope.launch {
+            delay(2000)
+            noticeUp = false
+        }
+    }
 
     // A scan that settled without an index to tap says so for a couple of seconds: no text on the
     // screen at all, or no scan at all — and while the latter holds, the circle-to-read path is
@@ -217,10 +240,7 @@ fun LookupOverlay(
             settled == ScanState.Unavailable -> R.string.lookup_hint
             else -> null
         } ?: return@LaunchedEffect
-        pillText = notice
-        noticeUp = true
-        delay(2000)
-        noticeUp = false
+        showNotice(notice)
     }
 
     // ML Kit's index is what the overlay goes Ready with, instantly. The reader then replaces each
@@ -397,13 +417,13 @@ fun LookupOverlay(
         }
     }
 
-    /** Select the entire tapped text box when the index is ready; dismiss on a miss. */
+    /** Select the tapped text box, keeping the overlay open with a retry hint on a miss. */
     fun onTap(at: Offset) {
         if (closing) return
         val live = screen
         val bmp = screenshot
         if (bmp == null || live == null) {
-            close()
+            showNotice(R.string.lookup_hint)
             return
         }
         // The finger is in view pixels; the index, and everything it is hit-tested against, is in
@@ -416,7 +436,7 @@ fun LookupOverlay(
         val lineIndex = ScreenHits.hitTestLine(live, x, y, tolerance)
         if (lineIndex == null) {
             Log.d(TAG, "Tap missed: no text box within $tolerance px")
-            close()
+            showNotice(R.string.lookup_hint)
             return
         }
         Log.d(TAG, "Tap hit line $lineIndex")

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<!--
+ * Copy for the Feedback group in Appearance. Haptics are the phone's own, so the row says where
+ * they come from; sounds are the app's, are off until asked for, and are two cues.
+ -->
+
+<resources>
+
+    <string name="feedback_group">Feedback</string>
+
+    <string name="feedback_haptics_title">Haptics</string>
+    <string name="feedback_haptics_summary">Follows your phone\'s settings.</string>
+
+    <string name="feedback_sounds_title">Sounds</string>
+    <string name="feedback_sounds_summary">A short cue when a word is added to Anki, and when a review session ends.</string>
+
+</resources>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<!--
+ * Copy for the redesigned review and lookup surfaces. Kept in its own file so the screens it
+ * belongs to can gain words without touching the resources they share with the rest of the app.
+ -->
+
+<resources>
+
+    <!-- Review: the deck picker -->
+    <string name="experience_anki_picker_note">AnkiDroid keeps the schedule. Choose a deck to review what is due now.</string>
+    <string name="experience_anki_deck_new">%1$d new</string>
+    <string name="experience_anki_deck_learning">%1$d learning</string>
+    <string name="experience_anki_deck_review">%1$d to review</string>
+    <string name="experience_anki_deck_default">Gaten exports here</string>
+
+    <!-- Review: one card -->
+    <string name="experience_anki_question">Question</string>
+    <string name="experience_anki_answer">Answer</string>
+    <string name="experience_anki_rate_prompt">How did that go?</string>
+
+    <!-- Review: finished, and when review cannot run at all -->
+    <string name="experience_anki_done_title">All caught up</string>
+    <string name="experience_anki_blocked_title">Review unavailable</string>
+    <string name="experience_anki_failed_title">Something went wrong</string>
+
+    <!--
+     * Leaving a card: the same promise as before, worded for where the reader now lands — the deck
+     * list, not out of the review flow.
+    -->
+    <string name="experience_anki_leave_body">Nothing is graded by leaving. The card you are on stays unanswered, and you go back to the deck list.</string>
+
+</resources>

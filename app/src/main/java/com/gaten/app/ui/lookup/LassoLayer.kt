@@ -224,8 +224,7 @@ fun LassoLayer(
             }
             .pointerInput(interactive) {
                 if (interactive) {
-                    // A tap without dragging is a word lookup once the index is ready, a
-                    // dismissal otherwise; a drag is never a tap.
+                    // A tap looks up a word or offers a retry hint; a drag is never a tap.
                     detectTapGestures { currentTap(it) }
                 }
             }

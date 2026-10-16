@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Copy for the app shell: the four destinations, the home dashboard's cards, and the sentences the
+ * dashboard uses for the states AnkiDroid or screen access can be in. Kept apart from the settings
+ * and lookup strings so that the shell's wording can move without touching theirs.
+ -->
+
+<resources>
+    <!-- The four destinations -->
+    <string name="nav_home">Home</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_review">Review</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home: header -->
+    <string name="dash_subtitle">Your Japanese reading toolkit</string>
+
+    <!-- Home: the way into Search. The card is a field in everything but the typing, so the hint is
+         what it says and the title it used to carry is gone. -->
+    <string name="dash_search_hero_hint">猫, ねこ, neko…</string>
+    <string name="dash_search_hero_action">Open search</string>
+
+    <!-- Home: the deck Gaten reviews -->
+    <string name="dash_review_title">Review</string>
+    <string name="dash_review_checking">Checking AnkiDroid&#8230;</string>
+    <string name="dash_review_not_installed">AnkiDroid is not installed.</string>
+    <string name="dash_review_permission">AnkiDroid has not given Gaten access yet.</string>
+    <string name="dash_review_deck_missing">No deck named &#8220;%1$s&#8221; in AnkiDroid.</string>
+    <string name="dash_review_unreadable">Could not read AnkiDroid: %1$s</string>
+    <string name="dash_review_nothing_due">Nothing due right now.</string>
+    <string name="dash_review_refresh">Check AnkiDroid again</string>
+    <string name="dash_review_new">New</string>
+    <string name="dash_review_learning">Learning</string>
+    <string name="dash_review_review">Review</string>
+    <string name="dash_action_review">Review</string>
+    <string name="dash_action_card_settings">Card settings</string>
+    <string name="dash_action_choose_deck">Choose deck</string>
+    <string name="dash_action_try_again">Try again</string>
+
+    <!-- Home: why a read of AnkiDroid failed -->
+    <string name="dash_anki_failure_not_installed">AnkiDroid is not installed</string>
+    <string name="dash_anki_failure_permission">access has not been granted</string>
+    <string name="dash_anki_failure_not_set_up">AnkiDroid has no collection folder yet</string>
+    <string name="dash_anki_failure_not_found">the deck is no longer there</string>
+    <string name="dash_anki_failure_provider">AnkiDroid could not open the collection</string>
+    <string name="dash_anki_failure_malformed">AnkiDroid answered something Gaten could not read</string>
+
+    <!-- Home: screen lookup -->
+    <string name="dash_lookup_title">Screen lookup</string>
+    <string name="dash_lookup_on">Screen access is on.</string>
+    <string name="dash_lookup_off">Screen access is off.</string>
+    <string name="dash_lookup_floating">Floating button</string>
+    <string name="dash_lookup_floating_support">Tap the bubble on screen to look up.</string>
+    <string name="dash_lookup_floating_needs_access">The bubble appears once screen access is on.</string>
+    <string name="dash_lookup_setup">Set up screen lookup</string>
+</resources>

@@ -105,11 +105,6 @@ class AnkiReviewViewModel(application: Application) : AndroidViewModel(applicati
     private val _expandedRadical = MutableStateFlow<Int?>(null)
     val expandedRadical: StateFlow<Int?> = _expandedRadical.asStateFlow()
 
-    // The kanji whose details were last shown: [expandedKanji] is already null while the panel
-    // shrinks away, so the exit animation reads this one instead.
-    private val _lastKanji = MutableStateFlow<String?>(null)
-    val lastKanji: StateFlow<String?> = _lastKanji.asStateFlow()
-
     /**
      * When the app went to the background with a card on screen, so the time spent away can be taken
      * back out of AnkiDroid's answer time. Survival across a rotation is also why the timer no longer
@@ -117,8 +112,16 @@ class AnkiReviewViewModel(application: Application) : AndroidViewModel(applicati
      */
     private var pausedAt: Long? = null
 
-    /** The deck Gaten exports to, offered as the picker's default selection. */
-    val configuredDeckName: String = AnkiReview.configuredDeckName(application)
+    /**
+     * The deck Gaten exports to, offered as the picker's default selection.
+     *
+     * Read through on every ask rather than captured when the view model was built: this view model
+     * belongs to the activity and outlives the screen, so a reader who changes the export deck on the
+     * Anki settings page and comes back must find their new choice preselected, not the one that was
+     * configured before.
+     */
+    val configuredDeckName: String
+        get() = AnkiReview.configuredDeckName(getApplication())
 
     /** Runs [action] only when no provider call is in flight. */
     private fun ifIdle(action: () -> Unit) {
@@ -138,6 +141,20 @@ class AnkiReviewViewModel(application: Application) : AndroidViewModel(applicati
     /** The permission dialog came back refused, so review cannot run yet. */
     fun permissionDenied() {
         _step.value = Step.Blocked(AnkiReviewFailure.PERMISSION)
+    }
+
+    /**
+     * Reads what review can do from scratch, from outside a deck: AnkiDroid's status, then its deck
+     * list, with no deck chosen.
+     *
+     * This is what entering the screen asks for whenever the reader is not already inside a session.
+     * Everything it re-reads can have changed while the screen was away — AnkiDroid installed, its
+     * access granted, its collection set up — and leaving any chosen deck behind is what keeps "a
+     * deck is chosen" meaning exactly the states that are a session.
+     */
+    fun refresh() = ifIdle {
+        _deck.value = null
+        start()
     }
 
     /** Reads the deck list, fresh. */
@@ -208,10 +225,8 @@ class AnkiReviewViewModel(application: Application) : AndroidViewModel(applicati
     /** Toggles the inline details: the open kanji closes them, another one swaps them, and the
      *  radical under them goes back with either. */
     fun toggleKanji(character: String) {
-        val open = character.takeIf { it != _expandedKanji.value }
-        _expandedKanji.value = open
+        _expandedKanji.value = character.takeIf { it != _expandedKanji.value }
         _expandedRadical.value = null
-        if (open != null) _lastKanji.value = open
     }
 
     /** Toggles one radical inside the open details. */
@@ -291,6 +306,5 @@ class AnkiReviewViewModel(application: Application) : AndroidViewModel(applicati
     private fun collapseDetails() {
         _expandedKanji.value = null
         _expandedRadical.value = null
-        _lastKanji.value = null
     }
 }
