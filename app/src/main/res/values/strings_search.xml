@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+
+    <!-- Search screen -->
+    <string name="search_title">Search</string>
+    <string name="search_hint">猫, ねこ, neko&#8230;</string>
+    <string name="search_cd_back">Back</string>
+    <string name="search_cd_clear">Clear the query</string>
+    <string name="search_cd_open">Open %1$s</string>
+    <string name="search_query_limit">Searches look at the first %1$d characters.</string>
+    <string name="search_loading">Searching the dictionary&#8230;</string>
+    <string name="search_results_count">%1$d results</string>
+    <string name="search_prefix_header">Words starting with %1$s</string>
+    <string name="search_matched_form">from %1$s</string>
+    <string name="search_common">common</string>
+
+    <!-- Search states -->
+    <string name="search_empty">No matches for %1$s</string>
+    <string name="search_empty_help">Check the spelling, or try a shorter word. A dictionary form matches best &#8212; 食べる rather than 食べた.</string>
+    <string name="search_not_japanese">Search in Japanese</string>
+    <string name="search_not_japanese_help">Type kanji or kana, or a reading in romaji such as neko or tokyo.</string>
+    <string name="search_error">The dictionary could not be read</string>
+    <string name="search_error_dictionary">%1$s</string>
+    <string name="search_retry">Try again</string>
+    <string name="search_examples_title">Look up a word</string>
+    <string name="search_examples_hint">Kanji, kana, a romaji reading such as neko or tokyo, or an inflected form such as 食べた. Gaten looks up words offline, from the dictionary on this device.</string>
+
+    <!-- Word detail -->
+    <string name="search_detail_meaning">Meaning</string>
+    <string name="search_detail_no_meaning">The dictionary has no gloss for this entry.</string>
+    <string name="search_detail_pos">Part of speech</string>
+    <string name="search_detail_also_written">Also written: %1$s</string>
+    <string name="search_detail_unavailable">This entry is no longer in the results</string>
+    <string name="search_detail_unavailable_help">The search was run again and no longer has it. Go back for the results you have.</string>
+    <string name="search_detail_anki_deck">Deck: %1$s</string>
+    <string name="search_detail_anki_added">Added &#10003;</string>
+    <string name="search_detail_anki_settings">Anki settings</string>
+    <string name="search_detail_send_to_anki">Send to AnkiDroid instead</string>
+</resources>

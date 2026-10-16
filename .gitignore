@@ -27,3 +27,6 @@ app/src/debug/assets/manga-ocr/
 # Device evidence screenshots stay out of history
 docs/jp-prototype/**/*.png
 docs/jp-prototype/**/*.jpg
+
+# Python bytecode from the dictionary tooling
+__pycache__/

@@ -6,15 +6,20 @@
 
 package com.gaten.app.ui.wanikani
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,11 +45,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import com.gaten.app.R
 import com.gaten.app.ui.theme.Spacing
 import com.gaten.app.wanikani.WaniKaniConnection
@@ -78,7 +87,6 @@ fun WaniKaniSettingsScreen(onClose: () -> Unit) {
     // disconnected, true when the token and the whole cache went, false when part of it did not.
     var answer by remember { mutableStateOf<WaniKaniConnection?>(null) }
     var cleared by remember { mutableStateOf<Boolean?>(null) }
-    BackHandler(onBack = onClose)
 
     val message = when (val current = answer) {
         null -> if (cleared == null) {
@@ -106,6 +114,12 @@ fun WaniKaniSettingsScreen(onClose: () -> Unit) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        // The bottom inset belongs to the scroller below, which is the only thing that knows how
+        // much content is on the page; taking it here as well would pad the page twice.
+        contentWindowInsets = WindowInsets.systemBars.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Top
+        ),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.wk_settings_title)) },
@@ -119,48 +133,77 @@ fun WaniKaniSettingsScreen(onClose: () -> Unit) {
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).imePadding()
-                .verticalScroll(rememberScrollState()).padding(Spacing.xl)
+                .verticalScroll(rememberScrollState())
+                // The page's own bottom inset, taken once by the content it scrolls with, plus the
+                // 16 dp gap that keeps the last action out of the gesture band.
+                .navigationBarsPadding()
+                .padding(horizontal = Spacing.xl)
+                .padding(top = Spacing.xl, bottom = Spacing.l)
         ) {
-            Text(
-                stringResource(R.string.wk_settings_explain),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(Spacing.l))
-            Text(
-                stringResource(
-                    if (connected) {
-                        R.string.wk_settings_status_saved
-                    } else {
-                        R.string.wk_settings_status_none
-                    }
-                ),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            WaniKaniCard {
+                Text(
+                    stringResource(R.string.wk_settings_explain),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(Spacing.m))
+                // The hub's row pattern, one line into the page: what the account amounts to on the
+                // left, the token's state on the right, in the same one-word vocabulary the hub's
+                // rows use for their own state.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(
+                            if (connected) {
+                                R.string.wk_settings_status_saved
+                            } else {
+                                R.string.wk_settings_status_none
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(Spacing.s))
+                    Text(
+                        stringResource(
+                            if (connected) {
+                                R.string.settings_value_on
+                            } else {
+                                R.string.settings_value_none
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
 
             Spacer(Modifier.height(Spacing.l))
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                label = { Text(stringResource(R.string.wk_settings_token_label)) },
-                placeholder = { Text(stringResource(R.string.wk_settings_token_placeholder)) },
-                singleLine = true,
-                enabled = !busy,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(Spacing.xs))
-            Text(
-                stringResource(R.string.wk_settings_token_help),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            // Where the token is made, one tap away rather than a page name to go looking for. The
-            // overlay cannot open this screen, so this is the reader's only way to the token page.
-            TextButton(onClick = { openWanikaniPage(context, WANIKANI_TOKEN_URL) }) {
-                Text(stringResource(R.string.wk_settings_token_page))
+            WaniKaniCard {
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text(stringResource(R.string.wk_settings_token_label)) },
+                    placeholder = { Text(stringResource(R.string.wk_settings_token_placeholder)) },
+                    singleLine = true,
+                    enabled = !busy,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    stringResource(R.string.wk_settings_token_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // Where the token is made, one tap away rather than a page name to go looking for.
+                // The overlay cannot open this screen, so this is the reader's only way to the token
+                // page.
+                TextButton(onClick = { openWanikaniPage(context, WANIKANI_TOKEN_URL) }) {
+                    Text(stringResource(R.string.wk_settings_token_page))
+                }
             }
 
             Spacer(Modifier.height(Spacing.l))
@@ -239,19 +282,41 @@ fun WaniKaniSettingsScreen(onClose: () -> Unit) {
                 )
             }
 
-            Spacer(Modifier.height(Spacing.xl))
-            Text(
-                stringResource(R.string.wk_settings_coverage),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(Spacing.s))
-            Text(
-                stringResource(R.string.wk_settings_attribution),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(Spacing.xl))
+            Spacer(Modifier.height(Spacing.l))
+            // What the pages cover and where they come from: reference rather than part of the form
+            // above it, so it reads as one card of its own rather than as the page running out.
+            WaniKaniCard {
+                Text(
+                    stringResource(R.string.wk_settings_coverage),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(Spacing.s))
+                Text(
+                    stringResource(R.string.wk_settings_attribution),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
+    }
+}
+
+/**
+ * One section of the page, on its own card: the reader's eye lands on the field or the paragraph it
+ * is about rather than on a flat column of copy, and the page background stays the ground between
+ * them. The status is the first of these — it is the state of the account, not part of the token the
+ * reader types into — and the token, its help and the way to WaniKani's own page share the second,
+ * because they are all about that one field.
+ */
+@Composable
+private fun WaniKaniCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(Spacing.l), content = content)
     }
 }

@@ -5,8 +5,13 @@
 Downloads two frozen jmdict-simplified releases, verifies their SHA-256, converts the English
 JMdict JSON into a compact SQLite database with the exact F2 schema (`entries`, `terms`,
 `idx_terms_term`) plus a compact `names` table built from JMnedict (proper nouns that JMdict does
-not carry), writes it uncompressed to `app/src/main/assets/db/jmdict.sqlite`, verifies the probe
-lookups, and writes `docs/jp-prototype/dictionary/DATA.md`.
+not carry) and one indexed row per reading in `loose` (the reader's own spelling with its long
+vowels collapsed, so romaji like "tokyo" reaches 東京), writes it uncompressed to
+`app/src/main/assets/db/jmdict.sqlite`, verifies the probe lookups and the romaji probes, and
+writes `docs/jp-prototype/dictionary/DATA.md`.
+
+The `loose` normalisation below is one half of a pair: `DictionarySearch.looseForm` (Kotlin) folds
+the query the same way, so the two must stay identical.
 
 The asset is shipped uncompressed on purpose: AGP expands `.gz` assets during
 asset merge anyway, so gzipping in the repo only hides which file the app must
@@ -59,10 +64,12 @@ NAME_PROBES = ("池袋", "新宿", "秋葉原")
 
 # Schema version stamped as `PRAGMA user_version`, and checked by `app/build.gradle.kts` before an
 # APK is built. 1 was `entries`/`terms`/`names`, 2 added an `examples` table while the Anki export
-# carried an example sentence, and 3 removed it again. The number only ever moves forward: an asset
-# built for another schema is refused by the build rather than reaching a device whose queries expect
-# something else.
-SCHEMA_VERSION = 3
+# carried an example sentence, 3 removed it again, and 4 added `loose` (one indexed row per reading,
+# long vowels collapsed). The number only ever moves forward: an asset built for another schema is
+# refused by the build rather than reaching a device whose queries expect something else — and a copy
+# already extracted into an installed app is replaced, because `JmdictRepository` compares the SQLite
+# header (which holds this field) with the packaged asset's.
+SCHEMA_VERSION = 4
 
 #: Longest stored name gloss; keeps the table at ~21 MB for ~624k terms.
 NAME_GLOSS_CHARS = 40
@@ -98,6 +105,50 @@ MAX_SENSES = None
 
 PROBES = ("猫", "水", "学校", "食べる", "ありがとう", "コンピュータ")
 
+#: The romaji probes: the query as a reader types it, the kana `Wanakana.toHiragana` makes of it
+#: (the app's converter; `DictionarySearchTest` pins the same conversions), the loose form `loose()`
+#: makes of that kana, and a spelling the answer must carry — the headword of a kanji entry, the
+#: reading of a kana-headed one. The shortened spellings (tokyo, ramen, ohayo, gakko, arigato) are
+#: the ones the exact lookup cannot answer; kirei, saikou and byouin are answered exactly, and pin
+#: that the loose pass adds nothing that displaces them.
+ROMAJI_PROBES = (
+    ("tokyo", "ときょ", "ときょ", "東京"),
+    ("ramen", "らめん", "らめん", "ラーメン"),
+    ("ohayo", "おはよ", "おはよ", "お早う"),
+    ("gakko", "がっこ", "がっこ", "学校"),
+    ("arigato", "ありがと", "ありがと", "有難う"),
+    ("kirei", "きれい", "きれい", "綺麗"),
+    ("saikou", "さいこう", "さいこ", "最高"),
+    ("byouin", "びょういん", "びょいん", "病院"),
+)
+
+#: Forms `loose()` must fold to, pinned: the romaji study's verified pairs, the voiced rows ("judo"
+#: needs どう to lose its う like とう), and the doubled and row vowels. Both sides of the fold are
+#: pinned here — `DictionarySearchTest` holds the same table in Kotlin — so a change to one language
+#: without the other is caught before a database is built from it.
+LOOSE_PROBES = (
+    ("ときょ", "ときょ"),
+    ("らめん", "らめん"),
+    ("おはよ", "おはよ"),
+    ("がっこ", "がっこ"),
+    ("ありがと", "ありがと"),
+    ("さいこう", "さいこ"),
+    ("きれい", "きれい"),  # えい is not collapsed
+    ("びょういん", "びょいん"),
+    ("とうきょう", "ときょ"),
+    ("ラーメン", "らめん"),
+    ("らーめん", "らめん"),
+    ("らあめん", "らめん"),
+    ("おはよう", "おはよ"),
+    ("がっこう", "がっこ"),
+    ("ありがとう", "ありがと"),
+    ("サイコー", "さいこ"),
+    ("じゅうどう", "じゅど"),
+    ("じゅど", "じゅど"),
+    ("おおきい", "おき"),
+    ("ええ", "え"),
+)
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSET_PATH = os.path.join(REPO_ROOT, "app", "src", "main", "assets", "db", "jmdict.sqlite")
 DATA_MD_PATH = os.path.join(REPO_ROOT, "docs", "jp-prototype", "dictionary", "DATA.md")
@@ -128,9 +179,26 @@ CREATE TABLE names(
   gloss TEXT NOT NULL
 );
 CREATE INDEX idx_names_term ON names(term);
+CREATE TABLE loose(
+  reading  TEXT NOT NULL,
+  entry_id INTEGER NOT NULL,
+  common   INTEGER NOT NULL
+);
+CREATE INDEX idx_loose_reading ON loose(reading);
 """
 
 NAME_LOOKUP_SQL = "SELECT kind, gloss FROM names WHERE term = ? ORDER BY rank ASC LIMIT 2"
+
+# The app's romaji fallback: `DictionarySearch.lookupLoose` asks exactly this, so the probe below
+# exercises the query the device runs. `loose` is one row per reading, so the same entry can appear
+# once per reading that folds onto the probe — the app deduplicates by id.
+LOOSE_LOOKUP_SQL = """
+SELECT e.id, e.kanji, e.kana, e.gloss, e.pos, e.common
+FROM loose l JOIN entries e ON e.id = l.entry_id
+WHERE l.reading = ?
+ORDER BY l.common DESC, (e.kanji = '') DESC, e.id ASC
+LIMIT 8
+"""
 
 LOOKUP_SQL = """
 SELECT e.id, e.kanji, e.kana, e.gloss, e.pos, e.common
@@ -139,6 +207,67 @@ WHERE t.term = ?
 ORDER BY e.common DESC, e.id ASC
 LIMIT 8
 """
+
+# ---------------------------------------------------------------------------
+# Loose readings (the romaji fallback)
+# ---------------------------------------------------------------------------
+
+#: Kana a dropped vowel may follow. Voiced and half-voiced forms are in the row they belong to by
+#: sound, not by spelling: without them じゅうどう would keep its last う while the reader's own
+#: じゅど never drops anything, and "judo" would miss 柔道. Row u takes う (とうきょう -> ときょ),
+#: row o takes う (サイコー -> さいこ), row a takes あ (らあめん -> らめん), row i takes い.
+ROW_U = frozenset("うくすつぬふむゆるゅゔぐずづぶぷ")
+ROW_O = frozenset("こそとのほもよろをぉょごぞどぼぽ")
+ROW_A = frozenset("かさたなはまやらわゃがざだばぱ")
+ROW_I = frozenset("きしちにひみりゅぎじぢびぴ")
+
+#: Vowels that collapse when written twice: おお -> お, ええ -> え, and the bare pairs alike.
+VOWELS = frozenset("あいうえお")
+
+
+def loose(kana):
+    """The reading as the reader tends to spell it: katakana folded, ー gone, long vowels collapsed.
+
+    The reader types "tokyo" for とうきょう, "ramen" for ラーメン and "gakko" for がっこう, and no
+    dictionary stores those spellings, so both the query and every indexed reading go through this
+    one function and are then compared exactly. Dropping a vowel after a vowel is what does the
+    work: う after a u-row or o-row kana (とうきょう -> ときょ), あ after an a-row kana
+    (らあめん -> らめん), い after an i-row kana, and a doubled vowel (おお -> お). Each character
+    is judged against the last one kept, so a dropped vowel never stands in for its own
+    predecessor.
+
+    Nothing here is linguistically exact — えい is not collapsed, so "kirei" and きれい still agree
+    — and it does not have to be: the same lossy fold on both sides only ever has to be consistent.
+    `DictionarySearch.looseForm` is the same function in Kotlin, so the two must stay in step.
+    """
+    out = []
+    for char in kana:
+        code = ord(char)
+        if 0x30A1 <= code <= 0x30F6:  # katakana (ァ to ヶ) down to hiragana
+            char = chr(code - 0x60)
+        if char == "ー":  # the prolonged sound mark, and the halfwidth one NFKC maps to it
+            continue
+        if out:
+            previous = out[-1]
+            if char == "う" and (previous in ROW_U or previous in ROW_O):
+                continue
+            if char in VOWELS and char == previous:
+                continue
+            if char == "あ" and previous in ROW_A:
+                continue
+            if char == "い" and previous in ROW_I:
+                continue
+        out.append(char)
+    return "".join(out)
+
+
+def loose_failures():
+    """The pinned forms `loose()` no longer folds to, so a bad fold is caught before the build."""
+    return [
+        f"loose({kana}) is {loose(kana)}, pinned {form}"
+        for kana, form in LOOSE_PROBES
+        if loose(kana) != form
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +332,7 @@ def sense_gloss(sense):
 
 
 def build_rows(words, pos_map):
-    """Yield (entry_row, term_rows) for every word in the JSON."""
+    """Yield (entry_row, term_rows, loose_rows) for every word in the JSON."""
     for word in words:
         entry_id = int(word["id"])
         kanji_forms = word.get("kanji", [])
@@ -233,7 +362,18 @@ def build_rows(words, pos_map):
         for form in kana_forms:
             term_rows.append((form["text"], entry_id, 0, 1 if (form_is_common(form) or common) else 0))
 
-        yield entry_row, term_rows
+        # One row per distinct loose reading: ラーメン, らーめん and らあめん are all らめん and all
+        # mean the same entry, so the reader asking for らめん gets it once however it was spelled.
+        # The row keeps the kana form's commonness, which is what the exact lookup ranks by.
+        loose_rows = {}
+        for form in kana_forms:
+            reading = loose(form["text"])
+            if not reading:
+                continue
+            is_common = 1 if (form_is_common(form) or common) else 0
+            loose_rows[reading] = max(loose_rows.get(reading, 0), is_common)
+
+        yield entry_row, term_rows, [(reading, entry_id, flag) for reading, flag in sorted(loose_rows.items())]
 
 
 def name_kind(types):
@@ -327,7 +467,8 @@ def build_sqlite(json_path, db_path):
         conn.executescript(SCHEMA)
         entry_count = 0
         term_count = 0
-        for entry_row, term_rows in build_rows(words, pos_map):
+        loose_count = 0
+        for entry_row, term_rows, loose_rows in build_rows(words, pos_map):
             conn.execute(
                 "INSERT INTO entries(id, kanji, kana, gloss, pos, common) VALUES(?,?,?,?,?,?)",
                 entry_row,
@@ -336,12 +477,17 @@ def build_sqlite(json_path, db_path):
                 "INSERT INTO terms(term, entry_id, is_kanji, common) VALUES(?,?,?,?)",
                 term_rows,
             )
+            conn.executemany(
+                "INSERT INTO loose(reading, entry_id, common) VALUES(?,?,?)",
+                loose_rows,
+            )
             entry_count += 1
             term_count += len(term_rows)
+            loose_count += len(loose_rows)
         conn.commit()
     finally:
         conn.close()
-    return entry_count, term_count
+    return entry_count, term_count, loose_count
 
 
 def copy_asset(src, dst):
@@ -371,6 +517,38 @@ def probe(db_path):
         conn.close()
 
 
+def probe_romaji(db_path):
+    """Run the romaji probes and return {query: (kana, loose, expected, exact_rows, loose_rows)}.
+
+    Exactly what the app does with a romaji query: the converted kana looked up, then the loose
+    reading looked up, both against the tables the device queries. A probe that cannot answer says
+    so loudly — a `loose` column without the index, or one built from a different fold, would
+    otherwise only show up on a device.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        results = {}
+        for romaji, kana, loose_form, expected in ROMAJI_PROBES:
+            exact = conn.execute(LOOKUP_SQL, (kana,)).fetchall()
+            fallback = conn.execute(LOOSE_LOOKUP_SQL, (loose_form,)).fetchall()
+            results[romaji] = (kana, loose_form, expected, exact, fallback)
+        return results
+    finally:
+        conn.close()
+
+
+def romaji_failures(results):
+    """The romaji probes that did not answer, each with what was wrong with it."""
+    failures = []
+    for romaji, (kana, loose_form, expected, exact, fallback) in results.items():
+        folded = loose(kana)
+        if folded != loose_form:
+            failures.append(f"{romaji}: loose({kana}) is {folded}, pinned {loose_form}")
+        elif not any(expected in row[1] + row[2] for row in exact + fallback):
+            failures.append(f"{romaji}: no row carries {expected}")
+    return failures
+
+
 def _size(n):
     return f"{n:,}"
 
@@ -381,8 +559,8 @@ def _cell(value):
 
 
 def write_data_md(archive_path, archive_sha, names_archive_path, names_archive_sha,
-                  asset_path, asset_sha, db_size, entry_count, term_count, name_count,
-                  results, name_results):
+                  asset_path, asset_sha, db_size, entry_count, term_count, loose_count,
+                  name_count, results, name_results, romaji_results):
     lines = []
     lines.append("# JMdict data (`jmdict.sqlite`)")
     lines.append("")
@@ -408,6 +586,7 @@ def write_data_md(archive_path, archive_sha, names_archive_path, names_archive_s
     lines.append(f"| Asset size (uncompressed on disk) | {_size(db_size)} bytes |")
     lines.append(f"| `entries` rows | {_size(entry_count)} |")
     lines.append(f"| `terms` rows | {_size(term_count)} |")
+    lines.append(f"| `loose` rows (indexed readings, long vowels collapsed) | {_size(loose_count)} |")
     lines.append(f"| `names` rows (proper nouns, JMnedict) | {_size(name_count)} |")
     lines.append(f"| Glosses | every sense of every entry |")
     lines.append(f"| License | {LICENSE_LINE} |")
@@ -450,6 +629,28 @@ def write_data_md(archive_path, archive_sha, names_archive_path, names_archive_s
         for kind, gloss in rows:
             lines.append(f"| {_cell(term)} | {_cell(kind)} | {_cell(gloss)} |")
         lines.append("")
+    lines.append("## Romaji probes (`loose` table)")
+    lines.append("")
+    lines.append("What a romaji query resolves to, through both lookups the app runs. The kana is "
+                 "what the app's converter (`Wanakana.toHiragana`) makes of the query — the same "
+                 "conversions are pinned by `DictionarySearchTest` — and the loose form is "
+                 "`loose()` of it, the key the `loose` index is asked for. The build fails unless "
+                 "every probe returns a row carrying its expected spelling (the headword of a kanji "
+                 "entry, or a reading of a kana-headed one).")
+    lines.append("")
+    for romaji, kana, loose_form, expected in ROMAJI_PROBES:
+        _, _, _, exact, fallback = romaji_results[romaji]
+        lines.append(f"### `{romaji}` \u2192 {kana} (loose {loose_form}), must carry {expected}")
+        lines.append("")
+        lines.append("| pass | id | kanji | kana | pos | common | gloss |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for pass_name, rows in (("exact", exact), ("loose", fallback)):
+            if not rows:
+                lines.append(f"| {pass_name} | _(no rows)_ | | | | | |")
+            for entry_id, kanji_cell, kana_cell, gloss, pos, common in rows:
+                lines.append(f"| {pass_name} | {entry_id} | {_cell(kanji_cell)} | "
+                             f"{_cell(kana_cell)} | {_cell(pos)} | {common} | {_cell(gloss)} |")
+        lines.append("")
     os.makedirs(os.path.dirname(DATA_MD_PATH), exist_ok=True)
     with open(DATA_MD_PATH, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines).rstrip() + "\n")
@@ -460,6 +661,10 @@ def write_data_md(archive_path, archive_sha, names_archive_path, names_archive_s
 # ---------------------------------------------------------------------------
 
 def main():
+    broken = loose_failures()
+    if broken:
+        raise SystemExit("loose() no longer folds as pinned: " + "; ".join(broken))
+
     archive_path = download_archive(SOURCE_URL, ARCHIVE_FILENAME, ARCHIVE_SHA256)
     names_archive_path = download_archive(NAMES_URL, NAMES_ARCHIVE_FILENAME, NAMES_ARCHIVE_SHA256)
     archive_sha = sha256_file(archive_path)
@@ -473,8 +678,8 @@ def main():
         names_json_path = extract_json(names_archive_path, work_dir)
         db_path = os.path.join(work_dir, "jmdict.sqlite")
         print(f"building sqlite from {os.path.basename(json_path)} ...")
-        entry_count, term_count = build_sqlite(json_path, db_path)
-        print(f"entries: {entry_count}  terms: {term_count}")
+        entry_count, term_count, loose_count = build_sqlite(json_path, db_path)
+        print(f"entries: {entry_count}  terms: {term_count}  loose: {loose_count}")
 
         print(f"adding proper nouns from {os.path.basename(names_json_path)} ...")
         name_count = add_names(db_path, names_json_path)
@@ -497,9 +702,16 @@ def main():
         if missing_names:
             raise SystemExit(f"name probes returned nothing: {missing_names}")
 
+        romaji_results = probe_romaji(db_path)
+        failures = romaji_failures(romaji_results)
+        if failures:
+            raise SystemExit("romaji probes did not answer: " + "; ".join(failures))
+        print("romaji probes: " + ", ".join(
+            f"{romaji}->{results[2]}" for romaji, results in romaji_results.items()))
+
         write_data_md(archive_path, archive_sha, names_archive_path, names_archive_sha,
-                      ASSET_PATH, asset_sha, db_size, entry_count, term_count,
-                      name_count, results, name_results)
+                      ASSET_PATH, asset_sha, db_size, entry_count, term_count, loose_count,
+                      name_count, results, name_results, romaji_results)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -508,6 +720,7 @@ def main():
     print(f"  size            {_size(db_size)} bytes")
     print(f"  entries         {_size(entry_count)}")
     print(f"  terms           {_size(term_count)}")
+    print(f"  loose           {_size(loose_count)}")
     print(f"  names           {_size(name_count)}")
     print(f"wrote {DATA_MD_PATH}")
     return 0

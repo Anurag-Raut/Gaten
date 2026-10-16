@@ -90,19 +90,22 @@ private fun tones(
 /*
  * The accents, as (primary, primaryContainer, onPrimaryContainer, tertiary) per mode.
  *
- * Indigo is the palette the app shipped with, untouched. Each of the others is that family's hue
- * moved to its own hue and every tone's lightness corrected to hold the same relative luminance as
- * indigo's — a hue may change the colour of the overlay, but not how well it reads. That correction
- * is what stops the trap a plain hue rotation falls into: at indigo's lightness, teal and green
- * come out at 2.5:1 over a white page, which is a lasso the reader cannot see.
+ * Indigo is the app's own accent, one Material step deeper than the palette it shipped with
+ * (0xFF3F51B5 → 0xFF3949AB), which is the weight the rest of the app's accents are now drawn at.
+ * Each of the others is that family's hue moved to its own hue and every tone's lightness corrected
+ * to hold the relative luminance the *previous* indigo primary had — a hue may change the colour of
+ * the overlay, but not how well it reads. That correction is what stops the trap a plain hue
+ * rotation falls into: at that lightness, teal and green come out at 2.5:1 over a white page, which
+ * is a lasso the reader cannot see.
  *
- * Measured per accent, so a change here can be checked rather than eyeballed: primary 6.87:1 over
+ * Measured, so a change here can be checked rather than eyeballed. Indigo's own light primary reads
+ * 7.73:1 over white. The other six, all at the luminance they were built to: primary 6.87:1 over
  * white and 8.17:1 over the dark background, the container pair 11:1 in either mode, tertiary
  * 3.45:1 over white.
  */
 
-/** The shipped indigo palette, and the reference every other accent is measured against. */
-private val IndigoLight = tones(0xFF3F51B5, 0xFFE8EAF6, 0xFF1A237E, 0xFF7986CB, dark = false)
+/** The shipped indigo palette, bolder by one step, and the reference every other accent is measured against. */
+private val IndigoLight = tones(0xFF3949AB, 0xFFE8EAF6, 0xFF1A237E, 0xFF7986CB, dark = false)
 private val IndigoDark = tones(0xFF9FA8DA, 0xFF283593, 0xFFE8EAF6, 0xFFC5CAE9, dark = true)
 
 private val BlueLight = tones(0xFF305D8A, 0xFFE3ECF4, 0xFF113151, 0xFF5C8EC0, dark = false)

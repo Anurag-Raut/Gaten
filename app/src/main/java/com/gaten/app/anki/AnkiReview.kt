@@ -259,6 +259,9 @@ object AnkiReview {
                     AnkiReviewFailure.PROVIDER,
                     "AnkiDroid returned no schedule cursor"
                 )
+                // The schedule comes from AnkiDroid's content provider, so the collection's own
+                // clock is not reachable here; wall time is the only clock the due comparison has.
+                @Suppress("DirectSystemCurrentTimeMillisUsage")
                 val nowSeconds = System.currentTimeMillis() / 1000
                 val queued = cursor.use { it.readQueue(resolver) }
                 val index = firstDueIndex(queued.map { row -> row.due }, nowSeconds)

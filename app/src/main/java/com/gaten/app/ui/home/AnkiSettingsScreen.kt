@@ -10,20 +10,34 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,9 +60,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -61,6 +79,7 @@ import com.gaten.app.anki.AnkiPreferences
 import com.gaten.app.anki.AnkiSettings
 import com.gaten.app.anki.AnkiSettingsError
 import com.gaten.app.anki.AnkiStatus
+import com.gaten.app.ui.components.pressScale
 import com.gaten.app.ui.theme.Spacing
 import com.ichi2.anki.api.AddContentApi
 import kotlinx.coroutines.launch
@@ -85,18 +104,24 @@ private val AnkiSettingsSaver = listSaver<AnkiSettings, String>(
 /**
  * Edits a local draft and saves it only on Save. Collection/field reads happen off the main thread;
  * selecting an existing note type never changes its templates or any notes in AnkiDroid.
+ *
+ * Save is offered only when there is something to save and what there is would pass validation, so
+ * the button and the reason it cannot be pressed never disagree: the moment the draft turns dirty and
+ * invalid, the reason is on the page below it rather than behind a toast that had to be provoked.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnkiSettingsScreen(onClose: () -> Unit) {
+fun AnkiSettingsScreen(onClose: () -> Unit, isCurrentDestination: Boolean = true) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var draft by rememberSaveable(stateSaver = AnkiSettingsSaver) {
         mutableStateOf(AnkiPreferences.load(context))
     }
-    var attemptedSave by rememberSaveable { mutableStateOf(false) }
-    var showTemplates by rememberSaveable { mutableStateOf(false) }
+    // The note type, the field mapping and the templates are one advanced section, folded away by
+    // default: most visits only pick a deck. The flag is saveable so a rotation does not close what
+    // the reader opened.
+    var showAdvanced by rememberSaveable { mutableStateOf(false) }
     var status by remember { mutableStateOf(AnkiExporter.status(context)) }
     var collection by remember { mutableStateOf<AnkiCollection?>(null) }
     var refresh by remember { mutableStateOf(0) }
@@ -119,7 +144,8 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
         if (dirty) confirmDiscard = true else onClose()
     }
 
-    BackHandler(onBack = { leave() })
+    // An outgoing entry may still be composed while the next page is arriving.
+    BackHandler(enabled = dirty && isCurrentDestination, onBack = { leave() })
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -146,8 +172,16 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
         }
     }
 
-    val error = if (attemptedSave) draft.validationError() else null
+    // Shown beside the disabled Save, and only for a draft the reader has actually changed: an
+    // untouched configuration is never argued with.
+    val error = draft.validationError().takeIf { dirty }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        // The bottom inset belongs to the scroller below, which is the only thing that knows how
+        // much content is on the page; taking it here as well would pad the page twice.
+        contentWindowInsets = WindowInsets.systemBars.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Top
+        ),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.anki_settings_open)) },
@@ -157,18 +191,26 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
                     }
                 },
                 actions = {
+                    // The page's long explanations live in the ? dialog instead of under the fields,
+                    // so every field above stays on one line.
+                    SettingsHelpAction(
+                        listOf(
+                            stringResource(R.string.anki_settings_deck_help),
+                            stringResource(R.string.anki_settings_tags_help),
+                            stringResource(R.string.anki_settings_mapping_help),
+                            stringResource(R.string.anki_settings_existing_help),
+                            stringResource(R.string.anki_settings_template_help)
+                        )
+                    )
                     TextButton(
-                        enabled = !loadingFields,
+                        // Disabled while the draft is untouched or invalid, and while AnkiDroid is
+                        // being read or its fields reloaded: nothing here may be saved against a form
+                        // whose own state is still arriving.
+                        enabled = dirty && error == null && !loading && !loadingFields,
                         onClick = {
-                            attemptedSave = true
-                            val invalid = draft.validationError()
-                            if (invalid == null) {
-                                AnkiPreferences.save(context, draft)
-                                Toast.makeText(context, R.string.anki_settings_saved, Toast.LENGTH_SHORT).show()
-                                onClose()
-                            } else {
-                                Toast.makeText(context, settingsErrorLabel(invalid), Toast.LENGTH_LONG).show()
-                            }
+                            AnkiPreferences.save(context, draft)
+                            Toast.makeText(context, R.string.anki_settings_saved, Toast.LENGTH_SHORT).show()
+                            onClose()
                         }
                     ) { Text(stringResource(R.string.anki_settings_save)) }
                 }
@@ -177,127 +219,151 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).imePadding()
-                .verticalScroll(rememberScrollState()).padding(Spacing.xl)
+                .verticalScroll(rememberScrollState())
+                // The page's own bottom inset, taken once by the content it scrolls with, plus the
+                // 16 dp gap that keeps the last field out of the gesture band.
+                .navigationBarsPadding()
+                .padding(horizontal = Spacing.xl)
+                .padding(top = Spacing.xl, bottom = Spacing.l)
         ) {
-            when (status) {
-                AnkiStatus.NotInstalled -> Text(stringResource(R.string.anki_settings_not_installed))
-                AnkiStatus.NeedsPermission -> {
-                    Text(stringResource(R.string.anki_settings_permission))
+            AnkiCard {
+                when (status) {
+                    AnkiStatus.NotInstalled ->
+                        Text(stringResource(R.string.anki_settings_not_installed))
+
+                    AnkiStatus.NeedsPermission -> {
+                        Text(stringResource(R.string.anki_settings_permission))
+                        Spacer(Modifier.height(Spacing.s))
+                        Button(onClick = { permission.launch(AddContentApi.READ_WRITE_PERMISSION) }) {
+                            Text(stringResource(R.string.anki_settings_connect))
+                        }
+                    }
+
+                    AnkiStatus.Ready -> {
+                        OutlinedButton(enabled = !loading && !loadingFields, onClick = { refresh++ }) {
+                            Text(stringResource(R.string.anki_settings_refresh))
+                        }
+                    }
+                }
+                if (loading || loadingFields) {
                     Spacer(Modifier.height(Spacing.s))
-                    Button(onClick = { permission.launch(AddContentApi.READ_WRITE_PERMISSION) }) {
-                        Text(stringResource(R.string.anki_settings_connect))
-                    }
+                    Text(stringResource(R.string.anki_settings_loading))
                 }
-                AnkiStatus.Ready -> {
-                    OutlinedButton(enabled = !loading && !loadingFields, onClick = { refresh++ }) {
-                        Text(stringResource(R.string.anki_settings_refresh))
-                    }
+                if (readFailed) {
+                    Spacer(Modifier.height(Spacing.s))
+                    Text(
+                        stringResource(R.string.anki_settings_load_failed),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
-            if (loading || loadingFields) Text(stringResource(R.string.anki_settings_loading))
-            if (readFailed) {
-                Text(stringResource(R.string.anki_settings_load_failed), color = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(Spacing.l))
+            AnkiCard {
+                OutlinedTextField(
+                    value = draft.deckName, onValueChange = { draft = draft.copy(deckName = it) },
+                    label = { Text(stringResource(R.string.anki_settings_deck)) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                collection?.decks?.takeIf { it.isNotEmpty() }?.let { decks ->
+                    Spacer(Modifier.height(Spacing.m))
+                    AnkiChoice(
+                        label = stringResource(R.string.anki_settings_choose_deck),
+                        value = draft.deckName, options = decks.map { it to it }
+                    ) { draft = draft.copy(deckName = it) }
+                }
             }
             Spacer(Modifier.height(Spacing.l))
-            OutlinedTextField(
-                value = draft.deckName, onValueChange = { draft = draft.copy(deckName = it) },
-                label = { Text(stringResource(R.string.anki_settings_deck)) },
-                singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-            Text(stringResource(R.string.anki_settings_deck_help), style = MaterialTheme.typography.bodySmall)
-            collection?.decks?.takeIf { it.isNotEmpty() }?.let { decks ->
-                Spacer(Modifier.height(Spacing.s))
-                AnkiChoice(
-                    label = stringResource(R.string.anki_settings_choose_deck),
-                    value = draft.deckName, options = decks.map { it to it }
-                ) { draft = draft.copy(deckName = it) }
+            AnkiCard {
+                OutlinedTextField(
+                    value = draft.tags, onValueChange = { draft = draft.copy(tags = it) },
+                    label = { Text(stringResource(R.string.anki_settings_tags)) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
             }
             Spacer(Modifier.height(Spacing.l))
-            OutlinedTextField(
-                value = draft.tags, onValueChange = { draft = draft.copy(tags = it) },
-                label = { Text(stringResource(R.string.anki_settings_tags)) },
-                singleLine = true, modifier = Modifier.fillMaxWidth()
-            )
-            Text(stringResource(R.string.anki_settings_tags_help), style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(Spacing.l))
-            val models = collection?.models.orEmpty()
-            val managedLabel = stringResource(R.string.anki_settings_managed)
-            AnkiChoice(
-                label = stringResource(R.string.anki_settings_note_type),
-                value = if (draft.modelId == null) managedLabel else
-                    draft.modelId?.let(models::get) ?: stringResource(R.string.anki_settings_unavailable_model),
-                options = listOf(null to managedLabel) + models.map { (id, name) -> id to name },
-                enabled = !loadingFields
-            ) { modelId ->
-                if (loadingFields) return@AnkiChoice
-                if (modelId == null) {
-                    draft = draft.copy(modelId = null, modelFields = emptyList(), fieldSources = emptyList())
-                } else {
-                    loadingFields = true
-                    scope.launch {
-                        AnkiExporter.modelFields(context, modelId).fold(
-                            onSuccess = { fields ->
-                                val previous = if (draft.modelId == modelId)
-                                    draft.modelFields.zip(draft.fieldSources).toMap() else emptyMap()
-                                draft = draft.copy(
-                                    modelId = modelId, modelFields = fields,
-                                    fieldSources = fields.map { name ->
-                                        previous[name] ?: AnkiField.entries.firstOrNull {
-                                            it != AnkiField.EMPTY && it.name.equals(name, ignoreCase = true)
-                                        } ?: AnkiField.EMPTY
+            AnkiCard {
+                // One fold for the three things a reader only opens when they came for them: which
+                // note type the cards are written as, what fills its fields, and the templates.
+                AnkiDisclosure(
+                    label = stringResource(R.string.anki_settings_templates),
+                    expanded = showAdvanced,
+                    onToggle = { showAdvanced = !showAdvanced }
+                )
+                if (showAdvanced) {
+                    Spacer(Modifier.height(Spacing.m))
+                    val models = collection?.models.orEmpty()
+                    val managedLabel = stringResource(R.string.anki_settings_managed)
+                    AnkiChoice(
+                        label = stringResource(R.string.anki_settings_note_type),
+                        value = if (draft.modelId == null) managedLabel else
+                            draft.modelId?.let(models::get) ?: stringResource(R.string.anki_settings_unavailable_model),
+                        options = listOf(null to managedLabel) + models.map { (id, name) -> id to name },
+                        enabled = !loadingFields
+                    ) { modelId ->
+                        if (loadingFields) return@AnkiChoice
+                        if (modelId == null) {
+                            draft = draft.copy(modelId = null, modelFields = emptyList(), fieldSources = emptyList())
+                        } else {
+                            loadingFields = true
+                            scope.launch {
+                                AnkiExporter.modelFields(context, modelId).fold(
+                                    onSuccess = { fields ->
+                                        val previous = if (draft.modelId == modelId)
+                                            draft.modelFields.zip(draft.fieldSources).toMap() else emptyMap()
+                                        draft = draft.copy(
+                                            modelId = modelId, modelFields = fields,
+                                            fieldSources = fields.map { name ->
+                                                previous[name] ?: AnkiField.entries.firstOrNull {
+                                                    it != AnkiField.EMPTY && it.name.equals(name, ignoreCase = true)
+                                                } ?: AnkiField.EMPTY
+                                            }
+                                        )
+                                    },
+                                    onFailure = {
+                                        Toast.makeText(context, R.string.anki_settings_load_failed, Toast.LENGTH_LONG).show()
                                     }
                                 )
-                            },
-                            onFailure = {
-                                Toast.makeText(context, R.string.anki_settings_load_failed, Toast.LENGTH_LONG).show()
+                                loadingFields = false
                             }
-                        )
-                        loadingFields = false
-                    }
-                }
-            }
-            Spacer(Modifier.height(Spacing.s))
-            if (draft.modelId != null) {
-                Text(stringResource(R.string.anki_settings_existing_help), style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(Spacing.s))
-                Text(stringResource(R.string.anki_settings_mapping_help), style = MaterialTheme.typography.bodySmall)
-                val sources = AnkiField.entries.map { it to stringResource(fieldLabel(it)) }
-                draft.modelFields.forEachIndexed { index, name ->
-                    Spacer(Modifier.height(Spacing.s))
-                    val source = draft.fieldSources.getOrElse(index) { AnkiField.EMPTY }
-                    AnkiChoice(
-                        label = name, value = stringResource(fieldLabel(source)),
-                        options = sources, enabled = !loadingFields
-                    ) { selected ->
-                        val mapping = draft.modelFields.indices.map {
-                            if (it == index) selected else draft.fieldSources.getOrElse(it) { AnkiField.EMPTY }
                         }
-                        draft = draft.copy(fieldSources = mapping)
                     }
-                }
-            } else {
-                Text(stringResource(R.string.anki_settings_template_help), style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { showTemplates = !showTemplates }) {
-                    Text(stringResource(R.string.anki_settings_templates))
-                }
-                if (showTemplates) {
-                    AnkiTemplateEditor(stringResource(R.string.anki_settings_front), draft.front) {
-                        draft = draft.copy(front = it)
+                    Spacer(Modifier.height(Spacing.m))
+                    if (draft.modelId != null) {
+                        val sources = AnkiField.entries.map { it to stringResource(fieldLabel(it)) }
+                        draft.modelFields.forEachIndexed { index, name ->
+                            Spacer(Modifier.height(Spacing.m))
+                            val source = draft.fieldSources.getOrElse(index) { AnkiField.EMPTY }
+                            AnkiChoice(
+                                label = name, value = stringResource(fieldLabel(source)),
+                                options = sources, enabled = !loadingFields
+                            ) { selected ->
+                                val mapping = draft.modelFields.indices.map {
+                                    if (it == index) selected else draft.fieldSources.getOrElse(it) { AnkiField.EMPTY }
+                                }
+                                draft = draft.copy(fieldSources = mapping)
+                            }
+                        }
+                    } else {
+                        AnkiTemplateEditor(stringResource(R.string.anki_settings_front), draft.front) {
+                            draft = draft.copy(front = it)
+                        }
+                        AnkiTemplateEditor(stringResource(R.string.anki_settings_back_template), draft.back) {
+                            draft = draft.copy(back = it)
+                        }
+                        AnkiTemplateEditor(stringResource(R.string.anki_settings_css), draft.css) {
+                            draft = draft.copy(css = it)
+                        }
+                        TextButton(onClick = {
+                            draft = draft.copy(
+                                front = AnkiSettings.DEFAULT_FRONT, back = AnkiSettings.DEFAULT_BACK,
+                                css = AnkiSettings.DEFAULT_CSS
+                            )
+                        }) { Text(stringResource(R.string.anki_settings_reset_templates)) }
                     }
-                    AnkiTemplateEditor(stringResource(R.string.anki_settings_back_template), draft.back) {
-                        draft = draft.copy(back = it)
-                    }
-                    AnkiTemplateEditor(stringResource(R.string.anki_settings_css), draft.css) {
-                        draft = draft.copy(css = it)
-                    }
-                    TextButton(onClick = {
-                        draft = draft.copy(
-                            front = AnkiSettings.DEFAULT_FRONT, back = AnkiSettings.DEFAULT_BACK,
-                            css = AnkiSettings.DEFAULT_CSS
-                        )
-                    }) { Text(stringResource(R.string.anki_settings_reset_templates)) }
                 }
             }
+            // Why Save cannot be pressed, in the reader's own sight instead of behind a toast they
+            // would have had to provoke by pressing it.
             error?.let {
                 Spacer(Modifier.height(Spacing.l))
                 Text(
@@ -305,7 +371,6 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
                     color = MaterialTheme.colorScheme.error
                 )
             }
-            Spacer(Modifier.height(Spacing.xl))
         }
     }
 
@@ -327,6 +392,59 @@ fun AnkiSettingsScreen(onClose: () -> Unit) {
                     Text(stringResource(R.string.anki_settings_discard_stay))
                 }
             }
+        )
+    }
+}
+
+/**
+ * One field or section of the form, on its own card: the reader's eye lands on the field rather than
+ * on a line of copy, and the page background stays the ground between them. The AnkiDroid connection
+ * status is the first of these — it is the one thing that decides whether anything below it can read
+ * the collection, and it is not part of the form.
+ */
+@Composable
+private fun AnkiCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(Spacing.l), content = content)
+    }
+}
+
+/**
+ * The one fold on the page. What it names is not what most visits came for, so it stays closed until
+ * it is asked for, and the row itself says which state it is in. The press animation and the click
+ * share one interaction source, so the row moves under the finger without either one swallowing the
+ * other's gesture.
+ */
+@Composable
+private fun AnkiDisclosure(label: String, expanded: Boolean, onToggle: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressScale(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onToggle
+            )
+            .semantics(mergeDescendants = true) {}
+            .padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = null
         )
     }
 }

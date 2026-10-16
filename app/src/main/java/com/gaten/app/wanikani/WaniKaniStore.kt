@@ -164,7 +164,8 @@ internal class WaniKaniStore(
         return write(missingFile, text)
     }
 
-    /** Reads an entry, and marks it as the most recently used one. */
+    // This mtime is only this cache's LRU clock; AnkiDroid's collection time does not apply.
+    @Suppress("DirectSystemCurrentTimeMillisUsage")
     private fun readTouched(file: File): String? {
         val text = read(file) ?: return null
         file.setLastModified(System.currentTimeMillis())

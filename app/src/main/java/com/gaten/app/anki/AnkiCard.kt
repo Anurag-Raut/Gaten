@@ -36,20 +36,31 @@ data class AnkiCard(
          */
         fun from(word: ScannedWord): AnkiCard {
             val entry = word.entries.firstOrNull()
-            return AnkiCard(
-                expression = escapeHtml(entry?.primary ?: word.baseForm),
-                reading = escapeHtml(entry?.kana?.firstOrNull().orEmpty()),
-                meaning = meaningOf(entry)
-            )
+                ?: return AnkiCard(escapeHtml(word.baseForm), reading = "", meaning = "")
+            return from(entry)
         }
+
+        /**
+         * Builds the card for one dictionary [entry] — the entry the reader selected.
+         *
+         * This is the overload a screen with a chosen entry uses: a search result is one entry of a
+         * word that may have several (a homograph, a name), and the note has to carry the readings
+         * and meanings of the one that was opened, not of whichever entry happened to come first.
+         * The fields are the same three as ever — display form, first kana form, glosses over parts
+         * of speech.
+         */
+        fun from(entry: DictEntry): AnkiCard = AnkiCard(
+            expression = escapeHtml(entry.primary),
+            reading = escapeHtml(entry.kana.firstOrNull().orEmpty()),
+            meaning = meaningOf(entry)
+        )
 
         /**
          * The glosses and, under them, the parts of speech — "cat; feline" over "noun (common)
          * (futsuumeishi)". A noun and a verb glossed the same are told apart by that second line,
          * which is what makes the field worth reviewing. Empty parts of speech leave it out.
          */
-        private fun meaningOf(entry: DictEntry?): String {
-            if (entry == null) return ""
+        private fun meaningOf(entry: DictEntry): String {
             val glosses = escapeHtml(entry.glosses.take(MAX_GLOSSES).joinToString("; "))
             val pos = escapeHtml(entry.pos.joinToString(", "))
             return when {

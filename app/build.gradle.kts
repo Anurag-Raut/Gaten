@@ -14,6 +14,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -136,7 +137,7 @@ androidComponents {
 // before the current schema — the lookup LEFT JOINs tables an older file never wrote. The builder
 // stamps `PRAGMA user_version` with the schema version (tools/build_jmdict_db.py, SCHEMA_VERSION)
 // and SQLite keeps it at bytes 60-63 of the file header, so reading those 64 bytes is enough.
-val dictionarySchemaVersion = 3
+val dictionarySchemaVersion = 4
 val verifyDictionaryAsset by tasks.registering {
     val asset = layout.projectDirectory.file("src/main/assets/db/jmdict.sqlite")
     description = "Fails the build when the generated JMdict asset is missing or of another schema version."
@@ -258,6 +259,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    // Navigation 3: the back stack is app-owned state, NavDisplay renders it.
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    // Scopes a ViewModel to a NavEntry instead of the Activity.
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    // @Serializable NavKeys; kotlinx-serialization-core is what Navigation3's rememberNavBackStack
+    // saves through, so it is a first-class dependency rather than a transitive accident.
+    implementation(libs.kotlinx.serialization.core)
+    // Romaji in the search box (tokyo -> ときょ): the dictionary itself is Japanese, so an ASCII
+    // query is transliterated before it is looked up. Pure Kotlin, MIT, no transitive deps.
+    implementation(libs.wanakana.core)
     testImplementation(libs.junit)
     // android.jar ships org.json as a stub whose every method throws, so a local unit test cannot
     // decode anything with the platform's copy. This gives the JVM tests a real implementation to

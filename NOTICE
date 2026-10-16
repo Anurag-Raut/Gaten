@@ -35,3 +35,16 @@ ONNX Runtime (inference engine)
 Copyright (c) Microsoft Corporation
 Licence: MIT
 https://onnxruntime.ai/
+
+Manrope (bundled variable font)
+-------------------------------
+Copyright 2018 The Manrope Project Authors
+Licence: SIL Open Font License 1.1 (bundled in assets/licenses/Manrope-OFL.txt)
+https://github.com/googlefonts/manrope
+
+wanakana-kt (romaji to kana in the search box)
+---------------------------------------------
+Copyright (c) 2021 Matthieu Esnault
+Licence: MIT (bundled in assets/licenses/wanakana-MIT.txt)
+https://github.com/esnaultdev/wanakana-kt
+A Kotlin port of WanaKana, itself MIT licensed.

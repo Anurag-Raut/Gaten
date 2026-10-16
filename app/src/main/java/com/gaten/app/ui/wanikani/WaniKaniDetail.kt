@@ -15,8 +15,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.StringRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -34,12 +34,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,7 +51,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -62,6 +62,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.gaten.app.MainActivity
 import com.gaten.app.R
 import com.gaten.app.ui.lookup.SheetType
+import com.gaten.app.ui.components.pressScale
 import com.gaten.app.ui.theme.Spacing
 import com.gaten.app.wanikani.WaniKaniComponent
 import com.gaten.app.wanikani.WaniKaniFailure
@@ -79,106 +80,6 @@ private val SkeletonLine = 14.dp
 private val SkeletonChip = 28.dp
 private val SkeletonLabelWidth = 72.dp
 private val SkeletonLineTail = 160.dp
-
-/**
- * The distinct kanji of [text], in order, one string per code point.
- *
- * Iterating code points rather than Chars is what keeps a supplementary-plane kanji such as 𠮷
- * whole: as Chars it is a surrogate pair, and `Character.isIdeographic` on half of it says no.
- */
-internal fun kanjiIn(text: String): List<String> {
-    val found = LinkedHashSet<String>()
-    var index = 0
-    while (index < text.length) {
-        val codePoint = text.codePointAt(index)
-        if (Character.isIdeographic(codePoint)) found.add(String(Character.toChars(codePoint)))
-        index += Character.charCount(codePoint)
-    }
-    return found.toList()
-}
-
-/**
- * The kanji of the word the entry is showing, each one a tap away from its WaniKani page.
- *
- * Drawn from the headword the entry is already headed with, and only when it has a kanji at all: a
- * kana-only word has nothing to look up. Every kanji is tappable whatever WaniKani covers, because
- * what WaniKani has is not known before the tap; a character it does not cover says so there.
- */
-@Composable
-internal fun KanjiStrip(
-    headword: String,
-    onKanji: (String) -> Unit,
-    type: SheetType,
-    modifier: Modifier = Modifier
-) {
-    KanjiStrip(remember(headword) { kanjiIn(headword) }, onKanji, type, modifier = modifier)
-}
-
-/**
- * The same strip for a caller that already knows which characters to offer — the review screen,
- * which keeps only the kanji its question side already shows, so a tap can never reveal part of the
- * answer. The characters are drawn in the order given, one chip each, and [selected] marks the one
- * whose details are open underneath: the chip that opened them is also the chip that closes them.
- *
- * [modifier] lands on the chip row itself, which is what a caller wanting to scroll the strip into
- * view measures; the label above it is part of the strip's own spacing.
- */
-@Composable
-internal fun KanjiStrip(
-    characters: List<String>,
-    onKanji: (String) -> Unit,
-    type: SheetType,
-    selected: String? = null,
-    modifier: Modifier = Modifier
-) {
-    if (characters.isEmpty()) return
-
-    Spacer(Modifier.height(Spacing.s))
-    Text(
-        text = stringResource(R.string.wk_strip_label),
-        style = type.small,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Spacer(Modifier.height(Spacing.xs))
-    Row(
-        modifier = Modifier.fillMaxWidth().then(modifier).horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s)
-    ) {
-        characters.forEach { character ->
-            val description = stringResource(R.string.wk_cd_kanji, character)
-            val open = character == selected
-            Surface(
-                onClick = { onKanji(character) },
-                shape = MaterialTheme.shapes.medium,
-                color = if (open) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    Color.Transparent
-                },
-                border = BorderStroke(
-                    1.dp,
-                    if (open) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outline
-                    }
-                ),
-                modifier = Modifier.semantics { contentDescription = description }
-            ) {
-                Text(
-                    text = character,
-                    style = type.headword,
-                    color = if (open) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs)
-                )
-            }
-        }
-    }
-}
 
 /**
  * The WaniKani page for one kanji or radical, drawn in place of the dictionary entry inside the
@@ -201,6 +102,10 @@ internal fun KanjiStrip(
  * [scrollable] is for a caller that has nowhere to put a long page: the sheet caps its panel, so the
  * page scrolls inside it. The review screen scrolls the whole deck space instead, and its panel is
  * laid out at its natural height with nothing scrolling inside it.
+ *
+ * [onOpenSettings] is where the two states answered in the app — no token, a rejected one — send the
+ * reader. The shell passes its own route when it has one; without it the app is opened the way the
+ * overlay always opened it, on the WaniKani page.
  */
 @Composable
 internal fun WaniKaniDetailPanel(
@@ -211,7 +116,8 @@ internal fun WaniKaniDetailPanel(
     compact: Boolean,
     modifier: Modifier = Modifier,
     showBack: Boolean = true,
-    scrollable: Boolean = true
+    scrollable: Boolean = true,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     // Null while the answer is on its way: the repository answers once, so "loading" is the UI's own
@@ -232,6 +138,10 @@ internal fun WaniKaniDetailPanel(
     val answer = lookup
     val subject = (answer as? WaniKaniLookup.Available)?.subject
     val iconSize = if (compact) 18.dp else 20.dp
+    // A token is typed on a real keyboard, which the overlay cannot offer, so the two token states
+    // point at the WaniKani settings instead of asking for one here. The shell's own route wins when
+    // it has one; otherwise the app is brought up, already on that page.
+    val openSettings: () -> Unit = onOpenSettings ?: { openApp(context) }
     // The heading: a kanji's own character is this page's anchor, so it is drawn at the sheet's
     // headword size in the primary text colour. A radical's anchor is its drawing, which lives in
     // the body, so its name stays a modest title here instead of shouting at the same size.
@@ -262,7 +172,7 @@ internal fun WaniKaniDetailPanel(
                 text = heading,
                 style = if (headingIsCharacter) type.headword else type.reading,
                 color = if (headingIsCharacter) {
-                    MaterialTheme.colorScheme.onSurface
+                    MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
@@ -360,17 +270,17 @@ internal fun WaniKaniDetailPanel(
                 )
 
                 // A token is typed on a real keyboard, which the overlay cannot offer, so both of
-                // these point at the app instead of asking for one here.
+                // these point at the WaniKani settings instead of asking for one here.
                 WaniKaniLookup.NeedsToken -> OpenAppNotice(
                     message = stringResource(R.string.wk_needs_token),
                     type = type,
-                    onOpen = { openApp(context) }
+                    onOpen = openSettings
                 )
 
                 WaniKaniLookup.AuthRejected -> OpenAppNotice(
                     message = stringResource(R.string.wk_auth),
                     type = type,
-                    onOpen = { openApp(context) }
+                    onOpen = openSettings
                 )
 
                 is WaniKaniLookup.Unreachable -> Notice(
@@ -591,12 +501,13 @@ private fun ComponentChip(component: WaniKaniComponent, type: SheetType, onClick
     val glyph = component.character
     val label = glyph ?: component.name ?: "…"
     val description = stringResource(R.string.wk_cd_radical, label)
+    val interactions = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = Color.Transparent,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.semantics { contentDescription = description }
+        interactionSource = interactions,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.pressScale(interactions).semantics { contentDescription = description }
     ) {
         Text(
             text = label,
@@ -647,15 +558,34 @@ private fun Notice(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = Spacing.s, bottom = Spacing.l)) {
-        Text(
-            text = message,
-            style = type.menu,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (actionLabel != null && onAction != null) {
-            Spacer(Modifier.height(Spacing.m))
-            OutlinedButton(onClick = onAction) { Text(actionLabel, style = type.button) }
+    // A card rather than a line of prose: nothing on it is content from WaniKani, so it should not
+    // read like a page. The action is filled when there is one, because it is the only thing here
+    // that does anything.
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(top = Spacing.s, bottom = Spacing.l)
+    ) {
+        Column(modifier = Modifier.padding(Spacing.l)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(
+                    Icons.Rounded.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(Spacing.s))
+                Text(
+                    text = message,
+                    style = type.menu,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(Spacing.m))
+                Button(onClick = onAction) { Text(actionLabel, style = type.button) }
+            }
         }
     }
 }
@@ -765,10 +695,21 @@ internal fun openWanikaniPage(context: Context, url: String) {
 /** WaniKani's own site; the only host the app ever hands to a browser. */
 private const val WANIKANI_HOST = "wanikani.com"
 
-/** Brings the setup app up from the overlay, where there is no task to put it in. */
+/** The extra the shell reads to open the app on a given settings page, and its WaniKani value. */
+private const val SETTINGS_PAGE_EXTRA = "settings_page"
+private const val SETTINGS_PAGE_WANIKANI = "wanikani"
+
+/**
+ * Brings the setup app up from the overlay, where there is no task to put it in, and asks for the
+ * WaniKani page: the two states that call this one are both about a token, so landing on Home would
+ * only make the reader find the page themselves. The shell decides what the flag means; a caller
+ * that ignores it still lands on the app's own start screen.
+ */
 private fun openApp(context: Context) {
     context.startActivity(
-        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(SETTINGS_PAGE_EXTRA, SETTINGS_PAGE_WANIKANI)
     )
 }
 

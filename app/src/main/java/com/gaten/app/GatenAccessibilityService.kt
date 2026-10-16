@@ -253,6 +253,12 @@ class GatenAccessibilityService : AccessibilityService() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         checkDisplayGeometry(newConfig)
+        // The bubble's position is a display coordinate, so a rotation can leave it outside the new
+        // display: the window manager clips the frame it draws, but the position the next drag
+        // moves on from is not clipped, and an off-display one only moves once the finger has
+        // travelled back past the clipped distance. Posted, so the resources — and with them the
+        // display metrics this clamps against — have already taken the new configuration.
+        mainHandler.post { floatingButton?.reclampToDisplay() }
     }
 
     /** Drops both pending and displayed captures when screen geometry or rotation changes. */
