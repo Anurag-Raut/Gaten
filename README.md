@@ -3,7 +3,8 @@
 Gaten is an Android app for reading Japanese on screen. When you hit a word you cannot read —
 in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the text, and Gaten
 shows the words it recognises, their kana readings and English meanings from an offline
-dictionary. Reading runs entirely on the device: there is no account and no server, and it works
+dictionary. You can also search by kanji, kana, or romaji directly in Gaten, explore an
+entry, and add it to Anki without capturing a screen. Reading runs entirely on the device: there is no account and no server, and it works
 in airplane mode. Gaten uses the network for exactly two things, and only after the reader asks for
 them: downloading the optional stylized-text model (see *Optional stylized-text model*), and WaniKani
 — connecting a personal access token, and fetching the reference page for a kanji the reader taps
@@ -41,20 +42,43 @@ them: downloading the optional stylized-text model (see *Optional stylized-text 
    those radicals opens that radical's own page. Each page is cached, so it stays readable offline,
    and a button opens the real page on wanikani.com (see *Optional WaniKani reference pages*).
 9. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to your
-   configured deck and note type through AnkiDroid's instant-add API. Open **Anki → Customize cards**
-   on the home screen to choose the deck, tags, field mapping and card layout. Export stays on-device.
+   configured deck and note type through AnkiDroid's instant-add API. Open **Settings → Anki cards**
+   to choose the deck, tags, field mapping and card layout. Export stays on-device.
 
 Steps 2–7 are fully offline. Gaten makes no network request of any kind until — and unless — the
 reader downloads the optional stylized-text model, or connects WaniKani (which checks the token) and
 opens a kanji.
 
-Appearance settings near the bottom of the setup screen let you choose the light/dark theme,
+**Settings → Appearance** lets you choose the light/dark theme,
 paper palette and accent independently. Changing the palette keeps your selected accent.
 Palette previews show each palette's paper and text colours with its name, without an accent dot.
 
-The home screen groups lookup triggers first, then Anki customization, the optional OCR model,
-Appearance and About. Hardware-key instructions and OCR model options are collapsed until needed.
-The floating-button switch has a visible off-state thumb and border in both themes.
+## Inside the app
+
+The bottom navigation separates four tasks:
+
+- **Home** — a dictionary-search entry point, the configured Anki deck's review counts when access
+  is already granted, and screen-lookup status and controls. Opening Home never requests Anki access
+  just to populate counts.
+- **Search** — type a Japanese word, kana reading, or romaji. Exact matches and dictionary forms of inflected
+  words come before related prefix matches. Open an entry to read its definitions, inspect its kanji,
+  or add that specific entry to Anki using your saved deck and card settings. Search works without
+  screen-access permission or either optional integration.
+- **Review** — choose an AnkiDroid deck and review its cards. The active card session keeps the
+  reveal and rating controls in focus, with bottom navigation hidden until you leave the session.
+- **Settings** — focused pages for Screen lookup, Text recognition, Anki cards, WaniKani, Appearance,
+  and About. Hardware-key setup and model management live here rather than on Home.
+
+Search is Japanese-to-English dictionary lookup: enter kanji, hiragana, katakana, or romaji,
+including inflected Japanese forms. Common shortened spellings such as `tokyo` and `ramen`
+use a loose reading index after exact matches. English definition search is not supported.
+No search query is sent to a server. Kanji reference pages still require the optional WaniKani
+connection described below.
+
+In-app navigation uses AndroidX Navigation 3, with a saved back stack for each tab. Word details,
+kanji and radical reference pages, and settings use the same destination transitions and Back
+behavior. Settings opened from a word return to that word. Review reveals and ratings stay inside
+the current session, and leaving an edited Anki configuration still asks before discarding it.
 
 ### Closing the lookup
 
@@ -99,9 +123,10 @@ likely to need a real device to confirm.
 ## Setup on a phone
 
 1. **Install the APK** for your ABI (`arm64-v8a` on modern phones).
-2. **Enable the accessibility service**: Settings → Accessibility → Gaten → On. The main screen
-   has a button that opens the right settings page.
-3. **Add the Quick Settings tile**: on Android 13+, tap **Add tile** on the home screen and confirm
+2. **Enable the accessibility service** for screen lookup: Settings → Accessibility → Gaten → On.
+   Gaten's **Settings → Screen lookup** page opens the system settings. Manual dictionary search
+   does not need this permission.
+3. **Add the Quick Settings tile**: on Android 13+, tap **Add tile** under **Settings → Screen lookup** and confirm
    Android's dialog. On older versions, add Gaten through the Quick Settings editor. The home row
    reflects **Added** and returns to **Add tile** when Android reports removal. Removal itself
    belongs to the Quick Settings editor; Android provides no app-side remove-tile API.
@@ -122,7 +147,7 @@ likely to need a real device to confirm.
    The trigger is a toggle: firing it while the panel is open closes the panel instead of starting
    another lookup.
 
-5. **Optional — customize Anki cards.** Open **Anki → Customize cards**. The default is the
+5. **Optional — customize Anki cards.** Open **Settings → Anki cards**. The default is the
    existing Gaten deck and three-field note type. Enter a deck name (including nested names such
    as `Japanese::Reading`) or allow AnkiDroid access to choose an existing deck. Add space-separated
    tags if wanted. New decks and Gaten note types are created only when you export a word.
@@ -142,7 +167,7 @@ likely to need a real device to confirm.
      all decks. A new layout creates a different note type, so its duplicate history is separate.
    - Tap **Save** to apply your settings. Without database access, the lookup uses AnkiDroid's
      share screen; choose the deck and note type there. Gaten settings apply to direct export.
-   - **Anki → Review cards** on the home screen then reviews these decks inside Gaten, with
+   - **Review** in the bottom navigation or **Review cards** on Home reviews these decks inside Gaten, with
      AnkiDroid doing the scheduling (see *Reviewing Anki cards in Gaten*).
 
    The deck/note-type/field-mapping workflow follows established patterns in
@@ -150,10 +175,26 @@ likely to need a real device to confirm.
    [asbplayer](https://docs.asbplayer.dev/docs/reference/settings/). Gaten uses AnkiDroid's local
    provider instead of their AnkiConnect transport; no code was copied from these projects.
 
-6. **Optional — connect WaniKani.** Open **WaniKani → WaniKani settings** on the main screen, create
+6. **Optional — connect WaniKani.** Open **Settings → WaniKani**, create
    a personal access token on WaniKani (read-only is enough), and paste it in. Gaten checks the token
    against WaniKani before storing it, and keeps it outside the backup set. **Disconnect** removes the
    token and every cached page. See *Optional WaniKani reference pages*.
+
+## UI stack
+
+The Activity uses one AndroidX Navigation 3 host with retained tab stacks, saveable destination
+keys, and the official saveable-state and ViewModel entry decorators. Search, review, and model
+management keep their long-lived ViewModels above destination scope. The accessibility overlay
+retains its independent service window and navigation.
+
+Dependencies are aligned through Compose BOM `2025.12.01` (Compose `1.10.0`, stable Material 3
+`1.4.0`), Kotlin `2.2.21`, Navigation 3 `1.1.7`, and Lifecycle Navigation 3 integration `2.10.0`.
+Navigation 3 `1.2.0` requires compile SDK 37 and AGP 9.1; this project retains compile SDK 36 and
+AGP 8.11. No experimental Expressive components or extra navigation/animation library are used.
+Page transitions share a 380 ms horizontal slide with parallax, including tabs, review stages,
+and reference pages. Lookup sheets slide from their dock edge; dictionary-entry changes within
+one sheet retain a short crossfade. Appearance settings include optional feedback sounds,
+off by default; haptics respect the phone's settings.
 
 ## Building from source
 
@@ -200,7 +241,7 @@ The memory reduction has not been measured on the current version.
 The model is ~117 MB, so it is never part of a release APK. There are three ways to get it onto a
 phone, and the app only reaches the network for the first one:
 
-- **Download it in the app** — Gaten → *Stylized-text model (manga-ocr, optional)* → **Download**.
+- **Download it in the app** — Gaten → **Settings → Text recognition → Download**.
   The size is shown first and has to be confirmed (with a warning when the phone is on mobile data),
   the download runs with a progress bar and a Cancel button, and the only hosts it talks to are
   `huggingface.co` and the CDN it redirects to, over HTTPS. Nothing is fetched until that button is
@@ -250,7 +291,7 @@ the account's levels is marked as such rather than shown (a free account covers 
 export is untouched: nothing from WaniKani goes into a note, and no Anki card gains a WaniKani view.
 
 **Connecting.** Create a token on WaniKani's *Personal access tokens* page — read-only is enough — and
-paste it into **WaniKani → WaniKani settings** on the main screen. Gaten checks it against `/v2/user`
+paste it into **Settings → WaniKani**. Gaten checks it against `/v2/user`
 before storing it, so a token on the device is always one WaniKani accepted, and the field is cleared
 the moment it is saved: the token is never shown or logged again, and it is sent only to
 `api.wanikani.com` — the image requests to `cdn.wanikani.com` carry no token at all. It is stored in
@@ -289,7 +330,7 @@ through the public API when the reader asks, and cached on that device.
 
 ## Reviewing Anki cards in Gaten
 
-**Anki → Review cards** on the home screen reviews AnkiDroid's own decks without leaving Gaten.
+**Review** in the bottom navigation, or **Review cards** on Home, reviews AnkiDroid's own decks without leaving Gaten.
 AnkiDroid still does everything that decides when a card comes back: Gaten asks it for the next due
 card, shows the question, reveals the answer, and sends the rating you pick back to it through the
 same content provider AnkiDroid shares with other apps. Nothing is scheduled, counted or remembered
@@ -332,10 +373,11 @@ on Gaten's side, and no network is involved — this is on-device provider acces
 - `wanikani/` — the optional WaniKani client: the token (Keystore-encrypted, stored off the backup
   set), the API calls to `api.wanikani.com` under the account's level entitlement, and the on-device
   cache of subjects and radical images.
-- `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
-  and deinflection (`Deinflector`).
+- `dict/` — offline dictionary: SQLite access (`JmdictRepository`), typed-word search
+  (`DictionarySearch`), OCR word scanning (`WordScanner`) and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
-- `ui/` — Jetpack Compose UI: `home/` (setup screen), `lookup/` (lasso layer, result sheet and the
+- `ui/` — Jetpack Compose UI: `home/` (app navigation, dashboard and focused settings pages),
+  `search/` (manual dictionary search and word details), `lookup/` (lasso layer, result sheet and the
   OCR + dictionary pipeline), `wanikani/` (the WaniKani settings screen, the kanji tiles under a
   result, and the kanji and radical pages drawn inside the sheet), `anki/` (the review screen that
   drives AnkiDroid's decks), `components/` (accessibility disclosure) and `theme/` (the palette,
@@ -384,7 +426,7 @@ closes for those before their own window appears. No notification title, text or
 read, kept, logged or stored. This needs no extra permission; it is a side effect of the
 accessibility service's event subscription.
 
-The optional notification-listener access the home screen offers is separate and is used for one
+The optional notification-listener access offered under **Settings → Screen lookup** is separate and is used for one
 thing only: reading the active media sessions so the video behind the overlay can be paused and
 resumed. It deliberately reads nothing from the notifications it is handed, and declining it leaves
 every lookup feature working (only the session-based pause gives way to a media key press).
@@ -400,6 +442,9 @@ documented here rather than left implicit.
 - **Gaten** is licensed under the **GNU GPL v3.0 or later** (see `LICENSE`), and is derived from
   [CircleToSearch](https://github.com/AKS-Labs/CircleToSearch) by AKS-Labs. See `NOTICE` for the
   full third-party attribution list.
+- **Latin typeface** — [Manrope](https://github.com/googlefonts/manrope), SIL Open Font License 1.1;
+  the font and licence are bundled with the app.
+- **Romaji conversion** — [wanakana-kt](https://github.com/esnaultdev/wanakana-kt) 1.1.1, MIT.
 - **Dictionary data** — JMdict and JMnedict © Electronic Dictionary Research and Development Group
   (EDRDG), used under
   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see
