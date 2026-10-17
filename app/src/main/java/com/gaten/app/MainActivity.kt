@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.gaten.app.capture.GatenCaptureService
 import com.gaten.app.ui.home.HomeScreen
 import com.gaten.app.ui.theme.GatenTheme
 import com.gaten.app.ui.theme.ThemePreferences
@@ -28,8 +29,8 @@ import com.gaten.app.ui.theme.ThemePreferences
  *
  * The only thing it tells the service is when the user is done with the app: a task that is really
  * going away (not a rotation) takes any lookup and pending capture down with it, which is also what
- * covers the app being taken off recents when the platform does not deliver `onTaskRemoved` to a
- * service it itself binds. Later triggers are unaffected — the service stays connected.
+ * covers the app being taken off recents when the platform does not deliver `onTaskRemoved` to the
+ * service. Lookup mode itself is not the app's task and stays on, with its notification.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +73,7 @@ class MainActivity : ComponentActivity() {
         // Only when the app is really finished: a configuration change destroys this activity too,
         // and a lookup must survive that.
         if (isFinishing && !isChangingConfigurations) {
-            GatenAccessibilityService.dismissForAppExit()
+            GatenCaptureService.dismissForAppExit()
         }
         super.onDestroy()
     }

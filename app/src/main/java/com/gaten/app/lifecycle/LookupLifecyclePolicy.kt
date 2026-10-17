@@ -7,25 +7,12 @@
 package com.gaten.app.lifecycle
 
 /**
- * What an accessibility signal means for a lookup. Every case but [None] takes the lookup down —
- * a call, a firing alarm or a system dialog — and these are interruptions the reader did not
- * cause. Everything else (an ordinary app window, a message notification, an upcoming-alarm
- * reminder) is [None]: those are left to the window focus the overlay loses when something really
- * does take the screen.
+ * What a posted notification means for a lookup. Every case but [None] takes the lookup down — an
+ * incoming call or a firing alarm, both interruptions the reader did not cause. Everything else (a
+ * message, an upcoming-alarm reminder, a player notification) is [None]: those are left to the
+ * window focus the overlay loses when something really does take the screen.
  */
-enum class LookupDismissal { None, Call, Alarm, PowerMenu, SystemDialog }
-
-/**
- * The signals a window-state event carries, kept free of Android so the policy is unit-tested
- * directly. Accessibility events do not expose the overlay's own window reliably, but Gaten's own
- * events are known by [ownPackage], and the window class and package are what distinguishes the
- * interruptions below.
- */
-data class WindowEvent(
-    val packageName: String?,
-    val ownPackage: String,
-    val windowClass: String? = null
-)
+enum class LookupDismissal { None, Call, Alarm }
 
 /**
  * Notification metadata only: the style template, published call type, category and full-screen
@@ -39,59 +26,6 @@ data class NotificationEvent(
     val callType: Int?,
     val hasFullScreenIntent: Boolean
 )
-
-/**
- * The in-call screen of a dialer or a calling app, and the clock's own alert window. Matched by
- * class name: OEM dialers and communication apps keep their own packages, and package-visibility
- * filtering would not resolve the AOSP dialer's role for them anyway. The names are distinctive
- * enough (`InCallActivity`, `InCallUi`, `AlarmActivity`, `AlarmAlert`) that no ordinary app window
- * is caught by them.
- */
-private val CALL_CLASS = Regex("(?i)incallactivity|incallui|def_call|callactivity")
-private val ALARM_CLASS = Regex("(?i)alarmactivity|alarmalert|def_alarm")
-
-/**
- * The system's own power menu. AOSP's `GlobalActionsDialog` window is an ordinary system window and
- * does not broadcast that it opened, so the window it puts up is the local signal: the SystemUI
- * global-actions window or the framework's dialog class. Ordinary app dialogs do not qualify.
- */
-private val POWER_CLASS = Regex("(?i)globalactions|global_action|powerdialog|power_dialog|shutdown")
-private val SYSTEM_UI_PACKAGE = Regex("(?i)^com\\.(android|oplus|oneplus)\\.systemui(?:\\.|$)")
-
-/**
- * Decides what a window-state event means for a lookup.
- *
- * The in-call screen is recognised by its own class name in any package, so an OEM dialer or a
- * messaging app's call screen (`InCallActivity`, `InCallUi`) ends the lookup just as the stock
- * dialer's does — package-role queries would not resolve those on Android 11+ package visibility
- * anyway. A clock alarm screen is recognised by its alert class regardless of the OEM package, and the
- * power menu by SystemUI's global-actions window. Anything else, including Gaten's own overlay
- * windows, an ordinary app's activity and a notification shade, is [LookupDismissal.None]: there is
- * deliberately no rule that closes the lookup for whatever window comes forward, so a background
- * app raising a dialog or changing screen does not end a lookup the reader is still using — the
- * overlay's window focus covers a real app switch.
- */
-fun classifyWindowEvent(event: WindowEvent): LookupDismissal {
-    val packageName = event.packageName
-    if (packageName == null || packageName == event.ownPackage) return LookupDismissal.None
-    val windowClass = event.windowClass.orEmpty()
-    if (windowClass.isEmpty()) return LookupDismissal.None
-
-    if (CALL_CLASS.containsMatchIn(windowClass)) return LookupDismissal.Call
-    if (ALARM_CLASS.containsMatchIn(windowClass)) return LookupDismissal.Alarm
-    if (SYSTEM_UI_PACKAGE.containsMatchIn(packageName) && POWER_CLASS.containsMatchIn(windowClass)) {
-        return LookupDismissal.PowerMenu
-    }
-    // Some SystemUI versions expose the framework Dialog class instead of GlobalActions.
-    // Any system dialog taking the screen ends the lookup; ordinary app dialogs stay unaffected.
-    if (SYSTEM_UI_PACKAGE.containsMatchIn(packageName) &&
-        (windowClass == "android.app.Dialog" || windowClass == "android.app.AlertDialog" ||
-            windowClass.endsWith("SystemUIDialog"))
-    ) {
-        return LookupDismissal.SystemDialog
-    }
-    return LookupDismissal.None
-}
 
 /**
  * Decides what a posted notification means for a lookup.

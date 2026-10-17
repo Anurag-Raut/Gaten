@@ -10,28 +10,30 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.gaten.app.capture.GatenCaptureService
 import com.gaten.app.trigger.TriggerPreferences
 
 /**
  * External entry point so a key remapper can start a lookup: the [ACTION_TRIGGER_LOOKUP] broadcast
- * asks the running accessibility service to screenshot the screen; a no-op when it is not connected.
+ * asks the capture service for a frame; a no-op when lookup mode is off, because nothing can be
+ * captured without the projection the user consented to.
  *
  * It also relays [TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED], which the home screen sends
- * after toggling the floating trigger, to [GatenAccessibilityService.syncFloatingButton].
+ * after toggling the floating trigger, to [GatenCaptureService.syncFloatingButton].
  */
 class LookupTriggerReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ACTION_TRIGGER_LOOKUP -> {
-                if (GatenAccessibilityService.instance == null) {
-                    Log.w(TAG, "Lookup requested but the accessibility service is not connected")
+                if (!GatenCaptureService.isLookupModeActive()) {
+                    Log.w(TAG, "Lookup requested but lookup mode is off")
                     return
                 }
-                GatenAccessibilityService.triggerCapture()
+                GatenCaptureService.triggerCapture()
             }
             TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED ->
-                GatenAccessibilityService.instance?.syncFloatingButton()
+                GatenCaptureService.syncFloatingButton()
         }
     }
 
