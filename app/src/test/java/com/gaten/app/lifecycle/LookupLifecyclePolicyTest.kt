@@ -12,19 +12,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The pure policy behind the overlay lifecycle: when a lookup may run, what a window event and a
- * posted notification mean for one that is up, when a frozen capture stops matching the display,
- * and the token that both gates a second capture and keeps a late one from clearing a newer.
+ * The pure policy behind the overlay lifecycle: when a lookup may run, what a posted notification
+ * means for one that is up, when a frozen capture stops matching the display, and the token that
+ * both gates a second capture and keeps a late one from clearing a newer.
  */
 class LookupLifecyclePolicyTest {
 
     private val ownPackage = "com.gaten.app"
     private val dialer = "com.android.dialer"
-    private val systemUi = "com.android.systemui"
     private val clock = "com.android.deskclock"
-
-    private fun window(packageName: String, windowClass: String? = null) =
-        WindowEvent(packageName = packageName, ownPackage = ownPackage, windowClass = windowClass)
 
     private fun notification(
         packageName: String,
@@ -56,96 +52,6 @@ class LookupLifecyclePolicyTest {
     @Test
     fun aLockedPhoneLocksTheLookupOut() {
         assertFalse(lookupAdmitted(isInteractive = true, isKeyguardLocked = true))
-    }
-
-    // --- window events: a call, a firing alarm, the power menu ---
-
-    @Test
-    fun anIncomingCallFromTheStockDialerEndsTheLookup() {
-        assertEquals(
-            LookupDismissal.Call,
-            classifyWindowEvent(window(dialer, "com.android.dialer.incall.InCallActivity"))
-        )
-    }
-
-    @Test
-    fun anOemOrMessagingInCallScreenEndsTheLookupDespiteItsPackage() {
-        // Any in-call screen is a call; OEM dialers and communication apps keep their own packages,
-        // and package-visibility queries would not resolve their role anyway.
-        assertEquals(
-            LookupDismissal.Call,
-            classifyWindowEvent(window("com.oneplus.dialer", "com.android.dialer.InCallActivity"))
-        )
-        assertEquals(
-            LookupDismissal.Call,
-            classifyWindowEvent(window("com.whatsapp", "com.whatsapp.calling.ui.InCallActivity"))
-        )
-    }
-
-    @Test
-    fun theDialerAndChatWindowsThatAreNotInCallDoNotEndTheLookup() {
-        assertEquals(
-            LookupDismissal.None,
-            classifyWindowEvent(window(dialer, "com.android.dialer.dialpad.DialtactsActivity"))
-        )
-        assertEquals(
-            LookupDismissal.None,
-            classifyWindowEvent(window("com.example.chat", "com.example.chat.ChatActivity"))
-        )
-    }
-
-    @Test
-    fun theClocksOwnAlarmWindowEndsTheLookup() {
-        assertEquals(
-            LookupDismissal.Alarm,
-            classifyWindowEvent(window(clock, "com.android.deskclock.alarms.AlarmActivity"))
-        )
-    }
-
-    @Test
-    fun anOemAlarmAlertEndsTheLookup() {
-        assertEquals(
-            LookupDismissal.Alarm,
-            classifyWindowEvent(window("com.oplus.alarmclock", "com.oplus.alarmclock.AlarmAlertFullScreen"))
-        )
-    }
-
-    @Test
-    fun aFrameworkSystemDialogEndsTheLookupButAnAppDialogDoesNot() {
-        assertEquals(
-            LookupDismissal.SystemDialog,
-            classifyWindowEvent(window(systemUi, "android.app.Dialog"))
-        )
-        assertEquals(
-            LookupDismissal.None,
-            classifyWindowEvent(window("com.example.reader", "android.app.Dialog"))
-        )
-    }
-
-    @Test
-    fun theSystemPowerMenuEndsTheLookup() {
-        assertEquals(
-            LookupDismissal.PowerMenu,
-            classifyWindowEvent(window(systemUi, "com.android.systemui.globalactions.GlobalActionsDialog"))
-        )
-    }
-
-    @Test
-    fun aPowerLookingClassOutsideSystemUiDoesNotEndTheLookup() {
-        // "Poweramp"/"Power" titles and classes in arbitrary apps must not close anything.
-        assertEquals(
-            LookupDismissal.None,
-            classifyWindowEvent(window("com.maxmpz.poweramp", "com.maxmpz.poweramp.PowerActivity"))
-        )
-    }
-
-    @Test
-    fun gatenOwnWindowsNeverEndALookup() {
-        assertEquals(
-            LookupDismissal.None,
-            classifyWindowEvent(window(ownPackage, "com.android.dialer.incall.InCallActivity"))
-        )
-        assertEquals(LookupDismissal.None, classifyWindowEvent(window(ownPackage)))
     }
 
     // --- notifications: incoming call and firing alarm only ---

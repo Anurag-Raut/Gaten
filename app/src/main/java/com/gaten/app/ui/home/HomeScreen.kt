@@ -6,6 +6,7 @@
 
 package com.gaten.app.ui.home
 
+import android.Manifest
 import android.app.StatusBarManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
@@ -18,7 +19,6 @@ import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.text.TextUtils
 import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -101,14 +101,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.gaten.app.LookupTileService
 import com.gaten.app.LookupTriggerReceiver
 import com.gaten.app.R
-import com.gaten.app.GatenAccessibilityService
+import com.gaten.app.capture.GatenCaptureService
 import com.gaten.app.media.hasNotificationAccess
 import com.gaten.app.ocr.MangaOcrCatalog
 import com.gaten.app.ocr.MangaOcrDownloader
 import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.anki.AnkiReviewScreen
-import com.gaten.app.ui.components.AccessibilityDisclosureDialog
+import com.gaten.app.ui.components.LookupModeDisclosureDialog
 import com.gaten.app.ui.theme.AccentColor
 import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.Palette
@@ -162,8 +162,9 @@ fun HomeScreen(
     }
     val scrollState = rememberScrollState()
 
-    // Service state, re-read on every resume because the user grants it in Settings.
-    var serviceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
+    // Lookup mode's state, re-read on every resume because it can also end outside the app: the
+    // status-bar privacy chip, the screen locking, or another app starting its own capture.
+    var lookupMode by remember { mutableStateOf(GatenCaptureService.isLookupModeActive()) }
     var notificationAccess by remember { mutableStateOf(hasNotificationAccess(context)) }
     var showDisclosure by remember { mutableStateOf(false) }
     var floatingEnabled by remember {
@@ -183,6 +184,47 @@ fun HomeScreen(
         mangaInstalled = MangaOcrModel.isInstalled(context)
         mangaSizeBytes = MangaOcrModel.installedSizeBytes(context)
         mangaCatalogId = MangaOcrModel.installedCatalogId(context)
+    }
+
+    // The notification permission only decides whether lookup mode's own notification is visible;
+    // the capture works without it, so its answer gates nothing.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { GatenCaptureService.requestLookupMode(context) }
+
+    /**
+     * Starts lookup mode, in the order the permissions can actually be asked for: display over
+     * other apps first (a Settings screen, which the user has to come back from), then the
+     * notification permission as a dialog, then the capture consent — the one Android insists on
+     * every single session.
+     */
+    fun turnOnLookupMode() {
+        if (!Settings.canDrawOverlays(context)) {
+            Toast.makeText(context, R.string.toast_overlay_needed, Toast.LENGTH_LONG).show()
+            try {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                )
+            } catch (_: Exception) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.toast_overlay_settings_error),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
+        val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsNotificationPermission) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            GatenCaptureService.requestLookupMode(context)
+        }
     }
 
     /** Runs the download the user confirmed, keeping the progress bar and the outcome message in sync. */
@@ -243,7 +285,7 @@ fun HomeScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                serviceEnabled = isAccessibilityServiceEnabled(context)
+                lookupMode = GatenCaptureService.isLookupModeActive()
                 notificationAccess = hasNotificationAccess(context)
                 floatingEnabled = TriggerPreferences.floatingButtonEnabled(context)
                 tileAdded = TriggerPreferences.tileAdded(context)
@@ -279,7 +321,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(Spacing.xl))
 
             StatusRow(
-                enabled = serviceEnabled,
+                enabled = lookupMode,
                 onTurnOn = { showDisclosure = true }
             )
 
@@ -312,6 +354,9 @@ fun HomeScreen(
                 onToggle = { checked ->
                     floatingEnabled = checked
                     TriggerPreferences.setFloatingButtonEnabled(context, checked)
+                    // The bubble only exists while lookup mode is on, so switching it on without it
+                    // is the moment to offer to turn lookup mode on.
+                    if (checked && !lookupMode) showDisclosure = true
                     // Explicit package: a manifest receiver only receives implicit broadcasts that
                     // name it (or its package) on API 26+.
                     context.sendBroadcast(
@@ -454,18 +499,10 @@ fun HomeScreen(
     }
 
     if (showDisclosure) {
-        AccessibilityDisclosureDialog(
+        LookupModeDisclosureDialog(
             onAccept = {
                 showDisclosure = false
-                try {
-                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                } catch (_: Exception) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.toast_accessibility_settings_error),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                turnOnLookupMode()
             },
             onDismiss = { showDisclosure = false }
         )
@@ -573,7 +610,7 @@ private fun MediaAccessRow(onGrant: () -> Unit) {
 
 /**
  * Start-a-lookup row: the on-screen floating bubble. The switch only records the choice; the
- * accessibility service owns the window and reacts to [TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED].
+ * capture service owns the window and reacts to [TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED].
  */
 @Composable
 private fun FloatingButtonRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
@@ -1196,24 +1233,4 @@ private fun openUrl(context: Context, url: String) {
     } catch (_: ActivityNotFoundException) {
         // No browser available; nothing sensible to do.
     }
-}
-
-/** True when [GatenAccessibilityService] appears in the enabled-services secure setting. */
-fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    val expectedComponentName = ComponentName(context, GatenAccessibilityService::class.java)
-    val enabledServicesSetting = Settings.Secure.getString(
-        context.contentResolver,
-        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-    ) ?: return false
-
-    val colonSplitter = TextUtils.SimpleStringSplitter(':')
-    colonSplitter.setString(enabledServicesSetting)
-
-    while (colonSplitter.hasNext()) {
-        val componentNameString = colonSplitter.next()
-        val enabledComponent = ComponentName.unflattenFromString(componentNameString)
-        if (enabledComponent != null && enabledComponent == expectedComponentName)
-            return true
-    }
-    return false
 }
