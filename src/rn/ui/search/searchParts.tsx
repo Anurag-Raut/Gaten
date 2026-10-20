@@ -18,6 +18,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Svg, {Circle, Path} from "react-native-svg";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -179,6 +180,7 @@ export function SearchField({
   onChangeQuery,
   onSearch,
   style,
+  compact = false,
 }: {
   inputRef: React.RefObject<TextInput | null>;
   query: string;
@@ -186,15 +188,17 @@ export function SearchField({
   onChangeQuery: (text: string) => void;
   onSearch: () => void;
   style?: React.ComponentProps<typeof View>["style"];
+  compact?: boolean;
 }) {
-  const {colors} = useTheme();
+  const {colors, palette} = useTheme();
+  const referenceLight = compact && palette === "Gaten" && Number.parseInt(colors.background.slice(1, 3), 16) >= 128;
   const reducedMotion = useReducedMotion();
   const focus = useSharedValue(0);
   const focusRing = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focus.value,
       [0, 1],
-      [colors.outlineVariant, colors.primary],
+      [referenceLight ? "#E3E3E7" : colors.outlineVariant, colors.primary],
     ),
   }));
   const settle = (target: number) => {
@@ -205,9 +209,14 @@ export function SearchField({
   return (
     <View style={style}>
       <Animated.View
-        style={[styles.fieldShell, {backgroundColor: colors.surfaceVariant}, focusRing]}
+        style={[
+          styles.fieldShell,
+          compact && styles.compactFieldShell,
+          {backgroundColor: referenceLight ? "#EFEFF1" : colors.surfaceVariant},
+          focusRing,
+        ]}
       >
-        <Icon name="search" color={colors.onSurfaceVariant} />
+        <Svg width={compact ? 22 : 24} height={compact ? 22 : 24} viewBox="0 0 24 24"><Circle cx={10.5} cy={10.5} r={6.5} stroke={referenceLight ? "#4A4A50" : colors.onSurfaceVariant} strokeWidth={2.4} fill="none" /><Path d="m16 16 4.5 4.5" stroke={referenceLight ? "#4A4A50" : colors.onSurfaceVariant} strokeWidth={2.4} strokeLinecap="round" /></Svg>
         <TextInput
           ref={inputRef}
           value={query}
@@ -215,10 +224,10 @@ export function SearchField({
           onFocus={() => settle(1)}
           onBlur={() => settle(0)}
           placeholder="猫, ねこ, neko…"
-          placeholderTextColor={colors.onSurfaceVariant}
+          placeholderTextColor={referenceLight ? "#7C7C84" : colors.onSurfaceVariant}
           returnKeyType="search"
           onSubmitEditing={onSearch}
-          style={[styles.field, {color: colors.onSurface}]}
+          style={[styles.field, compact && styles.homeField, {color: colors.onSurface}]}
           underlineColorAndroid="transparent"
         />
         {query.length > 0 && (
@@ -338,6 +347,15 @@ const styles = StyleSheet.create({
     marginVertical: spacing.s,
     paddingHorizontal: spacing.l,
   },
+  compactFieldShell: {
+    height: 44,
+    borderRadius: 22,
+    marginHorizontal: spacing.l,
+    marginVertical: 0,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  homeField: {fontFamily: "Inter", fontSize: 16, lineHeight: 22, fontWeight: "400"},
   field: {flex: 1, padding: 0, ...typeScale.bodyLarge},
   clearButton: {width: 40, height: 40, alignItems: "center", justifyContent: "center"},
   limitNote: {marginHorizontal: spacing.xl, marginTop: spacing.xs},

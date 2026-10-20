@@ -17,6 +17,7 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {
   DeviceEventEmitter,
+  StatusBar,
   useColorScheme,
   useWindowDimensions,
 } from "react-native";
@@ -52,6 +53,7 @@ import {
 import {ReviewTab} from "./ReviewScreen";
 import {SettingsTab, SettingsPageScreen} from "./SettingsScreen";
 import {SessionContext} from "./session";
+import * as ThemeBridge from "../native/GatenTheme";
 import {
   SETTINGS_PAGES,
   freshSettingsInstance,
@@ -349,6 +351,7 @@ function SwipeGate({
 export function AppShell() {
   const {colors, mode} = useTheme();
   const systemScheme = useColorScheme();
+  const dark = mode === "Dark" || (mode === "System" && systemScheme === "dark");
   const navigationRef = useNavigationContainerRef<RootTabParamList>();
   const [sessionActive, setSessionActive] = useState(
     reviewStore.sessionActive(),
@@ -362,6 +365,12 @@ export function AppShell() {
     const subscription = reviewStore.onSessionActive(setSessionActive);
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    ThemeBridge.setNavigationBarAppearance(colors.background, dark).catch((error: unknown) => {
+      console.warn("Could not update Android navigation bar appearance.", error);
+    });
+  }, [colors.background, dark]);
 
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
@@ -455,6 +464,10 @@ export function AppShell() {
 
   return (
     <SessionContext.Provider value={session}>
+      <StatusBar
+        barStyle={dark ? "light-content" : "dark-content"}
+        backgroundColor={colors.background}
+      />
       <NavigationContainer ref={navigationRef} theme={navigationTheme}>
         <Tab.Navigator
           tabBarPosition="bottom"

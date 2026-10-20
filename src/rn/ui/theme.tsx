@@ -21,6 +21,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import {useColorScheme} from "react-native";
 import * as ThemeBridge from "../native/GatenTheme";
 import type {
   Accent,
@@ -52,6 +53,7 @@ const DEFAULT_CHOICES: ThemeChoices = {
 };
 
 export function ThemeProvider({children}: {children: React.ReactNode}) {
+  const systemScheme = useColorScheme();
   const [choices, setChoices] = useState<ThemeChoices>(DEFAULT_CHOICES);
   const [colorMap, setColorMap] = useState<ThemeColorMap | null>(null);
 
@@ -62,22 +64,29 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
 
   useEffect(() => {
     let live = true;
-    const reload = () => {
-      ThemeBridge.getTheme()
-        .then((stored) => {
-          if (live) {
-            apply(stored);
-          }
-        })
-        .catch(() => {});
+    let request = 0;
+    // Read the saved choices and matching system-resolved colors together. Each await is guarded
+    // so a late response from an earlier OS/theme change cannot repaint a newer scheme.
+    const reload = async () => {
+      const currentRequest = ++request;
+      try {
+        const stored = await ThemeBridge.getTheme();
+        if (!live || currentRequest !== request) return;
+        const resolved = await ThemeBridge.colors(stored.mode, stored.palette, stored.accent);
+        if (!live || currentRequest !== request) return;
+        setChoices(stored);
+        setColorMap(resolved);
+      } catch {
+        // Keep the last complete theme; the next preference or system change retries the read.
+      }
     };
-    reload();
-    const subscription = ThemeBridge.onThemeChanged(reload);
+    void reload();
+    const subscription = ThemeBridge.onThemeChanged(() => void reload());
     return () => {
       live = false;
       subscription.remove();
     };
-  }, [apply]);
+  }, [systemScheme]);
 
   const setMode = useCallback(
     (mode: ThemeMode) => {

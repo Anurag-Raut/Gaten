@@ -9,7 +9,7 @@
  * Add-to-Anki bar. The entry is resolved by id from the shared search store — never carried
  * through the route — so a restored page resolves as soon as its search has answered.
  */
-import React, {useCallback, useMemo} from "react";
+import React, {useCallback, useMemo, useRef} from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -24,6 +24,7 @@ import {Button, Card, CommonChip, Icon, IconButton, KanjiStrip, distinctIdeograp
 import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
+import * as GatenDict from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
 import {hitFor, useSearchState} from "./searchStore";
 import {SearchNotice} from "./SearchScreen";
@@ -50,6 +51,7 @@ export function SearchWordScreen({
   const hit = useMemo(() => hitFor(entryId), [state.hits, entryId]);
   const anki = useAnkiExport();
   const exportState = anki.exportFor(entryId);
+  const recordedEntryId = useRef<number | null>(null);
 
   // Resume of the entry: status, settings and duplicate state are read again after any absence —
   // on the way in, and again every time the reader comes back to the page. Keyed to the entry and
@@ -59,6 +61,13 @@ export function SearchWordScreen({
     useCallback(() => {
       const entry = hitFor(entryId);
       if (entry) {
+        if (recordedEntryId.current !== entry.id) {
+          recordedEntryId.current = entry.id;
+          void GatenDict.rememberLookup(entry).catch((error: unknown) => {
+            recordedEntryId.current = null;
+            console.warn("Could not save the recent word lookup", error);
+          });
+        }
         void anki.prepareExport(entry);
       }
     }, [entryId]),

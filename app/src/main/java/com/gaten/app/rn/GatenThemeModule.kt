@@ -7,7 +7,10 @@
 package com.gaten.app.rn
 
 import android.content.res.Configuration
+import android.graphics.Color
+import android.os.Build
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -126,6 +129,39 @@ class GatenThemeModule(
         promise.resolve(colorMap(palette, accent, mode.isDark(systemDark)))
     }
 
+    /**
+     * Applies the RN shell's background and icon contrast to the Android gesture area. This changes
+     * only window bar appearance; React Native's safe-area layout remains responsible for insets.
+     */
+    @ReactMethod
+    fun setNavigationBarAppearance(background: String, dark: Boolean, promise: Promise) {
+        if (!background.matches(Regex("^#[0-9A-Fa-f]{6}$"))) {
+            promise.reject(CODE_INVALID_BAR_COLOR, "Expected an opaque #RRGGBB navigation bar color.")
+            return
+        }
+        val backgroundColor = Color.parseColor(background)
+        val activity = reactApplicationContext.currentActivity
+        if (activity == null) {
+            promise.resolve(null)
+            return
+        }
+
+        activity.runOnUiThread {
+            try {
+                val window = activity.window
+                window.navigationBarColor = backgroundColor
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.isNavigationBarContrastEnforced = false
+                }
+                WindowCompat.getInsetsController(window, window.decorView)
+                    .isAppearanceLightNavigationBars = !dark
+                promise.resolve(null)
+            } catch (error: Exception) {
+                promise.reject(CODE_SYSTEM_BAR, "Could not apply the navigation bar appearance.", error)
+            }
+        }
+    }
+
     private fun prefsToJsMap(): WritableMap = Arguments.createMap().apply {
         val context = reactApplicationContext
         putString("mode", ThemePreferences.themeMode(context).name)
@@ -196,5 +232,7 @@ class GatenThemeModule(
         const val NAME = "GatenTheme"
 
         private const val CODE_UNKNOWN = "E_THEME_UNKNOWN"
+        private const val CODE_INVALID_BAR_COLOR = "E_THEME_INVALID_BAR_COLOR"
+        private const val CODE_SYSTEM_BAR = "E_THEME_SYSTEM_BAR"
     }
 }

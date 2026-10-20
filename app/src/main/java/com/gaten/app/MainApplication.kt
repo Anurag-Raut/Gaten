@@ -32,6 +32,7 @@ class MainApplication : Application(), ReactApplication {
         getDefaultReactHost(
             applicationContext,
             packageList,
+            useDevSupport = BuildConfig.DEBUG,
         )
     }
 
@@ -57,6 +58,8 @@ class MainApplication : Application(), ReactApplication {
         // family. Registered before the first surface exists, so the first frame a screen draws
         // already has the face, and a missing family costs the face, never a crash.
         ReactFontManager.getInstance().addCustomFont(this, "Manrope", R.font.manrope)
+        // Inter is scoped to the screenshot-matched home service and streak cards.
+        ReactFontManager.getInstance().addCustomFont(this, "Inter", R.font.inter)
         loadReactNative(this)
     }
 }

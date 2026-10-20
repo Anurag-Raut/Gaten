@@ -31,6 +31,8 @@ export interface SearchResult {
 interface GatenDictNative {
   search(query: string): Promise<SearchResult[]>;
   isSearchable(query: string): Promise<boolean>;
+  recentLookups(): Promise<SearchResult[]>;
+  rememberLookup(entry: SearchResult): Promise<void>;
 }
 
 const GatenDict = NativeModules.GatenDict as GatenDictNative;
@@ -43,4 +45,14 @@ export function search(query: string): Promise<SearchResult[]> {
 /** True when `query` is something the dictionary can be asked about: Japanese, or full romaji. */
 export function isSearchable(query: string): Promise<boolean> {
   return GatenDict.isSearchable(query);
+}
+
+/** The twelve most recently opened word entries, kept on this device. */
+export function recentLookups(): Promise<SearchResult[]> {
+  return GatenDict.recentLookups();
+}
+
+/** Records an entry when its word-detail page opens. */
+export function rememberLookup(entry: SearchResult): Promise<void> {
+  return GatenDict.rememberLookup(entry);
 }

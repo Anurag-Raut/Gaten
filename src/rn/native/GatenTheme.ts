@@ -74,6 +74,7 @@ interface GatenThemeNative {
   setThemeMode(mode: ThemeMode): Promise<ThemeChoices>;
   setPalette(palette: Palette): Promise<ThemeChoices>;
   setAccent(accent: Accent): Promise<ThemeChoices>;
+  setNavigationBarAppearance(background: string, dark: boolean): Promise<void>;
   colors(
     mode: ThemeMode | null,
     palette: Palette | null,
@@ -101,6 +102,11 @@ export function setPalette(palette: Palette): Promise<ThemeChoices> {
 /** Stores the accent and announces it. */
 export function setAccent(accent: Accent): Promise<ThemeChoices> {
   return GatenTheme.setAccent(accent);
+}
+
+/** Applies the RN theme's background and icon contrast to Android's gesture navigation area. */
+export function setNavigationBarAppearance(background: string, dark: boolean): Promise<void> {
+  return GatenTheme.setNavigationBarAppearance(background, dark);
 }
 
 /**

@@ -74,6 +74,9 @@ let state: SearchState = {
 
 const listeners = new Set<() => void>();
 
+/** Persisted entries Home can open even when they are not part of the current search results. */
+const recentHits = new Map<number, SearchResult>();
+
 /**
  * Where the results list was left; the screen restores from it on mount and keeps it current. The
  * offset is the whole of it: the list is restored by offset rather than by the first visible row,
@@ -142,7 +145,15 @@ export function useSearchState(): SearchState {
 
 /** The row with [entryId], or null while the results carrying it are not here. */
 export function hitFor(entryId: number): SearchResult | null {
-  return state.hits.find((hit) => hit.id === entryId) ?? null;
+  return state.hits.find((hit) => hit.id === entryId) ?? recentHits.get(entryId) ?? null;
+}
+
+/** Makes locally persisted lookup rows resolvable by the existing word-detail route. */
+export function primeRecentLookupHits(entries: readonly SearchResult[]): void {
+  recentHits.clear();
+  for (const entry of entries) {
+    recentHits.set(entry.id, entry);
+  }
 }
 
 function cancelPending() {
