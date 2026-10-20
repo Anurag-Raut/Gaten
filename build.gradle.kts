@@ -11,4 +11,16 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    // React Native: configures project-wide New Architecture properties and orders :app
+    // evaluation before the autolinked libraries.
+    id("com.facebook.react.rootproject")
+}
+
+// React Native ecosystem libraries read these from the root project ext (the `safeExtGet` pattern
+// in their android/build.gradle) instead of hardcoding SDK levels. Kept in sync with the app
+// module's minSdk/targetSdk/compileSdk.
+buildscript {
+    extra["minSdkVersion"] = 29
+    extra["compileSdkVersion"] = 36
+    extra["targetSdkVersion"] = 36
 }

@@ -30,3 +30,4 @@ docs/jp-prototype/**/*.jpg
 
 # Python bytecode from the dictionary tooling
 __pycache__/
+node_modules/

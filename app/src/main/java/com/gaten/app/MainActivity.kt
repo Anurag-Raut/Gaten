@@ -7,43 +7,43 @@
 
 package com.gaten.app
 
+import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import com.gaten.app.ui.home.GatenApp
-import com.gaten.app.ui.theme.GatenTheme
-import com.gaten.app.ui.theme.ThemePreferences
+import com.facebook.react.ReactActivity
+import com.gaten.app.rn.GatenBridgeEmitter
+import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
 
 /**
- * The app's only activity: it owns the theme the whole app is drawn in and hands the rest to
- * [GatenApp].
+ * The app's only activity: it hosts the React Native UI (component name [MAIN_COMPONENT_NAME],
+ * registered from the repo-root `index.js`) and hands the rest to it.
  *
  * The only thing it tells the service is when the user is done with the app: a task that is really
  * going away (not a rotation) takes any lookup and pending capture down with it, which is also what
  * covers the app being taken off recents when the platform does not deliver `onTaskRemoved` to a
  * service it itself binds. Later triggers are unaffected — the service stays connected.
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : ReactActivity() {
 
     /**
      * The settings page this launch asked for, from [EXTRA_SETTINGS_PAGE], until a screen has taken
-     * it. Held here rather than inside the composition because it can arrive after the app is up: an
-     * outside launch carries `FLAG_ACTIVITY_NEW_TASK`, which delivers the intent to this running
-     * instance instead of creating another one.
+     * it. Held here rather than inside the rendered content because it can arrive after the app is
+     * up: an outside launch carries `FLAG_ACTIVITY_NEW_TASK`, which delivers the intent to this
+     * running instance instead of creating another one.
      */
-    private var settingsPageRequest by mutableStateOf<String?>(null)
+    var settingsPageRequest: String? = null
+        private set
+
+    override fun getMainComponentName(): String = MAIN_COMPONENT_NAME
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // Why this comes before super.onCreate: a restart — an Activity recreation, "Don't keep
+        // activities", or the system restoring a task it killed — hands the FragmentManager a saved
+        // fragment list, and the fragments react-native-screens draws its screens with refuse to be
+        // rebuilt that way ("Screen fragments should never be restored"). The library's own factory
+        // answers such a restore with a fragment that detaches itself, so the framework gets a valid
+        // instance and React mounts fresh screens over it. Required by the library: see
+        // react-native-screens README → Installation → Android.
+        supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
         super.onCreate(savedInstanceState)
 
         // A rotation replays onCreate with the same intent, and whatever it asked for has already
@@ -51,43 +51,18 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             settingsPageRequest = intent.getStringExtra(EXTRA_SETTINGS_PAGE)
         }
-        addOnNewIntentListener { newIntent ->
-            settingsPageRequest = newIntent.getStringExtra(EXTRA_SETTINGS_PAGE)
-        }
+    }
 
-        setContent {
-            // Hoisted here, not read inside GatenApp: the theme is applied above it, so the choices
-            // have to come from outside the content they change.
-            var themeMode by remember { mutableStateOf(ThemePreferences.themeMode(this)) }
-            var palette by remember { mutableStateOf(ThemePreferences.palette(this)) }
-            var accent by remember { mutableStateOf(ThemePreferences.accent(this)) }
-            GatenTheme(themeMode, palette, accent) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    GatenApp(
-                        themeMode = themeMode,
-                        onThemeModeChange = { mode ->
-                            themeMode = mode
-                            ThemePreferences.setThemeMode(this, mode)
-                        },
-                        palette = palette,
-                        onPaletteChange = { picked ->
-                            palette = picked
-                            ThemePreferences.setPalette(this, picked)
-                        },
-                        accent = accent,
-                        onAccentChange = { picked ->
-                            accent = picked
-                            ThemePreferences.setAccent(this, picked)
-                        },
-                        settingsPageRequest = settingsPageRequest,
-                        onSettingsPageRequestHandled = { settingsPageRequest = null }
-                    )
-                }
-            }
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        settingsPageRequest = intent.getStringExtra(EXTRA_SETTINGS_PAGE)
+        GatenBridgeEmitter.emitSettingsPageRequest(settingsPageRequest)
+    }
+
+    /** Clears the pending request once a screen has navigated for it (see GatenShellModule). */
+    fun consumeSettingsPageRequest() {
+        settingsPageRequest = null
     }
 
     override fun onDestroy() {
@@ -100,6 +75,11 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /**
+         * The name the JS side registers with `AppRegistry.registerComponent` in `index.js`.
+         */
+        const val MAIN_COMPONENT_NAME = "Gaten"
+
         /**
          * The extra an outside launcher sends to open one settings page: the settings route key, so
          * "wanikani", "anki" or "lookup". Anything else opens the Settings root.

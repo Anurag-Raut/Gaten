@@ -25,8 +25,11 @@
             are cached on the device and read from there offline; nothing is fetched or cached in the
             background.
 
-         The screenshot, the scanned sentence and the other words never leave the device, and no
-         WaniKani study progress is requested, kept or shown.
+         The screenshot, the scanned sentence and the other words never leave the device. With a token
+         connected, WaniKani study progress is read too - the account's level, the reviews due now and
+         over the next 24 hours, and how its items are spread across WaniKani's review stages - for the
+         analytics dashboard. It comes from api.wanikani.com, through the same allow-listed read-only
+         client, is cached on the device, and is never sent anywhere else.
 
          It also has to be declared rather than removed: ML Kit's transport library and ONNX Runtime
          both ask for it for their analytics and telemetry backends, and stripping it from the merged
@@ -43,6 +46,7 @@
     </queries>
 
     <application
+        android:name=".MainApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -51,14 +55,42 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Gaten"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="false"
         android:extractNativeLibs="true"
         tools:targetApi="31">
+        <!-- The React host's activity, with the three window settings React Native expects of it.
+
+             configChanges: these are handled without recreating the activity — ReactActivity hands
+             onConfigurationChanged to React, which re-reads the display metrics and announces a
+             colour-scheme change to the JS `Appearance` module, so a rotation or a dark-mode switch
+             repaints the running app instead of rebuilding the activity (and every saveable screen
+             state in it). It is the list the React Native template ships; anything not named here is
+             still delivered as a recreation, which MainActivity's react-native-screens fragment
+             factory covers.
+
+             windowSoftInputMode: from targetSdk 35 on, Android 15 and later display the app
+             edge-to-edge, so the window need not shrink for the keyboard on its own. The one RN
+             screen that has a list under a keyboard turns that inset into layout itself (the search
+             tab, through KeyboardAvoidingView), so adjustResize — the platform's own layout
+             adjustment for the IME, and the precondition that component documents on Android — is
+             still what is declared here.
+
+             Measured on a moto g35 5G (Android 15, gesture navigation) after installing this build:
+             with the keyboard up the app's own root view still spans the full 1080×2400 — the window
+             is *not* resized, so adjustResize alone changes nothing, and the inset is turned into
+             layout in JS instead. The search screen wraps its whole body in KeyboardAvoidingView
+             (`behavior="padding"`, no `keyboardVerticalOffset` — it is the scene's top child, so its
+             frame is already the rectangle that calculation wants): with the keyboard up (top edge
+             measured at y=1591) the results list's own bounds become [0,448][1080,1591] — it ends
+             exactly at the keyboard's top edge — and with the keyboard hidden they return to
+             [0,448][1080,2200], the full scene, so nothing is padded twice. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Gaten">
+            android:theme="@style/Theme.Gaten"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

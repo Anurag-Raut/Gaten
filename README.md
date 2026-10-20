@@ -47,7 +47,7 @@ them: downloading the optional stylized-text model (see *Optional stylized-text 
 
 Steps 2–7 are fully offline. Gaten makes no network request of any kind until — and unless — the
 reader downloads the optional stylized-text model, or connects WaniKani (which checks the token) and
-opens a kanji.
+then opens a kanji or looks at the Analytics tab.
 
 **Settings → Appearance** lets you choose the light/dark theme,
 paper palette and accent independently. Changing the palette keeps your selected accent.
@@ -182,30 +182,40 @@ likely to need a real device to confirm.
 
 ## UI stack
 
-The Activity uses one AndroidX Navigation 3 host with retained tab stacks, saveable destination
-keys, and the official saveable-state and ViewModel entry decorators. Search, review, and model
-management keep their long-lived ViewModels above destination scope. The accessibility overlay
-retains its independent service window and navigation.
+The in-app UI is React Native (0.86.3, Fabric / new architecture, Hermes). `MainActivity` is a
+`ReactActivity` and renders the JS app from `index.js` → `App.js` → `src/rn/ui/`: four tabs
+(Home / Search / Review / Settings) with per-tab stacks via React Navigation, a custom bottom bar
+(hidden during review sessions and under pushed pages), and a theme resolved on the Kotlin side.
+JS talks to the Kotlin logic through bridge modules in `app/src/main/java/com/gaten/app/rn/`
+(dictionary search, Anki review/export, WaniKani, theme, haptics, recognition downloads, platform
+utilities) — no business logic is duplicated in JavaScript.
 
-Dependencies are aligned through Compose BOM `2025.12.01` (Compose `1.10.0`, stable Material 3
-`1.4.0`), Kotlin `2.2.21`, Navigation 3 `1.1.7`, and Lifecycle Navigation 3 integration `2.10.0`.
-Navigation 3 `1.2.0` requires compile SDK 37 and AGP 9.1; this project retains compile SDK 36 and
-AGP 8.11. No experimental Expressive components or extra navigation/animation library are used.
-Page transitions share a 380 ms horizontal slide with parallax, including tabs, review stages,
-and reference pages. Lookup sheets slide from their dock edge; dictionary-entry changes within
-one sheet retain a short crossfade. Appearance settings include optional feedback sounds,
-off by default; haptics respect the phone's settings.
+The accessibility lookup overlay retains its independent service window and navigation, still
+drawn in Compose inside `OverlayWindowController` — it never touches the activity UI.
+
+Dependencies: Kotlin `2.2.21`, AGP `8.11.0`, RN `0.86.3` (New Architecture) with
+`react-native-reanimated` `4.7` + `react-native-worklets` `0.13`, React Navigation `7`.
+Motion: a 380 ms emphasized horizontal page slide for tabs (bottom-tabs `transitionSpec` + a
+custom scene interpolator) and for pushed pages (native-stack, platform animator), the review's
+step swaps on a Reanimated shared value with parallax, staggered list entrances and a Material
+tab indicator in the bottom bar — see `docs/rn-migration/PLAN.md` § Motion. The overlay keeps its
+own sheet slide. Appearance settings include optional feedback sounds, off by default; haptics
+respect the phone's settings.
 
 ## Building from source
 
 Requirements: JDK 17 or newer and an Android SDK with `compileSdk 36` (set `ANDROID_HOME` or
-`local.properties`), plus Python 3 for the dictionary builder.
+`local.properties`), plus Python 3 for the dictionary builder and Node.js 22+ for the React
+Native toolchain.
 
 ```sh
 # 1. Generate the dictionary asset (stdlib only; downloads JMdict/JMnedict and verifies SHA-256).
 python3 tools/build_jmdict_db.py
 
-# 2. Build the debug APK.
+# 2. Install the JavaScript dependencies.
+npm install
+
+# 3. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
 ./gradlew :app:assembleDebug
 ```
 
@@ -245,8 +255,9 @@ phone, and the app only reaches the network for the first one:
   The size is shown first and has to be confirmed (with a warning when the phone is on mobile data),
   the download runs with a progress bar and a Cancel button, and the only hosts it talks to are
   `huggingface.co` and the CDN it redirects to, over HTTPS. Nothing is fetched until that button is
-  tapped; the optional WaniKani pages are the app's only other network use, and only once a token is
-  connected and a kanji is tapped. The files come from
+  tapped. WaniKani is the app's only other network use, and only with a token connected: a kanji page
+  when one is tapped, and the account's own study progress when the Analytics tab is open. The files
+  come from
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
   (`encoder_model_int8.onnx`, `decoder_model_int8.onnx`) and
   [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base) (`vocab.txt`).
@@ -284,10 +295,14 @@ dictionary entry one Back away. Tapping a radical in that composition opens the 
 drawing included: the radicals no font has are rendered from the SVG WaniKani serves for them. A
 button on either page opens the real page on `wanikani.com` in the browser.
 
-**What it does not do.** No learning progress is involved. Gaten never reads or shows a level,
-lessons, reviews, assignments or statistics, and never writes anything to a WaniKani account. The
-only account call is `GET /v2/user`, read for the subscription's own entitlement, so content above
-the account's levels is marked as such rather than shown (a free account covers levels 1–3). The Anki
+**What it reads, and what it never does.** Two things here are the account's own. `GET /user` is read
+for the subscription's entitlement, so content above the account's levels is marked as such rather
+than shown (a free account covers levels 1–3). And with a token connected, the **Analytics** tab reads
+the account's study progress: the level, the reviews available now and over the next 24 hours
+(`GET /summary`), and how many items sit in each of WaniKani's review stages — six count-only
+`GET /assignments` requests that ask for the count of a filtered scope and throw the page away. It
+never reads lessons, never submits a lesson or a review, never changes anything in the account, and
+no other account data is read. The Anki
 export is untouched: nothing from WaniKani goes into a note, and no Anki card gains a WaniKani view.
 
 **Connecting.** Create a token on WaniKani's *Personal access tokens* page — read-only is enough — and
@@ -320,8 +335,10 @@ in an `Authorization` header; opening a kanji or one of its radicals sends that 
 subject id, with a kanji's composition adding its own radicals' ids. All of it goes to
 `api.wanikani.com` over HTTPS, plus `cdn.wanikani.com` for the SVG of a radical that has no
 character. Redirects are refused outright and the token is never logged. The scanned sentence, the
-other words of the lookup and the screenshot are never sent, and no study progress is requested, kept
-or shown.
+other words of the lookup and the screenshot are never sent. The account's own study progress — the
+level, the review availability and the per-stage counts the Analytics tab shows — is requested only
+for that tab, from `api.wanikani.com` alone, and kept on this device; nothing else about the account
+is read, and no lesson or review is ever submitted.
 
 **Attribution.** WaniKani and its content belong to [Tofugu LLC](https://www.wanikani.com/). Gaten's
 WaniKani pages are an unofficial third-party reference: Gaten is not affiliated with or endorsed by
@@ -376,13 +393,19 @@ on Gaten's side, and no network is involved — this is on-device provider acces
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), typed-word search
   (`DictionarySearch`), OCR word scanning (`WordScanner`) and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
-- `ui/` — Jetpack Compose UI: `home/` (app navigation, dashboard and focused settings pages),
-  `search/` (manual dictionary search and word details), `lookup/` (lasso layer, result sheet and the
-  OCR + dictionary pipeline), `wanikani/` (the WaniKani settings screen, the kanji tiles under a
-  result, and the kanji and radical pages drawn inside the sheet), `anki/` (the review screen that
-  drives AnkiDroid's decks), `components/` (accessibility disclosure) and `theme/` (the palette,
-  the type scale and `ThemePreferences`, the stored dark/light, palette and accent choices the
-  overlay and the floating bubble read too).
+- `rn/` — the React Native bridge: native modules exposing the dictionary, Anki, WaniKani, theme,
+  feedback, recognition downloads and platform utilities to JS, plus the `GatenCardWebView`
+  view manager used by the review card and the radical image.
+- `src/rn/` — the React Native app: `native/` (typed bridge wrappers) and `ui/` (shell, tabs,
+  screens). See `docs/rn-migration/`.
+- `ui/lookup/` — the service-owned overlay: lasso layer, result sheet and the
+  OCR + dictionary pipeline (still Compose, hosted in its own window).
+- `ui/wanikani/` — the kanji and radical detail panel drawn inside the overlay sheet
+  (`WaniKaniDetail.kt`).
+- `ui/overlay/` — `OverlayWindowController`, the accessibility-overlay window host.
+- `ui/components/` — `KanjiStrip` and `pressScale` used by the overlay result sheet.
+- `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light, palette and accent
+  choices the overlay, the floating bubble and the RN theme bridge read).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
   which downloads the optional manga-ocr model for pushing to a device.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
@@ -400,24 +423,34 @@ them started by the reader and neither of them in the background:
   entitlement), and opening a kanji sends that character — a radical, its id, a kanji's composition
   the ids of its own radicals — in the request for that one page. `cdn.wanikani.com` is asked only
   for the SVG of a radical that has no character. All over HTTPS, with redirects refused. The scanned
-  sentence, the other words, the screenshot and everything else looked up stay on the device, and
-  nothing about lessons, reviews, assignments or progress is requested or kept. Nothing is
+  sentence, the other words, the screenshot and everything else looked up stay on the device. The only
+  other account data read is the study progress the Analytics tab shows — the level, the reviews
+  available now and over the next 24 hours, and the counts per review stage — all of it from
+  `api.wanikani.com` and all of it kept on this device; no lesson or review is ever submitted, and
+  nothing else about the account is read. Nothing is
   prefetched: with the network gone the saved pages still answer, and nothing else happens.
 
 The WaniKani personal access token lives in app-private storage outside the backup set
 (`noBackupFilesDir`), encrypted with an Android Keystore key: it is not in a cloud backup and not in
 a device-to-device transfer. It is never logged, never shown again after it is saved, and Disconnect
-deletes it along with every cached page — reporting it if any of that could not be removed. Of the
-account itself Gaten reads the subscription's level entitlement — plan, level and expiry — and
-nothing else: no lessons, no reviews, no assignments, no statistics, and no write of any kind. That
-entitlement is all the cache holds about the account, and it is used only to refuse a subject above
-the account's levels.
+deletes it along with every cached page — reporting it if any of that could not be removed.
+
+Of the account itself Gaten reads two things. One is the subscription's level entitlement — plan,
+level and expiry — used only to refuse a subject above the account's levels. The other is the study
+progress the **Analytics** tab shows: the level, the review availability over the next 24 hours and
+the counts per review stage, as described above. The cache holds both: the entitlement, and one small
+snapshot per connected account (keyed by a digest of that account's token, never the token). Nothing
+is ever written: no lesson is submitted, no review is answered and no assignment is changed. What the
+Analytics tab reads of them is only the aggregate — the count of a filtered scope, from six
+`GET /assignments` requests whose rows are read past and discarded, plus the review availability
+above.
 
 Nothing else is fetched, and the screenshot never leaves the device: it stays in memory, is never
 uploaded, never shared and never written to disk. Reviewing Anki cards changes nothing here either:
 it reads and answers cards through AnkiDroid's own local content provider, on the device, and asks
-AnkiDroid for every scheduling decision. There is no analytics, no account of Gaten's own and no
-server.
+AnkiDroid for every scheduling decision. There is no telemetry and no server of Gaten's own: nothing
+about the reader is collected, profiled or sent anywhere, and the Analytics tab draws only the
+numbers described above, from WaniKani and from AnkiDroid on this device.
 
 The only notifications Gaten looks at are the accessibility events Android already sends it for a
 posted notification, and it reads **metadata only**: whether an incoming call (`CallStyle`, incoming

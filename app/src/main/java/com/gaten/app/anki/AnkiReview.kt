@@ -263,7 +263,7 @@ object AnkiReview {
                 // clock is not reachable here; wall time is the only clock the due comparison has.
                 @Suppress("DirectSystemCurrentTimeMillisUsage")
                 val nowSeconds = System.currentTimeMillis() / 1000
-                val queued = cursor.use { it.readQueue(resolver) }
+                val queued = cursor.use { it.readQueue(resolver, nowSeconds) }
                 val index = firstDueIndex(queued.map { row -> row.due }, nowSeconds)
                     ?: return@withLock AnkiQueue.Empty
                 val served = queued[index]
@@ -436,11 +436,23 @@ object AnkiReview {
         resolver.query(deckUri(deckId), DECK_NAME_PROJECTION, null, null, null)
             ?.use { it.moveToFirst() } ?: false
 
-    /** The queued cards AnkiDroid reported, in the order it would serve them, with each due check. */
-    private fun Cursor.readQueue(resolver: ContentResolver): List<QueueRow> = buildList {
+    /**
+     * The queued cards AnkiDroid reported, in the order it would serve them, with each due check.
+     *
+     * The read stops at the first card [dueNow] calls due: that is the card this read serves, and
+     * [firstDueIndex] only ever looks at the rows up to and including it. Asking about a queued card
+     * costs a provider round-trip of its own ([queuedCard]), so reading the rest of the queue would
+     * be paid for on every card and never consulted. A queue with nothing due yet is still read to
+     * [SCHEDULE_LIMIT], so "nothing due" is answered exactly as it was.
+     */
+    private fun Cursor.readQueue(
+        resolver: ContentResolver,
+        nowSeconds: Long
+    ): List<QueueRow> = buildList {
         while (size < SCHEDULE_LIMIT && moveToNext()) {
             val noteId = long(FlashCardsContract.ReviewInfo.NOTE_ID)
             val ord = int(FlashCardsContract.ReviewInfo.CARD_ORD)
+            val due = queuedCard(resolver, noteId, ord)
             add(
                 QueueRow(
                     noteId = noteId,
@@ -450,9 +462,10 @@ object AnkiReview {
                         jsonStrings(string(FlashCardsContract.ReviewInfo.NEXT_REVIEW_TIMES))
                     ),
                     mediaFiles = jsonStrings(string(FlashCardsContract.ReviewInfo.MEDIA_FILES)),
-                    due = queuedCard(resolver, noteId, ord)
+                    due = due
                 )
             )
+            if (dueNow(due.type, due.dueEpochSeconds, nowSeconds)) break
         }
     }
 

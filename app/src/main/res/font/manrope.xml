@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Gaten
+  Copyright (C) 2026 Anurag Raut
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  Manrope as React Native needs it: one family the Android font stack can pick a weight from.
+
+  `manrope_variable.ttf` is a variable font whose own default instance is ExtraLight (200) — the
+  Kotlin side says so in ui/theme/Type.kt, which is why every Compose entry sets the weight axis it
+  wants through FontVariation.Settings. React Native has no such setting: it hands a text's weight to
+  `Typeface.create`, which resolves it against a family's declared entries, so a variable file
+  referenced on its own would draw every step at 200. These three entries give the family the three
+  weights Gaten's type scale asks for (400/500/600 — Type.kt: normal prose, controls and labels, and
+  headings), each pinned to the axis value it names.
+
+  Consumed through ReactFontManager.addCustomFont(..., R.font.manrope) as the face "Manrope" for
+  every role except displayMedium/displaySmall, which Type.kt draws in the system face because they
+  are always a Japanese word. The Compose overlay keeps using @font/manrope_variable directly
+  (Type.kt builds its FontFamily from that resource), so this file adds no bytes to the APK.
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/manrope_variable"
+        android:fontStyle="normal"
+        android:fontWeight="400"
+        android:fontVariationSettings="'wght' 400" />
+    <font
+        android:font="@font/manrope_variable"
+        android:fontStyle="normal"
+        android:fontWeight="500"
+        android:fontVariationSettings="'wght' 500" />
+    <font
+        android:font="@font/manrope_variable"
+        android:fontStyle="normal"
+        android:fontWeight="600"
+        android:fontVariationSettings="'wght' 600" />
+</font-family>
