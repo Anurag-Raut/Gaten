@@ -121,18 +121,18 @@ function StreakBanner({
   );
   const currentRun = Math.max(days, 1);
   const message = streak.status === "loading"
-    ? "Checking your study history…"
+    ? "Checking study history…"
     : streak.status === "unavailable"
-      ? "Your Anki study history could not be loaded."
+      ? "Study history unavailable."
       : completedToday
         ? streak.atLeastSevenDays
-          ? "A full week! Great consistency!"
-          : `${currentRun} ${currentRun === 1 ? "day" : "days"} in a row! ${currentRun === 1 ? "Keep going!" : "Keep it up!"}`
+          ? "7+ day streak. Great work!"
+          : `${currentRun}${streak.capped ? "+" : ""} ${currentRun === 1 ? "day" : "days"} in a row. Keep going!`
         : days > 0
-          ? `Keep going! You're on a ${days} day streak.`
+          ? `${days}${streak.capped ? "+" : ""} day streak. Study today!`
           : streakWasBroken
-            ? "Streak reset. No worries, start again!"
-            : "Start your learning journey today.";
+            ? "Streak reset. Start again."
+            : "Start your streak today.";
   const totalLabel = streak.totalStudyDays == null
     ? "—"
     : `${streak.totalStudyDays} ${streak.totalStudyDays === 1 ? "day" : "days"}`;
@@ -141,7 +141,7 @@ function StreakBanner({
   return (
     <View style={[styles.streakCard, {backgroundColor: cardColor}]}>
       <View style={styles.streakTop}>
-        <StreakFlameMark active={days > 0 || completedToday} size={40} dark={dark} />
+        <StreakFlameMark active={days > 0 || completedToday} size={30} dark={dark} />
         <View style={styles.streakCopy}>
           <Text
             accessibilityLabel="Daily streak. Anki study days follow your collection's rollover."
@@ -198,7 +198,7 @@ function StreakBanner({
             accessibilityLabel={`Anki ${day.label}: ${status}${day.today ? ", today" : ""}`}
             style={styles.weekDay}
           >
-            <StreakDayMark state={state} size={40} dark={dark} />
+            <StreakDayMark state={state} size={28} dark={dark} />
             <Text numberOfLines={1} style={[styles.dayLabel, {color: muted}, state === "today" ? [styles.todayLabel, {color: ink}] : null]}>
               {day.label}
             </Text>
@@ -293,7 +293,7 @@ function AnkiCard({
       detail={detail}
       dark={dark}
       tint="blue"
-      artwork={<AnkiCardsArtwork width={130} height={124} dark={dark} />}
+      artwork={<AnkiCardsArtwork width={100} height={100} dark={dark} />}
       action={action}
       actionLabel={actionLabel}
     />
@@ -365,7 +365,7 @@ function WaniKaniCard({
       detail={detail}
       dark={dark}
       tint="pink"
-      artwork={<ToriiArtwork width={130} height={124} dark={dark} />}
+      artwork={<ToriiArtwork width={100} height={100} dark={dark} />}
       action={action}
       actionLabel={actionLabel}
     />
@@ -426,7 +426,7 @@ function ServiceCard({
   const content = (
     <View style={[styles.serviceCard, {borderColor: palette.border}]}>
       <GradientSurface id={`service-${tint}`} colors={[palette.from, palette.to]} radius={19} />
-      <View pointerEvents="none" style={styles.serviceArtwork}>{artwork}</View>
+      <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.serviceArtwork, {opacity: dark ? 0.2 : 0.35}]}>{artwork}</View>
       <View style={styles.serviceContent}>
         <View style={styles.serviceHeader}>
           <Text style={[styles.heavyTitle, styles.serviceTitle, {color: palette.text}]}>{title}</Text>
@@ -439,7 +439,7 @@ function ServiceCard({
           {count != null ? (
             <View style={styles.serviceCountLine}>
               <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[styles.serviceCount, {color: palette.accent}]}>{count}</Text>
-              <Text numberOfLines={1} style={[styles.serviceCountLabel, {color: palette.muted}]}>{countLabel}</Text>
+              <Text style={[styles.serviceCountLabel, {color: palette.muted}]}>{countLabel}</Text>
             </View>
           ) : actionLabel ? (
             <Text style={[styles.serviceActionLabel, {color: palette.accent}]}>
@@ -660,54 +660,55 @@ const styles = StyleSheet.create({
   streakCard: {
     width: "100%",
     maxWidth: 400,
-    minHeight: 168,
+    minHeight: 120,
     alignSelf: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderRadius: 20,
     overflow: "hidden",
     justifyContent: "space-between",
   },
   streakTop: {
-    minHeight: 40,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
   streakCopy: {flex: 1, minWidth: 0},
-  streakTitle: {fontFamily: "Inter", fontSize: 20, lineHeight: 24, fontWeight: "700", flexShrink: 1},
-  streakMessage: {fontFamily: "Inter", fontSize: 13, lineHeight: 18, fontWeight: "400", marginTop: 2},
+  streakTitle: {fontFamily: "Inter", fontSize: 16, lineHeight: 20, fontWeight: "700", flexShrink: 1},
+  streakMessage: {fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "400", marginTop: 2},
   retryLink: {alignSelf: "flex-start", minHeight: 36, justifyContent: "center"},
-  streakTotal: {minWidth: 64, alignItems: "flex-end", justifyContent: "center"},
-  streakTotalValue: {fontFamily: "Inter", fontSize: 17, lineHeight: 22, fontWeight: "700"},
-  streakTotalCaption: {fontFamily: "Inter", fontSize: 13, lineHeight: 16, fontWeight: "400"},
-  weekRow: {flexDirection: "row", justifyContent: "space-between"},
-  weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: 6},
-  dayLabel: {fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
+  streakTotal: {minWidth: 42, alignItems: "flex-end", justifyContent: "center"},
+  streakTotalValue: {fontFamily: "Inter", fontSize: 15, lineHeight: 18, fontWeight: "700"},
+  streakTotalCaption: {fontFamily: "Inter", fontSize: 10, lineHeight: 12, fontWeight: "400"},
+  weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 10},
+  weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: 4},
+  dayLabel: {fontFamily: "Inter", fontSize: 11, lineHeight: 14, fontWeight: "500"},
   todayLabel: {fontWeight: "700"},
-  serviceRow: {gap: 12, alignItems: "center"},
-  serviceColumn: {width: "100%", maxWidth: 380},
+  serviceRow: {flexDirection: "row", gap: 12, alignItems: "stretch"},
+  serviceColumn: {flex: 1, minWidth: 0},
   serviceCard: {
-    minHeight: 124,
+    flex: 1,
+    minHeight: 112,
     borderWidth: 1,
     borderRadius: 20,
     overflow: "hidden",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
   serviceContent: {zIndex: 3},
-  serviceHeader: {paddingRight: 90},
-  serviceTitle: {fontFamily: "Inter", fontSize: 20, lineHeight: 26, fontWeight: "700"},
-  serviceStatusRow: {minHeight: 18, flexDirection: "row", alignItems: "center", gap: 6},
-  serviceStatusDot: {width: 8, height: 8, borderRadius: 4},
-  serviceStatus: {fontFamily: "Inter", fontSize: 13, lineHeight: 18, fontWeight: "600", flexShrink: 1},
-  serviceDetailRow: {minHeight: 44, marginTop: 6, justifyContent: "center", zIndex: 1},
-  serviceCountLine: {flexDirection: "row", alignItems: "baseline", gap: 6},
-  serviceCount: {fontFamily: "Inter", fontSize: 30, lineHeight: 30, fontWeight: "700"},
-  serviceCountLabel: {flexShrink: 1, fontFamily: "Inter", fontSize: 14, lineHeight: 18, fontWeight: "400"},
-  serviceActionLabel: {fontFamily: "Inter", fontSize: 15, lineHeight: 20, fontWeight: "600"},
-  serviceDetail: {fontFamily: "Inter", fontSize: 15, lineHeight: 20, fontWeight: "500"},
-  serviceArtwork: {position: "absolute", end: 0, top: 0, width: 130, height: 124, zIndex: 0},
+  serviceHeader: {minHeight: 37},
+  serviceTitle: {fontFamily: "Inter", fontSize: 16, lineHeight: 22, fontWeight: "700"},
+  serviceStatusRow: {minHeight: 15, flexDirection: "row", alignItems: "center", gap: 6},
+  serviceStatusDot: {width: 6, height: 6, borderRadius: 3},
+  serviceStatus: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, fontWeight: "600", flexShrink: 1},
+  serviceDetailRow: {minHeight: 44, marginTop: 6, justifyContent: "center"},
+  serviceCountLine: {flexDirection: "row", alignItems: "baseline", gap: 5},
+  serviceCount: {flexShrink: 1, fontFamily: "Inter", fontSize: 24, lineHeight: 28, fontWeight: "700"},
+  serviceCountLabel: {flexShrink: 1, fontFamily: "Inter", fontSize: 11, lineHeight: 14, fontWeight: "400"},
+  serviceActionLabel: {fontFamily: "Inter", fontSize: 13, lineHeight: 17, fontWeight: "600"},
+  serviceDetail: {fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
+  serviceArtwork: {position: "absolute", end: 0, bottom: 0, width: 100, height: 100, zIndex: 0},
   studyButton: {
     minHeight: 52,
     borderRadius: 26,
