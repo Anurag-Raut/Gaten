@@ -5,7 +5,8 @@
  */
 
 import React from "react";
-import Svg, {Circle, Defs, G, Image as SvgImage, LinearGradient, Mask, Path, Rect, Stop, SvgXml} from "react-native-svg";
+import {Image} from "react-native";
+import Svg, {Circle, Path, SvgXml} from "react-native-svg";
 import {homeSvgXml} from "./HomeSvgAssets";
 import {homeStreakDayXml, homeStreakFlameXml} from "./HomeStreakAssets";
 
@@ -25,111 +26,20 @@ function Artwork({
   return <SvgXml xml={homeSvgXml(name, dark)} width={width} height={height} />;
 }
 
-/** Places the original card art at the right edge and fades its left edge into the card. */
-function FadedServiceArt({
-  source,
-  sourceWidth,
-  sourceHeight,
-  width,
-  height,
-  id,
-  dark,
-}: {
-  source: number;
-  sourceWidth: number;
-  sourceHeight: number;
-  width: number;
-  height: number;
-  id: string;
-  dark: boolean;
-}) {
-  const imageWidth = Math.min(width, height * sourceWidth / sourceHeight);
-  const imageHeight = imageWidth * sourceHeight / sourceWidth;
-  const imageX = width - imageWidth;
-  const fadeId = `${id}Fade`;
-  const maskId = `${id}Mask`;
-  const edgeYFadeId = `${id}EdgeYFade`;
-  const edgeYMaskId = `${id}EdgeYMask`;
-  const edgeXFadeId = `${id}EdgeXFade`;
-  const edgeXMaskId = `${id}EdgeXMask`;
-
+/**
+ * The Anki and WaniKani marks a service card's icon tile draws: the supplied square art at the
+ * tile's own size. It is opaque, so the tile's background stays behind its rounded corners.
+ */
+export function AnkiServiceMark({size = 42}: {size?: number}) {
   return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Defs>
-        <LinearGradient id={fadeId} gradientUnits="userSpaceOnUse" x1={imageX} y1="0" x2={width} y2="0">
-          <Stop offset="0%" stopColor="#000000" stopOpacity={0} />
-          <Stop offset="45%" stopColor="#000000" stopOpacity={1} />
-          <Stop offset="100%" stopColor="#000000" stopOpacity={1} />
-        </LinearGradient>
-        <Mask
-          id={maskId}
-          x="0"
-          y="0"
-          width={width}
-          height={height}
-          maskUnits="userSpaceOnUse"
-          maskContentUnits="userSpaceOnUse"
-          maskType="alpha"
-        >
-          <Rect x={imageX} y={0} width={imageWidth} height={imageHeight} fill={`url(#${fadeId})`} />
-        </Mask>
-        {dark && (
-          <>
-            <LinearGradient id={edgeYFadeId} gradientUnits="userSpaceOnUse" x1={imageX} y1="0" x2={imageX} y2={imageHeight}>
-              <Stop offset="0%" stopColor="#000000" stopOpacity={0} />
-              <Stop offset="8%" stopColor="#000000" stopOpacity={1} />
-              <Stop offset="92%" stopColor="#000000" stopOpacity={1} />
-              <Stop offset="100%" stopColor="#000000" stopOpacity={0} />
-            </LinearGradient>
-            <LinearGradient id={edgeXFadeId} gradientUnits="userSpaceOnUse" x1={imageX} y1="0" x2={width} y2="0">
-              <Stop offset="0%" stopColor="#000000" stopOpacity={1} />
-              <Stop offset="92%" stopColor="#000000" stopOpacity={1} />
-              <Stop offset="100%" stopColor="#000000" stopOpacity={0} />
-            </LinearGradient>
-            <Mask id={edgeYMaskId} x="0" y="0" width={width} height={height} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" maskType="alpha">
-              <Rect x={imageX} y={0} width={imageWidth} height={imageHeight} fill={`url(#${edgeYFadeId})`} />
-            </Mask>
-            <Mask id={edgeXMaskId} x="0" y="0" width={width} height={height} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" maskType="alpha">
-              <Rect x={imageX} y={0} width={imageWidth} height={imageHeight} fill={`url(#${edgeXFadeId})`} />
-            </Mask>
-          </>
-        )}
-      </Defs>
-      {dark ? (
-        <G mask={`url(#${edgeYMaskId})`}>
-          <G mask={`url(#${edgeXMaskId})`}>
-            <SvgImage
-              href={source}
-              x={imageX}
-              y={0}
-              width={imageWidth}
-              height={imageHeight}
-              preserveAspectRatio="xMaxYMin meet"
-              mask={`url(#${maskId})`}
-            />
-          </G>
-        </G>
-      ) : (
-        <SvgImage
-          href={source}
-          x={imageX}
-          y={0}
-          width={imageWidth}
-          height={imageHeight}
-          preserveAspectRatio="xMaxYMin meet"
-          mask={`url(#${maskId})`}
-        />
-      )}
-    </Svg>
+    <Image source={require("./assets/anki-stack.png")} style={{width: size, height: size}} resizeMode="cover" />
   );
 }
 
-export function AnkiServiceMark({size = 32, dark = false}: MarkProps) {
-  return <Artwork name="anki_app" width={size} height={size} dark={dark} />;
-}
-
-export function ToriiServiceMark({size = 32, dark = false}: MarkProps) {
-  return <Artwork name="wanikani_app" width={size} height={size} dark={dark} />;
+export function ToriiServiceMark({size = 42}: {size?: number}) {
+  return (
+    <Image source={require("./assets/wanikani-torii.png")} style={{width: size, height: size}} resizeMode="cover" />
+  );
 }
 
 export function StreakPowerIcon({size = 24, dark = false}: MarkProps) {
@@ -220,38 +130,3 @@ export function NoStreakArtwork({width = 110, height = 105, dark = false}: Artwo
   return <Artwork name="sprout_no_streak" width={width} height={height} dark={dark} />;
 }
 
-export function AnkiCardsArtwork({
-  width = 125,
-  height = 100,
-  dark = false,
-}: ArtworkSize & {complete?: boolean}) {
-  return (
-    <FadedServiceArt
-      source={require("./assets/anki-stack.png")}
-      sourceWidth={178}
-      sourceHeight={174}
-      width={width}
-      height={height}
-      id="ankiServiceArt"
-      dark={dark}
-    />
-  );
-}
-
-export function ToriiArtwork({
-  width = 140,
-  height = 110,
-  dark = false,
-}: ArtworkSize & {complete?: boolean}) {
-  return (
-    <FadedServiceArt
-      source={require("./assets/wanikani-torii.png")}
-      sourceWidth={181}
-      sourceHeight={174}
-      width={width}
-      height={height}
-      id="wanikaniServiceArt"
-      dark={dark}
-    />
-  );
-}

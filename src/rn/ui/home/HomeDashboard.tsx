@@ -22,10 +22,10 @@ import type {SearchResult} from "../../native/GatenDict";
 import type {SettingsPageName} from "../navigation";
 import type {HomeDashboardData} from "./useHomeDashboard";
 import {
-  AnkiCardsArtwork,
+  AnkiServiceMark,
   StreakDayMark,
   StreakFlameMark,
-  ToriiArtwork,
+  ToriiServiceMark,
 } from "./HomeArtwork";
 
 type HomeDashboardProps = {
@@ -234,11 +234,14 @@ function AnkiCard({
   let detail: string | undefined;
   let action: (() => void) | undefined;
   let actionLabel: string | undefined;
+  let hint: string | undefined;
 
   switch (anki.status) {
     case "connected":
       status = anki.refreshing ? "Refreshing…" : "Connected";
       statusTone = anki.refreshing ? "neutral" : "connected";
+      action = onReview;
+      hint = "Opens the review session";
       if (due != null) {
         count = due;
         countLabel = completed != null && completed > 0 ? "remaining" : "reviews due";
@@ -251,24 +254,28 @@ function AnkiCard({
       statusTone = "disconnected";
       action = onSettings;
       actionLabel = "Connect to start";
+      hint = "Opens Anki settings";
       break;
     case "permissionNeeded":
       status = "Permission needed";
       statusTone = "error";
       action = onReview;
       actionLabel = "Grant access";
+      hint = "Opens the review screen to grant AnkiDroid access";
       break;
     case "notSetUp":
       status = "Not set up";
       statusTone = "disconnected";
       action = onSettings;
       actionLabel = "Set up AnkiDroid";
+      hint = "Opens Anki settings";
       break;
     case "error":
       status = "Refresh failed";
       statusTone = "error";
       action = onRefresh;
       actionLabel = "Retry reading Anki";
+      hint = "Retries reading Anki";
       if (due != null) {
         count = due;
         countLabel = "due · tap to retry";
@@ -293,9 +300,10 @@ function AnkiCard({
       detail={detail}
       dark={dark}
       tint="blue"
-      artwork={<AnkiCardsArtwork width={100} height={100} dark={dark} />}
+      artwork={<AnkiServiceMark />}
       action={action}
       actionLabel={actionLabel}
+      hint={hint}
     />
   );
 }
@@ -319,6 +327,7 @@ function WaniKaniCard({
   let detail: string | undefined;
   let action: (() => void) | undefined;
   let actionLabel: string | undefined;
+  let hint: string | undefined;
 
   switch (waniKani.status) {
     case "connected":
@@ -329,6 +338,10 @@ function WaniKaniCard({
       if (waniKani.error) {
         action = onRefresh;
         actionLabel = "Retry reading WaniKani";
+        hint = "Retries reading WaniKani";
+      } else {
+        action = onSettings;
+        hint = "Opens WaniKani settings";
       }
       break;
     case "disconnected":
@@ -336,18 +349,21 @@ function WaniKaniCard({
       statusTone = "disconnected";
       action = onSettings;
       actionLabel = "Connect to start";
+      hint = "Opens WaniKani settings";
       break;
     case "authRejected":
       status = "Reconnect required";
       statusTone = "error";
       action = onSettings;
       actionLabel = "Reconnect";
+      hint = "Opens WaniKani settings";
       break;
     case "error":
       status = "Unavailable";
       statusTone = "error";
       action = onRefresh;
       actionLabel = "Try again";
+      hint = "Retries reading WaniKani";
       break;
     case "loading":
       status = "Checking…";
@@ -365,16 +381,20 @@ function WaniKaniCard({
       detail={detail}
       dark={dark}
       tint="pink"
-      artwork={<ToriiArtwork width={100} height={100} dark={dark} />}
+      artwork={<ToriiServiceMark />}
       action={action}
       actionLabel={actionLabel}
+      hint={hint}
     />
   );
 }
 
 type ServiceStatusTone = "connected" | "disconnected" | "neutral" | "error";
 
-/** Renders the shared title, connection status, one honest count or action, and faded service art. */
+/**
+ * Renders the shared card: the service's own mark in a tile, its title and connection status
+ * beside it, and one honest count or action with the chevron every tappable card carries.
+ */
 function ServiceCard({
   title,
   status,
@@ -387,6 +407,7 @@ function ServiceCard({
   artwork,
   action,
   actionLabel,
+  hint,
 }: {
   title: string;
   status: string;
@@ -399,18 +420,19 @@ function ServiceCard({
   artwork: React.ReactNode;
   action?: () => void;
   actionLabel?: string;
+  hint?: string;
 }) {
   const palette = tint === "blue"
     ? dark
-      ? {from: "#1B2A3E", to: "#263B55", border: "#344A67", text: "#F7FAFF", muted: "#CAD5E7", accent: "#AFC2FF"}
-      : {from: "#EEF4FF", to: "#D9E8FF", border: "#CFE0FA", text: "#14142B", muted: "#4B4F6B", accent: "#3B4FE0"}
+      ? {from: "#1B2A3E", to: "#263B55", border: "#344A67", tile: "#101B2A", tileBorder: "#33496A", text: "#F7FAFF", muted: "#CAD5E7", accent: "#AFC2FF", chevron: "#93A3BE"}
+      : {from: "#F6FAFF", to: "#DCEAFF", border: "#D5E4FA", tile: "#FFFFFF", tileBorder: "#DCE7F8", text: "#14142B", muted: "#4B4F6B", accent: "#3B4FE0", chevron: "#9098AB"}
     : dark
-      ? {from: "#2D2330", to: "#3B2A3A", border: "#563D52", text: "#FFF8FC", muted: "#E0CDD9", accent: "#FF9AB9"}
-      : {from: "#FFF3FA", to: "#FBE3F1", border: "#F4D3E6", text: "#14142B", muted: "#4B4F6B", accent: "#C42B52"};
+      ? {from: "#2D2330", to: "#3B2A3A", border: "#563D52", tile: "#2A1F27", tileBorder: "#5C4356", text: "#FFF8FC", muted: "#E0CDD9", accent: "#FF9AB9", chevron: "#C0A5B4"}
+      : {from: "#FFF7FC", to: "#FBDDEE", border: "#F5D5E8", tile: "#FFF1F8", tileBorder: "#F6D3E6", text: "#14142B", muted: "#4B4F6B", accent: "#C42B52", chevron: "#9098AB"};
   const statusColor = statusTone === "connected"
-    ? dark ? "#86EFAC" : "#166534"
+    ? dark ? "#86EFAC" : "#15803D"
     : statusTone === "disconnected" || statusTone === "error"
-      ? dark ? "#FDA4AF" : "#991B1B"
+      ? dark ? "#FDA4AF" : "#B91C1C"
       : dark ? "#C3C9D7" : "#4B4F6B";
   const statusDotColor = statusTone === "connected"
     ? "#16A34A"
@@ -420,34 +442,49 @@ function ServiceCard({
   const visibleDescription = count != null
     ? `${count} ${countLabel}`
     : actionLabel
-      ? `${actionLabel} →`
+      ? actionLabel
       : detail ?? "";
   const accessibilityLabel = `${title}, ${status}${count != null ? `, ${count} ${countLabel}` : detail ? `, ${detail}` : actionLabel ? `, ${actionLabel}` : ""}`;
   const content = (
     <View style={[styles.serviceCard, {borderColor: palette.border}]}>
       <GradientSurface id={`service-${tint}`} colors={[palette.from, palette.to]} radius={19} />
-      <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.serviceArtwork, {opacity: dark ? 0.2 : 0.35}]}>{artwork}</View>
       <View style={styles.serviceContent}>
         <View style={styles.serviceHeader}>
-          <Text style={[styles.heavyTitle, styles.serviceTitle, {color: palette.text}]}>{title}</Text>
-          <View style={styles.serviceStatusRow}>
-            <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
-            <Text style={[styles.serviceStatus, {color: statusColor}]}>{status}</Text>
+          <View
+            accessible={false}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[styles.serviceIconTile, {backgroundColor: palette.tile, borderColor: palette.tileBorder}]}
+          >
+            {artwork}
+          </View>
+          <View style={styles.serviceTitles}>
+            <Text numberOfLines={1} style={[styles.heavyTitle, styles.serviceTitle, {color: palette.text}]}>{title}</Text>
+            <View style={styles.serviceStatusRow}>
+              <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
+              <Text numberOfLines={2} style={[styles.serviceStatus, {color: statusColor}]}>{status}</Text>
+            </View>
           </View>
         </View>
-        <View style={[styles.serviceDetailRow]}>
+        <View style={styles.serviceFooter}>
           {count != null ? (
             <View style={styles.serviceCountLine}>
-              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[styles.serviceCount, {color: palette.accent}]}>{count}</Text>
-              <Text style={[styles.serviceCountLabel, {color: palette.muted}]}>{countLabel}</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.serviceCount, {color: palette.accent}]}>{count}</Text>
+              <Text numberOfLines={1} style={[styles.serviceCountLabel, {color: palette.muted}]}>{countLabel}</Text>
             </View>
           ) : actionLabel ? (
-            <Text style={[styles.serviceActionLabel, {color: palette.accent}]}>
-              {actionLabel} →
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              style={[styles.serviceActionLabel, {color: palette.accent}]}
+            >
+              {actionLabel}
             </Text>
           ) : (
-            <Text style={[styles.serviceDetail, {color: palette.muted}]}>{visibleDescription}</Text>
+            <Text numberOfLines={1} style={[styles.serviceDetail, {color: palette.muted}]}>{visibleDescription}</Text>
           )}
+          {action ? <Icon name="keyboard_arrow_right" size={18} color={palette.chevron} /> : null}
         </View>
       </View>
     </View>
@@ -458,9 +495,7 @@ function ServiceCard({
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={actionLabel?.startsWith("Retry") || actionLabel === "Try again"
-        ? "Retries the service status check"
-        : "Opens the related connection or permission settings"}
+      accessibilityHint={hint}
       onPress={action}
       style={styles.serviceColumn}
     >
@@ -689,26 +724,35 @@ const styles = StyleSheet.create({
   serviceColumn: {flex: 1, minWidth: 0},
   serviceCard: {
     flex: 1,
-    minHeight: 112,
+    minHeight: 126,
     borderWidth: 1,
     borderRadius: 20,
     overflow: "hidden",
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 13,
   },
-  serviceContent: {zIndex: 3},
-  serviceHeader: {minHeight: 37},
-  serviceTitle: {fontFamily: "Inter", fontSize: 16, lineHeight: 22, fontWeight: "700"},
-  serviceStatusRow: {minHeight: 15, flexDirection: "row", alignItems: "center", gap: 6},
+  serviceContent: {zIndex: 3, flex: 1, justifyContent: "space-between"},
+  serviceHeader: {flexDirection: "row", alignItems: "center", gap: 8},
+  serviceIconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    borderWidth: 1,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  serviceTitles: {flex: 1, minWidth: 0},
+  serviceTitle: {fontFamily: "Inter", fontSize: 16, lineHeight: 21, fontWeight: "700"},
+  serviceStatusRow: {marginTop: 2, flexDirection: "row", alignItems: "center", gap: 5},
   serviceStatusDot: {width: 6, height: 6, borderRadius: 3},
-  serviceStatus: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, fontWeight: "600", flexShrink: 1},
-  serviceDetailRow: {minHeight: 44, marginTop: 6, justifyContent: "center"},
-  serviceCountLine: {flexDirection: "row", alignItems: "baseline", gap: 5},
-  serviceCount: {flexShrink: 1, fontFamily: "Inter", fontSize: 24, lineHeight: 28, fontWeight: "700"},
-  serviceCountLabel: {flexShrink: 1, fontFamily: "Inter", fontSize: 11, lineHeight: 14, fontWeight: "400"},
-  serviceActionLabel: {fontFamily: "Inter", fontSize: 13, lineHeight: 17, fontWeight: "600"},
-  serviceDetail: {fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
-  serviceArtwork: {position: "absolute", end: 0, bottom: 0, width: 100, height: 100, zIndex: 0},
+  serviceStatus: {flexShrink: 1, fontFamily: "Inter", fontSize: 11, lineHeight: 15, fontWeight: "600"},
+  serviceFooter: {marginTop: 12, flexDirection: "row", alignItems: "center", gap: 4},
+  serviceCountLine: {flex: 1, minWidth: 0, flexDirection: "row", alignItems: "baseline", gap: 6},
+  serviceCount: {fontFamily: "Inter", fontSize: 30, lineHeight: 34, fontWeight: "700"},
+  serviceCountLabel: {flexShrink: 1, fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
+  serviceActionLabel: {flex: 1, minWidth: 0, fontFamily: "Inter", fontSize: 15, lineHeight: 20, fontWeight: "700"},
+  serviceDetail: {flex: 1, minWidth: 0, fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
   studyButton: {
     minHeight: 52,
     borderRadius: 26,
