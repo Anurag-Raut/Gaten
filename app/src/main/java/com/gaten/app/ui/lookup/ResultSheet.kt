@@ -74,6 +74,7 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,6 +94,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -108,6 +110,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.luminance
 import com.gaten.app.R
 import com.gaten.app.anki.AddResult
 import com.gaten.app.anki.AnkiCard
@@ -146,11 +149,24 @@ private val LeftSheetShape = RoundedCornerShape(topEnd = SheetShape, bottomEnd =
 private val RightSheetShape = RoundedCornerShape(topStart = SheetShape, bottomStart = SheetShape)
 
 /**
- * Minimum height of the compact "Add to Anki" button: shorter than the 40dp default, still a full
- * target — a floor, not a cap, so a larger display size makes the button taller instead of clipping
- * its label.
+ * Minimum action height in the compact sheet. The surrounding layout stays compact while actions
+ * retain the baseline touch target.
  */
-private val CompactButtonHeight = 36.dp
+private val CompactButtonHeight = 52.dp
+
+/** Primary actions use the neutral ink role; the selected accent remains available for indicators. */
+@Composable
+private fun resultActionButtonColors() = run {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    ButtonDefaults.buttonColors(
+        containerColor = if (dark) Color(0xFFF5F5F7) else Color(0xFF18181B),
+        contentColor = if (dark) Color(0xFF17171A) else Color.White,
+        disabledContainerColor = if (dark) Color(0xFF303136) else Color(0xFFE9E9ED),
+        disabledContentColor = if (dark) Color(0xFFB0B0BA) else Color(0xFF6C6C75)
+    )
+}
+
+private val ResultActionShape = RoundedCornerShape(13.dp)
 
 /** The handle row's height: a generous 48dp touch target for the drag-to-dismiss grip. */
 private val HandleTouchHeight = 48.dp
@@ -704,7 +720,12 @@ private fun EmptyState(
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(if (compact) Spacing.m else Spacing.l))
-            Button(onClick = onSelectAgain) {
+            Button(
+                onClick = onSelectAgain,
+                shape = ResultActionShape,
+                colors = resultActionButtonColors(),
+                modifier = Modifier.heightIn(min = 52.dp)
+            ) {
                 Text(stringResource(R.string.lookup_select_again), style = type.button)
             }
         }
@@ -1100,13 +1121,15 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
             }
         },
         enabled = state is AnkiUiState.Idle,
+        shape = ResultActionShape,
+        colors = resultActionButtonColors(),
         interactionSource = interactions,
         modifier = (if (compact) {
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = CompactButtonHeight)
         } else {
-            Modifier.fillMaxWidth()
+            Modifier.fillMaxWidth().heightIn(min = 52.dp)
         }).pressScale(interactions)
     ) {
         when (val current = state) {

@@ -25,6 +25,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import {
   NavigationProp,
@@ -37,7 +38,7 @@ import * as GatenHaptics from "../native/GatenHaptics";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, IconButton, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
-import {shape, spacing, typeScale} from "./tokens";
+import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "./tokens";
 import {useTheme, type Theme} from "./theme";
 import {DialogShell} from "./settings/settings-components";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
@@ -98,6 +99,8 @@ export function ReviewTab() {
   const theme = useTheme();
   const {colors} = theme;
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   const review = useAnkiReview();
   const navigation = useNavigation<NavigationProp<RootTabParamList>>();
   const isFocused = useIsFocused();
@@ -199,7 +202,7 @@ export function ReviewTab() {
           nothing but the card, and a step is never remounted by a change of its own content. */}
       <View style={styles.flex}>
         {step.kind === "starting" ? (
-          <View style={styles.pagePadding}>
+          <View style={[styles.pagePadding, {paddingHorizontal: contentInset}]}>
             <StateCard theme={theme} spin icon="refresh" title="Reading AnkiDroid…" />
           </View>
         ) : step.kind === "blocked" ? (
@@ -315,10 +318,19 @@ function BlockedView({
   failure: ReviewFailure;
   onGrant: () => void;
 }) {
+  const {width} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   return (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[styles.pagePadding, styles.scrollBody]}
+      contentContainerStyle={[
+        styles.pagePadding,
+        {
+          paddingHorizontal: contentInset,
+          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+        },
+      ]}
     >
       <StateCard
         theme={theme}
@@ -363,6 +375,8 @@ function DeckPicker({
   onStart: (deck: AnkiDeckResult) => void;
 }) {
   const {colors} = theme;
+  const {width} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   // The reader's own pick, once they have made one. Until then the selection is what the read
   // arrived with — the deck Gaten exports to, or the first — so the preselection is in place on the
   // picker's first frame rather than moving under the reader a tick later.
@@ -374,7 +388,15 @@ function DeckPicker({
     null;
 
   return (
-    <View style={styles.picker}>
+    <View
+      style={[
+        styles.picker,
+        {
+          paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset,
+          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+        },
+      ]}
+    >
       <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
         Choose a deck
       </Text>
@@ -400,7 +422,7 @@ function DeckPicker({
           <ScrollView
             accessibilityRole="radiogroup"
             style={styles.flex}
-            contentContainerStyle={{paddingTop: spacing.xl, gap: spacing.m}}
+            contentContainerStyle={{paddingTop: spacing.xl}}
           >
             {decks.map((deck) => (
               <DeckRow
@@ -448,9 +470,8 @@ function DeckPicker({
 }
 
 /**
- * One deck as a card: a radio, its name, AnkiDroid's own counts as tags, and — when it is the
- * deck Gaten exports to — what that means. The whole card is the target and states the radio
- * role; the drawn radio is decoration over it.
+ * One deck row: a radio, its name, AnkiDroid's own counts as tags, and — when it is the deck Gaten
+ * exports to — what that means. The whole row is the target and states the radio role.
  */
 function DeckRow({
   theme,
@@ -474,11 +495,7 @@ function DeckRow({
       onPress={onSelect}
       style={[
         styles.deckCard,
-        // Raised and quiet when it is not the choice; the accent surface is the deck the reader
-        // picked, and the ring is what says so at a glance.
-        selected
-          ? {backgroundColor: colors.primaryContainer, borderColor: colors.primary}
-          : {backgroundColor: colors.surface},
+        {borderBottomColor: colors.outlineVariant},
       ]}
     >
       <View style={styles.deckHead}>
@@ -487,9 +504,9 @@ function DeckRow({
           numberOfLines={2}
           ellipsizeMode="tail"
           style={[
-            typeScale.titleMedium,
+            typeScale.titleSmall,
             {
-              color: selected ? colors.onPrimaryContainer : colors.onSurface,
+              color: colors.onSurface,
               flex: 1,
               marginStart: spacing.s,
             },
@@ -508,7 +525,7 @@ function DeckRow({
         <Text
           style={[
             typeScale.labelMedium,
-            {color: colors.primary, marginTop: spacing.m},
+            {color: colors.onSurfaceVariant, marginTop: spacing.m},
           ]}
         >
           Gaten exports here
@@ -525,11 +542,11 @@ function RadioDot({theme, selected}: {theme: Theme; selected: boolean}) {
     <View
       style={[
         styles.radioOuter,
-        {borderColor: selected ? colors.primary : colors.onSurfaceVariant},
+        {borderColor: selected ? colors.accent : colors.onSurfaceVariant},
       ]}
     >
       {selected && (
-        <View style={[styles.radioInner, {backgroundColor: colors.primary}]} />
+        <View style={[styles.radioInner, {backgroundColor: colors.accent}]} />
       )}
     </View>
   );
@@ -767,7 +784,7 @@ function SessionView({
               onGrade={(ease) => {
                 // The rating that goes back is also what the card flashes with: "Again" is
                 // the one answer that means the card was not known.
-                setFlashTint(ease === 1 ? colors.error : colors.primary);
+                setFlashTint(ease === 1 ? colors.error : colors.accent);
                 onGrade(ease);
               }}
             />
@@ -926,10 +943,19 @@ function DoneView({
   onFinish: () => void;
   onChangeDeck: () => void;
 }) {
+  const {width} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   return (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[styles.pagePadding, styles.scrollBody]}
+      contentContainerStyle={[
+        styles.pagePadding,
+        {
+          paddingHorizontal: contentInset,
+          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+        },
+      ]}
     >
       <StateCard
         theme={theme}
@@ -963,11 +989,20 @@ function FailedView({
   onRetry: () => void;
   onChangeDeck: () => void;
 }) {
+  const {width} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   const message = failureMessage(step.failure, step.detail);
   return (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[styles.pagePadding, styles.scrollBody]}
+      contentContainerStyle={[
+        styles.pagePadding,
+        {
+          paddingHorizontal: contentInset,
+          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+        },
+      ]}
     >
       <StateCard
         theme={theme}
@@ -1024,19 +1059,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pagePadding: {padding: spacing.xl},
-  scrollBody: {paddingBottom: spacing.xxl},
+  pagePadding: {paddingVertical: spacing.l, paddingHorizontal: spacing.contentInset},
   picker: {
     flex: 1,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.contentInset,
     paddingTop: spacing.l,
   },
   deckCard: {
-    borderRadius: shape.medium,
-    // The ring is always there so the row's box never moves; only its colour says "selected".
-    borderWidth: 1,
-    borderColor: "transparent",
-    padding: spacing.xl,
+    borderBottomWidth: 1,
+    paddingVertical: spacing.m,
     width: "100%",
   },
   deckHead: {flexDirection: "row", alignItems: "center"},
@@ -1080,7 +1111,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.m,
     width: "100%",
     // A hairline is all that separates the actions from the card above them.
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
   },
   gapS: {height: spacing.s},
   gapM: {height: spacing.m},

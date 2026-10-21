@@ -53,7 +53,6 @@ import {
 import {ReviewTab} from "./ReviewScreen";
 import {SettingsTab, SettingsPageScreen} from "./SettingsScreen";
 import {SessionContext} from "./session";
-import * as ThemeBridge from "../native/GatenTheme";
 import {
   SETTINGS_PAGES,
   freshSettingsInstance,
@@ -69,6 +68,7 @@ import {
 import * as ShellBridge from "../native/GatenShell";
 import * as Haptics from "../native/GatenHaptics";
 import {reviewStore} from "./review/review-store";
+import * as searchStore from "./search/searchStore";
 
 /** The Home root's props: its own stack plus the tab level above it, for the Review tab's card. */
 type HomeRouteProps<RouteName extends keyof HomeStackParamList> =
@@ -350,6 +350,7 @@ function SwipeGate({
 
 export function AppShell() {
   const {colors, mode} = useTheme();
+  const searchActive = searchStore.useSearchState().searchActive;
   const systemScheme = useColorScheme();
   const dark = mode === "Dark" || (mode === "System" && systemScheme === "dark");
   const navigationRef = useNavigationContainerRef<RootTabParamList>();
@@ -365,12 +366,6 @@ export function AppShell() {
     const subscription = reviewStore.onSessionActive(setSessionActive);
     return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-    ThemeBridge.setNavigationBarAppearance(colors.background, dark).catch((error: unknown) => {
-      console.warn("Could not update Android navigation bar appearance.", error);
-    });
-  }, [colors.background, dark]);
 
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
@@ -449,10 +444,10 @@ export function AppShell() {
         notification: colors.primary,
       },
       fonts: {
-        regular: {fontFamily: "sans-serif", fontWeight: "400"},
-        medium: {fontFamily: "sans-serif", fontWeight: "500"},
-        bold: {fontFamily: "sans-serif", fontWeight: "600"},
-        heavy: {fontFamily: "sans-serif", fontWeight: "600"},
+        regular: {fontFamily: "Inter", fontWeight: "400"},
+        medium: {fontFamily: "Inter", fontWeight: "500"},
+        bold: {fontFamily: "Inter", fontWeight: "700"},
+        heavy: {fontFamily: "Inter", fontWeight: "700"},
       },
     };
   }, [colors, mode, systemScheme]);
@@ -485,7 +480,12 @@ export function AppShell() {
                 descriptors={props.descriptors}
                 sessionActive={sessionActive}
               />
-              <BottomBar {...props} />
+              <BottomBar
+                {...props}
+                searchActive={
+                  searchActive && props.state.routes[props.state.index]?.name === "Home"
+                }
+              />
             </>
           )}
           // `route.state` is the tab's own stack (the pager keeps one per tab); the typed route for a

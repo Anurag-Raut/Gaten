@@ -37,10 +37,9 @@ import com.gaten.app.ui.theme.paletteNeutrals
  * resolved here, on the Kotlin side, from [accentRoles] and [paletteNeutrals]: the same palette
  * and accent functions [com.gaten.app.ui.theme.Theme] builds its Material scheme from, so JS does
  * no colour maths and renders exactly the tones Compose rendered. The role-to-key mapping mirrors
- * `gatenColorScheme`'s (a private function of that file): secondary and its container are the
- * accent's tones, the finer container steps land on the ladder's own tones, and the inverse roles
- * come from the *other* mode's ladder — the only part of the scheme that is not already a public
- * function.
+ * `gatenColorScheme`'s (a private function of that file): secondary and tertiary use accent tones,
+ * the secondary action container is neutral, the finer container steps land on the ladder's own
+ * tones, and inverse roles come from the *other* mode's ladder.
  *
  * Every setter announces the change through [GatenBridgeEmitter], so the RN screens re-read
  * without being told.
@@ -173,10 +172,9 @@ class GatenThemeModule(
      * The scheme's roles as a flat map of hex strings, [dark] deciding the mode.
      *
      * The tones come from [accentRoles] and [paletteNeutrals] and the errors from the constants the
-     * Compose scheme reads; the mapping below is [com.gaten.app.ui.theme.Theme]'s own: the accent's
-     * tones carry secondary and tertiary under the names the scheme aliases them to, the ladder's
-     * two steps stand in for the finer container steps, and the inverse roles come from the other
-     * mode's ladder.
+     * Compose scheme reads; the mapping below mirrors [com.gaten.app.ui.theme.Theme]: accent tones
+     * carry secondary and tertiary, the secondary action container is neutral, the ladder's two
+     * steps stand in for finer container steps, and inverse roles come from the other mode's ladder.
      */
     private fun colorMap(palette: Palette, accent: AccentColor, dark: Boolean): WritableMap {
         val tone = accentRoles(accent, dark)
@@ -205,8 +203,8 @@ class GatenThemeModule(
             put("onPrimaryContainer", tone.onPrimaryContainer)
             put("secondary", tone.primary)
             put("onSecondary", tone.onPrimary)
-            put("secondaryContainer", tone.primaryContainer)
-            put("onSecondaryContainer", tone.onPrimaryContainer)
+            put("secondaryContainer", neutral.surfaceVariant)
+            put("onSecondaryContainer", neutral.onSurface)
             put("tertiary", tone.tertiary)
             put("tertiaryContainer", tone.primaryContainer)
             put("onTertiaryContainer", tone.onPrimaryContainer)

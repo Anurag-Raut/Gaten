@@ -18,9 +18,9 @@ import {KeyboardAvoidingView, ScrollView, Text, View} from "react-native";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
-import {Button, Card, IconButton} from "../components";
+import {Button, IconButton} from "../components";
 import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
-import {FieldLabel, TextField} from "./settings-components";
+import {FieldLabel, SettingsTile, TextField} from "./settings-components";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -45,9 +45,9 @@ const FAILURE_LABELS: Record<WaniKaniFailure, string> = {
 /** One section of the page, on its own card, with the page's ground between the cards. */
 function WaniKaniCard({children}: {children: React.ReactNode}) {
   return (
-    <Card>
+    <SettingsTile>
       <View style={{padding: spacing.xl}}>{children}</View>
-    </Card>
+    </SettingsTile>
   );
 }
 
@@ -206,7 +206,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
           maxWidth: 840,
           width: "100%",
           alignSelf: "center",
-          paddingHorizontal: spacing.xl,
+          paddingHorizontal: spacing.l,
           paddingTop: spacing.xl,
           paddingBottom: spacing.l + insets.bottom,
         }}

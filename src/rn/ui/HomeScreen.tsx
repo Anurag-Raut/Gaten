@@ -4,31 +4,45 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import React, {useCallback, useMemo, useRef} from "react";
+import React, {useCallback, useEffect, useMemo, useRef} from "react";
 import {
+  BackHandler,
   FlatList,
   KeyboardAvoidingView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
-import {SafeAreaView} from "react-native-safe-area-context";
+import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
 import {useIsFocused} from "@react-navigation/native";
 import type {CompositeScreenProps} from "@react-navigation/native";
 import type {MaterialTopTabScreenProps} from "@react-navigation/material-top-tabs";
 import type {NativeStackScreenProps} from "@react-navigation/native-stack";
+import Animated, {
+  FadeInDown,
+  FadeInRight,
+  FadeInUp,
+  FadeOutRight,
+  FadeOutUp,
+  LinearTransition,
+  useReducedMotion,
+} from "react-native-reanimated";
+import {Icon} from "./components";
 import {useTheme} from "./theme";
-import {spacing, typeScale} from "./tokens";
+import {BOTTOM_BAR_HEIGHT, PAGE_EASING_REANIMATED, spacing, typeScale} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
 import {
   SEARCH_LIST_CONTENT,
+  SearchIdlePrompt,
   SearchField,
   SearchRowItem,
   SearchRowSeparator,
   searchRows,
   type SearchRow,
 } from "./search/searchParts";
+import {PressableScale} from "./PressableScale";
 import * as store from "./search/searchStore";
 import {SearchNotice} from "./search/SearchScreen";
 import {
@@ -56,8 +70,11 @@ export function HomeScreen({
   onOpenReview,
   onOpenSettingsPage,
 }: HomeScreenProps) {
-  const {colors, palette} = useTheme();
-  const referenceLight = palette === "Gaten" && Number.parseInt(colors.background.slice(1, 3), 16) >= 128;
+  const {colors} = useTheme();
+  const {width} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const reducedMotion = useReducedMotion();
   const focused = useIsFocused();
   const home = useHomeDashboard(focused);
 
@@ -67,13 +84,19 @@ export function HomeScreen({
     [searchState.hits, searchState.hitsQuery, searchState.query],
   );
   const searching = store.normalizeQuery(searchState.query).length > 0;
+  const searchMode = searchState.searchActive || searching;
   const searchInput = useRef<TextInput>(null);
   const list = useRef<FlatList<SearchRow>>(null);
   const restored = useRef(false);
+  const searchTransitioned = useRef(false);
+  const motionDuration = reducedMotion ? 0 : SEARCH_TRANSITION_MS;
+  const layoutTransition = LinearTransition
+    .duration(motionDuration)
+    .easing(PAGE_EASING_REANIMATED);
 
   /** Restores the shared search list's last position after a Home tab remount. */
   const restoreScroll = () => {
-    if (restored.current) {
+    if (!searching || restored.current) {
       return;
     }
     restored.current = true;
@@ -81,6 +104,41 @@ export function HomeScreen({
       list.current?.scrollToOffset({offset: store.searchScroll.offset, animated: false});
     }
   };
+
+  const enterSearch = useCallback(() => {
+    if (!searchMode) {
+      store.searchScroll.offset = 0;
+      list.current?.scrollToOffset({offset: 0, animated: false});
+    }
+    searchTransitioned.current = true;
+    store.setSearchActive(true);
+  }, [searchMode]);
+
+  const exitSearch = useCallback(() => {
+    searchInput.current?.blur();
+    store.onQueryChange("");
+    store.searchScroll.offset = 0;
+    restored.current = true;
+    store.setSearchActive(false);
+    list.current?.scrollToOffset({offset: 0, animated: false});
+  }, []);
+
+  useEffect(() => {
+    if (searchMode) {
+      searchTransitioned.current = true;
+    }
+  }, [searchMode]);
+
+  useEffect(() => {
+    if (!focused || !searchMode) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      exitSearch();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [exitSearch, focused, searchMode]);
 
   const openRow = useCallback(
     (entryId: number) => {
@@ -140,53 +198,121 @@ export function HomeScreen({
       />
     ) : null;
 
+  const listHeader = searchMode
+    ? searching
+      ? null
+      : (
+          <Animated.View
+            key="search-prompt"
+            entering={FadeInDown.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+            exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+          >
+            <SearchIdlePrompt />
+          </Animated.View>
+        )
+    : (
+        <Animated.View
+          key="home-dashboard"
+          entering={searchTransitioned.current
+            ? FadeInDown.duration(motionDuration).easing(PAGE_EASING_REANIMATED)
+            : undefined}
+          exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+        >
+          <HomeDashboard
+            home={home}
+            onOpenReview={openReview}
+            onOpenSettingsPage={openSettings}
+            onOpenWord={openRow}
+          />
+        </Animated.View>
+      );
+
   return (
-    <SafeAreaView style={[styles.root, {backgroundColor: referenceLight ? "#FAFAFA" : colors.background}]} edges={["top", "left", "right"]}>
+    <SafeAreaView style={[styles.root, {backgroundColor: colors.background}]} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView behavior="padding" style={styles.root}>
         <View style={styles.topHeader}>
-          <View style={styles.headerColumn}>
-            <Text style={[typeScale.headlineSmall, styles.brand, {color: referenceLight ? "#14142B" : colors.onSurface}]}>
-              Gaten
-            </Text>
-            <SearchField
-              compact
-              inputRef={searchInput}
-              query={searchState.query}
-              queryLimited={searchState.queryLimited}
-              onChangeQuery={store.onQueryChange}
-              onSearch={() => {
-                searchInput.current?.blur();
-                store.searchNow();
-              }}
-            />
-          </View>
+          <Animated.View style={[styles.headerColumn, {paddingHorizontal: contentInset}]} layout={layoutTransition}>
+            {!searchMode && (
+              <Animated.Text
+                entering={searchTransitioned.current
+                  ? FadeInUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)
+                  : undefined}
+                exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+                style={[typeScale.brand, styles.brand, {color: colors.onSurface}]}
+              >
+                Gaten
+              </Animated.Text>
+            )}
+            <Animated.View style={styles.searchRow} layout={layoutTransition}>
+              <Animated.View style={styles.searchField} layout={layoutTransition}>
+                <SearchField
+                  compact
+                  inputRef={searchInput}
+                  query={searchState.query}
+                  queryLimited={searchState.queryLimited}
+                  onChangeQuery={store.onQueryChange}
+                  onFocus={enterSearch}
+                  onSearch={() => {
+                    searchInput.current?.blur();
+                    store.searchNow();
+                  }}
+                />
+              </Animated.View>
+              {searchMode && (
+                <Animated.View
+                  entering={FadeInRight.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+                  exiting={FadeOutRight.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+                >
+                  <PressableScale
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel search"
+                    onPress={exitSearch}
+                    style={styles.cancelSearch}
+                  >
+                    <Icon name="close" size={20} color={colors.accent} />
+                  </PressableScale>
+                </Animated.View>
+              )}
+            </Animated.View>
+          </Animated.View>
         </View>
         <FlatList<SearchRow>
           ref={list}
+          style={{marginBottom: searchMode ? 0 : BOTTOM_BAR_HEIGHT + insets.bottom}}
           data={rows}
           keyExtractor={(row) => row.key}
-          renderItem={({item}) => <SearchRowItem row={item} onOpen={openRow} />}
+          renderItem={({item}) => (
+            <Animated.View
+              entering={FadeInDown.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+              exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+            >
+              <SearchRowItem row={item} onOpen={openRow} />
+            </Animated.View>
+          )}
           ItemSeparatorComponent={SearchRowSeparator}
           contentContainerStyle={[
             SEARCH_LIST_CONTENT,
             styles.listContent,
+            {paddingHorizontal: contentInset},
           ]}
-          ListHeaderComponent={
-            searching ? null : (
-              <HomeDashboard
-                home={home}
-                onOpenReview={openReview}
-                onOpenSettingsPage={openSettings}
-                onOpenWord={openRow}
-              />
-            )
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            searchMode && searching && searchStateNotice != null ? (
+              <Animated.View
+                entering={FadeInDown.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+                exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
+              >
+                {searchStateNotice}
+              </Animated.View>
+            ) : null
           }
-          ListEmptyComponent={searching ? searchStateNotice : null}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           onContentSizeChange={restoreScroll}
           onScroll={(event) => {
-            store.searchScroll.offset = event.nativeEvent.contentOffset.y;
+            if (searchMode) {
+              store.searchScroll.offset = event.nativeEvent.contentOffset.y;
+            }
           }}
           scrollEventThrottle={16}
         />
@@ -200,21 +326,35 @@ const styles = StyleSheet.create({
   topHeader: {width: "100%"},
   headerColumn: {
     width: "100%",
-    maxWidth: 412,
+    maxWidth: 560,
     alignSelf: "center",
   },
+  searchRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.s,
+  },
+  searchField: {flex: 1},
+  cancelSearch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "rgba(0, 0, 0, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   brand: {
-    marginHorizontal: spacing.l,
-    marginTop: 14,
-    marginBottom: 12,
-    fontFamily: "Inter",
-    fontWeight: "700",
-    fontSize: 28,
-    lineHeight: 36,
+    marginTop: 23,
+    marginBottom: 20,
   },
   listContent: {
     paddingHorizontal: spacing.l,
-    paddingTop: 12,
-    maxWidth: 412,
+    paddingTop: 0,
+    maxWidth: 560,
   },
 });
+
+/** Search mode uses the same short, emphasized transition in both directions. */
+const SEARCH_TRANSITION_MS = 220;

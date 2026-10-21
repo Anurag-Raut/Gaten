@@ -24,9 +24,8 @@ import kotlin.math.abs
 class PaletteTest {
 
     /**
-     * How far a contrast ratio may move. The retint takes the 8-bit step at or above the shipped
-     * luminance, so a role can land one channel brighter; measured across every palette, mode and
-     * pair below, the worst that costs is 0.64%. This leaves room for that and no more.
+     * How far a contrast ratio may move. The retint takes the 8-bit step at or above the source
+     * luminance, so a role can land one channel brighter. The bound allows a rounding step.
      */
     private val maxContrastDrift = 0.01f
 
@@ -160,9 +159,9 @@ class PaletteTest {
             for (palette in listOf(Palette.Cool, Palette.Warm)) {
                 val tinted = paletteNeutrals(palette, dark)
                 assertNotEquals(
-                    "$palette leaves the paper as it was (dark=$dark)",
-                    shipped.background,
-                    tinted.background
+                    "$palette leaves the subtle surface as it was (dark=$dark)",
+                    shipped.surfaceVariant,
+                    tinted.surfaceVariant
                 )
                 assertNotEquals(
                     "$palette leaves the ink as it was (dark=$dark)",
@@ -187,5 +186,30 @@ class PaletteTest {
                 primary
             )
         }
+    }
+
+    @Test
+    fun defaultLightBaselineColorsAndAccent() {
+        val light = paletteNeutrals(Palette.Gaten, dark = false)
+        assertEquals(Color(0xFFFDFDFD), light.background)
+        assertEquals(Color(0xFFFFFFFF), light.surface)
+        assertEquals(Color(0xFFF6F6F8), light.surfaceVariant)
+        assertEquals(Color(0xFF17171A), light.onSurface)
+        assertEquals(Color(0xFF6C6C75), light.onSurfaceVariant)
+        assertEquals(Color(0xFFE9E9ED), light.outline)
+        assertEquals(Color(0xFFB42335), LightError)
+
+        val indigo = accentRoles(AccentColor.Indigo, dark = false)
+        assertEquals(Color(0xFF7564D9), indigo.primary)
+        assertEquals(Color(0xFFF2EFFF), indigo.primaryContainer)
+
+        val dark = paletteNeutrals(Palette.Gaten, dark = true)
+        assertEquals(Color(0xFF101114), dark.background)
+        assertEquals(Color(0xFF17181C), dark.surface)
+        assertEquals(Color(0xFF1B1C21), dark.surfaceVariant)
+        assertEquals(Color(0xFFF5F5F6), dark.onSurface)
+        assertEquals(Color(0xFFB0B0BA), dark.onSurfaceVariant)
+        assertEquals(Color(0xFF303136), dark.outline)
+        assertEquals(Color(0xFFB0A0FF), accentRoles(AccentColor.Indigo, dark = true).primary)
     }
 }

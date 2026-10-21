@@ -18,7 +18,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Svg, {Circle, Path} from "react-native-svg";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -27,6 +26,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {CommonChip, Icon, PressableCard} from "../components";
+import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {
@@ -110,7 +110,7 @@ export function SearchRowItem({
   const {colors} = useTheme();
   if (row.kind === "count") {
     return (
-      <Text style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}>
+      <Text style={[typeScale.bodySmall, styles.resultCount, {color: colors.onSurfaceVariant}]}>
         {row.forQuery == null ? `${row.count} results` : `${row.count} results for ${row.forQuery}`}
       </Text>
     );
@@ -139,7 +139,7 @@ export function SearchIdlePrompt() {
   const {colors} = useTheme();
   return (
     <View style={styles.prompt}>
-      <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
+      <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>
         Look up a word
       </Text>
       <Text
@@ -169,9 +169,8 @@ export function SearchIdlePrompt() {
 }
 
 /**
- * The query field: a capsule on a quiet fill, with the accent appearing only while the reader is in
- * one — a 1dp ring that fades from the outline to the accent. It never takes the cursor by itself:
- * the keyboard opens on the reader's own tap and on nothing else.
+ * The query field uses the shared control shape and neutral fill. Its quiet border becomes the
+ * accent on focus, and focus is still opened only by the reader's own tap.
  */
 export function SearchField({
   inputRef,
@@ -179,6 +178,7 @@ export function SearchField({
   queryLimited,
   onChangeQuery,
   onSearch,
+  onFocus,
   style,
   compact = false,
 }: {
@@ -187,18 +187,18 @@ export function SearchField({
   queryLimited: boolean;
   onChangeQuery: (text: string) => void;
   onSearch: () => void;
+  onFocus?: () => void;
   style?: React.ComponentProps<typeof View>["style"];
   compact?: boolean;
 }) {
-  const {colors, palette} = useTheme();
-  const referenceLight = compact && palette === "Gaten" && Number.parseInt(colors.background.slice(1, 3), 16) >= 128;
+  const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const focus = useSharedValue(0);
   const focusRing = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focus.value,
       [0, 1],
-      [referenceLight ? "#E3E3E7" : colors.outlineVariant, colors.primary],
+      ["transparent", colors.accent],
     ),
   }));
   const settle = (target: number) => {
@@ -209,37 +209,32 @@ export function SearchField({
   return (
     <View style={style}>
       <Animated.View
+        onTouchEnd={() => inputRef.current?.focus()}
         style={[
           styles.fieldShell,
           compact && styles.compactFieldShell,
-          {backgroundColor: referenceLight ? "#EFEFF1" : colors.surfaceVariant},
+          {backgroundColor: colors.surfaceVariant},
           focusRing,
         ]}
       >
-        <Svg width={compact ? 22 : 24} height={compact ? 22 : 24} viewBox="0 0 24 24"><Circle cx={10.5} cy={10.5} r={6.5} stroke={referenceLight ? "#4A4A50" : colors.onSurfaceVariant} strokeWidth={2.4} fill="none" /><Path d="m16 16 4.5 4.5" stroke={referenceLight ? "#4A4A50" : colors.onSurfaceVariant} strokeWidth={2.4} strokeLinecap="round" /></Svg>
+        <InkIcon name="search" color={colors.iconPrimary} />
         <TextInput
           ref={inputRef}
           value={query}
           onChangeText={onChangeQuery}
-          onFocus={() => settle(1)}
+          onFocus={() => {
+            settle(1);
+            onFocus?.();
+          }}
           onBlur={() => settle(0)}
-          placeholder="猫, ねこ, neko…"
-          placeholderTextColor={referenceLight ? "#7C7C84" : colors.onSurfaceVariant}
+          accessibilityLabel="Search Japanese dictionary"
+          placeholder="猫, ねこ, neko..."
+          placeholderTextColor={colors.onSurfaceVariant}
           returnKeyType="search"
           onSubmitEditing={onSearch}
-          style={[styles.field, compact && styles.homeField, {color: colors.onSurface}]}
+          style={[styles.field, {color: colors.onSurface}]}
           underlineColorAndroid="transparent"
         />
-        {query.length > 0 && (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Clear the query"
-            onPress={() => onChangeQuery("")}
-            style={styles.clearButton}
-          >
-            <Icon name="close" size={24} color={colors.onSurfaceVariant} />
-          </PressableScale>
-        )}
       </Animated.View>
       {queryLimited && (
         <Text style={[typeScale.bodySmall, styles.limitNote, {color: colors.onSurfaceVariant}]}>
@@ -263,12 +258,12 @@ export function ResultCard({
     <PressableCard
       accessibilityLabel={`Open ${hit.primary}`}
       onPress={() => onOpen(hit.id)}
-      style={styles.resultCard}
+      style={[styles.resultCard, {backgroundColor: colors.surfaceVariant}]}
     >
       <View style={styles.resultRow}>
         <View style={styles.resultMain}>
           <View style={styles.headwordRow}>
-            <Text numberOfLines={1} style={[typeScale.titleLarge, {color: colors.onSurface}]}>
+            <Text numberOfLines={1} style={[typeScale.titleMedium, {color: colors.onSurface}]}>
               {hit.primary}
             </Text>
             {hit.common && <CommonChip />}
@@ -276,7 +271,7 @@ export function ResultCard({
           {hit.kana.length > 0 && (
             <Text
               numberOfLines={1}
-              style={[typeScale.bodyMedium, styles.line, {color: colors.onSurfaceVariant}]}
+              style={[typeScale.bodySmall, styles.line, {color: colors.onSurfaceVariant}]}
             >
               {hit.kana.join("・")}
             </Text>
@@ -284,13 +279,13 @@ export function ResultCard({
           {hit.glosses.length > 0 && (
             <Text
               numberOfLines={2}
-              style={[typeScale.bodyLarge, styles.glosses, {color: colors.onSurface}]}
+              style={[typeScale.bodyMedium, styles.glosses, {color: colors.onSurface}]}
             >
               {hit.glosses.slice(0, 3).join("; ")}
             </Text>
           )}
           {hit.pos.length > 0 && (
-            <View style={[styles.metaPill, {backgroundColor: colors.surfaceVariant}]}>
+            <View style={[styles.metaPill, {backgroundColor: colors.surface}]}>
               <Text numberOfLines={1} style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>
                 {hit.pos[0]}
               </Text>
@@ -299,7 +294,7 @@ export function ResultCard({
           {(hit.match === "NORMALIZED" || hit.match === "LOOSE") && (
             <Text
               numberOfLines={1}
-              style={[typeScale.labelMedium, styles.line, {color: colors.primary}]}
+              style={[typeScale.bodySmall, styles.line, {color: colors.accent}]}
             >
               from {hit.form}
             </Text>
@@ -316,13 +311,13 @@ export const SEARCH_LIST_CONTENT = {
   width: "100%" as const,
   maxWidth: MAX_CONTENT_WIDTH,
   alignSelf: "center" as const,
-  paddingHorizontal: spacing.xl,
+  paddingHorizontal: spacing.l,
   paddingTop: spacing.m,
   paddingBottom: spacing.xxl,
 };
 
 const styles = StyleSheet.create({
-  prompt: {padding: spacing.xl},
+  prompt: {padding: spacing.l},
   promptHint: {marginTop: spacing.s},
   flowRow: {
     flexDirection: "row",
@@ -331,49 +326,51 @@ const styles = StyleSheet.create({
     marginTop: spacing.l,
   },
   exampleChip: {
-    borderRadius: shape.large,
+    borderRadius: shape.small,
+    minHeight: 48,
+    justifyContent: "center",
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.m,
   },
   fieldShell: {
     flexDirection: "row",
     alignItems: "center",
-    // The radius ladder's largest step is exactly half this field's height, so it is the capsule.
-    borderRadius: shape.large,
-    borderWidth: 1,
-    height: 56,
+    borderRadius: shape.small,
+    borderWidth: 2,
+    minHeight: 49,
     gap: spacing.s,
-    marginHorizontal: spacing.xl,
-    marginVertical: spacing.s,
-    paddingHorizontal: spacing.l,
+    marginHorizontal: spacing.contentInset,
+    marginVertical: 0,
+    paddingHorizontal: 15,
   },
   compactFieldShell: {
-    height: 44,
-    borderRadius: 22,
-    marginHorizontal: spacing.l,
+    height: 49,
+    minHeight: 49,
+    borderRadius: shape.small,
+    marginHorizontal: 0,
     marginVertical: 0,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 0,
+    gap: 13,
   },
-  homeField: {fontFamily: "Inter", fontSize: 16, lineHeight: 22, fontWeight: "400"},
-  field: {flex: 1, padding: 0, ...typeScale.bodyLarge},
-  clearButton: {width: 40, height: 40, alignItems: "center", justifyContent: "center"},
+  field: {flex: 1, padding: 0, ...typeScale.bodyMedium},
   limitNote: {marginHorizontal: spacing.xl, marginTop: spacing.xs},
   header: {marginTop: spacing.s},
-  resultCard: {borderRadius: shape.medium},
+  resultCount: {marginBottom: spacing.xs},
+  resultCard: {borderRadius: shape.small},
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing.l,
-    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.m,
+    paddingHorizontal: spacing.l,
   },
   resultMain: {flex: 1},
   headwordRow: {flexDirection: "row", alignItems: "center", gap: spacing.s},
   metaPill: {
     alignSelf: "flex-start",
-    borderRadius: 999,
+    borderRadius: shape.brandTile,
     paddingHorizontal: spacing.s,
-    paddingVertical: 2,
+    paddingVertical: spacing.xs,
     marginTop: spacing.xs,
   },
   line: {marginTop: spacing.xs},

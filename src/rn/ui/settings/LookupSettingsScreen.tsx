@@ -199,7 +199,7 @@ function KeyMapperRow() {
             Hardware key (Key Mapper)
           </Text>
           <Pressable onPress={() => setExpanded(!expanded)}>
-            <Text style={[typeScale.labelLarge, {color: colors.primary}]}>
+            <Text style={[typeScale.labelLarge, {color: colors.accent}]}>
               {expanded ? "Hide" : "Set up"}
             </Text>
           </Pressable>

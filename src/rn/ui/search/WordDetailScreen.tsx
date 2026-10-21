@@ -5,7 +5,7 @@
  */
 
 /**
- * The word detail: the headword card, the numbered meanings, the kanji strip, and the pinned
+ * The word detail: the headword, numbered meanings, kanji strip, and pinned
  * Add-to-Anki bar. The entry is resolved by id from the shared search store — never carried
  * through the route — so a restored page resolves as soon as its search has answered.
  */
@@ -17,10 +17,11 @@ import {
   Text,
   ToastAndroid,
   View,
+  useWindowDimensions,
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
-import {Button, Card, CommonChip, Icon, IconButton, KanjiStrip, distinctIdeographs} from "../components";
+import {Button, CommonChip, Icon, IconButton, KanjiStrip, distinctIdeographs} from "../components";
 import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
@@ -29,9 +30,6 @@ import * as GatenAnki from "../../native/GatenAnki";
 import {hitFor, useSearchState} from "./searchStore";
 import {SearchNotice} from "./SearchScreen";
 import {useAnkiExport, type AnkiExport, type ExportState} from "./useAnkiExport";
-
-/** The capsule a short pill takes: RN clamps it to half the box, so one number fits every pill. */
-const CAPSULE = 999;
 
 export interface SearchWordScreenProps {
   entryId: number;
@@ -47,6 +45,7 @@ export function SearchWordScreen({
   onOpenSettingsPage,
 }: SearchWordScreenProps) {
   const {colors} = useTheme();
+  const {width} = useWindowDimensions();
   const state = useSearchState();
   const hit = useMemo(() => hitFor(entryId), [state.hits, entryId]);
   const anki = useAnkiExport();
@@ -96,7 +95,10 @@ export function SearchWordScreen({
       <WordAppBar title={hit.primary} onBack={onBack} />
       <ScrollView
         style={styles.body}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
+        ]}
       >
         <HeadwordCard hit={hit} />
         <MeaningsCard hit={hit} />
@@ -145,7 +147,7 @@ function WordAppBar({title, onBack}: {title: string; onBack: () => void}) {
       <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onBack} />
       <Text
         numberOfLines={1}
-        style={[typeScale.titleLarge, styles.appBarTitle, {color: colors.onSurface}]}
+        style={[typeScale.headlineSmall, styles.appBarTitle, {color: colors.onSurface}]}
       >
         {title}
       </Text>
@@ -156,7 +158,7 @@ function WordAppBar({title, onBack}: {title: string; onBack: () => void}) {
 function HeadwordCard({hit}: {hit: SearchResult}) {
   const {colors} = useTheme();
   return (
-    <Card style={styles.card}>
+      <View style={[styles.card, {borderBottomColor: colors.outlineVariant}]}>
       <View style={styles.flowRow}>
         <Text style={[typeScale.displaySmall, {color: colors.onSurface}]}>{hit.primary}</Text>
         {hit.common && <CommonChip />}
@@ -165,7 +167,7 @@ function HeadwordCard({hit}: {hit: SearchResult}) {
         <Text
           numberOfLines={1}
           accessibilityLabel={hit.kana.join("・")}
-          style={[typeScale.titleMedium, styles.line, {color: colors.onSurfaceVariant}]}
+          style={[typeScale.titleSmall, styles.line, {color: colors.onSurfaceVariant}]}
         >
           {hit.kana.join("・")}
         </Text>
@@ -176,18 +178,18 @@ function HeadwordCard({hit}: {hit: SearchResult}) {
         </Text>
       )}
       {(hit.match === "NORMALIZED" || hit.match === "LOOSE") && (
-        <Text style={[typeScale.labelMedium, styles.line, {color: colors.primary}]}>
+        <Text style={[typeScale.labelMedium, styles.line, {color: colors.accent}]}>
           from {hit.form}
         </Text>
       )}
-    </Card>
+      </View>
   );
 }
 
 function MeaningsCard({hit}: {hit: SearchResult}) {
   const {colors} = useTheme();
   return (
-    <Card style={styles.card}>
+    <View style={[styles.card, {borderBottomColor: colors.outlineVariant}]}>
       <Text style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}>Meaning</Text>
       {hit.glosses.length === 0 ? (
         <Text
@@ -225,11 +227,11 @@ function MeaningsCard({hit}: {hit: SearchResult}) {
           </View>
         </>
       )}
-    </Card>
+    </View>
   );
 }
 
-/** One part of speech: a quiet capsule — named, but not competing with the word's own colour. */
+/** One part of speech: a quiet rounded label, secondary to the headword. */
 function PosPill({label}: {label: string}) {
   const {colors} = useTheme();
   return (
@@ -296,9 +298,9 @@ function AddToAnkiBar({
           label={busy ? undefined : buttonLabel}
           leading={
             busy ? (
-              <ActivityIndicator size="small" color={colors.onPrimary} />
+              <ActivityIndicator size="small" color={colors.onActionPrimary} />
             ) : exportState.kind === "idle" || exportState.kind === "failed" ? (
-              <Icon name="add" size={18} color={colors.onPrimary} />
+              <Icon name="add" size={18} color={colors.onActionPrimary} />
             ) : null
           }
           onPress={() => {
@@ -338,11 +340,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.contentInset,
     paddingTop: spacing.l,
     paddingBottom: spacing.l,
   },
-  card: {padding: spacing.xl, borderRadius: shape.medium},
+  card: {paddingVertical: spacing.l, borderBottomWidth: 1},
   line: {marginTop: spacing.m},
   strip: {marginTop: spacing.m},
   settingsRow: {marginTop: spacing.m},
@@ -352,16 +354,16 @@ const styles = StyleSheet.create({
   glossNumber: {width: 28},
   posCaption: {marginTop: spacing.xl},
   posPill: {
-    borderRadius: CAPSULE,
+    borderRadius: shape.small,
     paddingHorizontal: spacing.m,
     paddingVertical: spacing.xs,
   },
   posRow: {flexDirection: "row", flexWrap: "wrap", gap: spacing.s, marginTop: spacing.m},
   bar: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.l,
     paddingTop: spacing.l,
     gap: spacing.s,
     // A hairline is all that separates the pinned action from the page above it.
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
   },
 });

@@ -67,8 +67,6 @@ export interface HomeStreakState {
   status: "loading" | "ready" | "unavailable";
   /** Current consecutive Anki study days, capped to the observed seven-day window. */
   days: number | null;
-  /** Lifetime distinct study days are not exposed by AnkiDroid's bounded search-count API. */
-  totalStudyDays: number | null;
   /** True when all seven observed days are active, so the actual streak may be longer. */
   atLeastSevenDays: boolean;
   /** True when the streak reaches the oldest observed day, so older activity could extend it. */
@@ -111,7 +109,6 @@ const EMPTY_ANKI: HomeAnkiState = {
 const EMPTY_STREAK: HomeStreakState = {
   status: "loading",
   days: null,
-  totalStudyDays: null,
   atLeastSevenDays: false,
   capped: false,
   weekdays: [],
@@ -184,7 +181,6 @@ function makeStreak(daily: Array<number | null>): HomeStreakState {
     return {
       status: "unavailable",
       days: null,
-      totalStudyDays: null,
       atLeastSevenDays: false,
       capped: false,
       weekdays,
@@ -204,7 +200,6 @@ function makeStreak(daily: Array<number | null>): HomeStreakState {
   return {
     status: "ready",
     days,
-    totalStudyDays: null,
     atLeastSevenDays: days >= 7,
     capped,
     weekdays,

@@ -21,6 +21,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import {GatenCardWebView} from "../../native/GatenCardWebView";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
@@ -35,9 +36,6 @@ import {Button, Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
-
-/** The capsule a short pill takes: RN clamps it to half the box, so one number fits every pill. */
-const CAPSULE = 999;
 
 /** What was tapped: a kanji by its character, or a radical by its WaniKani subject id. */
 export type WaniKaniTarget =
@@ -114,6 +112,7 @@ export function WaniKaniPanel({
   onSettings,
 }: WaniKaniPanelProps) {
   const {colors} = useTheme();
+  const {width} = useWindowDimensions();
   const targetKey =
     target.kind === "kanji" ? `kanji:${target.character}` : `radical:${target.id}`;
   // The answered page and the target it answers, together: a new target has no answer yet, the way
@@ -165,13 +164,18 @@ export function WaniKaniPanel({
     : target.kind === "kanji"
       ? target.character
       : "Radical";
-  // A kanji is this page's anchor, so it is drawn at the headword size in the accent colour before
-  // the lookup answers as well as after; a radical's anchor is its drawing, which lives in the body.
+  // A kanji is this page's anchor, so it is drawn at the headword size before and after the lookup;
+  // a radical's anchor is its drawing, which lives in the body.
   const headingIsCharacter =
     (subject !== null && subject.kind === "kanji") || target.kind === "kanji";
 
   const body = (
-    <View style={styles.content}>
+    <View
+      style={[
+        styles.content,
+        {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
+      ]}
+    >
       {lookup === null && unreachable === null && <Skeleton compact={compact} />}
       {unreachable !== null && (
         <PanelNotice
@@ -243,7 +247,7 @@ export function WaniKaniPanel({
           style={[
             headingIsCharacter ? typeScale.displaySmall : typeScale.titleLarge,
             {
-              color: headingIsCharacter ? colors.primary : colors.onSurfaceVariant,
+              color: headingIsCharacter ? colors.onSurface : colors.onSurfaceVariant,
               flexShrink: 1,
             },
           ]}
@@ -320,13 +324,13 @@ function AvailableContent({
               size={compact ? 56 : 72}
             />
           ) : (
-            <Text style={[typeScale.displaySmall, {color: colors.primary}]}>
+            <Text style={[typeScale.displaySmall, {color: colors.onSurface}]}>
               {radical.character ?? radical.primaryMeaning}
             </Text>
           )}
         </View>
       )}
-      <View style={[styles.sectionBlock, {backgroundColor: colors.surface}]}>
+      <View style={[styles.sectionBlock, styles.sectionRule, {borderBottomColor: colors.outlineVariant}]}>
         <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
           Meaning
         </Text>
@@ -340,7 +344,14 @@ function AvailableContent({
         )}
       </View>
       {kanji && (kanji.onyomi.length > 0 || kanji.kunyomi.length > 0) && (
-        <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+        <View
+          style={[
+            styles.sectionBlock,
+            styles.sectionGap,
+            styles.sectionRule,
+            {borderBottomColor: colors.outlineVariant},
+          ]}
+        >
           {kanji.onyomi.length > 0 && (
             <>
               <Text
@@ -348,7 +359,7 @@ function AvailableContent({
               >
                 On’yomi
               </Text>
-              <Text style={[typeScale.titleMedium, {color: colors.primary}]}>
+              <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>
                 {kanji.onyomi.join("・")}
               </Text>
             </>
@@ -360,7 +371,7 @@ function AvailableContent({
               >
                 Kun’yomi
               </Text>
-              <Text style={[typeScale.titleMedium, {color: colors.primary}]}>
+              <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>
                 {kanji.kunyomi.join("・")}
               </Text>
             </View>
@@ -368,7 +379,14 @@ function AvailableContent({
         </View>
       )}
       {kanji && kanji.components.length > 0 && onRadical && (
-        <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+        <View
+          style={[
+            styles.sectionBlock,
+            styles.sectionGap,
+            styles.sectionRule,
+            {borderBottomColor: colors.outlineVariant},
+          ]}
+        >
           <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
             Radicals
           </Text>
@@ -394,7 +412,14 @@ function AvailableContent({
           </ScrollView>
         </View>
       )}
-      <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+      <View
+        style={[
+          styles.sectionBlock,
+          styles.sectionGap,
+          styles.sectionRule,
+          {borderBottomColor: colors.outlineVariant},
+        ]}
+      >
         <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
           WaniKani’s meaning mnemonic
         </Text>
@@ -403,7 +428,14 @@ function AvailableContent({
         </Text>
       </View>
       {kanji && (
-        <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+        <View
+          style={[
+            styles.sectionBlock,
+            styles.sectionGap,
+            styles.sectionRule,
+            {borderBottomColor: colors.outlineVariant},
+          ]}
+        >
           <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
             WaniKani’s reading mnemonic
           </Text>
@@ -478,7 +510,7 @@ function PanelNotice({
   return (
     <View style={[styles.notice, {backgroundColor: colors.surface}]}>
       <View style={styles.noticeRow}>
-        <View style={[styles.noticeBadge, {backgroundColor: colors.surfaceContainerHighest}]}>
+        <View style={[styles.noticeBadge, {backgroundColor: colors.surfaceVariant}]}>
           <Icon name="info" size={22} color={colors.onSurfaceVariant} />
         </View>
         <Text style={[typeScale.bodyMedium, styles.noticeMessage, {color: colors.onSurface}]}>
@@ -543,13 +575,13 @@ function Skeleton({compact}: {compact: boolean}) {
       accessibilityLabel="Looking up WaniKani…"
       style={{maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center", width: "100%"}}
     >
-      <View style={[styles.sectionBlock, {backgroundColor: colors.surface}]}>
+      <View style={styles.sectionBlock}>
         <SkeletonLabel compact={compact} />
         <View style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]} />
         <SkeletonLabel compact={compact} />
         <View style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]} />
       </View>
-      <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+      <View style={[styles.sectionBlock, styles.sectionGap]}>
         <SkeletonLabel compact={compact} />
         <View style={styles.skeletonChips}>
           {[0, 1, 2, 3].map((chip) => (
@@ -560,11 +592,11 @@ function Skeleton({compact}: {compact: boolean}) {
           ))}
         </View>
       </View>
-      <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+      <View style={[styles.sectionBlock, styles.sectionGap]}>
         <SkeletonLabel compact={compact} />
         <SkeletonParagraph lines={3} />
       </View>
-      <View style={[styles.sectionBlock, styles.sectionGap, {backgroundColor: colors.surface}]}>
+      <View style={[styles.sectionBlock, styles.sectionGap]}>
         <SkeletonLabel compact={compact} />
         <SkeletonParagraph lines={2} />
       </View>
@@ -578,14 +610,13 @@ const styles = StyleSheet.create({
   headerActions: {flexDirection: "row", marginLeft: "auto"},
   content: {
     flex: 1,
-    paddingHorizontal: spacing.l,
+    paddingHorizontal: spacing.contentInset,
     paddingTop: spacing.s,
     paddingBottom: spacing.xl,
   },
   scrollContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
-  // The sheet's gloss is a step larger than bodyLarge, so the page's prose keeps a rhythm rather
-  // than a size (SheetType.gloss with compact = false).
-  gloss: {fontSize: 18, lineHeight: 26},
+  // Keep the meaning at the shared body size so longer glosses remain easy to scan.
+  gloss: {fontSize: 14, lineHeight: 20},
   hero: {
     alignSelf: "center",
     borderRadius: shape.medium,
@@ -594,19 +625,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // One grouped block of the page: a caption and its content on a raised card, tight enough that
-  // a long mnemonic reads as one paragraph rather than as padding.
+  // A flat section with a readable caption and enough room for a long mnemonic to wrap.
   sectionBlock: {
-    borderRadius: shape.medium,
-    padding: spacing.l,
+    paddingVertical: spacing.s,
     gap: spacing.xs,
   },
-  sectionGap: {marginTop: spacing.m},
+  sectionRule: {borderBottomWidth: 1},
+  sectionGap: {marginTop: spacing.l},
   readingRow: {marginTop: spacing.s},
   caption: {marginBottom: spacing.xs},
   componentRow: {gap: spacing.s},
   componentChip: {
-    borderRadius: CAPSULE,
+    borderRadius: shape.small,
     minHeight: 48,
     justifyContent: "center",
     paddingHorizontal: spacing.l,

@@ -17,39 +17,38 @@ import androidx.compose.ui.graphics.luminance
  * The neutrals and the status colours do not follow the accent: a red error stays red and the greys
  * stay grey. Only the accent moves.
  *
- * Only the roles Gaten actually draws with (or aliases in Theme.kt) are named here. The container
- * roles are the tonal neighbours of the accent's hue: leaving them at the library defaults would
- * pull the baseline purple scheme back into the UI, since dynamic colour is deliberately off.
+ * Only the roles Gaten actually draws with (or aliases in Theme.kt) are named here. Accent
+ * containers follow the selected accent; neutral action containers come from the neutral ladder.
  */
 
 // --- Neutral and status tones: the same whatever the accent ---
 
 // --- Light ---
 
-val LightBackground = Color(0xFFFAFAF9)
+val LightBackground = Color(0xFFFDFDFD)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFF1F1EF)
-val LightSurfaceContainer = Color(0xFFF1F1EF)
-val LightSurfaceContainerHigh = Color(0xFFEAEAE7)
-val LightSurfaceContainerHighest = Color(0xFFE4E4E1)
-val LightOnSurface = Color(0xFF1A1A1A)
-val LightOnSurfaceVariant = Color(0xFF6B6B6B)
-val LightOutline = Color(0xFFE4E4E1)
-val LightError = Color(0xFFC62828)
+val LightSurfaceVariant = Color(0xFFF6F6F8)
+val LightSurfaceContainer = Color(0xFFF6F6F8)
+val LightSurfaceContainerHigh = Color(0xFFF6F6F8)
+val LightSurfaceContainerHighest = Color(0xFFF6F6F8)
+val LightOnSurface = Color(0xFF17171A)
+val LightOnSurfaceVariant = Color(0xFF6C6C75)
+val LightOutline = Color(0xFFE9E9ED)
+val LightError = Color(0xFFB42335)
 val LightErrorContainer = Color(0xFFFFEBEE)
 val LightOnErrorContainer = Color(0xFFB71C1C)
 
 // --- Dark ---
 
-val DarkBackground = Color(0xFF111111)
-val DarkSurface = Color(0xFF1A1A1A)
-val DarkSurfaceVariant = Color(0xFF242424)
-val DarkSurfaceContainer = Color(0xFF242424)
-val DarkSurfaceContainerHigh = Color(0xFF2B2B2B)
-val DarkSurfaceContainerHighest = Color(0xFF2E2E2E)
-val DarkOnSurface = Color(0xFFEDEDED)
-val DarkOnSurfaceVariant = Color(0xFF9A9A9A)
-val DarkOutline = Color(0xFF2E2E2E)
+val DarkBackground = Color(0xFF101114)
+val DarkSurface = Color(0xFF17181C)
+val DarkSurfaceVariant = Color(0xFF1B1C21)
+val DarkSurfaceContainer = Color(0xFF1B1C21)
+val DarkSurfaceContainerHigh = Color(0xFF1C1D21)
+val DarkSurfaceContainerHighest = Color(0xFF303136)
+val DarkOnSurface = Color(0xFFF5F5F6)
+val DarkOnSurfaceVariant = Color(0xFFB0B0BA)
+val DarkOutline = Color(0xFF303136)
 val DarkError = Color(0xFFEF9A9A)
 val DarkErrorContainer = Color(0xFFB71C1C)
 val DarkOnErrorContainer = Color(0xFFFFEBEE)
@@ -59,7 +58,7 @@ val DarkOnErrorContainer = Color(0xFFFFEBEE)
 /** The accent the reader picked in Settings. [Indigo] is the app's own accent and the default. */
 enum class AccentColor { Indigo, Blue, Violet, Teal, Green, Rose, Graphite }
 
-/** One accent's tones for one mode: everything in the UI that is neither a neutral nor an error. */
+/** One accent's tones for one mode, kept separate from neutral and error roles. */
 data class AccentRoles(
     val primary: Color,
     val onPrimary: Color,
@@ -69,9 +68,7 @@ data class AccentRoles(
 )
 
 /**
- * One accent's tones in one mode. [onPrimary] is not the accent's business — it is the near-black
- * or near-white that reads on [primary], and the same on every accent because every accent's
- * [primary] carries the same luminance by construction (see the table below).
+ * One accent's roles in one mode, including the foreground that reads on its primary tone.
  */
 private fun tones(
     primary: Long,
@@ -88,25 +85,13 @@ private fun tones(
 )
 
 /*
- * The accents, as (primary, primaryContainer, onPrimaryContainer, tertiary) per mode.
- *
- * Indigo is the app's own accent, one Material step deeper than the palette it shipped with
- * (0xFF3F51B5 → 0xFF3949AB), which is the weight the rest of the app's accents are now drawn at.
- * Each of the others is that family's hue moved to its own hue and every tone's lightness corrected
- * to hold the relative luminance the *previous* indigo primary had — a hue may change the colour of
- * the overlay, but not how well it reads. That correction is what stops the trap a plain hue
- * rotation falls into: at that lightness, teal and green come out at 2.5:1 over a white page, which
- * is a lasso the reader cannot see.
- *
- * Measured, so a change here can be checked rather than eyeballed. Indigo's own light primary reads
- * 7.73:1 over white. The other six, all at the luminance they were built to: primary 6.87:1 over
- * white and 8.17:1 over the dark background, the container pair 11:1 in either mode, tertiary
- * 3.45:1 over white.
+ * Accent tones by role and mode. Indigo is the default app accent; other accent values are retained
+ * for readers who selected them.
  */
 
-/** The shipped indigo palette, bolder by one step, and the reference every other accent is measured against. */
-private val IndigoLight = tones(0xFF3949AB, 0xFFE8EAF6, 0xFF1A237E, 0xFF7986CB, dark = false)
-private val IndigoDark = tones(0xFF9FA8DA, 0xFF283593, 0xFFE8EAF6, 0xFFC5CAE9, dark = true)
+/** Default indigo accent tones. */
+private val IndigoLight = tones(0xFF7564D9, 0xFFF2EFFF, 0xFF17171A, 0xFF7564D9, dark = false)
+private val IndigoDark = tones(0xFFB0A0FF, 0xFF30295A, 0xFFF2EFFF, 0xFFB0A0FF, dark = true)
 
 private val BlueLight = tones(0xFF305D8A, 0xFFE3ECF4, 0xFF113151, 0xFF5C8EC0, dark = false)
 private val BlueDark = tones(0xFF8AAED2, 0xFF1C4267, 0xFFE3ECF4, 0xFFB8CEE4, dark = true)
@@ -144,9 +129,8 @@ fun accentRoles(accent: AccentColor, dark: Boolean): AccentRoles = when (accent)
  * The palettes the reader can pick between. A palette recolours the neutral ladder — paper, its
  * hairline and the ink written on it — without changing the reader's selected accent.
  *
- * [Gaten] carries no tone: its ladder is the one the app shipped with, written out, and no single
- * (hue, saturation) pair reproduces it — its light paper is warm while its ink is neutral, and its
- * dark ladder is pure grey. Every other palette is that ladder retinted.
+ * [Gaten] carries no tone: it is the Ink neutral ladder. Every other palette is that ladder
+ * retinted while the reader's selected accent stays independent.
  */
 enum class Palette(
     private val lightTone: PaletteTone?,
@@ -161,9 +145,8 @@ enum class Palette(
 }
 
 /**
- * The tint one palette puts on a mode. Paper and ink take the same hue but different saturations:
- * at the paper's saturation the ink turns into coloured text, and the palette the app shipped with
- * sets the precedent — a warm paper, a neutral ink.
+ * The tint one palette puts on a mode. Paper and ink use separate saturation values so text remains
+ * visually neutral while the surface carries the selected palette hue.
  */
 data class PaletteTone(val hue: Float, val paper: Float, val ink: Float)
 
@@ -211,8 +194,7 @@ private fun shippedNeutrals(dark: Boolean): NeutralRoles = if (dark) {
  * [palette]'s neutral ladder for [dark].
  *
  * Every tone is retinted at its own relative luminance — [retinted] solves for the lightness that
- * holds it — so a palette moves the hue of the paper and the ink without moving a single contrast
- * ratio in the app. That is the whole contract: a palette changes the mood, never the readability.
+ * holds it — so a palette changes hue while preserving the contrast ladder.
  */
 fun paletteNeutrals(palette: Palette, dark: Boolean): NeutralRoles {
     val shipped = shippedNeutrals(dark)
@@ -235,10 +217,7 @@ fun paletteNeutrals(palette: Palette, dark: Boolean): NeutralRoles {
  * relative luminance.
  *
  * `Color.hsl` lands in 8-bit channels, so the ladder is a staircase and the exact lightness is
- * usually between two steps. The step taken is the one *at or above* the shipped luminance, never
- * the one below: a palette may make a role a channel brighter, but it may not make the ink fainter
- * or the paper darker than the app shipped with. Measured across every palette, that holds every
- * readable pair within 0.64% of the contrast it had.
+ * usually between two steps. Choose the first step at or above the source luminance.
  */
 private fun Color.retinted(hue: Float, saturation: Float): Color {
     val target = luminance()

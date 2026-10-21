@@ -17,6 +17,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import {Button, Icon} from "../components";
 import type {IconName} from "../icons";
@@ -43,17 +44,24 @@ export function SearchNotice({
   spin?: boolean;
 }) {
   const {colors} = useTheme();
+  const {width} = useWindowDimensions();
   return (
-    <ScrollView style={styles.noticeScroll} contentContainerStyle={styles.notice}>
+    <ScrollView
+      style={styles.noticeScroll}
+      contentContainerStyle={[
+        styles.notice,
+        {padding: width < 360 ? spacing.l : spacing.contentInset},
+      ]}
+    >
       <View style={[styles.noticeCard, {backgroundColor: colors.surface}]}>
-        <View style={[styles.noticeBadge, {backgroundColor: colors.surfaceContainerHighest}]}>
+        <View style={[styles.noticeBadge, {backgroundColor: colors.surfaceVariant}]}>
           {spin ? (
-            <ActivityIndicator size="small" color={colors.primary} />
+            <ActivityIndicator size="small" color={colors.accent} />
           ) : (
             <Icon name={icon} size={24} color={colors.onSurfaceVariant} />
           )}
         </View>
-        <Text style={[typeScale.titleMedium, styles.noticeText, {color: colors.onSurface}]}>
+        <Text style={[typeScale.titleLarge, styles.noticeText, {color: colors.onSurface}]}>
           {title}
         </Text>
         {body != null && (
@@ -84,7 +92,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: spacing.xl,
+    padding: spacing.contentInset,
   },
   noticeCard: {
     borderRadius: shape.medium,

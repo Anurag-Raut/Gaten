@@ -29,7 +29,7 @@ import {
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiPreferencesResult, AnkiStatus} from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {Button, Card, Icon, IconButton} from "../components";
+import {Button, Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
@@ -38,6 +38,7 @@ import {
   DialogShell,
   FieldLabel,
   HelpAction,
+  SettingsTile,
   TextField,
 } from "./settings-components";
 import {
@@ -251,12 +252,12 @@ export function AnkiSettingsScreen({
           maxWidth: 840,
           width: "100%",
           alignSelf: "center",
-          paddingHorizontal: spacing.xl,
+          paddingHorizontal: spacing.l,
           paddingTop: spacing.xl,
           paddingBottom: spacing.l + insets.bottom,
         }}
       >
-        <Card>
+        <SettingsTile>
           <View style={{padding: spacing.xl, gap: spacing.s}}>
             {status === "notInstalled" && (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
@@ -294,10 +295,10 @@ export function AnkiSettingsScreen({
               </Text>
             )}
           </View>
-        </Card>
+        </SettingsTile>
 
         <View style={{marginTop: spacing.l}}>
-          <Card>
+          <SettingsTile>
             <View style={{padding: spacing.xl}}>
               <FieldLabel label="Deck" />
               <TextField
@@ -315,11 +316,11 @@ export function AnkiSettingsScreen({
                 </View>
               )}
             </View>
-          </Card>
+          </SettingsTile>
         </View>
 
         <View style={{marginTop: spacing.l}}>
-          <Card>
+          <SettingsTile>
             <View style={{padding: spacing.xl}}>
               <FieldLabel label="Tags" />
               <TextField
@@ -327,11 +328,11 @@ export function AnkiSettingsScreen({
                 onChangeText={(tags) => setDraft({...draft, tags})}
               />
             </View>
-          </Card>
+          </SettingsTile>
         </View>
 
         <View style={{marginTop: spacing.l}}>
-          <Card>
+          <SettingsTile>
             <View style={{padding: spacing.xl}}>
               <PressableScale
                 accessibilityRole="button"
@@ -427,7 +428,7 @@ export function AnkiSettingsScreen({
                 </View>
               )}
             </View>
-          </Card>
+          </SettingsTile>
         </View>
 
         {error != null && (
@@ -477,9 +478,10 @@ function ChoiceRow<T extends string | number | null>({
         disabled={!enabled}
         style={{
           borderWidth: 1,
-          borderColor: colors.outline,
-          borderRadius: 20,
-          height: 40,
+          borderColor: colors.outlineVariant,
+          borderRadius: 14,
+          minHeight: 49,
+          paddingVertical: spacing.s,
           paddingHorizontal: spacing.l,
           flexDirection: "row",
           alignItems: "center",
@@ -530,8 +532,8 @@ function ChoiceDialog<T extends string | number | null>({
       >
         <Pressable
           style={{
-            backgroundColor: colors.surfaceContainerHigh,
-            borderRadius: 28,
+            backgroundColor: colors.surface,
+            borderRadius: 20,
             paddingVertical: spacing.s,
             width: "100%",
             maxWidth: 360,

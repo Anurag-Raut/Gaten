@@ -24,7 +24,7 @@ import androidx.core.view.ViewCompat
 /**
  * The palette for one palette, accent and mode: the accent's own tones, the palette's neutral
  * ladder, and the Material roles Gaten never draws aliased onto the accent's — a component reaching
- * for `secondaryContainer` or `tertiaryContainer` lands on the accent rather than on the library's
+ * for `tertiaryContainer` lands on the accent rather than on the library's
  * baseline purple, which is the one hue this palette never shows.
  *
  * The ladder is filled in all the way down for the same reason. The roles left unset are not
@@ -51,8 +51,8 @@ private fun gatenColorScheme(palette: Palette, accent: AccentColor, dark: Boolea
             tertiary = tone.tertiary,
             secondary = tone.primary,
             onSecondary = tone.onPrimary,
-            secondaryContainer = tone.primaryContainer,
-            onSecondaryContainer = tone.onPrimaryContainer,
+            secondaryContainer = neutral.surfaceVariant,
+            onSecondaryContainer = neutral.onSurface,
             tertiaryContainer = tone.primaryContainer,
             onTertiaryContainer = tone.onPrimaryContainer,
             background = neutral.background,
@@ -89,8 +89,8 @@ private fun gatenColorScheme(palette: Palette, accent: AccentColor, dark: Boolea
             tertiary = tone.tertiary,
             secondary = tone.primary,
             onSecondary = tone.onPrimary,
-            secondaryContainer = tone.primaryContainer,
-            onSecondaryContainer = tone.onPrimaryContainer,
+            secondaryContainer = neutral.surfaceVariant,
+            onSecondaryContainer = neutral.onSurface,
             tertiaryContainer = tone.primaryContainer,
             onTertiaryContainer = tone.onPrimaryContainer,
             background = neutral.background,
@@ -120,9 +120,9 @@ private fun gatenColorScheme(palette: Palette, accent: AccentColor, dark: Boolea
 
 /** The corner steps: chips and buttons, grouped rows and the cards that hold content. */
 private val GatenShapes = Shapes(
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(20.dp),
-    large = RoundedCornerShape(28.dp)
+    small = RoundedCornerShape(13.dp),
+    medium = RoundedCornerShape(17.dp),
+    large = RoundedCornerShape(20.dp)
 )
 
 /**
@@ -132,7 +132,7 @@ private val GatenShapes = Shapes(
  * once here rather than borrowed from the ladder above, and the sheet builds its three
  * dock-directional shapes from this number (ui/lookup/ResultSheet.kt).
  */
-val SheetShape = 28.dp
+val SheetShape = 20.dp
 
 /**
  * The app's only theme: the Gaten palette and type scale. Dark or light comes from [mode], the

@@ -46,6 +46,8 @@ export const QUERY_LIMIT = 32;
 export type SearchStatus = "idle" | "searching" | "results" | "failed" | "unsupported";
 
 export interface SearchState {
+  /** Whether Home's full-screen search surface is open. */
+  searchActive: boolean;
   query: string;
   /** True when the query had to be cut to QUERY_LIMIT characters. */
   queryLimited: boolean;
@@ -63,6 +65,7 @@ export interface SearchState {
 }
 
 let state: SearchState = {
+  searchActive: false,
   query: "",
   queryLimited: false,
   status: "idle",
@@ -136,6 +139,13 @@ export function subscribeSearchState(listener: () => void): () => void {
 
 export function getSearchState(): SearchState {
   return state;
+}
+
+/** Opens or closes Home's search surface for the app shell and Home screen. */
+export function setSearchActive(searchActive: boolean): void {
+  if (state.searchActive !== searchActive) {
+    set({searchActive});
+  }
 }
 
 /** The search state, re-read whenever the store moves. */

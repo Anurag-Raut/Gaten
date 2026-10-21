@@ -14,7 +14,7 @@
  * stated, and the page that owns it is where it is asked for.
  */
 import React, {useEffect, useState} from "react";
-import {AppState, ScrollView, Text, View} from "react-native";
+import {AppState, ScrollView, Text, View, useWindowDimensions} from "react-native";
 import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
@@ -24,7 +24,7 @@ import * as GatenRecognition from "../../native/GatenRecognition";
 import type {AnkiStatus} from "../../native/GatenAnki";
 import type {SettingsPageName} from "../navigation";
 import {useTheme} from "../theme";
-import {spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "../tokens";
 import {
   CONTENT_COLUMN,
   SettingsGroup,
@@ -48,11 +48,11 @@ function recognitionValue(
 function ankiSummary(status: AnkiStatus): string {
   switch (status) {
     case "notInstalled":
-      return "AnkiDroid is not installed";
+      return "Not installed";
     case "needsPermission":
-      return "Allow Gaten to add cards to AnkiDroid";
+      return "Permission needed";
     default:
-      return "Deck, note type and card layout";
+      return "Connected";
   }
 }
 
@@ -60,6 +60,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const theme = useTheme();
   const colors = theme.colors;
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
   const {request: requestScreenAccess, dialog: disclosureDialog} = useScreenAccessRequest();
 
   const [screenAccess, setScreenAccess] = useState(false);
@@ -126,88 +127,86 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
           scroller itself rather than on its content, because Compose's hub took safeDrawing's top
           inset outside its scroller: its content never slid under the status bar, where a content
           inset let this page's title run under the clock as soon as it scrolled. */}
-      <ScrollView style={{marginTop: insets.top}}>
-        <View style={CONTENT_COLUMN}>
+      <ScrollView style={{marginTop: insets.top, marginBottom: BOTTOM_BAR_HEIGHT + insets.bottom}}>
+        <View style={[CONTENT_COLUMN, {paddingHorizontal: width < 360 ? 16 : 22}]}>
           {/* One confident heading with room to breathe above it, then nothing but rows. */}
-          <View style={{marginTop: spacing.xxl + spacing.m}}>
-            <Text style={[typeScale.displaySmall, {color: colors.onSurface}]}>
+          <View style={{marginTop: 23}}>
+            <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
               Settings
             </Text>
-            <Text
-              style={[
-                typeScale.bodyMedium,
-                {color: colors.onSurfaceVariant, marginTop: spacing.s},
-              ]}
-            >
-              What Gaten reads, where it sends it, and how it looks.
+            <Text style={[typeScale.description, {color: colors.onSurfaceVariant, marginTop: 10}]}>
+              Manage your Gaten preferences.
             </Text>
           </View>
-          <SettingsGroup bare title="Look up" style={{marginTop: spacing.xl}}>
+          <SettingsGroup bare title="Lookup" style={{marginTop: 22}}>
             <SettingsRow
               surface
               icon={screenAccess ? "check_circle" : "shield"}
+              inkIcon={!screenAccess ? "shield" : undefined}
               title="Screen access"
-              summary={
-                screenAccess
-                  ? "Circle any Japanese text on screen to look it up."
-                  : "Gaten cannot read the screen until you turn it on."
-              }
+              summary="Allow screen reading"
               value={screenAccess ? "On" : "Off"}
               onPress={screenAccess ? () => onOpenPage("lookup") : requestScreenAccess}
             />
             <SettingsRow
               surface
               icon="search"
+              inkIcon="search"
               title="Screen lookup"
-              summary="Floating button, Quick Settings tile and hardware key"
+              summary="Button, tile & shortcut"
               onPress={() => onOpenPage("lookup")}
             />
             <SettingsRow
               surface
               icon="text_snippet"
+              inkIcon="text"
               title="Text recognition"
-              summary="Optional stylized-text model"
+              summary="Stylized text model"
               value={recognitionValue(modelInstalled, modelId, catalog)}
               onPress={() => onOpenPage("recognition")}
             />
           </SettingsGroup>
-          <SettingsGroup bare title="Study" style={{marginTop: spacing.xl}}>
+          <SettingsGroup bare title="Study" style={{marginTop: 22}}>
             <SettingsRow
               surface
               icon="library_books"
+              inkIcon="cards"
               title="Anki cards"
-              summary={ankiSummary(ankiStatus)}
-              value={ankiStatus === "ready" ? ankiDeck : null}
+              summary="Deck & card layout"
+              value={ankiStatus === "ready" ? ankiDeck ?? "Choose deck" : ankiSummary(ankiStatus)}
               onPress={() => onOpenPage("anki")}
             />
             <SettingsRow
               surface
               icon="translate"
+              inkIcon="torii"
               title="WaniKani"
-              summary="Kanji and vocabulary reference"
+              summary="Kanji & vocabulary"
               value={wanikaniConnected ? "Connected" : "Not connected"}
               onPress={() => onOpenPage("wanikani")}
             />
           </SettingsGroup>
-          <SettingsGroup bare title="App" style={{marginTop: spacing.xl}}>
+          <SettingsGroup bare title="App" style={{marginTop: 22}}>
             <SettingsRow
               surface
               icon="palette"
+              inkIcon="sun"
               title="Appearance"
-              summary="Theme, palette and accent"
-              value={`${theme.mode} · ${theme.accent}`}
+              summary="Theme preferences"
+              value={theme.mode}
               onPress={() => onOpenPage("appearance")}
             />
             <SettingsRow
               surface
               icon="info"
+              inkIcon="user"
               title="About"
-              summary="Offline, privacy, licences"
+              summary="Offline, privacy & licences"
               value={versionName}
               onPress={() => onOpenPage("about")}
             />
           </SettingsGroup>
-          <View style={{height: spacing.xxl}} />
+          <View style={{height: 18}} />
         </View>
       </ScrollView>
       {disclosureDialog}

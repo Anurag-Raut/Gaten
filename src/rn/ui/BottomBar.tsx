@@ -9,7 +9,7 @@
  * over a tab has to be full-screen with no bar and the bar has to disappear entirely while a review
  * session is on screen.
  *
- * A rounded surface holds an accent capsule with the selected glyph and label inline; every
+ * A rounded surface holds a filled selected pill with the selected glyph and label inline; every
  * other tab is a muted glyph on its own. Light and dark modes share the same geometry.
  *
  * The bar never moves (it is a sibling of the pager), and everything inside it is one continuous
@@ -37,41 +37,46 @@ import {
   useColorScheme,
 } from "react-native";
 import type {MaterialTopTabBarProps} from "@react-navigation/material-top-tabs";
-import {SvgXml} from "react-native-svg";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
 import {useSessionActive} from "./session";
+import * as ThemeBridge from "../native/GatenTheme";
 import * as Haptics from "../native/GatenHaptics";
-import {navigationSvgXml, type NavigationSvgAsset} from "./home/HomeSvgAssets";
+import {shape, typeScale} from "./tokens";
+import {InkIcon, type InkIconName} from "./InkIcon";
 
 /**
- * The bar's own geometry, in dp: a 44 dp capsule inside a 64 dp content box, above whatever the
+ * The bar's own geometry, in dp: a 46 dp capsule inside a 63 dp content box, above whatever the
  * gesture inset needs. `SLOT_WIDTH` is one *inactive* tab — its glyph and its whole touch area — and
  * `MIN_SLOT` is how far it may close up on a narrow screen before the capsule starts giving up width
  * instead. 48 dp is still an accessible target.
  */
-const BAR_HEIGHT = 64;
-const CAPSULE_HEIGHT = 44;
-const BAR_SIDE_MARGIN = 16;
-const BAR_TOP_MARGIN = 16;
+const BAR_HEIGHT = 63;
+const CAPSULE_HEIGHT = 46;
+const BAR_SIDE_MARGIN = 22;
+const BAR_INNER_PADDING = 6;
 const SLOT_WIDTH = 66;
 const MIN_SLOT = 48;
-const ICON_SIZES: Record<string, number> = {Home: 24, Analytics: 26, Review: 28, Settings: 30};
-const ICON_VIEWBOXES: Record<string, string> = {Home: "9 8 62 62", Analytics: "13.5 16 53 53", Review: "9 9 62 62", Settings: "5 5.5 71 71"};
+const ICON_SIZE = 20;
 const CAPSULE_PADDING = 16;
 const CONTENT_GAP = 8;
 
-/** The bar's top corners, and how far a capsule label drifts while the capsule crosses to another. */
-const BAR_RADIUS = 32;
+/** The bar's corners, and how far a capsule label drifts while the capsule crosses to another. */
+const BAR_RADIUS = shape.medium;
 const CONTENT_DRIFT = 18;
 
-const NAVIGATION_ASSETS: Record<string, NavigationSvgAsset> = {
-  Home: "home",
-  Analytics: "stats",
-  Review: "profile",
-  Settings: "settings",
-};
+/** Draws the reference's outline tab icons with a shared size and stroke. */
+function TabIcon({label, color}: {label: string; color: string}) {
+  const name: InkIconName = label === "Home"
+    ? "home"
+    : label === "Stats"
+      ? "stats"
+      : label === "Review"
+        ? "user"
+        : "settings";
+  return <InkIcon name={name} size={ICON_SIZE} color={color} />;
+}
 
 /** How deep the named tab's own stack is: a pushed page hides the bar. */
 function stackDepth(state: MaterialTopTabBarProps["state"], name: string): number {
@@ -80,15 +85,18 @@ function stackDepth(state: MaterialTopTabBarProps["state"], name: string): numbe
   return nested && typeof nested.index === "number" ? nested.index : 0;
 }
 
+function tabLabel(routeName: string): string {
+  return routeName === "Analytics" ? "Stats" : routeName;
+}
+
 /**
  * Where one settled selection puts the bar, in the bar's own frame (x = 0 at its left edge): the
  * capsule's own left edge, and how far each glyph has moved from where it sits with no selection at
  * all. Every state the bar can settle in is one call of this, and `position` interpolates between
  * them, so the whole layout — capsule and glyphs alike — is one continuous function of the pager.
  *
- * The row is centred twice: once with four equal slots (what the glyphs rest on), and once with the
- * selected tab's slot as wide as its capsule (what the selection looks like when it settles). The
- * difference between the two is exactly the shift each glyph needs.
+ * The selected capsule and remaining slots fill the row between 6 dp side insets. Glyph shifts
+ * are measured from their fixed resting slots so the same layout can animate between tabs.
  */
 function layoutAt(
   selected: number,
@@ -100,12 +108,15 @@ function layoutAt(
   const row = count * slot;
   const slotsLeft = (width - row) / 2;
   const capsuleWidth = capsuleWidths[selected];
-  const idealLeft = (width - (row - slot + capsuleWidth)) / 2;
+  const idealLeft = count > 1 ? BAR_INNER_PADDING : (width - capsuleWidth) / 2;
+  const inactiveSlot = count > 1
+    ? Math.max(0, (width - BAR_INNER_PADDING * 2 - capsuleWidth) / (count - 1))
+    : 0;
   const start = (index: number) =>
     index <= selected
-      ? idealLeft + index * slot
-      : idealLeft + capsuleWidth + (index - 1) * slot;
-  const box = (index: number) => (index === selected ? capsuleWidth : slot);
+      ? idealLeft + index * inactiveSlot
+      : idealLeft + capsuleWidth + (index - 1) * inactiveSlot;
+  const box = (index: number) => (index === selected ? capsuleWidth : inactiveSlot);
 
   return {
     slotsLeft,
@@ -126,9 +137,7 @@ function BarItem({
   label,
   index,
   selected,
-  dark,
-  capsuleColor,
-  capsuleInk,
+  iconColor,
   slotLeft,
   slot,
   shift,
@@ -139,9 +148,7 @@ function BarItem({
   label: string;
   index: number;
   selected: boolean;
-  dark: boolean;
-  capsuleColor: string;
-  capsuleInk: string;
+  iconColor: string;
   slotLeft: number;
   slot: number;
   shift: number[];
@@ -149,7 +156,6 @@ function BarItem({
   inputRange: number[];
   onPress: () => void;
 }) {
-  const {colors, palette} = useTheme();
   const translateX = position.interpolate({
     inputRange,
     outputRange: shift,
@@ -177,42 +183,44 @@ function BarItem({
         onPress={onPress}
       >
         <Animated.View style={{opacity: plain}}>
-          <SvgXml
-            xml={navigationSvgXml(
-              NAVIGATION_ASSETS[label] ?? "home",
-              dark,
-              false,
-              capsuleColor,
-              capsuleInk,
-              !dark && palette === "Gaten" ? "#4A4A50" : colors.onSurfaceVariant,
-              !dark && palette === "Gaten" ? "#F1F1F3" : colors.surfaceContainer,
-            ).replace('viewBox="0 0 80 80"', `viewBox="${ICON_VIEWBOXES[label]}"`)}
-            width={ICON_SIZES[label] ?? 24}
-            height={ICON_SIZES[label] ?? 24}
-          />
+          <TabIcon label={label} color={iconColor} />
         </Animated.View>
       </PressableScale>
     </Animated.View>
   );
 }
 
-export function BottomBar({state, navigation, position, layout}: MaterialTopTabBarProps) {
-  const {colors, mode, accent, palette} = useTheme();
+export function BottomBar({
+  state,
+  navigation,
+  position,
+  layout,
+  searchActive = false,
+}: MaterialTopTabBarProps & {searchActive?: boolean}) {
+  const {colors, mode} = useTheme();
   const systemMode = useColorScheme();
   const dark = mode === "Dark" || (mode === "System" && systemMode === "dark");
-  const capsuleColor = accent === "Indigo" ? (dark ? "#B9A7FF" : "#4F35E8") : colors.primary;
-  const capsuleInk = accent === "Indigo" ? (dark ? "#171124" : "#FFFFFF") : colors.onPrimary;
-  const referenceLight = !dark && palette === "Gaten";
-  const barColor = referenceLight ? "#F1F1F3" : colors.surfaceContainer;
-  const background = referenceLight ? "#FAFAFA" : colors.background;
+  const capsuleColor = colors.actionPrimary;
+  const capsuleInk = colors.onActionPrimary;
+  const barColor = colors.bottom;
+  const iconColor = colors.fine;
+  const background = colors.background;
   const insets = useSafeAreaInsets();
   const sessionActive = useSessionActive();
   // The one measured thing in the bar: how wide each label is, at the reader's own font scale.
   const [labelWidths, setLabelWidths] = useState<number[] | null>(null);
 
   const depth = stackDepth(state, state.routes[state.index]?.name ?? "");
-  const visible = !sessionActive && depth === 0;
+  const visible = !sessionActive && depth === 0 && !searchActive;
   const atNonHomeRoot = visible && state.index !== 0;
+
+  useEffect(() => {
+    ThemeBridge.setNavigationBarAppearance(background, dark).catch(
+      (error: unknown) => {
+        console.warn("Could not update Android navigation bar appearance.", error);
+      },
+    );
+  }, [background, dark]);
 
   // Back from a tab root leaves for Home; a pushed page is handled by its own stack, and at
   // Home's root Back belongs to the system. (The tab navigator's own `backBehavior` is
@@ -246,7 +254,8 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
           key={route.key}
           style={styles.capsuleLabel}
           onLayout={(event) => {
-            const width = event.nativeEvent.layout.width;
+            // Leave a pixel-rounding allowance so measured labels do not ellipsize.
+            const width = Math.ceil(event.nativeEvent.layout.width) + 1;
             setLabelWidths((current) => {
               if (current?.[index] === width) {
                 return current;
@@ -257,7 +266,7 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
             });
           }}
         >
-          {route.name}
+          {tabLabel(route.name)}
         </Text>
       ))}
     </View>
@@ -272,23 +281,26 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
     return (
       <View
         style={{
-          height: BAR_HEIGHT + insets.bottom + BAR_TOP_MARGIN,
-          backgroundColor: background,
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: BAR_HEIGHT + insets.bottom,
         }}
       >
         <View
           style={[
-            styles.bar,
+            styles.surface,
             {
               height: BAR_HEIGHT,
               width,
-              alignSelf: "center",
-              marginTop: BAR_TOP_MARGIN,
               backgroundColor: barColor,
             },
           ]}
         >
-          {measureRow}
+          <View style={{height: BAR_HEIGHT, width, alignSelf: "center"}}>
+            {measureRow}
+          </View>
         </View>
       </View>
     );
@@ -298,13 +310,13 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
   // uses its own label width, while the inactive slots preserve their full touch target where space
   // allows.
   const capsuleIdeals = labelWidths.map(
-    (labelWidth, index) => Math.max(state.routes[index].name === "Home" ? 113 : 0, CAPSULE_PADDING * 2 + (ICON_SIZES[state.routes[index].name] ?? 24) + CONTENT_GAP + labelWidth),
+    (labelWidth, index) => Math.max(state.routes[index].name === "Home" ? 113 : 0, CAPSULE_PADDING * 2 + ICON_SIZE + CONTENT_GAP + labelWidth),
   );
   const spare =
-    count > 1 ? (width - Math.max(...capsuleIdeals)) / (count - 1) : SLOT_WIDTH;
+    count > 1 ? (width - BAR_INNER_PADDING * 2 - Math.max(...capsuleIdeals)) / (count - 1) : SLOT_WIDTH;
   const slot = Math.max(MIN_SLOT, Math.min(SLOT_WIDTH, spare));
   const capsuleWidths = capsuleIdeals.map((ideal) =>
-    Math.max(0, Math.min(ideal, width - (count - 1) * slot)),
+    Math.max(0, Math.min(ideal, width - BAR_INNER_PADDING * 2 - (count - 1) * slot)),
   );
   const widestCapsuleWidth = Math.max(1, ...capsuleWidths);
   const inputRange = state.routes.map((_, index) => index);
@@ -330,38 +342,37 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
     extrapolate: "clamp",
   });
 
-  // The page colour shows around the floating bar's rounded perimeter; its content stays 64 dp tall
-  // above the safe-area inset; the wrapper adds the reference's 16dp top gap.
+  // Only the floating track paints a surface; the pager continues beneath its margins and gesture inset.
   return (
     <View
       style={{
-        height: BAR_HEIGHT + insets.bottom + BAR_TOP_MARGIN,
-        backgroundColor: background,
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: BAR_HEIGHT + insets.bottom,
       }}
     >
       <View
         style={[
-          styles.bar,
+          styles.surface,
           {
             height: BAR_HEIGHT,
             width,
-            alignSelf: "center",
-            marginTop: BAR_TOP_MARGIN,
             backgroundColor: barColor,
           },
         ]}
       >
+      <View style={{height: BAR_HEIGHT, width, alignSelf: "center"}}>
         {measureRow}
         <View style={styles.stage}>
         {state.routes.map((route, index) => (
           <BarItem
             key={route.key}
-            label={route.name}
+            label={tabLabel(route.name)}
             index={index}
             selected={index === state.index}
-            dark={dark}
-            capsuleColor={capsuleColor}
-            capsuleInk={capsuleInk}
+            iconColor={iconColor}
             slotLeft={slotsLeft}
             slot={slot}
             shift={settled.map((frame) => rtl * frame.iconShift(index))}
@@ -436,21 +447,11 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
                 },
               ]}
             >
-              <SvgXml
-                xml={navigationSvgXml(
-                  NAVIGATION_ASSETS[route.name] ?? "home",
-                  dark,
-                  true,
-                  capsuleColor,
-                  capsuleInk,
-                  !dark && palette === "Gaten" ? "#4A4A50" : colors.onSurfaceVariant,
-                  colors.background,
-                ).replace('viewBox="0 0 80 80"', `viewBox="${ICON_VIEWBOXES[route.name]}"`)}
-                width={ICON_SIZES[route.name] ?? 24}
-                height={ICON_SIZES[route.name] ?? 24}
-              />
+              <TabIcon label={tabLabel(route.name)} color={capsuleInk} />
               <Text
                 numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
                 style={[
                   styles.capsuleLabel,
                   {
@@ -459,13 +460,13 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
                       0,
                       capsuleWidths[index] -
                         CAPSULE_PADDING * 2 -
-                        (ICON_SIZES[route.name] ?? 24) -
+                        ICON_SIZE -
                         CONTENT_GAP,
                     ),
                   },
                 ]}
               >
-                {route.name}
+                {tabLabel(route.name)}
               </Text>
             </Animated.View>
           ))}
@@ -492,12 +493,14 @@ export function BottomBar({state, navigation, position, layout}: MaterialTopTabB
         </Animated.View>
         </View>
       </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  surface: {
+    alignSelf: "center",
     borderRadius: BAR_RADIUS,
   },
   stage: {flex: 1},
@@ -512,7 +515,7 @@ const styles = StyleSheet.create({
   },
   capsuleFill: {
     flex: 1,
-    borderRadius: CAPSULE_HEIGHT / 2,
+    borderRadius: shape.navActive,
     overflow: "hidden",
   },
   capsuleContentFrame: {
@@ -532,7 +535,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: CONTENT_GAP,
   },
-  capsuleLabel: {fontFamily: "Inter", fontSize: 16, lineHeight: 22, fontWeight: "600"},
+  capsuleLabel: typeScale.navigation,
   shieldPosition: {
     position: "absolute",
     top: (BAR_HEIGHT - CAPSULE_HEIGHT) / 2,

@@ -176,20 +176,21 @@ class GatenDictModule(
         }
     }
 
+    // Qualify JSON reads: the React Native output map and arrays also expose getters.
     private fun JSONObject.toJsMap() = Arguments.createMap().apply {
-        putInt("id", getInt("id"))
-        putString("primary", getString("primary"))
-        putArray("kanji", getJSONArray("kanji").toJsStrings())
-        putArray("kana", getJSONArray("kana").toJsStrings())
-        putArray("glosses", getJSONArray("glosses").toJsStrings())
-        putArray("pos", getJSONArray("pos").toJsStrings())
-        putBoolean("common", getBoolean("common"))
-        putString("match", getString("match"))
-        putString("form", getString("form"))
+        putInt("id", this@toJsMap.getInt("id"))
+        putString("primary", this@toJsMap.getString("primary"))
+        putArray("kanji", this@toJsMap.getJSONArray("kanji").toJsStrings())
+        putArray("kana", this@toJsMap.getJSONArray("kana").toJsStrings())
+        putArray("glosses", this@toJsMap.getJSONArray("glosses").toJsStrings())
+        putArray("pos", this@toJsMap.getJSONArray("pos").toJsStrings())
+        putBoolean("common", this@toJsMap.getBoolean("common"))
+        putString("match", this@toJsMap.getString("match"))
+        putString("form", this@toJsMap.getString("form"))
     }
 
     private fun JSONArray.toJsStrings(): WritableArray = Arguments.createArray().apply {
-        for (index in 0 until length()) pushString(getString(index))
+        for (index in 0 until length()) pushString(this@toJsStrings.getString(index))
     }
 
     private fun ReadableMap.toHistoryJson(): JSONObject {

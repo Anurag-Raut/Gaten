@@ -58,14 +58,7 @@ export function Icon({
   );
 }
 
-const CARD_SHADOW = {
-  shadowColor: "#000000",
-  shadowOpacity: 0.08,
-  shadowRadius: 2,
-  shadowOffset: {width: 0, height: 1},
-} as const;
-
-/** The resting card every page draws: 1dp elevation, no border, the surface colour. */
+/** Flat content surface; screens use spacing and separators to establish grouping. */
 export function Card({
   style,
   children,
@@ -81,7 +74,6 @@ export function Card({
           backgroundColor: colors.surface,
           borderRadius: shape.medium,
           elevation: CARD_ELEVATION,
-          ...CARD_SHADOW,
         },
         style,
       ]}
@@ -120,7 +112,6 @@ export function PressableCard({
           backgroundColor: colors.surface,
           borderRadius: shape.medium,
           elevation: CARD_ELEVATION,
-          ...CARD_SHADOW,
         },
         style,
       ]}
@@ -130,7 +121,7 @@ export function PressableCard({
   );
 }
 
-/** A small capsule of text: the "common" marker, a count, a part of speech. */
+/** A compact label for a status, count or part of speech. */
 function ChipBase({
   label,
   background,
@@ -149,8 +140,7 @@ function ChipBase({
       style={[
         {
           backgroundColor: background,
-          // A capsule, like every other chip and control in the app.
-          borderRadius: 999,
+          borderRadius: shape.small,
           paddingHorizontal: spacing.m,
           paddingVertical: spacing.xs,
         },
@@ -163,9 +153,7 @@ function ChipBase({
 }
 
 /**
- * A tonal tile a row or a card opens with: the glyph on the accent's own container, so a list of
- * rows reads as one family of controls rather than a pile of bare glyphs. Callers that sit on an
- * accent surface themselves invert the pair (see the home hero).
+ * A neutral icon tile for a row. Callers may supply semantic status colors for meaningful states.
  */
 export function IconBadge({
   name,
@@ -186,8 +174,8 @@ export function IconBadge({
       style={{
         width: size,
         height: size,
-        borderRadius: shape.small,
-        backgroundColor: background ?? colors.primaryContainer,
+        borderRadius: shape.brandTile,
+        backgroundColor: background ?? colors.surfaceVariant,
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -195,15 +183,14 @@ export function IconBadge({
       <Icon
         name={name}
         size={iconSize ?? Math.round(size * 0.5)}
-        color={color ?? colors.onPrimaryContainer}
+        color={color ?? colors.iconSecondary}
       />
     </View>
   );
 }
 
 /**
- * The quiet name over a group of rows or cards: small, spaced, uppercase, and in the reader's
- * secondary ink, so it labels what is below it without competing with it.
+ * A supporting label over related rows, using the same text rhythm as other metadata.
  */
 export function SectionLabel({
   children,
@@ -219,8 +206,6 @@ export function SectionLabel({
         typeScale.labelSmall,
         {
           color: colors.onSurfaceVariant,
-          textTransform: "uppercase",
-          letterSpacing: 1.1,
         },
         style,
       ]}
@@ -257,7 +242,7 @@ export function CountChip({
       accessibilityLabel={accessibilityLabel}
       style={{
         backgroundColor: colors.primaryContainer,
-        borderRadius: 999,
+        borderRadius: shape.small,
         paddingHorizontal: spacing.s,
         paddingVertical: 2,
       }}
@@ -284,17 +269,8 @@ export function OutlinedChip({label}: {label: string}) {
 }
 
 /**
- * The app's one button, in the four weights a screen needs: filled (its single confident action),
- * tonal (a secondary action on the accent's own container), outlined (a quiet alternative) and
- * text (an inline action beside another). Every one is a capsule, and the three that stand on their
- * own are 48 dp tall — the touch target the app asks of a control — while a text button keeps the
- * 40 dp of an action inside a row, with 4 dp of slop under it for the same target. Disabled is
- * always the library's own treatment: the ink drops to onSurface at 38%, a fill to 12%, an outline
- * to a 12% hairline.
- *
- * [style] is for the shape a call site asked for that Compose's own `Button` could not give it by
- * default: the word detail's "add to Anki" button is `shapes.small` — a 12 dp radius — where every
- * other button in the app keeps Material's pill. Nothing else overrides it.
+ * Shared action control: ink-filled primary, neutral secondary, outlined or text action.
+ * Minimum heights and vertical padding allow labels to grow with the reader's font size.
  */
 export function Button({
   label,
@@ -318,8 +294,9 @@ export function Button({
   const {colors} = useTheme();
   const bare = variant === "text";
   const container: ViewStyle = {
-    height: bare ? 40 : 48,
-    borderRadius: 999,
+    minHeight: bare ? 48 : 52,
+    borderRadius: shape.button,
+    paddingVertical: bare ? spacing.s : spacing.m,
     paddingHorizontal: bare ? spacing.m : spacing.xl,
     flexDirection: "row",
     alignItems: "center",
@@ -327,29 +304,25 @@ export function Button({
     gap: spacing.s,
     alignSelf: fullWidth ? ("stretch" as const) : ("auto" as const),
     ...(variant === "filled"
-      ? {backgroundColor: disabled ? `${colors.onSurface}1F` : colors.primary}
+      ? {backgroundColor: disabled ? colors.disabled : colors.actionPrimary}
       : variant === "tonal"
         ? {
-            backgroundColor: disabled
-              ? `${colors.onSurface}1F`
-              : colors.primaryContainer,
+            backgroundColor: disabled ? colors.disabled : colors.actionSecondary,
           }
         : variant === "outlined"
           ? {
               borderWidth: 1,
-              borderColor: disabled
-                ? `${colors.onSurface}1F`
-                : colors.outline,
+              borderColor: disabled ? colors.disabled : colors.outline,
             }
           : null),
   };
   const textColor = disabled
-    ? `${colors.onSurface}61`
+    ? colors.onDisabled
     : variant === "filled"
-      ? colors.onPrimary
+      ? colors.onActionPrimary
       : variant === "tonal"
-        ? colors.onPrimaryContainer
-        : colors.primary;
+        ? colors.onActionSecondary
+        : variant === "outlined" ? colors.onSurface : colors.accent;
   return (
     <PressableScale
       onPress={onPress}
@@ -357,13 +330,11 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{disabled}}
-      // A text button is shorter than a control, so it keeps a 48 dp target without one.
-      hitSlop={bare ? 4 : undefined}
       style={[container, style]}
     >
       {leading}
       {label != null && (
-        <Text style={[typeScale.labelLarge, {color: textColor}]}>{label}</Text>
+        <Text style={[typeScale.labelLarge, {color: textColor, flexShrink: 1, textAlign: "center"}]}>{label}</Text>
       )}
     </PressableScale>
   );
@@ -398,6 +369,7 @@ export function IconButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      hitSlop={compact ? 6 : undefined}
       style={{
         width: target,
         height: target,
@@ -406,7 +378,7 @@ export function IconButton({
         justifyContent: "center",
       }}
     >
-      <Icon name={name} size={size} color={color ?? colors.onSurfaceVariant} />
+      <Icon name={name} size={size} color={color ?? colors.iconSecondary} />
     </PressableScale>
   );
 }

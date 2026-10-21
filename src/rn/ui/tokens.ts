@@ -6,7 +6,7 @@
 
 /**
  * The global design tokens the Compose screens shared, as plain numbers: the spacing scale, the type
- * scale out of the Kotlin app's own `Type.kt`, the motion constants every transition is built from,
+ * scale shared with the native overlay, the motion constants every transition is built from,
  * and the few layout constants the spec fixes. Colours are not tokens — they come from the theme
  * bridge (see `theme.tsx`).
  */
@@ -19,28 +19,36 @@ export const spacing = {
   s: 8,
   m: 12,
   l: 16,
+  compactSection: 20,
+  contentInset: 22,
   xl: 24,
   xxl: 32,
 } as const;
 
 /** Nothing in the app is wider than this, however wide the screen is. */
-export const MAX_CONTENT_WIDTH = 840;
+export const MAX_CONTENT_WIDTH = 560;
 
 /** Two cards are put beside each other from here on; below it a phone has width for one. */
 export const TWO_COLUMN_WIDTH = 640;
 
-/** Card elevation everywhere is exactly 1dp, and no card draws a border. */
-export const CARD_ELEVATION = 1;
+/** Content surfaces stay flat; dividers and spacing establish grouping. */
+export const CARD_ELEVATION = 0;
 
-/** The corner radii the Compose theme shipped (GatenShapes: 12/20/28). */
+/** The shared corner vocabulary: brand artwork, controls and contained surfaces. */
 export const shape = {
-  small: 12,
+  small: 14,
   medium: 20,
-  large: 28,
+  large: 20,
+  brandTile: 10,
+  settingsIcon: 11,
+  empty: 12,
+  button: 13,
+  settings: 17,
+  navActive: 15,
 } as const;
 
-/** The custom bottom bar's own height, before the bottom safe-area inset is added. */
-export const BOTTOM_BAR_HEIGHT = 80;
+/** The custom bottom bar track height, before the bottom safe-area inset is added. */
+export const BOTTOM_BAR_HEIGHT = 63;
 
 /** The press-scale curve — Material's fast-out-slow-in, the Kotlin app's own `Motion.pressEasing`. */
 export const PRESS_EASING: [number, number, number, number] = [0.4, 0, 0.2, 1];
@@ -65,35 +73,25 @@ export const PAGE_EASING_REANIMATED = ReanimatedEasing.bezier(0.2, 0, 0, 1);
 /** The press-scale curve as a Reanimated easing, for the press feedback's timing. */
 export const PRESS_EASING_REANIMATED = ReanimatedEasing.bezier(...PRESS_EASING);
 
-/**
- * The face the Kotlin scale draws every Latin glyph in: `Type.kt`'s `Latin` FontFamily, which is
- * Manrope — bundled for Compose as `res/font/manrope_variable.ttf`.
- *
- * React Native resolves a text's weight against the *family* it names (see `ReactFontManager`), not
- * against a variable font's axis, so the family is published by `res/font/manrope.xml`: one entry
- * per weight the scale asks for (400/500/600), each pinned to the axis value it names. A Japanese
- * glyph is absent from Manrope and falls through to the system face, exactly as it does in Compose.
- */
-const MANROPE = "Manrope";
+/** Inter is bundled for Latin text; Japanese glyphs use the platform font fallback. */
+const INTER = "Inter";
 
-/**
- * The type scale, step for step out of the Kotlin app's own `Type.kt`: one size, weight, line height,
- * letter spacing and face per Material role, exactly as the Compose screens set them.
- *
- * The two display steps name no face because `Type.kt` draws them in the system one: they are always
- * a Japanese word, and a Japanese glyph falls through to the system face from Manrope anyway.
- */
+/** Shared text roles from docs/Gaten_Ink_Design_Language_v1.md. Display roles retain Japanese reading sizes. */
 export const typeScale = {
   displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500"},
   displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500"},
-  headlineSmall: {fontSize: 26, lineHeight: 34, fontWeight: "600", fontFamily: MANROPE},
-  titleLarge: {fontSize: 24, lineHeight: 32, fontWeight: "600", fontFamily: MANROPE},
-  titleMedium: {fontSize: 19, lineHeight: 26, fontWeight: "500", fontFamily: MANROPE},
-  titleSmall: {fontSize: 16, lineHeight: 24, fontWeight: "600", fontFamily: MANROPE},
-  bodyLarge: {fontSize: 17, lineHeight: 26, fontWeight: "400", fontFamily: MANROPE},
-  bodyMedium: {fontSize: 15, lineHeight: 22, fontWeight: "400", fontFamily: MANROPE},
-  bodySmall: {fontSize: 13, lineHeight: 18, fontWeight: "400", fontFamily: MANROPE},
-  labelLarge: {fontSize: 15, lineHeight: 20, fontWeight: "500", letterSpacing: 0.1, fontFamily: MANROPE},
-  labelMedium: {fontSize: 13, lineHeight: 18, fontWeight: "500", letterSpacing: 0.3, fontFamily: MANROPE},
-  labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", letterSpacing: 0.4, fontFamily: MANROPE},
+  brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
+  headlineSmall: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
+  titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: INTER},
+  titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
+  titleSmall: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
+  bodyLarge: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: INTER},
+  bodyMedium: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: INTER},
+  description: {fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: INTER},
+  bodySmall: {fontSize: 12, lineHeight: 17, fontWeight: "400", fontFamily: INTER},
+  labelLarge: {fontSize: 15, lineHeight: 20, letterSpacing: -0.2, fontWeight: "600", fontFamily: INTER},
+  labelMedium: {fontSize: 12, lineHeight: 18, fontWeight: "600", fontFamily: INTER},
+  labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: INTER},
+  navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: INTER},
+  metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: INTER},
 } satisfies Record<string, TextStyle>;

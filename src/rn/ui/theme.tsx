@@ -31,10 +31,28 @@ import type {
   ThemeMode,
 } from "../native/GatenTheme";
 
+/** Action roles are separate from accent roles so focus and charts keep the selected accent. */
+export interface ThemeColors extends ThemeColorMap {
+  bottom: string;
+  fine: string;
+  actionPrimary: string;
+  onActionPrimary: string;
+  actionSecondary: string;
+  onActionSecondary: string;
+  iconPrimary: string;
+  iconSecondary: string;
+  accent: string;
+  accentSubtle: string;
+  success: string;
+  warning: string;
+  disabled: string;
+  onDisabled: string;
+}
+
 /** What every screen reads its colours and type from. */
 export interface Theme {
   /** The resolved scheme for the current choices; opaque `#RRGGBB` per Material role. */
-  colors: ThemeColorMap;
+  colors: ThemeColors;
   mode: ThemeMode;
   palette: Palette;
   accent: Accent;
@@ -119,8 +137,25 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
     if (!colorMap) {
       return null;
     }
+    const dark = choices.mode === "Dark" || (choices.mode === "System" && systemScheme === "dark");
     return {
-      colors: colorMap,
+      colors: {
+        ...colorMap,
+        bottom: dark ? "#1C1D21" : "#F5F5F6",
+        fine: dark ? "#777781" : "#A1A1AB",
+        actionPrimary: dark ? "#F5F5F7" : "#18181B",
+        onActionPrimary: dark ? "#17171A" : "#FFFFFF",
+        actionSecondary: colorMap.surfaceVariant,
+        onActionSecondary: colorMap.onSurface,
+        iconPrimary: dark ? colorMap.onSurface : "#000000",
+        iconSecondary: dark ? "#909099" : "#83838C",
+        accent: colorMap.primary,
+        accentSubtle: colorMap.primaryContainer,
+        success: dark ? "#53C99B" : "#16A476",
+        warning: dark ? "#EF8A96" : "#DC6673",
+        disabled: dark ? colorMap.surfaceContainerHighest : "#E9E9ED",
+        onDisabled: dark ? colorMap.onSurfaceVariant : "#83838C",
+      },
       mode: choices.mode,
       palette: choices.palette,
       accent: choices.accent,
@@ -128,7 +163,7 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
       setPalette,
       setAccent,
     };
-  }, [choices, colorMap, setMode, setPalette, setAccent]);
+  }, [choices, colorMap, systemScheme, setMode, setPalette, setAccent]);
 
   if (!theme) {
     // The first resolve has not landed yet; nothing is drawn until the colours exist.

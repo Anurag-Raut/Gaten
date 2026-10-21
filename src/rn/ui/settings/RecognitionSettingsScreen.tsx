@@ -34,6 +34,7 @@ import {
   RowIcon,
   SettingsGroup,
   SettingsPageScaffold,
+  SettingsTile,
 } from "./settings-components";
 
 const HELP_PARAGRAPHS = [
@@ -113,9 +114,9 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
     };
   }, [confirmDownload]);
 
-  const container = state.installed ? colors.primaryContainer : colors.surface;
-  const content = state.installed ? colors.onPrimaryContainer : colors.onSurface;
-  const valueColor = state.installed ? colors.onPrimaryContainer : colors.onSurfaceVariant;
+  const container = state.installed ? colors.accentSubtle : colors.surfaceVariant;
+  const content = colors.onSurface;
+  const valueColor = state.installed ? colors.success : colors.onSurfaceVariant;
 
   return (
     <SettingsPageScaffold
@@ -157,7 +158,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
 
       {state.downloading != null && (
         <View style={{marginTop: spacing.l}}>
-          <Card>
+          <SettingsTile>
             <View style={{padding: spacing.xl}}>
               <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>
                 {`Downloading ${state.downloading.label}…`}
@@ -167,7 +168,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
                   marginTop: spacing.s,
                   height: 4,
                   borderRadius: 2,
-                  backgroundColor: colors.surfaceContainerHighest,
+                  backgroundColor: colors.surfaceVariant,
                   overflow: "hidden",
                 }}
               >
@@ -176,7 +177,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
                     style={{
                       height: 4,
                       borderRadius: 2,
-                      backgroundColor: colors.primary,
+                      backgroundColor: colors.accent,
                       width: `${Math.round(state.progress.fraction * 100)}%` as `${number}%`,
                     }}
                   />
@@ -193,7 +194,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
                 />
               </View>
             </View>
-          </Card>
+          </SettingsTile>
         </View>
       )}
 

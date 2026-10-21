@@ -18,8 +18,7 @@ import * as GatenHaptics from "../../native/GatenHaptics";
 import * as GatenTheme from "../../native/GatenTheme";
 import type {Accent, Palette, ThemeColorMap, ThemeMode} from "../../native/GatenTheme";
 import {PressableScale} from "../PressableScale";
-import {Card} from "../components";
-import {SwitchRow, SettingsGroup, SettingsPageScaffold, RowIcon} from "./settings-components";
+import {SwitchRow, SettingsGroup, SettingsPageScaffold, RowIcon, SettingsTile} from "./settings-components";
 import {useTheme, type Theme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 
@@ -99,9 +98,9 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
           <View
             style={{
               flexDirection: "row",
-              borderRadius: 999,
+              borderRadius: 14,
               padding: spacing.xs,
-              backgroundColor: theme.colors.surfaceContainerHigh,
+                backgroundColor: theme.colors.surfaceVariant,
             }}
           >
             {(["System", "Light", "Dark"] as ThemeMode[]).map((mode) => {
@@ -114,12 +113,12 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
                   onPress={() => theme.setMode(mode)}
                   style={{
                     flex: 1,
-                    minHeight: 44,
+                    minHeight: 48,
                     alignItems: "center",
                     justifyContent: "center",
-                    borderRadius: 999,
+                    borderRadius: 14,
                     backgroundColor: selected ? theme.colors.surface : "transparent",
-                    elevation: selected ? 1 : 0,
+                    elevation: 0,
                   }}
                 >
                   <Text
@@ -164,9 +163,9 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
                     style={{
                       width: 64,
                       height: 48,
-                      borderRadius: 12,
+                      borderRadius: 10,
                       borderWidth: selected ? 2 : 1,
-                      borderColor: selected ? theme.colors.onSurface : theme.colors.outline,
+                      borderColor: selected ? theme.colors.onSurface : theme.colors.outlineVariant,
                       padding: 4,
                     }}
                   >
@@ -180,7 +179,7 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
                       }}
                     >
                       {tones != null && (
-                        <Text style={[typeScale.titleMedium, {color: tones.onSurface}]}>Aa</Text>
+                        <Text style={[typeScale.titleSmall, {color: tones.onSurface}]}>Aa</Text>
                       )}
                     </View>
                   </View>
@@ -211,7 +210,7 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
           >
             {ACCENTS.map((accent) => {
               const selected = accent === theme.accent;
-              const primary = accentPrimaries[accent] ?? theme.colors.primary;
+              const primary = accentPrimaries[accent] ?? theme.colors.accent;
               return (
                 <PressableScale
                   key={accent}
@@ -310,12 +309,12 @@ function ChoiceCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card style={{padding: spacing.xl}}>
-      <Text style={[typeScale.titleMedium, {color: theme.colors.onSurface}]}>{title}</Text>
+    <SettingsTile style={{padding: spacing.xl}}>
+      <Text style={[typeScale.titleLarge, {color: theme.colors.onSurface}]}>{title}</Text>
       <Text style={[typeScale.bodySmall, {color: theme.colors.onSurfaceVariant, marginTop: spacing.xs}]}>
         {support}
       </Text>
       <View style={{marginTop: spacing.l}}>{children}</View>
-    </Card>
+    </SettingsTile>
   );
 }

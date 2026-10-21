@@ -9,12 +9,10 @@
  * built from, drawn locally because they are this screen's visual language rather than the app's
  * shared kit.
  *
- * The language is the one the reference screens share: capsule controls, raised rounded cards,
- * a small badge behind a state's glyph, one accent-filled action per surface and quiet, legible
- * muted metadata. Every control is at least a 48 dp touch target (Android's own minimum for
- * interactive elements, developer.android.com `guide/topics/ui/accessibility/apps`), and the
- * shapes come from the app's own tokens except for the capsule, which the radius ladder has no
- * step for.
+ * Controls use rounded rectangles, flat white surfaces, a small badge behind a state's glyph, one
+ * dark primary action per surface and quiet, legible metadata. Every control is at least a 48 dp
+ * touch target (Android's own minimum for interactive elements, developer.android.com
+ * `guide/topics/ui/accessibility/apps`), and shapes come from the app's shared tokens.
  */
 import React from "react";
 import {ActivityIndicator, StyleSheet, Text, View} from "react-native";
@@ -24,10 +22,7 @@ import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import type {Theme} from "../theme";
 
-/** The capsule every pill, chip and control takes — the radius the radius ladder has no step for. */
-const CAPSULE = 999;
-
-/** One filled action: the primary button, the one accent-filled control its surface carries. */
+/** The screen's dominant action: a dark fill with a high-contrast label. */
 export function FilledAction({
   theme,
   label,
@@ -53,9 +48,7 @@ export function FilledAction({
         {
           minHeight,
           width: "100%",
-          backgroundColor: disabled
-            ? `${theme.colors.onSurface}1F`
-            : theme.colors.primary,
+          backgroundColor: disabled ? theme.colors.disabled : theme.colors.actionPrimary,
         },
       ]}
     >
@@ -63,7 +56,7 @@ export function FilledAction({
         style={[
           typeScale.labelLarge,
           {
-            color: disabled ? `${theme.colors.onSurface}61` : theme.colors.onPrimary,
+            color: disabled ? theme.colors.onDisabled : theme.colors.onActionPrimary,
           },
         ]}
       >
@@ -73,7 +66,7 @@ export function FilledAction({
   );
 }
 
-/** One outlined action: the quiet alternative beside a filled one. */
+/** One neutral secondary action beside the dark primary action. */
 export function OutlinedAction({
   theme,
   label,
@@ -99,10 +92,7 @@ export function OutlinedAction({
         {
           minHeight,
           width: "100%",
-          borderWidth: 1,
-          borderColor: disabled
-            ? `${theme.colors.onSurface}1F`
-            : theme.colors.outlineVariant,
+          backgroundColor: disabled ? theme.colors.disabled : theme.colors.actionSecondary,
         },
       ]}
     >
@@ -111,8 +101,8 @@ export function OutlinedAction({
           typeScale.labelLarge,
           {
             color: disabled
-              ? `${theme.colors.onSurface}61`
-              : theme.colors.onSurface,
+              ? theme.colors.onDisabled
+              : theme.colors.onActionSecondary,
           },
         ]}
       >
@@ -122,14 +112,13 @@ export function OutlinedAction({
   );
 }
 
-/** One tonal action: the rating bar's buttons, in the accent's container colour. */
+/** One tonal action: the rating bar's category color, or a neutral disabled state. */
 export function TonalAction({
   theme,
   content,
   onPress,
   disabled,
   container,
-  contentColor,
   minHeight = 64,
 }: {
   theme: Theme;
@@ -138,7 +127,6 @@ export function TonalAction({
   disabled?: boolean;
   /** Overrides the default tonal pair — the rating bar's "Again" takes the error tones. */
   container?: string;
-  contentColor?: string;
   minHeight?: number;
 }) {
   return (
@@ -151,8 +139,9 @@ export function TonalAction({
         styles.pill,
         {
           minHeight,
-          backgroundColor: container ?? theme.colors.secondaryContainer,
-          opacity: disabled ? 0.38 : 1,
+          backgroundColor: disabled
+            ? theme.colors.disabled
+            : container ?? theme.colors.actionSecondary,
           // The bar's buttons are as wide as their share of the row, so their content padding is
           // the library's own 4dp rather than the roomier pill the full-width actions take.
           paddingHorizontal: spacing.xs,
@@ -188,7 +177,7 @@ export function TextAction({
       <Text
         style={[
           typeScale.labelLarge,
-          {color: theme.colors.primary, opacity: disabled ? 0.38 : 1},
+          {color: disabled ? theme.colors.onDisabled : theme.colors.accent},
         ]}
       >
         {label}
@@ -198,8 +187,8 @@ export function TextAction({
 }
 
 /**
- * The badge a glyph sits in: a rounded square, one tonal step raised from the surface behind it,
- * which is what makes a state read at a glance before its text is read.
+ * The badge a glyph sits in: a rounded square on a subtle neutral surface, so a state reads at a
+ * glance before its text is read.
  */
 export function IconBadge({
   theme,
@@ -223,7 +212,7 @@ export function IconBadge({
           height: size,
           backgroundColor: onContainer
             ? theme.colors.surface
-            : theme.colors.surfaceContainerHighest,
+            : theme.colors.surfaceVariant,
         },
       ]}
     >
@@ -268,12 +257,12 @@ export function StateCard({
           {
             backgroundColor: failed
               ? colors.errorContainer
-              : colors.surfaceContainerHighest,
+              : colors.surfaceVariant,
           },
         ]}
       >
         {spin ? (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.accent} />
         ) : (
           <Icon
             name={icon}
@@ -282,7 +271,7 @@ export function StateCard({
           />
         )}
       </View>
-      <Text style={[typeScale.titleMedium, styles.stateTitle, {color: colors.onSurface}]}>
+      <Text style={[typeScale.titleSmall, styles.stateTitle, {color: colors.onSurface}]}>
         {title}
       </Text>
       {body != null && (
@@ -309,7 +298,7 @@ export function BusyRow({theme, message}: {theme: Theme; message: string}) {
         {backgroundColor: theme.colors.surfaceVariant, padding: spacing.m},
       ]}
     >
-      <ActivityIndicator size="small" color={theme.colors.primary} />
+      <ActivityIndicator size="small" color={theme.colors.accent} />
       <Text
         style={[
           typeScale.bodyMedium,
@@ -377,7 +366,7 @@ export function CardSideTag({
         styles.chip,
         {
           backgroundColor: revealed
-            ? theme.colors.primaryContainer
+            ? theme.colors.accentSubtle
             : theme.colors.surfaceVariant,
           alignSelf: "flex-start",
         },
@@ -388,7 +377,7 @@ export function CardSideTag({
           typeScale.labelMedium,
           {
             color: revealed
-              ? theme.colors.onPrimaryContainer
+              ? theme.colors.accent
               : theme.colors.onSurfaceVariant,
           },
         ]}
@@ -441,8 +430,8 @@ export function ratingsFor(buttonCount: number): Rating[] {
       return [
         again,
         {name: "Hard", ease: 2},
-        good,
-        easy,
+        {name: "Good", ease: 3},
+        {name: "Easy", ease: 4},
       ];
   }
 }
@@ -469,9 +458,11 @@ export function RatingBar({
     <View style={{flexDirection: "row", width: "100%"}}>
       {ratings.map((rating, index) => {
         const isAgain = rating.ease === 1;
-        const color = isAgain
-          ? theme.colors.onErrorContainer
-          : theme.colors.onSecondaryContainer;
+        const color = !enabled
+          ? theme.colors.onDisabled
+          : isAgain
+            ? theme.colors.onErrorContainer
+            : theme.colors.onSecondaryContainer;
         return (
           <View
             key={rating.ease}
@@ -511,7 +502,7 @@ export function RatingBar({
 
 const styles = StyleSheet.create({
   pill: {
-    borderRadius: CAPSULE,
+    borderRadius: shape.button,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.xl,
@@ -528,7 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chip: {
-    borderRadius: CAPSULE,
+    borderRadius: shape.small,
     paddingHorizontal: spacing.m,
     paddingVertical: spacing.xs,
   },

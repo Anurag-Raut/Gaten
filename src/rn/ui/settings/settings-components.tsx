@@ -22,6 +22,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type StyleProp,
   type TextInputProps,
   type TextStyle,
@@ -38,6 +39,7 @@ import {
   SectionLabel,
 } from "../components";
 import {PressableScale} from "../PressableScale";
+import {InkIcon, type InkIconName} from "../InkIcon";
 import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import type {IconName} from "../icons";
@@ -51,21 +53,54 @@ export const CONTENT_COLUMN: ViewStyle = {
   width: "100%",
   maxWidth: MAX_CONTENT_WIDTH,
   alignSelf: "center",
-  paddingHorizontal: spacing.xl,
+  paddingHorizontal: 22,
 };
 
 /**
- * A row's own glyph: one restrained glyph in the reader's quiet ink, the same size on every row and
- * page, so a group reads as a list rather than a pile of controls. It used to sit in an accent-tinted
- * block; the pages read calmer without one, and the glyph alone already says what the row is.
+ * A settings glyph in the preview's neutral icon tile, with an app-native fallback for destinations
+ * that are not present in the preview.
  */
-export function RowIcon({name}: {name: IconName}) {
+export function RowIcon({name, tile = false, inkName}: {name: IconName; tile?: boolean; inkName?: InkIconName}) {
   const {colors} = useTheme();
-  return <Icon name={name} size={24} color={colors.onSurfaceVariant} />;
+  if (!tile) {
+    return <Icon name={name} size={24} color={colors.iconSecondary} />;
+  }
+  return (
+    <View
+      style={{
+        width: 37,
+        height: 37,
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: shape.settingsIcon,
+        backgroundColor: colors.surfaceVariant,
+      }}
+    >
+      {inkName
+        ? <InkIcon name={inkName} size={20} color={colors.iconPrimary} />
+        : <Icon name={name} size={21} color={colors.iconPrimary} />}
+    </View>
+  );
 }
 
-/** The corner every settings surface is cut to: the app's largest step, for the calm rounded look. */
-const SURFACE_RADIUS: ViewStyle = {borderRadius: shape.large};
+/** A contained group uses the shared 20dp container radius. */
+const SURFACE_RADIUS: ViewStyle = {borderRadius: shape.medium};
+
+/** A settings tile uses the design language's neutral secondary surface in both themes. */
+export function SettingsTile({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const {colors} = useTheme();
+  return (
+    <Card style={[SURFACE_RADIUS, {backgroundColor: colors.surfaceVariant}, style]}>
+      {children}
+    </Card>
+  );
+}
 
 /** A group of rows inside no surface of its own, for callers that give each row its own card. */
 const FLUSH_ROW: ViewStyle = {backgroundColor: "transparent", borderRadius: 0, elevation: 0};
@@ -86,20 +121,25 @@ export function SettingsGroup({
   style?: StyleProp<ViewStyle>;
   bare?: boolean;
 }) {
+  const {colors} = useTheme();
   return (
     <View style={style}>
       <SectionLabel
         style={[
           typeScale.labelMedium,
-          {textTransform: "none", letterSpacing: 0, marginBottom: spacing.m + spacing.xs},
+          {
+            color: colors.onSurfaceVariant,
+            textTransform: "none",
+            marginBottom: 9,
+          },
         ]}
       >
         {title}
       </SectionLabel>
       {bare ? (
-        <View style={{gap: spacing.l}}>{children}</View>
+        <View style={{gap: 9}}>{children}</View>
       ) : (
-        <Card style={SURFACE_RADIUS}>{children}</Card>
+        <SettingsTile>{children}</SettingsTile>
       )}
     </View>
   );
@@ -115,6 +155,7 @@ export function SettingsGroup({
  */
 export function SettingsRow({
   icon,
+  inkIcon,
   title,
   summary,
   value,
@@ -122,6 +163,7 @@ export function SettingsRow({
   surface = false,
 }: {
   icon: IconName;
+  inkIcon?: InkIconName;
   title: string;
   summary: string;
   value?: string | null;
@@ -130,29 +172,64 @@ export function SettingsRow({
 }) {
   const {colors} = useTheme();
   const padding = {
-    paddingHorizontal: spacing.l + spacing.xs,
-    paddingVertical: spacing.l,
+    paddingHorizontal: 11,
+    paddingVertical: 12,
+  };
+  const contentStyle: ViewStyle = surface
+    ? {flex: 1, minHeight: 70, justifyContent: "center"}
+    : {};
+  const rowSurface: ViewStyle = {
+    minHeight: 72,
+    borderRadius: shape.settings,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+    elevation: 0,
+    shadowOpacity: 0,
   };
   const body = (
     <View style={{flexDirection: "row", alignItems: "center"}}>
-      <RowIcon name={icon} />
-      <View style={{flex: 1, marginStart: spacing.l}}>
-        <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>{title}</Text>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>{summary}</Text>
+      <RowIcon name={icon} tile={surface} inkName={inkIcon} />
+      <View
+        style={{
+          flex: 1,
+          minWidth: 0,
+          marginStart: 12,
+        }}
+      >
+        <Text
+          style={[
+            typeScale.bodyLarge,
+          {color: colors.onSurface, fontWeight: "700", letterSpacing: -0.3},
+          ]}
+        >
+          {title}
+        </Text>
+        <Text
+          style={[
+            typeScale.bodySmall,
+            {color: colors.onSurfaceVariant, marginTop: 5},
+          ]}
+        >
+          {summary}
+        </Text>
       </View>
-      <View style={{flexDirection: "row", alignItems: "center"}}>
+      <View style={{flexDirection: "row", alignItems: "center", maxWidth: "36%", flexShrink: 1}}>
         {value != null && (
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
-            style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, maxWidth: 132}]}
+            style={[
+              typeScale.labelMedium,
+              {color: colors.onSurfaceVariant, maxWidth: 132, flexShrink: 1},
+            ]}
           >
             {value}
           </Text>
         )}
         {onPress != null && (
-          <View style={{marginStart: value != null ? spacing.s : 0}}>
-            <Icon name="keyboard_arrow_right" color={colors.onSurfaceVariant} />
+          <View style={{marginStart: value != null ? 7 : 0}}>
+            <InkIcon name="chevron" size={15} color={colors.fine} />
           </View>
         )}
       </View>
@@ -160,8 +237,8 @@ export function SettingsRow({
   );
   if (onPress == null) {
     return surface ? (
-      <Card style={SURFACE_RADIUS}>
-        <View style={padding}>{body}</View>
+      <Card style={rowSurface}>
+        <View style={[padding, contentStyle]}>{body}</View>
       </Card>
     ) : (
       <View style={padding}>{body}</View>
@@ -169,11 +246,11 @@ export function SettingsRow({
   }
   return (
     <PressableCard
-      accessibilityLabel={`${title}. ${summary}`}
+      accessibilityLabel={`${title}${value != null ? `. ${value}` : onPress != null ? ". Open settings" : ""}. ${summary}`}
       onPress={onPress}
-      style={surface ? SURFACE_RADIUS : FLUSH_ROW}
+      style={surface ? rowSurface : FLUSH_ROW}
     >
-      <View style={padding}>{body}</View>
+      <View style={[padding, contentStyle]}>{body}</View>
     </PressableCard>
   );
 }
@@ -192,16 +269,16 @@ export function ScreenAccessCard({
 }) {
   const {colors} = useTheme();
   return (
-    <Card style={SURFACE_RADIUS}>
+    <SettingsTile>
       <View style={{padding: spacing.xl}}>
         <View style={{flexDirection: "row", alignItems: "center"}}>
           <Icon
             name={enabled ? "check_circle" : "shield"}
             size={24}
-            color={enabled ? colors.primary : colors.onSurfaceVariant}
+              color={enabled ? colors.success : colors.iconSecondary}
           />
           <Text
-            style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1, marginStart: spacing.m}]}
+            style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1, marginStart: spacing.m}]}
           >
             {enabled ? "Screen access is on" : "Screen access is off"}
           </Text>
@@ -217,7 +294,7 @@ export function ScreenAccessCard({
           </View>
         )}
       </View>
-    </Card>
+    </SettingsTile>
   );
 }
 
@@ -271,28 +348,40 @@ export function FieldLabel({
 }
 
 /**
- * The box a settings page types into: a filled container at the app's own corner and control
- * height, on the surface the page sits on rather than outlined against it. Everything a caller
- * passes to a `TextInput` goes through, and its own `style` still wins over the box.
+ * The box a settings page types into: a white/dark surface inside the tinted settings tile, with a
+ * quiet outline and the app's own corner and control height. Everything a caller passes to a
+ * `TextInput` goes through, and its own `style` still wins over the box.
  */
 export function TextField(props: TextInputProps) {
   const {colors} = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
     <TextInput
       {...props}
+      onFocus={(event) => {
+        setFocused(true);
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        props.onBlur?.(event);
+      }}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
       underlineColorAndroid="transparent"
       style={[
-        typeScale.bodyLarge,
+        typeScale.bodyMedium,
         {
-          backgroundColor: colors.surfaceContainerHigh,
-          borderRadius: shape.medium,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.outlineVariant,
+          borderRadius: shape.small,
           color: colors.onSurface,
           paddingHorizontal: spacing.l,
           paddingVertical: spacing.m,
-          minHeight: 48,
+          minHeight: 49,
         },
         props.style,
+        focused && {outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 2},
       ]}
     />
   );
@@ -301,7 +390,7 @@ export function TextField(props: TextInputProps) {
 /** A small state chip: what a row currently is, stated in the accent's own colour. */
 export function Chip({label}: {label: string}) {
   const {colors} = useTheme();
-  return <Text style={[typeScale.labelLarge, {color: colors.primary}]}>{label}</Text>;
+  return <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{label}</Text>;
 }
 
 /**
@@ -344,10 +433,10 @@ export function SwitchRow({
         disabled={disabled}
         accessibilityLabel={title}
         trackColor={{
-          false: colors.surfaceContainerHighest,
-          true: colors.primary,
+          false: disabled ? colors.disabled : colors.surfaceVariant,
+          true: disabled ? colors.disabled : colors.accent,
         }}
-        thumbColor={value ? colors.onPrimary : colors.onSurfaceVariant}
+        thumbColor={disabled ? colors.onDisabled : value ? colors.onActionPrimary : colors.iconSecondary}
       />
     </View>
   );
@@ -382,8 +471,8 @@ export function DialogShell({
       >
         <Pressable
           style={{
-            backgroundColor: colors.surfaceContainerHigh,
-            borderRadius: shape.large,
+          backgroundColor: colors.surface,
+          borderRadius: shape.medium,
             padding: spacing.xl,
             width: "100%",
             maxWidth: 360,
@@ -500,13 +589,13 @@ export function AccessibilityDisclosureDialog({
             height: 18,
             borderRadius: 2,
             borderWidth: 2,
-            borderColor: agreed ? colors.primary : colors.onSurfaceVariant,
-            backgroundColor: agreed ? colors.primary : "transparent",
+            borderColor: agreed ? colors.accent : colors.iconSecondary,
+            backgroundColor: agreed ? colors.accent : "transparent",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          {agreed && <Icon name="check" size={14} color={colors.onPrimary} />}
+          {agreed && <Icon name="check" size={14} color={colors.onActionPrimary} />}
         </View>
         <Text
           style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s}]}
@@ -575,6 +664,7 @@ export function SettingsPageScaffold({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
       <View
@@ -598,7 +688,10 @@ export function SettingsPageScaffold({
         {help != null && <HelpAction paragraphs={help} />}
       </View>
       <ScrollView
-        contentContainerStyle={[CONTENT_COLUMN, {paddingBottom: insets.bottom + spacing.l}]}
+        contentContainerStyle={[
+          CONTENT_COLUMN,
+          {paddingHorizontal: width < 360 ? 16 : 22, paddingBottom: insets.bottom + spacing.l},
+        ]}
       >
         {children}
       </ScrollView>

@@ -18,10 +18,10 @@ import React, {useEffect, useState} from "react";
 import {Text, View} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {Card, Icon} from "../components";
+import {Icon} from "../components";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
-import {SettingsGroup, SettingsPageScaffold, SettingsRow} from "./settings-components";
+import {SettingsGroup, SettingsPageScaffold, SettingsRow, SettingsTile} from "./settings-components";
 
 /** Where each attribution and licence lives. Opened in the browser, which may be nowhere. */
 const EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html";
@@ -45,11 +45,11 @@ function AboutCard({
 }) {
   const {colors} = useTheme();
   return (
-    <Card>
+    <SettingsTile>
       <View style={{padding: spacing.xl}}>
         <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Icon name={icon} size={20} color={colors.primary} />
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface, marginStart: spacing.s}]}>
+          <Icon name={icon} size={20} color={colors.accent} />
+          <Text style={[typeScale.titleLarge, {color: colors.onSurface, marginStart: spacing.s}]}>
             {title}
           </Text>
         </View>
@@ -57,7 +57,7 @@ function AboutCard({
           {body}
         </Text>
       </View>
-    </Card>
+    </SettingsTile>
   );
 }
 
@@ -82,13 +82,15 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
   return (
     <SettingsPageScaffold title="About" onClose={onClose}>
       <View style={{marginTop: spacing.s}}>
-        <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>Gaten</Text>
-        <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-          Circle Japanese on screen. Read it offline.
-        </Text>
-        <Text style={[typeScale.labelMedium, {color: colors.primary, marginTop: spacing.xs}]}>
-          {`Gaten ${versionName}`}
-        </Text>
+        <SettingsTile style={{padding: spacing.xl}}>
+          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>Gaten</Text>
+          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+            Circle Japanese on screen. Read it offline.
+          </Text>
+          <Text style={[typeScale.labelMedium, {color: colors.accent, marginTop: spacing.xs}]}>
+            {`Gaten ${versionName}`}
+          </Text>
+        </SettingsTile>
       </View>
 
       <View style={{marginTop: spacing.xl}}>

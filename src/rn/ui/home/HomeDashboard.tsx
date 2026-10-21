@@ -5,17 +5,11 @@
  */
 
 import React, {useState} from "react";
-import {ActivityIndicator, StyleSheet, Text, View} from "react-native";
-import Svg, {
-  Circle,
-  Path,
-  Defs,
-  LinearGradient as SvgLinearGradient,
-  Rect,
-  Stop,
-} from "react-native-svg";
+import {ActivityIndicator, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import Svg, {Path} from "react-native-svg";
 import {useTheme} from "../theme";
 import {Icon} from "../components";
+import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
@@ -42,20 +36,9 @@ export function HomeDashboard({
   onOpenSettingsPage,
   onOpenWord,
 }: HomeDashboardProps) {
-  const {colors, accent} = useTheme();
+  const {colors} = useTheme();
   const dark = isDarkScheme(colors.background);
   const canReview = home.canReview;
-  const usesIndigoCta = accent === "Indigo";
-  const keepIndigoDisabledColor = usesIndigoCta && !dark && !canReview;
-  const cta = !canReview && !keepIndigoDisabledColor
-    ? dark
-      ? {from: "#383246", to: "#302A3C", text: "#BDB2D5"}
-      : {from: "#F0EBFF", to: "#E8E0FF", text: "#8573B5"}
-    : dark && usesIndigoCta
-      ? {from: "#C8B6FF", to: "#B9A7FF", text: "#261849"}
-      : usesIndigoCta
-        ? {from: "#5A3EF0", to: "#4B31E3", text: "#FFFFFF"}
-        : {from: colors.primary, to: colors.primary, text: colors.onPrimary};
 
   return (
     <View style={styles.dashboard}>
@@ -63,14 +46,12 @@ export function HomeDashboard({
       <View style={styles.serviceRow}>
         <AnkiCard
           home={home}
-          dark={dark}
           onReview={onOpenReview}
           onSettings={() => onOpenSettingsPage("anki")}
           onRefresh={home.refreshAnki}
         />
         <WaniKaniCard
           home={home}
-          dark={dark}
           onSettings={() => onOpenSettingsPage("wanikani")}
           onRefresh={home.refreshWaniKani}
         />
@@ -81,14 +62,13 @@ export function HomeDashboard({
         accessibilityState={{disabled: !canReview}}
         disabled={!canReview}
         onPress={onOpenReview}
-        style={[styles.studyButton, keepIndigoDisabledColor ? styles.studyButtonDisabled : null]}
+        style={[styles.studyButton, {backgroundColor: canReview ? colors.actionPrimary : colors.disabled}]}
       >
-        <GradientSurface id="home-cta" colors={[cta.from, cta.to]} radius={26} vertical />
-        <Text style={[typeScale.labelLarge, styles.studyButtonLabel, {color: cta.text}]}>
+        <Text style={[typeScale.labelLarge, styles.studyButtonLabel, {color: canReview ? colors.onActionPrimary : colors.onDisabled}]}>
           Start studying
         </Text>
         <View pointerEvents="none" style={styles.studyButtonArrow}>
-          <Svg width={20} height={20} viewBox="0 0 20 20"><Path d="m7 4 6 6-6 6" fill="none" stroke={cta.text} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" /></Svg>
+          <Svg width={18} height={18} viewBox="0 0 20 20"><Path d="m7 4 6 6-6 6" fill="none" stroke={canReview ? colors.onActionPrimary : colors.onDisabled} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" /></Svg>
         </View>
       </PressableScale>
       <RecentLookups home={home} onOpenWord={onOpenWord} onRefresh={home.refreshRecentLookups} />
@@ -107,50 +87,26 @@ function StreakBanner({
   onRefresh: () => void;
 }) {
   const {streak} = home;
-  const days = streak.days ?? 0;
   const completedToday = (streak.completedToday ?? 0) > 0;
-  const ink = dark ? "#F6F2FF" : "#1B1740";
-  const muted = dark ? "#C9C3E0" : "#5A5780";
   const {colors} = useTheme();
+  const ink = colors.onSurface;
+  const muted = colors.onSurfaceVariant;
   const weekdays = home.streak.weekdays;
-  const hasObservedActivity = weekdays.some((day) => day.active === true) || (streak.totalStudyDays ?? 0) > 0;
   const hasPriorActivity = (day: (typeof weekdays)[number]) =>
     weekdays.some((olderDay) => olderDay.daysAgo > day.daysAgo && olderDay.active === true);
-  const streakWasBroken = weekdays.some(
-    (day) => day.daysAgo > 0 && day.active === false && hasPriorActivity(day),
-  );
-  const currentRun = Math.max(days, 1);
-  const message = streak.status === "loading"
-    ? "Checking study history…"
-    : streak.status === "unavailable"
-      ? "Study history unavailable."
-      : completedToday
-        ? streak.atLeastSevenDays
-          ? "7+ day streak. Great work!"
-          : `${currentRun}${streak.capped ? "+" : ""} ${currentRun === 1 ? "day" : "days"} in a row. Keep going!`
-        : days > 0
-          ? `${days}${streak.capped ? "+" : ""} day streak. Study today!`
-          : streakWasBroken
-            ? "Streak reset. Start again."
-            : "Start your streak today.";
-  const totalLabel = streak.totalStudyDays == null
+  const streakDaysLabel = streak.days == null
     ? "—"
-    : `${streak.totalStudyDays} ${streak.totalStudyDays === 1 ? "day" : "days"}`;
-  const cardColor = dark ? "#27243B" : "#F1EEFF";
-
+    : String(streak.days);
   return (
-    <View style={[styles.streakCard, {backgroundColor: cardColor}]}>
+    <View style={[styles.streakCard, {borderBottomColor: colors.outlineVariant}]}>
       <View style={styles.streakTop}>
-        <StreakFlameMark active={days > 0 || completedToday} size={30} dark={dark} />
+        <StreakFlameMark />
         <View style={styles.streakCopy}>
           <Text
             accessibilityLabel="Daily streak. Anki study days follow your collection's rollover."
-            style={[styles.heavyTitle, styles.streakTitle, {color: ink}]}
+            style={[typeScale.titleMedium, styles.streakTitle, {color: ink}]}
           >
             Daily streak
-          </Text>
-          <Text style={[typeScale.bodySmall, styles.streakMessage, {color: muted}]}>
-            {message}
           </Text>
           {streak.error ? (
             <PressableScale
@@ -159,26 +115,28 @@ function StreakBanner({
               onPress={onRefresh}
               style={styles.retryLink}
             >
-              <Text style={[typeScale.labelMedium, {color: colors.primary}]}>Try again</Text>
+              <Text style={[typeScale.labelMedium, {color: colors.accent}]}>Try again</Text>
             </PressableScale>
           ) : null}
         </View>
         <View style={styles.streakTotal}>
-          <Text style={[styles.streakTotalValue, {color: ink}]}>{totalLabel}</Text>
-          <Text style={[styles.streakTotalCaption, {color: muted}]}>total</Text>
+          <Text style={[styles.streakCount, {color: ink}]}>{streakDaysLabel}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[typeScale.bodySmall, styles.streakTotalLabel, {color: muted}]}>days</Text>
         </View>
       </View>
       <View style={styles.weekRow}>
         {weekdays.map((day) => {
-          let state: "complete" | "missed" | "today" | "empty" | "unknown" = "empty";
+          let state: "complete" | "missed" | "today" | "empty" | "unknown" | "upcoming" = "empty";
           if (day.today) {
             if (completedToday || day.active === true) state = "complete";
             else if (day.active == null) state = "unknown";
-            else if (hasObservedActivity) state = "today";
+            else state = "today";
           } else if (day.active === true) {
             state = "complete";
           } else if (day.active === false && day.daysAgo > 0 && hasPriorActivity(day)) {
             state = "missed";
+          } else if (day.daysAgo < 0) {
+            state = "upcoming";
           } else if (day.active == null && day.daysAgo >= 0) {
             state = "unknown";
           }
@@ -190,7 +148,9 @@ function StreakBanner({
                 ? "not studied yet"
                 : state === "unknown"
                   ? "study activity unknown"
-                  : "no study recorded";
+                  : state === "upcoming"
+                    ? "upcoming"
+                    : "no study recorded";
           return (
           <View
             key={day.key}
@@ -198,8 +158,8 @@ function StreakBanner({
             accessibilityLabel={`Anki ${day.label}: ${status}${day.today ? ", today" : ""}`}
             style={styles.weekDay}
           >
-            <StreakDayMark state={state} size={28} dark={dark} />
-            <Text numberOfLines={1} style={[styles.dayLabel, {color: muted}, state === "today" ? [styles.todayLabel, {color: ink}] : null]}>
+            <StreakDayMark state={state} size={29} />
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={[typeScale.labelMedium, {color: day.today ? colors.accent : muted}]}>
               {day.label}
             </Text>
           </View>
@@ -213,13 +173,11 @@ function StreakBanner({
 /** Shows Anki's live due count while keeping connection, permission, and retry states explicit. */
 function AnkiCard({
   home,
-  dark,
   onReview,
   onSettings,
   onRefresh,
 }: {
   home: HomeDashboardData;
-  dark: boolean;
   onReview: () => void;
   onSettings: () => void;
   onRefresh: () => void;
@@ -253,7 +211,7 @@ function AnkiCard({
       status = "Not connected";
       statusTone = "disconnected";
       action = onSettings;
-      actionLabel = "Connect to start";
+      actionLabel = "Connect";
       hint = "Opens Anki settings";
       break;
     case "permissionNeeded":
@@ -298,9 +256,7 @@ function AnkiCard({
       count={count}
       countLabel={countLabel}
       detail={detail}
-      dark={dark}
-      tint="blue"
-      artwork={<AnkiServiceMark />}
+      artwork={<AnkiServiceMark size={28} />}
       action={action}
       actionLabel={actionLabel}
       hint={hint}
@@ -311,12 +267,10 @@ function AnkiCard({
 /** Shows WaniKani's due-now count without inventing completed or remaining-review history. */
 function WaniKaniCard({
   home,
-  dark,
   onSettings,
   onRefresh,
 }: {
   home: HomeDashboardData;
-  dark: boolean;
   onSettings: () => void;
   onRefresh: () => void;
 }) {
@@ -348,7 +302,7 @@ function WaniKaniCard({
       status = "Not connected";
       statusTone = "disconnected";
       action = onSettings;
-      actionLabel = "Connect to start";
+      actionLabel = "Connect";
       hint = "Opens WaniKani settings";
       break;
     case "authRejected":
@@ -379,9 +333,7 @@ function WaniKaniCard({
       count={count}
       countLabel={waniKani.error ? "due · tap to retry" : "reviews due"}
       detail={detail}
-      dark={dark}
-      tint="pink"
-      artwork={<ToriiServiceMark />}
+      artwork={<ToriiServiceMark size={28} />}
       action={action}
       actionLabel={actionLabel}
       hint={hint}
@@ -392,8 +344,7 @@ function WaniKaniCard({
 type ServiceStatusTone = "connected" | "disconnected" | "neutral" | "error";
 
 /**
- * Renders the shared card: the service's own mark in a tile, its title and connection status
- * beside it, and one honest count or action with the chevron every tappable card carries.
+ * Renders a compact service row with its mark, connection state and one honest count or action.
  */
 function ServiceCard({
   title,
@@ -402,8 +353,6 @@ function ServiceCard({
   count,
   countLabel,
   detail,
-  dark,
-  tint,
   artwork,
   action,
   actionLabel,
@@ -415,30 +364,26 @@ function ServiceCard({
   count: number | null;
   countLabel: string;
   detail?: string;
-  dark: boolean;
-  tint: "blue" | "pink";
   artwork: React.ReactNode;
   action?: () => void;
   actionLabel?: string;
   hint?: string;
 }) {
-  const palette = tint === "blue"
-    ? dark
-      ? {from: "#1B2A3E", to: "#263B55", border: "#344A67", tile: "#101B2A", tileBorder: "#33496A", text: "#F7FAFF", muted: "#CAD5E7", accent: "#AFC2FF", chevron: "#93A3BE"}
-      : {from: "#F6FAFF", to: "#DCEAFF", border: "#D5E4FA", tile: "#FFFFFF", tileBorder: "#DCE7F8", text: "#14142B", muted: "#4B4F6B", accent: "#3B4FE0", chevron: "#9098AB"}
-    : dark
-      ? {from: "#2D2330", to: "#3B2A3A", border: "#563D52", tile: "#2A1F27", tileBorder: "#5C4356", text: "#FFF8FC", muted: "#E0CDD9", accent: "#FF9AB9", chevron: "#C0A5B4"}
-      : {from: "#FFF7FC", to: "#FBDDEE", border: "#F5D5E8", tile: "#FFF1F8", tileBorder: "#F6D3E6", text: "#14142B", muted: "#4B4F6B", accent: "#C42B52", chevron: "#9098AB"};
-  const statusColor = statusTone === "connected"
-    ? dark ? "#86EFAC" : "#15803D"
-    : statusTone === "disconnected" || statusTone === "error"
-      ? dark ? "#FDA4AF" : "#B91C1C"
-      : dark ? "#C3C9D7" : "#4B4F6B";
+  const {colors} = useTheme();
+  const {fontScale} = useWindowDimensions();
+  const stackOutcome = fontScale > 1.2;
+  const dark = isDarkScheme(colors.background);
+  const tileColor = title === "Anki"
+    ? dark ? "#182D40" : "#EAF4FF"
+    : dark ? "#38212A" : "#FFF0F2";
+  const ink = colors.onSurface;
+  const muted = colors.onSurfaceVariant;
+  const statusColor = statusTone === "error" ? colors.error : muted;
   const statusDotColor = statusTone === "connected"
-    ? "#16A34A"
-    : statusTone === "disconnected" || statusTone === "error"
-      ? "#DC2626"
-      : dark ? "#9AA5B9" : "#8B90A3";
+    ? colors.success
+    : statusTone === "error"
+      ? colors.warning
+      : colors.iconSecondary;
   const visibleDescription = count != null
     ? `${count} ${countLabel}`
     : actionLabel
@@ -446,46 +391,43 @@ function ServiceCard({
       : detail ?? "";
   const accessibilityLabel = `${title}, ${status}${count != null ? `, ${count} ${countLabel}` : detail ? `, ${detail}` : actionLabel ? `, ${actionLabel}` : ""}`;
   const content = (
-    <View style={[styles.serviceCard, {borderColor: palette.border}]}>
-      <GradientSurface id={`service-${tint}`} colors={[palette.from, palette.to]} radius={19} />
-      <View style={styles.serviceContent}>
-        <View style={styles.serviceHeader}>
-          <View
-            accessible={false}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={[styles.serviceIconTile, {backgroundColor: palette.tile, borderColor: palette.tileBorder}]}
+    <View style={[styles.serviceRowItem, stackOutcome && styles.serviceRowItemScaled, {borderBottomColor: colors.outlineVariant}]}>
+      <View style={[styles.serviceHeader, stackOutcome && styles.serviceHeaderScaled]}>
+        <View
+          accessible={false}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.serviceIconTile, {backgroundColor: tileColor}]}
+        >
+          {artwork}
+        </View>
+        <View style={styles.serviceTitles}>
+          <Text numberOfLines={1} style={[typeScale.titleSmall, {color: ink}]}>{title}</Text>
+          <View style={styles.serviceStatusRow}>
+            <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
+            <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceStatus, {color: statusColor}]}>{status}</Text>
+          </View>
+        </View>
+      </View>
+      <View style={[styles.serviceFooter, stackOutcome && styles.serviceFooterScaled]}>
+        {count != null ? (
+          <View style={styles.serviceCountLine}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.serviceCount, {color: ink}]}>{count}</Text>
+            <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceCountLabel, {color: muted}]}>{countLabel}</Text>
+          </View>
+        ) : actionLabel ? (
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            style={[styles.serviceAction, {color: ink}]}
           >
-            {artwork}
-          </View>
-          <View style={styles.serviceTitles}>
-            <Text numberOfLines={1} style={[styles.heavyTitle, styles.serviceTitle, {color: palette.text}]}>{title}</Text>
-            <View style={styles.serviceStatusRow}>
-              <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
-              <Text numberOfLines={2} style={[styles.serviceStatus, {color: statusColor}]}>{status}</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.serviceFooter}>
-          {count != null ? (
-            <View style={styles.serviceCountLine}>
-              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.serviceCount, {color: palette.accent}]}>{count}</Text>
-              <Text numberOfLines={1} style={[styles.serviceCountLabel, {color: palette.muted}]}>{countLabel}</Text>
-            </View>
-          ) : actionLabel ? (
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-              style={[styles.serviceActionLabel, {color: palette.accent}]}
-            >
-              {actionLabel}
-            </Text>
-          ) : (
-            <Text numberOfLines={1} style={[styles.serviceDetail, {color: palette.muted}]}>{visibleDescription}</Text>
-          )}
-          {action ? <Icon name="keyboard_arrow_right" size={18} color={palette.chevron} /> : null}
-        </View>
+            {actionLabel}
+          </Text>
+        ) : (
+          <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceDetail, {color: muted}]}>{visibleDescription}</Text>
+        )}
+        {action ? <Icon name="keyboard_arrow_right" size={18} color={muted} /> : null}
       </View>
     </View>
   );
@@ -514,8 +456,7 @@ function RecentLookups({
   onOpenWord: (entryId: number) => void;
   onRefresh: () => void;
 }) {
-  const {colors, palette} = useTheme();
-  const referenceLight = palette === "Gaten" && !isDarkScheme(colors.background);
+  const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   const {recentLookups, recentLookupsError, recentLookupsStatus} = home;
   const visibleLookups = expanded ? recentLookups : recentLookups.slice(0, 3);
@@ -523,7 +464,7 @@ function RecentLookups({
   return (
     <View style={styles.recentSection}>
       <View style={styles.recentHeading}>
-        <Text style={[styles.heavyTitle, styles.recentTitle, {color: referenceLight ? "#14142B" : colors.onSurface}]}>Recently looked up</Text>
+        <Text style={[typeScale.titleLarge, styles.recentTitle, {color: colors.onSurface}]}>Recently looked up</Text>
         {recentLookups.length > 3 ? (
           <PressableScale
             accessibilityRole="button"
@@ -532,14 +473,14 @@ function RecentLookups({
             onPress={() => setExpanded((value) => !value)}
             style={styles.seeAllButton}
           >
-            <Text style={[typeScale.labelMedium, {color: colors.primary}]}>
+            <Text style={[typeScale.labelMedium, {color: colors.accent}]}>
               {expanded ? "Show less" : "See all"}
             </Text>
           </PressableScale>
         ) : null}
       </View>
       {recentLookups.length > 0 ? (
-        <View style={[styles.recentList, {backgroundColor: colors.surface}]}>
+        <View style={styles.recentList}>
           {visibleLookups.map((hit, index) => (
             <RecentLookupRow
               key={hit.id}
@@ -551,23 +492,28 @@ function RecentLookups({
         </View>
       ) : recentLookupsStatus === "loading" ? (
         <EmptyRecent
-          icon={<ActivityIndicator size="small" color={colors.primary} />}
+          icon={<ActivityIndicator size="small" color={colors.iconSecondary} />}
           title="Loading recent lookups…"
           message=""
         />
       ) : recentLookupsStatus === "error" ? (
         <EmptyRecent
-          icon={<Icon name="error" color={colors.onSurfaceVariant} />}
+          icon={<Icon name="error" color={colors.warning} />}
           title="Recent lookups could not be loaded"
           message={recentLookupsError ?? "Try loading them again."}
+          error
           action={{label: "Try again", onPress: onRefresh}}
         />
       ) : (
-        <EmptyRecent
-          icon={<Svg width={18} height={18} viewBox="0 0 24 24"><Circle cx={10.5} cy={10.5} r={6.5} stroke={isDarkScheme(colors.background) ? colors.onSurfaceVariant : "#3A3A3F"} strokeWidth={2.6} fill="none" /><Path d="m16 16 4.5 4.5" stroke={isDarkScheme(colors.background) ? colors.onSurfaceVariant : "#3A3A3F"} strokeWidth={2.6} strokeLinecap="round" /></Svg>}
-          title="No recent lookups yet"
-          message="Words you search will appear here."
-        />
+        <View accessible accessibilityLabel="No recent lookups. Words you search will appear here." style={styles.noRecentLookups}>
+          <View style={[styles.emptyIcon, {backgroundColor: colors.surfaceVariant}]} pointerEvents="none">
+            <InkIcon name="search" size={19} color={colors.iconSecondary} />
+          </View>
+          <View style={styles.emptyCopy}>
+            <Text style={[styles.emptyTitle, {color: colors.onSurface}]}>No recent lookups</Text>
+            <Text style={[typeScale.bodySmall, styles.emptyMessage, {color: colors.onSurfaceVariant}]}>Words you search will appear here.</Text>
+          </View>
+        </View>
       )}
       {recentLookups.length > 0 && recentLookupsError ? (
         <PressableScale
@@ -576,7 +522,7 @@ function RecentLookups({
           onPress={onRefresh}
           style={styles.recentError}
         >
-          <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>Could not refresh recent lookups. Try again.</Text>
+          <Text style={[typeScale.labelMedium, {color: colors.error}]}>Could not refresh recent lookups. Try again.</Text>
         </PressableScale>
       ) : null}
     </View>
@@ -602,16 +548,11 @@ function RecentLookupRow({
       onPress={onPress}
       style={[
         styles.lookupRow,
-        !last && {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.outlineVariant},
+        !last && {borderBottomWidth: 1, borderBottomColor: colors.outlineVariant},
       ]}
     >
-      <View style={[styles.lookupGlyph, {backgroundColor: colors.surfaceVariant}]}>
-        <Text numberOfLines={1} style={[styles.heavyTitle, styles.kanjiGlyph, {color: colors.onSurface}]}>
-          {hit.primary.slice(0, 2)}
-        </Text>
-      </View>
       <View style={styles.lookupWord}>
-        <Text numberOfLines={1} style={[styles.heavyTitle, styles.lookupTitle, {color: colors.onSurface}]}>
+        <Text numberOfLines={1} style={[typeScale.titleSmall, {color: colors.onSurface}]}>
           {hit.primary}
         </Text>
         {reading ? (
@@ -634,54 +575,33 @@ function EmptyRecent({
   title,
   message,
   action,
+  error = false,
 }: {
   icon: React.ReactNode;
   title: string;
   message: string;
   action?: {label: string; onPress: () => void};
+  error?: boolean;
 }) {
-  const {colors, palette} = useTheme();
-  const referenceLight = palette === "Gaten" && !isDarkScheme(colors.background);
+  const {colors} = useTheme();
   return (
     <View style={styles.emptyRecent}>
-      <View style={[styles.emptyIcon, {backgroundColor: referenceLight ? "#EDEDEF" : colors.surfaceVariant}]}>{icon}</View>
-      <Text style={[styles.heavyTitle, styles.emptyTitle, {color: referenceLight ? "#14142B" : colors.onSurface}]}>{title}</Text>
-      {message ? <Text style={[typeScale.bodySmall, styles.emptyMessage, {color: referenceLight ? "#6B6B72" : colors.onSurfaceVariant}]}>{message}</Text> : null}
-      {action ? (
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          onPress={action.onPress}
-          style={styles.emptyAction}
-        >
-          <Text style={[typeScale.labelLarge, {color: colors.primary}]}>{action.label}</Text>
-        </PressableScale>
-      ) : null}
+        <View style={[styles.emptyIcon, {backgroundColor: colors.surfaceVariant}]}>{icon}</View>
+      <View style={styles.emptyCopy}>
+        <Text style={[typeScale.titleSmall, {color: error ? colors.error : colors.onSurface}]}>{title}</Text>
+        {message ? <Text style={[typeScale.bodySmall, styles.emptyMessage, {color: colors.onSurfaceVariant}]}>{message}</Text> : null}
+        {action ? (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            onPress={action.onPress}
+            style={styles.emptyAction}
+          >
+            <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{action.label}</Text>
+          </PressableScale>
+        ) : null}
+      </View>
     </View>
-  );
-}
-
-function GradientSurface({
-  id,
-  colors,
-  radius,
-  vertical = false,
-}: {
-  id: string;
-  colors: string[];
-  radius: number;
-  vertical?: boolean;
-}) {
-  return (
-    <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Defs>
-        <SvgLinearGradient id={id} x1="0" y1="0" x2={vertical ? "0" : "1"} y2="1">
-          <Stop offset="0" stopColor={colors[0]} />
-          <Stop offset="1" stopColor={colors[1]} />
-        </SvgLinearGradient>
-      </Defs>
-      <Rect width="100%" height="100%" rx={radius} fill={`url(#${id})`} />
-    </Svg>
   );
 }
 
@@ -690,82 +610,73 @@ function isDarkScheme(background: string): boolean {
 }
 
 const styles = StyleSheet.create({
-  dashboard: {width: "100%", gap: spacing.m},
-  heavyTitle: {fontFamily: "Inter", fontWeight: "700"},
+  dashboard: {width: "100%"},
   streakCard: {
     width: "100%",
-    maxWidth: 400,
-    minHeight: 120,
-    alignSelf: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 20,
-    overflow: "hidden",
-    justifyContent: "space-between",
+    marginTop: spacing.xl,
+    paddingBottom: 22,
+    borderBottomWidth: 1,
   },
   streakTop: {
     minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 11,
   },
   streakCopy: {flex: 1, minWidth: 0},
-  streakTitle: {fontFamily: "Inter", fontSize: 16, lineHeight: 20, fontWeight: "700", flexShrink: 1},
-  streakMessage: {fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "400", marginTop: 2},
-  retryLink: {alignSelf: "flex-start", minHeight: 36, justifyContent: "center"},
-  streakTotal: {minWidth: 42, alignItems: "flex-end", justifyContent: "center"},
-  streakTotalValue: {fontFamily: "Inter", fontSize: 15, lineHeight: 18, fontWeight: "700"},
-  streakTotalCaption: {fontFamily: "Inter", fontSize: 10, lineHeight: 12, fontWeight: "400"},
-  weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 10},
-  weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: 4},
-  dayLabel: {fontFamily: "Inter", fontSize: 11, lineHeight: 14, fontWeight: "500"},
-  todayLabel: {fontWeight: "700"},
-  serviceRow: {flexDirection: "row", gap: 12, alignItems: "stretch"},
-  serviceColumn: {flex: 1, minWidth: 0},
-  serviceCard: {
-    flex: 1,
-    minHeight: 126,
-    borderWidth: 1,
-    borderRadius: 20,
-    overflow: "hidden",
-    paddingHorizontal: 13,
-    paddingVertical: 13,
+  streakTitle: {flexShrink: 1},
+  retryLink: {alignSelf: "flex-start", minHeight: 48, justifyContent: "center"},
+  streakTotal: {minWidth: 88, alignItems: "flex-end", justifyContent: "center", gap: 3},
+  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "500"},
+  streakTotalLabel: {textAlign: "right"},
+  weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 20},
+  weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: spacing.s},
+  serviceRow: {marginTop: 8},
+  serviceColumn: {width: "100%"},
+  serviceRowItem: {
+    minHeight: 69,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 0,
+    borderBottomWidth: 1,
   },
-  serviceContent: {zIndex: 3, flex: 1, justifyContent: "space-between"},
-  serviceHeader: {flexDirection: "row", alignItems: "center", gap: 8},
+  serviceRowItemScaled: {flexDirection: "column", alignItems: "stretch", gap: spacing.s},
+  serviceHeader: {flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: spacing.m},
+  serviceHeaderScaled: {flex: 0},
   serviceIconTile: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    borderWidth: 1,
+    width: 37,
+    height: 37,
+    borderRadius: shape.brandTile,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
   serviceTitles: {flex: 1, minWidth: 0},
-  serviceTitle: {fontFamily: "Inter", fontSize: 16, lineHeight: 21, fontWeight: "700"},
-  serviceStatusRow: {marginTop: 2, flexDirection: "row", alignItems: "center", gap: 5},
+  serviceStatusRow: {marginTop: spacing.xs, flexDirection: "row", alignItems: "center", gap: spacing.xs},
   serviceStatusDot: {width: 6, height: 6, borderRadius: 3},
-  serviceStatus: {flexShrink: 1, fontFamily: "Inter", fontSize: 11, lineHeight: 15, fontWeight: "600"},
-  serviceFooter: {marginTop: 12, flexDirection: "row", alignItems: "center", gap: 4},
-  serviceCountLine: {flex: 1, minWidth: 0, flexDirection: "row", alignItems: "baseline", gap: 6},
-  serviceCount: {fontFamily: "Inter", fontSize: 30, lineHeight: 34, fontWeight: "700"},
-  serviceCountLabel: {flexShrink: 1, fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
-  serviceActionLabel: {flex: 1, minWidth: 0, fontFamily: "Inter", fontSize: 15, lineHeight: 20, fontWeight: "700"},
-  serviceDetail: {flex: 1, minWidth: 0, fontFamily: "Inter", fontSize: 12, lineHeight: 16, fontWeight: "500"},
+  serviceStatus: {flexShrink: 1},
+  serviceFooter: {flexShrink: 1, maxWidth: 132, flexDirection: "row", alignItems: "center", gap: 7},
+  serviceFooterScaled: {width: "100%", maxWidth: "100%", alignSelf: "flex-end", justifyContent: "flex-end"},
+  serviceCountLine: {flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 7},
+  serviceCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700"},
+  serviceCountLabel: {flexShrink: 1},
+  serviceAction: {fontSize: 13, lineHeight: 18, fontWeight: "600"},
+  serviceDetail: {flexShrink: 1},
   studyButton: {
     minHeight: 52,
-    borderRadius: 26,
+    marginTop: 22,
+    borderRadius: shape.button,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.l,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.m,
     overflow: "hidden",
   },
-  studyButtonDisabled: {opacity: 0.9},
-  studyButtonLabel: {flex: 1, textAlign: "center", fontFamily: "Inter", fontSize: 18, lineHeight: 24, fontWeight: "600", letterSpacing: 0},
-  studyButtonArrow: {position: "absolute", end: 20},
-  recentSection: {marginTop: 8},
+  studyButtonLabel: {flex: 1, textAlign: "center"},
+  studyButtonArrow: {position: "absolute", end: spacing.l},
+  recentSection: {marginTop: 34},
   recentHeading: {
     minHeight: 28,
     flexDirection: "row",
@@ -773,9 +684,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.s,
   },
-  recentTitle: {fontSize: 20, lineHeight: 28, flex: 1, flexShrink: 1},
-  seeAllButton: {minHeight: 40, minWidth: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xs},
-  recentList: {borderRadius: 14, overflow: "hidden"},
+  recentTitle: {flex: 1, flexShrink: 1},
+  seeAllButton: {minHeight: 48, minWidth: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xs},
+  recentList: {marginTop: 8},
   lookupRow: {
     minHeight: 58,
     flexDirection: "row",
@@ -784,15 +695,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.m,
     paddingVertical: spacing.xs,
   },
-  lookupGlyph: {width: 38, minHeight: 38, borderRadius: shape.small, alignItems: "center", justifyContent: "center", paddingHorizontal: 2},
-  kanjiGlyph: {fontSize: 15, lineHeight: 20},
   lookupWord: {flex: 1, minWidth: 0},
-  lookupTitle: {fontSize: 14, lineHeight: 19},
   lookupGloss: {maxWidth: "34%", textAlign: "right"},
-  emptyRecent: {alignItems: "center", paddingTop: 4, paddingBottom: 16},
-  emptyIcon: {width: 32, height: 32, borderRadius: 16, marginBottom: 10, alignItems: "center", justifyContent: "center"},
-  emptyTitle: {fontSize: 16, lineHeight: 22, fontWeight: "600", textAlign: "center"},
-  emptyMessage: {fontFamily: "Inter", fontSize: 14, lineHeight: 20, marginTop: 2, textAlign: "center"},
-  emptyAction: {minHeight: 40, justifyContent: "center", paddingHorizontal: spacing.m},
-  recentError: {minHeight: 44, justifyContent: "center", alignItems: "center"},
+  noRecentLookups: {minHeight: 39, flexDirection: "row", alignItems: "center", gap: spacing.m, marginTop: 20},
+  emptyRecent: {flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 16, paddingBottom: 16},
+  emptyIcon: {width: 39, height: 39, borderRadius: shape.empty, alignItems: "center", justifyContent: "center"},
+  emptyCopy: {flex: 1, minWidth: 0},
+  emptyTitle: {fontSize: 13, lineHeight: 18, fontWeight: "700"},
+  emptyMessage: {marginTop: 4},
+  emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
+  recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},
 });

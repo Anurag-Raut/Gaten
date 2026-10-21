@@ -42,7 +42,7 @@ import Animated, {
 import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import Svg, {Circle} from "react-native-svg";
-import {shape, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme, type Theme} from "../theme";
@@ -120,11 +120,11 @@ function MetricCard({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={[styles.metricCard, {backgroundColor: colors.surface}]}>
+    <View style={[styles.metricCard, {backgroundColor: colors.surfaceVariant}]}>
       <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{source}</Text>
       <Text
         style={[
-          typeScale.displaySmall,
+          typeScale.metric,
           styles.metricFigure,
           {color: muted ? colors.onSurfaceVariant : colors.onSurface},
         ]}
@@ -151,7 +151,7 @@ function SourceCard({
     <View style={[styles.card, {backgroundColor: colors.surface}]}>
       <View style={styles.cardHead}>
         <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{source}</Text>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
       </View>
       {children}
     </View>
@@ -194,7 +194,7 @@ function Bar({point, max}: {point: ChartPoint; max: number}) {
   }, [share, reducedMotion, track]);
 
   const barStyle = useAnimatedStyle(() => ({width: `${track.value * 100}%`}));
-  const fill = point.emphasis ? colors.primary : colors.primaryContainer;
+  const fill = point.emphasis ? colors.accent : colors.accentSubtle;
 
   return (
     <View accessible accessibilityLabel={point.spoken} style={styles.barColumn}>
@@ -208,7 +208,7 @@ function Bar({point, max}: {point: ChartPoint; max: number}) {
       <View
         style={[
           styles.barTrack,
-          {backgroundColor: colors.surfaceContainerHighest},
+          {backgroundColor: colors.surfaceVariant},
           unknown && [styles.barUnknown, {borderColor: colors.outlineVariant}],
         ]}
       >
@@ -368,7 +368,7 @@ function Donut({
             cx={DONUT_SIZE / 2}
             cy={DONUT_SIZE / 2}
             r={DONUT_RADIUS}
-            stroke={colors.surfaceContainerHighest}
+            stroke={colors.surfaceVariant}
             strokeWidth={DONUT_THICKNESS}
             fill="none"
           />
@@ -390,7 +390,7 @@ function Donut({
           ))}
         </Svg>
         <View style={styles.donutCentre} pointerEvents="none">
-          <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>{centre}</Text>
+          <Text style={[typeScale.metric, {color: colors.onSurface}]}>{centre}</Text>
           <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>
             {centreCaption}
           </Text>
@@ -441,7 +441,7 @@ function SourceNotice({
     <View style={[styles.card, {backgroundColor: colors.surface}]}>
       <View style={styles.cardHead}>
         <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{source}</Text>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>{title}</Text>
       </View>
       <Text style={[typeScale.bodySmall, styles.noticeBody, {color: colors.onSurfaceVariant}]}>
         {body}
@@ -451,9 +451,9 @@ function SourceNotice({
           accessibilityRole="button"
           accessibilityLabel={action.label}
           onPress={action.onPress}
-          style={[styles.noticeAction, {backgroundColor: colors.primary}]}
+          style={[styles.noticeAction, {backgroundColor: colors.actionPrimary}]}
         >
-          <Text style={[typeScale.labelLarge, {color: colors.onPrimary}]}>{action.label}</Text>
+          <Text style={[typeScale.labelLarge, {color: colors.onActionPrimary}]}>{action.label}</Text>
         </PressableScale>
       )}
     </View>
@@ -547,7 +547,7 @@ function Header({
   return (
     <View style={styles.headerRow}>
       <View style={styles.headerText}>
-        <Text style={[typeScale.displaySmall, {color: colors.onSurface}]}>Analytics</Text>
+        <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>Analytics</Text>
         <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
           {updated ?? "Reading the numbers…"}
         </Text>
@@ -556,9 +556,9 @@ function Header({
         accessibilityRole="button"
         accessibilityLabel="Refresh the numbers"
         onPress={onRefresh}
-        style={[styles.refresh, {backgroundColor: colors.surfaceContainerHigh}]}
+        style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
       >
-        <Icon name="refresh" size={22} color={busy ? colors.onSurfaceVariant : colors.primary} />
+        <Icon name="refresh" size={22} color={busy ? colors.onSurfaceVariant : colors.accent} />
       </PressableScale>
     </View>
   );
@@ -593,7 +593,7 @@ function DeckPicker({
             style={[
               styles.deckChip,
               {
-                backgroundColor: selected ? colors.primaryContainer : colors.surfaceContainerHigh,
+                backgroundColor: selected ? colors.accentSubtle : colors.surfaceVariant,
               },
             ]}
           >
@@ -601,7 +601,7 @@ function DeckPicker({
               numberOfLines={1}
               style={[
                 typeScale.labelLarge,
-                {color: selected ? colors.onPrimaryContainer : colors.onSurfaceVariant},
+                {color: selected ? colors.accent : colors.onSurfaceVariant},
               ]}
             >
               {deck.name}
@@ -634,7 +634,7 @@ export function AnalyticsScreen({
   const ankiData = anki.data;
   const wkData = wanikani.snapshot;
 
-  const rows = width >= 640 ? 2 : 1;
+  const rows = width >= 360 ? 2 : 1;
 
   // The freshest of the two reads, as an absolute clock time. No timer sits behind the label: it says
   // when the numbers on screen were read, and a resumed app re-reads them through the hooks.
@@ -669,7 +669,13 @@ export function AnalyticsScreen({
     <View style={[styles.root, {backgroundColor: colors.background}]}>
       <ScrollView
         style={{marginTop: insets.top}}
-        contentContainerStyle={[styles.content, {paddingBottom: spacing.xxl + insets.bottom}]}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset,
+            paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <Header updated={updatedLabel(updatedAt)} busy={busy} onRefresh={refresh} />
@@ -844,7 +850,7 @@ function DeckCount({label, value}: {label: string; value: number | null}) {
   const {colors} = useTheme();
   return (
     <View style={styles.deckCount}>
-      <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+      <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>
         {value != null ? String(value) : "—"}
       </Text>
       <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{label}</Text>
@@ -856,15 +862,15 @@ const styles = StyleSheet.create({
   root: {flex: 1},
   content: {
     width: "100%",
-    maxWidth: 840,
+    maxWidth: MAX_CONTENT_WIDTH,
     alignSelf: "center",
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.contentInset,
     gap: spacing.l,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: spacing.xxl,
+    marginTop: spacing.l,
     gap: spacing.l,
   },
   headerText: {flex: 1},
@@ -915,7 +921,7 @@ const styles = StyleSheet.create({
   staleNote: {paddingHorizontal: spacing.xs},
   deckRow: {gap: spacing.s, paddingVertical: spacing.xs},
   deckChip: {
-    borderRadius: 999,
+    borderRadius: shape.small,
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.s,
     maxWidth: 220,
@@ -939,7 +945,7 @@ const styles = StyleSheet.create({
   noticeBody: {lineHeight: 18},
   noticeAction: {
     alignSelf: "flex-start",
-    borderRadius: 999,
+    borderRadius: shape.button,
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.m,
   },
