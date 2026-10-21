@@ -182,7 +182,7 @@ Scrollable settings list is separate from the anchored bottom navigation. On sma
 
 # 8. Floating bottom navigation — approved / do not replace
 
-The **approved bottom bar** is the earlier neutral floating capsule. Not the later black full-width dock. Home, Stats, Profile and Settings use the same bar; only selected state changes.
+The **approved bottom bar** is the earlier neutral floating capsule. Not the later black full-width dock. Home, Analytics, Review and Settings use the same bar; only selected state changes.
 
 | Part | Reference value | Behavior |
 | --- | --- | --- |
@@ -191,8 +191,8 @@ The **approved bottom bar** is the earlier neutral floating capsule. Not the lat
 | Tabs | 46 px visual height | Unselected icon only; center aligned |
 | Selected pill | 15 px radius | `--ink-active-bg` fill, `--ink-active-fg` icon/text |
 | Selected width | ~1.55× regular tab flex | Enough room for icon + active label |
-| Icon | 20 px, 1.8 px stroke | Matching set on all pages |
-| Selected label | 11 px, 650 | Home/Stats/Profile/Settings; no truncation |
+| Icon | 20 px, Material Symbols (outlined) | One glyph per tab — home, bar_chart, school, settings — from the same `ui/icons.ts` set the rest of the app draws |
+| Selected label | 11 px, 650 | Home/Analytics/Review/Settings; no truncation |
 | Gesture indicator | System-provided | Preview drew a 94 × 4 px mock bar; do NOT duplicate natively |
 
 For Android, use actual **WindowInsets**. Keep touchable navigation above the gesture/system-nav area. On focus, font scaling or narrow devices, allow the active label to remain readable; increase tap targets to ≥48 dp even if icon/pill visuals are 46 px tall.

@@ -36,6 +36,7 @@ import {
   View,
   useColorScheme,
 } from "react-native";
+import {useReducedMotion} from "react-native-reanimated";
 import type {MaterialTopTabBarProps} from "@react-navigation/material-top-tabs";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {PressableScale} from "./PressableScale";
@@ -43,8 +44,9 @@ import {useTheme} from "./theme";
 import {useSessionActive} from "./session";
 import * as ThemeBridge from "../native/GatenTheme";
 import * as Haptics from "../native/GatenHaptics";
-import {shape, typeScale} from "./tokens";
-import {InkIcon, type InkIconName} from "./InkIcon";
+import {PRESS_EASING_REANIMATED, shape, typeScale} from "./tokens";
+import {Icon} from "./components";
+import type {IconName} from "./icons";
 
 /**
  * The bar's own geometry, in dp: a 46 dp capsule inside a 63 dp content box, above whatever the
@@ -66,16 +68,82 @@ const CONTENT_GAP = 8;
 const BAR_RADIUS = shape.medium;
 const CONTENT_DRIFT = 18;
 
-/** Draws the reference's outline tab icons with a shared size and stroke. */
+/**
+ * The selected glyph's arrival, as offsets from its own tab's pager index: the glyph stays still
+ * until the capsule is 28% of a page away, swells to [ICON_POP_SCALE] with a [ICON_POP_LIFT] dp
+ * rise by 14% out, and is back at rest exactly as the capsule lands. Because it is a function of
+ * `position` like the rest of the bar, a swipe plays it while arriving, a slow drag holds it under
+ * the finger, and a tap that reverses retargets it.
+ */
+const ICON_POP_OUT = 0.28;
+const ICON_POP_IN = 0.14;
+const ICON_POP_SCALE = 1.16;
+const ICON_POP_LIFT = 1.5;
+
+/** Draws the tab's own Material Symbols glyph: the bar's shared size, in the ink it is given. */
 function TabIcon({label, color}: {label: string; color: string}) {
-  const name: InkIconName = label === "Home"
+  const name: IconName = label === "Home"
     ? "home"
-    : label === "Stats"
-      ? "stats"
+    : label === "Analytics"
+      ? "bar_chart"
       : label === "Review"
-        ? "user"
+        ? "school"
         : "settings";
-  return <InkIcon name={name} size={ICON_SIZE} color={color} />;
+  return <Icon name={name} size={ICON_SIZE} color={color} />;
+}
+
+/**
+ * The capsule's glyph, which pops once when its tab becomes the selected one. The first render is
+ * skipped so launching the app on Home does not play the movement; leaving a tab resets silently,
+ * because that glyph is fading out under the capsule anyway. Reduced motion keeps the glyph still.
+ */
+function PopIcon({
+  label,
+  color,
+  active,
+}: {
+  label: string;
+  color: string;
+  active: boolean;
+}) {
+  const reducedMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  const lift = useSharedValue(0);
+  const firstRender = useRef(true);
+
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    if (!active) {
+      scale.value = 1;
+      lift.value = 0;
+      return;
+    }
+    if (reducedMotion) {
+      return;
+    }
+    const away = {duration: ICON_POP_MS, easing: PRESS_EASING_REANIMATED};
+    scale.value = withSequence(
+      withTiming(ICON_POP_SCALE, away),
+      withSpring(1, ICON_SETTLE_SPRING),
+    );
+    lift.value = withSequence(
+      withTiming(-ICON_POP_LIFT, away),
+      withSpring(0, ICON_SETTLE_SPRING),
+    );
+  }, [active, reducedMotion, scale, lift]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{translateY: lift.value}, {scale: scale.value}],
+  }));
+
+  return (
+    <Reanimated.View style={style}>
+      <TabIcon label={label} color={color} />
+    </Reanimated.View>
+  );
 }
 
 /** How deep the named tab's own stack is: a pushed page hides the bar. */
@@ -83,10 +151,6 @@ function stackDepth(state: MaterialTopTabBarProps["state"], name: string): numbe
   const route = state.routes.find((candidate) => candidate.name === name);
   const nested = route?.state;
   return nested && typeof nested.index === "number" ? nested.index : 0;
-}
-
-function tabLabel(routeName: string): string {
-  return routeName === "Analytics" ? "Stats" : routeName;
 }
 
 /**
@@ -266,7 +330,7 @@ export function BottomBar({
             });
           }}
         >
-          {tabLabel(route.name)}
+          {route.name}
         </Text>
       ))}
     </View>
@@ -369,7 +433,7 @@ export function BottomBar({
         {state.routes.map((route, index) => (
           <BarItem
             key={route.key}
-            label={tabLabel(route.name)}
+            label={route.name}
             index={index}
             selected={index === state.index}
             iconColor={iconColor}
@@ -447,7 +511,11 @@ export function BottomBar({
                 },
               ]}
             >
-              <TabIcon label={tabLabel(route.name)} color={capsuleInk} />
+              <PopIcon
+                label={route.name}
+                color={capsuleInk}
+                active={index === state.index}
+              />
               <Text
                 numberOfLines={1}
                 adjustsFontSizeToFit
@@ -466,7 +534,7 @@ export function BottomBar({
                   },
                 ]}
               >
-                {tabLabel(route.name)}
+                {route.name}
               </Text>
             </Animated.View>
           ))}

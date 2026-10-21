@@ -10,11 +10,21 @@ them: downloading the optional stylized-text model (see *Optional stylized-text 
 — connecting a personal access token, and fetching the reference page for a kanji the reader taps
 (see *Optional WaniKani reference pages*).
 
+Gaten asks for **no accessibility service**. The screen is read from a capture session the reader
+turns on themselves (*lookup mode*), and the overlay is drawn with the ordinary "display over other
+apps" permission. That removes the accessibility-service requirement that some apps — banking and
+payment apps among them — check for; it is not a promise that every such app accepts an overlay or a
+screen capture, and no figure here claims otherwise.
+
 ## How it works
 
-1. **Trigger** — the OnePlus Plus Key (remapped with Key Mapper), or the Quick Settings tile. Either
-   way a lookup is requested from outside the app.
-2. **Capture** — the accessibility service calls `takeScreenshot()` and freezes the current screen.
+1. **Trigger** — the floating bubble on screen, the Quick Settings tile, or the OnePlus Plus Key
+   (remapped with Key Mapper). Every one of them can start a lookup from outside the app.
+2. **Capture** — the capture service gives its projection's virtual display a surface for the length
+   of one frame, takes that frame and takes the surface away again, then freezes it. Between lookups
+   no frame reaches the app, no image buffer is held, and the display has nothing to render into (the
+   platform treats a virtual display with no surface like a screen that is off). What stays up for
+   the session is the projection, the foreground service and its notification, and the privacy chip.
    Surfaces marked `FLAG_SECURE` (DRM video) come back blank; Gaten never tries to bypass them.
 3. **Detect** — as soon as the overlay opens, ML Kit finds the lines on the whole screen and indexes
    each one with a box per character for hit testing. Those boxes are not drawn: only your own
@@ -88,20 +98,23 @@ that stops being true, and a trigger that cannot start one is refused:
 - **The screen goes off, the phone locks, or an always-on display comes up.** A pending capture is
   dropped and a trigger while locked is ignored. Unlocking (or the screen coming back on) restores
   the floating button, never the old lookup.
-- **An incoming call or a firing alarm.** These arrive two ways: as a posted notification
-  (`TYPE_NOTIFICATION_STATE_CHANGED`, no extra permission needed) and as the dialer's or clock's own
-  window. A *missed* call and an *upcoming* alarm reminder do not close a lookup: the notification
-  has to be an incoming call (`CallStyle` metadata, incoming call type), a legacy full-screen CALL,
-  or an ALARM-category notification
-  with a full-screen intent, which is how the ring and the alert are shown.
-- **The power menu or another SystemUI dialog.** These are recognised from the window event,
-  including framework dialogs whose class does not identify the power menu specifically.
+- **An incoming call or a firing alarm.** Both are read from the posted notification by the
+  notification listener Gaten already has for pausing media, as metadata only: a `CallStyle` with an
+  incoming call type or a legacy full-screen CALL, or an ALARM-category notification with a
+  full-screen intent, which is how the ring and the alert are shown. A *missed* call and an
+  *upcoming* alarm reminder do not close a lookup.
 - **The display rotates (including a half-turn), unfolds or is otherwise reshaped** — while a capture is still pending or
   while the frame is on screen. The frozen frame is in the pixels of the screen it was taken from,
-  so it is closed rather than rescaled; ordinary layout changes — the keyboard, a split-screen
-  divider, a font change — are ignored.
-- **The accessibility service is unbound or destroyed, or the app's task is finished** (including
-  being taken off recents, where the platform chooses whether to deliver the callback).
+  so it is closed rather than rescaled; the mirror itself is resized for the next lookup. Ordinary
+  layout changes — the keyboard, a split-screen divider, a font change — are ignored.
+- **Lookup mode ends, or the app's task is finished.** The status-bar privacy chip, the screen
+  locking, another app starting its own capture, the notification's **Turn off** and the service
+  being destroyed all end the projection, and lookup mode ends with it — the reader is told, and the
+  next **Turn on** asks for the consent again. What the platform does about a lock depends on the
+  version: Android 15 QPR1 and later stop a projection when the screen locks, older versions leave
+  it running (the lookup still closes on the lock, and **Turn off** ends the session). A lookup that
+  is up goes down at the same moment, and the app's task being finished (or the app being taken off
+  recents) takes any lookup and pending capture with it, though lookup mode itself stays on.
 
 The media the lookup paused is left **paused** for all of these — and so is a pause that was still
 landing when the lookup ended, because the frozen frame had already asked for it. The reader should
@@ -109,29 +122,36 @@ not hear a video play on under a call, and a player that has already raised its 
 started again behind them. The reader's own dismissals — back, the scrim, the trigger toggle — play
 it back as before, and a close that beats the pause cancels it.
 
-Foreground app changes cancel a capture that is still on its way to the screen. Once the frozen frame
-is up, the app beneath it is behind an opaque window, so a window event from it no longer ends the
-lookup. Each callback is tied to its capture, so a late success or failure cannot reopen a closed
-lookup or alter a newer request.
+Each callback is tied to its capture, so a late frame or a failure cannot reopen a closed lookup or
+alter a newer request.
 
-What this does **not** promise: the power menu, an OEM dialer's in-call screen, or a clock's alarm
-screen each have their own window class names, and only the ones listed above are recognised; an
-OEM that names them differently may only be covered by the window focus the overlay loses anyway.
-The same is true of whether OxygenOS delivers any given accessibility event — that is the part most
-likely to need a real device to confirm.
+What this does **not** promise: the power menu is no longer noticed at all — outside an accessibility
+service it has no signal to listen to — so a lookup under it closes only through the window focus the
+overlay loses. An OEM dialer's in-call screen and a clock's alarm screen are no longer recognised by
+window class either: their notifications are what closes a lookup now, and an app that posts neither
+leaves the dismissals to the reader. Whether a particular app's video surface comes back in the
+mirror — and whether its player pauses and resumes the way it does under the old capture — is the
+part most likely to need a real device to confirm.
 
 ## Setup on a phone
 
 1. **Install the APK** for your ABI (`arm64-v8a` on modern phones).
-2. **Enable the accessibility service** for screen lookup: Settings → Accessibility → Gaten → On.
-   Gaten's **Settings → Screen lookup** page opens the system settings. Manual dictionary search
-   does not need this permission.
+2. **Turn on lookup mode**: open **Settings → Lookup mode** and tap **Turn on** (the same button sits
+   on **Settings → Screen lookup**), read the disclosure and accept.
+   Android then asks for the permissions lookup mode needs, in this order — **Display over other
+   apps** (`SYSTEM_ALERT_WINDOW`), which the frozen frame, the lasso and the bubble are drawn with;
+   the **notification permission** (`POST_NOTIFICATIONS` on Android 13+), so Gaten's ongoing
+   **Lookup mode is on** notification can be shown; and then its own **screen-capture** consent,
+   which starts the media projection. A privacy chip stays in the status bar while lookup mode is
+   on; tapping that chip, locking the screen or tapping **Turn off** on Gaten's notification ends the
+   session, and the next **Turn on** asks for the consent again. (Android requires a fresh consent
+   for every session, so this is once per switch-on, not once per lookup.)
 3. **Add the Quick Settings tile**: on Android 13+, tap **Add tile** under **Settings → Screen lookup** and confirm
    Android's dialog. On older versions, add Gaten through the Quick Settings editor. The home row
    reflects **Added** and returns to **Add tile** when Android reports removal. Removal itself
    belongs to the Quick Settings editor; Android provides no app-side remove-tile API.
-   Tapping the tile starts a lookup; if the accessibility service is not enabled, it opens
-   accessibility settings instead.
+   The tile's own state mirrors whether the projection is alive: it is active while lookup mode is
+   on. Tapping it starts a lookup; with lookup mode off it asks for the capture consent instead.
 4. **Optional — bind the Plus Key.** The OnePlus Plus Key is intercepted by OxygenOS before apps
    see it, so it needs Key Mapper running in Expert Mode on Shizuku:
    1. Developer options → **Disable permission monitoring** → ON (Shizuku's documented
@@ -145,7 +165,9 @@ likely to need a real device to confirm.
    5. Set the OxygenOS Plus Key function to **`nothing`** so no stock action fires as well.
 
    The trigger is a toggle: firing it while the panel is open closes the panel instead of starting
-   another lookup.
+   another lookup. Expert Mode matters for one more reason: Key Mapper's ordinary mode *is* an
+   accessibility service, and having any accessibility service enabled is what lookup mode exists to
+   avoid — running it on Shizuku keeps the permission off the phone entirely.
 
 5. **Optional — customize Anki cards.** Open **Settings → Anki cards**. The default is the
    existing Gaten deck and three-field note type. Enter a deck name (including nested names such
@@ -190,8 +212,9 @@ JS talks to the Kotlin logic through bridge modules in `app/src/main/java/com/ga
 (dictionary search, Anki review/export, WaniKani, theme, haptics, recognition downloads, platform
 utilities) — no business logic is duplicated in JavaScript.
 
-The accessibility lookup overlay retains its independent service window and navigation, still
-drawn in Compose inside `OverlayWindowController` — it never touches the activity UI.
+The lookup overlay retains its independent service window and navigation, still drawn in Compose
+inside `OverlayWindowController` — now a `TYPE_APPLICATION_OVERLAY` window owned by the capture
+service, behind the "display over other apps" permission — and it never touches the activity UI.
 
 Dependencies: Kotlin `2.2.21`, AGP `8.11.0`, RN `0.86.3` (New Architecture) with
 `react-native-reanimated` `4.7` + `react-native-worklets` `0.13`, React Navigation `7`.
@@ -242,7 +265,7 @@ keeps ML Kit's text, and the rest of the screen keeps being read behind the resu
 gesture usually needs no wait at all.
 
 The engines are not kept for the life of the process. Once no lookup has used them for 90 seconds —
-or when the system asks for memory, or when the accessibility service is torn down — Gaten releases
+or when the system asks for memory, or when lookup mode ends or its service is destroyed — Gaten releases
 them (manga-ocr's ONNX sessions and ML Kit's Japanese recognizer). The next lookup builds them again
 from local files or APK assets, with no download; this first lookup may take longer.
 Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
@@ -325,7 +348,7 @@ mnemonics; a radical above the account's level says that too. Radical names are 
 mnemonics, not linguistic definitions. Every kanji of a word stays tappable either way, and each of
 these outcomes is stated in the sheet instead of leaving an empty page.
 
-**The token cannot be typed in the overlay.** The lookup overlay belongs to the accessibility
+**The token cannot be typed in the overlay.** The lookup overlay belongs to the capture
 service and cannot offer a keyboard reliably, so a kanji page with no token connected — or with a
 token WaniKani has rejected — explains that and offers **Open Gaten**, which brings this app up over
 the overlay.
@@ -375,8 +398,12 @@ on Gaten's side, and no network is involved — this is on-device provider acces
 
 ## Project layout
 
-- `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
-  Settings tile, accessibility service.
+- `.` (root package) — app entry points: the React host activity, the trigger receiver and the Quick
+  Settings tile.
+- `capture/` — lookup mode: `ScreenCaptureSession` (the projection, the virtual display that mirrors
+  the screen into an `ImageReader`, and the frame copying), `GatenCaptureService` (the foreground
+  service that owns the projection, the overlay windows and the capture pipeline),
+  `CaptureConsentActivity` (the transparent activity Android hands the capture consent back to).
 - `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the full-screen text index
   (`ScreenText*`, `ScreenHits`) and
   `OcrRepair`. The reader is `ScreenLineReader` (the per-session cache that replaces each line's text
@@ -402,7 +429,8 @@ on Gaten's side, and no network is involved — this is on-device provider acces
   OCR + dictionary pipeline (still Compose, hosted in its own window).
 - `ui/wanikani/` — the kanji and radical detail panel drawn inside the overlay sheet
   (`WaniKaniDetail.kt`).
-- `ui/overlay/` — `OverlayWindowController`, the accessibility-overlay window host.
+- `ui/overlay/` — `OverlayWindowController`, the `TYPE_APPLICATION_OVERLAY` window host the capture
+  service draws the lookup in.
 - `ui/components/` — `KanjiStrip` and `pressScale` used by the overlay result sheet.
 - `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light, palette and accent
   choices the overlay, the floating bubble and the RN theme bridge read).
@@ -452,17 +480,30 @@ AnkiDroid for every scheduling decision. There is no telemetry and no server of 
 about the reader is collected, profiled or sent anywhere, and the Analytics tab draws only the
 numbers described above, from WaniKani and from AnkiDroid on this device.
 
-The only notifications Gaten looks at are the accessibility events Android already sends it for a
-posted notification, and it reads **metadata only**: whether an incoming call (`CallStyle`, incoming
-call type) or a firing alarm (ALARM category with a full-screen intent) was posted, so the lookup
-closes for those before their own window appears. No notification title, text or other content is
-read, kept, logged or stored. This needs no extra permission; it is a side effect of the
-accessibility service's event subscription.
+The optional notification-listener access Gaten offers is used for two things, and only two: it is
+what lets `MediaSessionManager` hand Gaten the active media sessions, so the video behind the overlay
+can be paused and resumed, and it is where an incoming call or a firing alarm is noticed. Both are
+**metadata only**: a `CallStyle` with an incoming call type (or a legacy full-screen CALL), an
+ALARM-category notification with a full-screen intent, and the media sessions themselves. No
+notification title, text or other content is read, kept, logged or stored, and declining the access
+leaves every lookup feature working — the media pause falls back to a media key press, and calls and
+alarms simply close nothing.
 
-The optional notification-listener access offered under **Settings → Screen lookup** is separate and is used for one
-thing only: reading the active media sessions so the video behind the overlay can be paused and
-resumed. It deliberately reads nothing from the notifications it is handed, and declining it leaves
-every lookup feature working (only the session-based pause gives way to a media key press).
+Lookup mode is visible in the system's own way: Android shows its capture consent dialog when it is
+switched on and keeps a privacy chip in the status bar while it is, and Gaten's ongoing notification
+— which the notification permission (`POST_NOTIFICATIONS` on Android 13+) is what allows to appear —
+carries the button that ends it. A frame is only taken when a lookup is triggered: the request gets
+its own reader, the display is given a surface only while that request runs, and both are given up
+again the moment the frame is in hand — so between lookups no frame reaches the app, no image buffer
+is parked in a queue and the display has nothing to render into.
+
+That is not the same as a free session. Of the capture path, what stays running while lookup mode is
+on is the projection itself (which Android requires a foreground service and a privacy chip for), the
+worker thread that serves a request, and the notification. Small, but not nothing — and whether the
+whole thing costs less power than the always-on accessibility service it replaced is a question only
+a real-device comparison can answer; the app makes no claim about it. Nor is this session the only
+thing Gaten holds: the OCR engines, the frame behind an open lookup and the app's own heaps are
+separate, and follow the release rules described for them above.
 
 ML Kit's transport library and ONNX Runtime also declare `INTERNET` for their own analytics and
 telemetry backends. Gaten's code never calls those, but while the permission is in the merged

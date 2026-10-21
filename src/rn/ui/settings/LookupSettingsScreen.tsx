@@ -5,13 +5,13 @@
  */
 
 /**
- * Look up: whether Gaten may read the screen, the three ways a lookup can start, and the optional
- * pause of whatever is playing behind the overlay.
+ * Look up: whether lookup mode is on, the three ways a lookup can start, and the optional pause of
+ * whatever is playing behind the overlay.
  *
- * The permissions this page reports on are the platform's own — the enabled accessibility
- * services and the enabled notification listeners — and both are read again on every arrival and
- * every foregrounding, because both are granted in system Settings, outside the app. Nothing here
- * is asked for by itself: the disclosure comes first, and only then the system screen.
+ * Lookup mode is a live media projection, and it ends outside Gaten as easily as it starts — the
+ * status-bar chip, the notification, the screen locking — so it is read again on every arrival and
+ * every foregrounding, as is the notification-listener permission the media pause needs. Nothing
+ * here asks for anything by itself: the disclosure comes first, and only then the system dialogs.
  */
 import React, {useEffect, useState} from "react";
 import {AppState, Platform, Pressable, Text, View} from "react-native";
@@ -23,13 +23,13 @@ import {IconButton} from "../components";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {
+  LookupModeCard,
   OutlinedButton,
   RowIcon,
-  ScreenAccessCard,
   SettingsGroup,
   SettingsPageScaffold,
   SwitchRow,
-  useScreenAccessRequest,
+  useLookupModeRequest,
 } from "./settings-components";
 
 /** The broadcast a key remapper sends to start a lookup (LookupTriggerReceiver). */
@@ -40,20 +40,21 @@ const ADD_TILE_API = 33;
 
 export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   const theme = useTheme();
-  const {request: requestScreenAccess, dialog: disclosureDialog} = useScreenAccessRequest();
+  const {request: requestLookupMode, dialog: disclosureDialog} = useLookupModeRequest();
 
-  const [screenAccess, setScreenAccess] = useState(false);
+  const [lookupMode, setLookupMode] = useState(false);
   const [notificationAccess, setNotificationAccess] = useState(false);
   const [floatingEnabled, setFloatingEnabled] = useState(false);
   const [tileAdded, setTileAdded] = useState(false);
 
-  // Tile callbacks can arrive while this page sits under the Quick Settings shade, and both
-  // permissions are granted in system Settings: re-read on every arrival and foregrounding.
+  // Tile callbacks can arrive while this page sits under the Quick Settings shade, lookup mode can
+  // end without the app being asked, and the notification-listener permission is granted in system
+  // Settings: re-read on every arrival and foregrounding.
   useEffect(() => {
     let cancelled = false;
     const readAll = () => {
-      void GatenAppInfo.isScreenAccessEnabled().then((v) => {
-        if (!cancelled) setScreenAccess(v);
+      void GatenAppInfo.isLookupModeActive().then((v) => {
+        if (!cancelled) setLookupMode(v);
       });
       void GatenPlatform.isNotificationAccessEnabled().then((v) => {
         if (!cancelled) setNotificationAccess(v);
@@ -79,6 +80,9 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
     void GatenHaptics.play("tick").catch(() => {});
     setFloatingEnabled(next);
     void GatenTrigger.setFloatingButtonEnabled(next).catch(() => {});
+    // The bubble only exists while lookup mode is on, so switching it on without lookup mode is
+    // the moment to offer to turn lookup mode on.
+    if (next && !lookupMode) requestLookupMode();
   };
 
   const requestAddTile = () => {
@@ -95,16 +99,16 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   return (
     <SettingsPageScaffold title="Screen lookup" onClose={onClose}>
       <View style={{marginTop: spacing.s}}>
-        <ScreenAccessCard enabled={screenAccess} onTurnOn={requestScreenAccess} />
+        <LookupModeCard enabled={lookupMode} onTurnOn={requestLookupMode} />
       </View>
       <SettingsGroup title="Start a lookup" style={{marginTop: spacing.xl}}>
         <SwitchRow
           icon="touch_app"
           title="Floating button"
           summary={
-            screenAccess
+            lookupMode
               ? "Tap the bubble on screen to look up."
-              : "Appears once screen access is on."
+              : "Appears once lookup mode is on."
           }
           value={floatingEnabled}
           onValueChange={toggleFloating}

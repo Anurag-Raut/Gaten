@@ -6,7 +6,7 @@
 
 /**
  * The pieces every settings page is built from: the scaffold with its top bar, the row of a
- * group, the group itself, the dialogs a page raises, and the screen-access card with the
+ * group, the group itself, the dialogs a page raises, and the lookup-mode card with the
  * disclosure flow behind its "Turn on".
  *
  * These are the RN ports of the shared composables in `SettingsScreen.kt`; the pages in
@@ -16,6 +16,8 @@
 import React, {useState} from "react";
 import {
   Modal,
+  PermissionsAndroid,
+  Platform,
   Pressable,
   ScrollView,
   Switch as RNSwitch,
@@ -29,7 +31,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {openAccessibilitySettings, toast} from "../../native/GatenPlatform";
+import {canDrawOverlays, openOverlaySettings, requestLookupMode, toast} from "../../native/GatenPlatform";
 import {
   Button,
   Card,
@@ -256,11 +258,11 @@ export function SettingsRow({
 }
 
 /**
- * The state of screen access, for the page that owns it: a calm rounded surface either way, a quiet
+ * The state of lookup mode, for the page that owns it: a calm rounded surface either way, a quiet
  * glyph, what it means, and — while it is off — the one action that changes it. Being off is a setup
  * state, not an error, so nothing here is painted with the error roles.
  */
-export function ScreenAccessCard({
+export function LookupModeCard({
   enabled,
   onTurnOn,
 }: {
@@ -280,13 +282,13 @@ export function ScreenAccessCard({
           <Text
             style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1, marginStart: spacing.m}]}
           >
-            {enabled ? "Screen access is on" : "Screen access is off"}
+            {enabled ? "Lookup mode is on" : "Lookup mode is off"}
           </Text>
         </View>
         <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
           {enabled
             ? "Circle any Japanese text on screen to look it up."
-            : "Gaten cannot read the screen until you turn it on."}
+            : "Gaten cannot read the screen until you turn lookup mode on."}
         </Text>
         {!enabled && (
           <View style={{marginTop: spacing.l, alignSelf: "flex-start"}}>
@@ -547,10 +549,11 @@ export function HelpAction({paragraphs}: {paragraphs: string[]}) {
 }
 
 /**
- * The disclosure behind every "Turn on": the app's own explanation of the accessibility service
- * first, the checkbox before the confirm, and system Settings only once the reader has agreed.
+ * The disclosure behind every "Turn on": the app's own explanation of the two permissions lookup
+ * mode asks for first, the checkbox before the confirm, and the system dialogs only once the
+ * reader has agreed.
  */
-export function AccessibilityDisclosureDialog({
+export function LookupModeDisclosureDialog({
   onAccept,
   onDismiss,
 }: {
@@ -559,10 +562,9 @@ export function AccessibilityDisclosureDialog({
 }) {
   const {colors} = useTheme();
   const [agreed, setAgreed] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   return (
     <DialogShell
-      title="Grant Accessibility Permission"
+      title="Turn on lookup mode"
       onDismiss={onDismiss}
       scrollBody
       actions={
@@ -574,7 +576,7 @@ export function AccessibilityDisclosureDialog({
     >
       <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
         {
-          "Gaten uses the accessibility service to take a screenshot of the screen only when you start a lookup, and to close the lookup when something interrupts it. The screenshot never leaves your device."
+          "Gaten reads Japanese off your screen only while you ask it to. Turning lookup mode on asks for two things:\n\n• Screen capture — Android shows its own dialog, and a privacy chip stays in the status bar while the capture is live. Tap that chip or turn lookup mode off and the capture ends at once; on Android 15 QPR1 and later, locking the screen ends it too.\n• Display over other apps — how the frozen frame, the lasso and the floating bubble are drawn on top of what you are reading.\n\nNothing is recorded and nothing leaves the device: a frame is taken when you start a lookup, recognised and looked up offline, and then dropped — between lookups the screen is not being captured. Gaten does not ask for accessibility at all: no accessibility service is enabled for it, it never inspects another app's accessibility tree, and it does not read notification message text.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character's page. With a token connected, Gaten also reads your own study progress from wanikani.com — the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages — and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device."
         }
       </Text>
       <Pressable
@@ -600,42 +602,47 @@ export function AccessibilityDisclosureDialog({
         <Text
           style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s}]}
         >
-          I understand how this permission will be used and agree to proceed
+          I understand how these permissions will be used and agree to proceed
         </Text>
       </Pressable>
-      <Button
-        variant="text"
-        label={showDetails ? "Hide the details" : "Read the details"}
-        onPress={() => setShowDetails(!showDetails)}
-      />
-      {showDetails && (
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-          {
-            "Gaten uses the accessibility service to capture a screenshot when you start a lookup and detect interruptions so the lookup closes automatically. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service does not read notification messages or type for you.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character's page. With a token connected, Gaten also reads your own study progress from wanikani.com — the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages — and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device."
-          }
-        </Text>
-      )}
     </DialogShell>
   );
 }
 
 /**
- * The state behind every screen-access "Turn on", so a caller needs no dialog of its own and the
- * disclosure is the same one wherever it is raised from. Returns the action that opens it and
- * the dialog element to render, exactly as `rememberScreenAccessRequest` returned its action.
+ * Turns lookup mode on, in the order the permissions can actually be asked for: display over other
+ * apps first (a Settings screen the reader has to come back from), then the notification permission
+ * — a dialog, and only so lookup mode's own notification is visible, since the capture works
+ * without it — and the screen-capture consent last, which is the one Android insists on every
+ * session. Declining any of them leaves lookup mode off, and nothing is captured either way.
  */
-export function useScreenAccessRequest() {
+async function turnOnLookupMode() {
+  if (!(await canDrawOverlays())) {
+    void toast("Allow Gaten to display over other apps, then turn lookup mode on again");
+    if (!(await openOverlaySettings())) {
+      void toast("Could not open the Display over other apps settings");
+    }
+    return;
+  }
+  if (Platform.OS === "android" && Number(Platform.Version) >= 33) {
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  }
+  await requestLookupMode();
+}
+
+/**
+ * The state behind every lookup-mode "Turn on", so a caller needs no dialog of its own and the
+ * disclosure is the same one wherever it is raised from. Returns the action that opens it and
+ * the dialog element to render.
+ */
+export function useLookupModeRequest() {
   const [showDisclosure, setShowDisclosure] = useState(false);
   const request = () => setShowDisclosure(true);
   const dialog = showDisclosure ? (
-    <AccessibilityDisclosureDialog
+    <LookupModeDisclosureDialog
       onAccept={() => {
         setShowDisclosure(false);
-        openAccessibilitySettings().then((opened) => {
-          if (!opened) {
-            void toast("Could not open Accessibility Settings");
-          }
-        });
+        void turnOnLookupMode();
       }}
       onDismiss={() => setShowDisclosure(false)}
     />

@@ -32,6 +32,8 @@
 import {useSyncExternalStore} from "react";
 import {
   isSearchable as dictIsSearchable,
+  recentSearches as dictRecentSearches,
+  rememberSearch as dictRememberSearch,
   search as dictSearch,
   type SearchResult,
 } from "../../native/GatenDict";
@@ -41,6 +43,9 @@ const SEARCH_DEBOUNCE_MS = 250;
 
 /** The query length the dictionary answers for — DictionarySearch.QUERY_LIMIT. */
 export const QUERY_LIMIT = 32;
+
+/** How many searched words the empty prompt offers — GatenDictModule.MAX_RECENT_SEARCHES. */
+export const RECENT_SEARCH_LIMIT = 6;
 
 /** What the search screen is showing, or waiting for. */
 export type SearchStatus = "idle" | "searching" | "results" | "failed" | "unsupported";
@@ -62,6 +67,11 @@ export interface SearchState {
   error: string | null;
   /** Moves with every query the reader types; the list starts at the top when it moves. */
   generation: number;
+  /**
+   * The queries the reader has searched with, newest first. Empty until they have searched at all,
+   * which is what the empty prompt shows examples for instead.
+   */
+  recentSearches: string[];
 }
 
 let state: SearchState = {
@@ -73,6 +83,7 @@ let state: SearchState = {
   hitsQuery: "",
   error: null,
   generation: 0,
+  recentSearches: [],
 };
 
 const listeners = new Set<() => void>();
@@ -164,6 +175,57 @@ export function primeRecentLookupHits(entries: readonly SearchResult[]): void {
   for (const entry of entries) {
     recentHits.set(entry.id, entry);
   }
+}
+
+/** [query] at the front of [list], without the copy that was already in it, cut to the limit. */
+function withRecentSearch(list: readonly string[], query: string): string[] {
+  const key = normalizeQuery(query);
+  return [query, ...list.filter((prior) => normalizeQuery(prior) !== key)].slice(0, RECENT_SEARCH_LIMIT);
+}
+
+/**
+ * Reads the searched words kept on this device. Whatever is already here — the words searched with
+ * since the read was asked for — stays in front of the stored list, so a save that raced the read
+ * is not lost behind it or duplicated by it.
+ */
+export function loadRecentSearches(): void {
+  // The bridge call sits inside the chain: a JS bundle running over a build that predates the
+  // native method then rejects like any other failure, instead of throwing out of Home's mount.
+  void Promise.resolve()
+    .then(() => dictRecentSearches())
+    .then((stored) => {
+      const seen = new Set(state.recentSearches.map(normalizeQuery));
+      const merged = [...state.recentSearches];
+      for (const query of stored) {
+        const key = normalizeQuery(query);
+        if (key.length > 0 && !seen.has(key)) {
+          seen.add(key);
+          merged.push(query);
+        }
+      }
+      set({recentSearches: merged.slice(0, RECENT_SEARCH_LIMIT)});
+    })
+    .catch((error: unknown) => {
+      console.warn("Could not read the recent searches", error);
+    });
+}
+
+/**
+ * Remembers [query] as a word the reader searched with: the keyboard's search action, a chip on the
+ * empty prompt, or a result they opened. Typing on its own does not count — the debounce asks about
+ * text the reader is still writing, and those fragments would fill the prompt.
+ */
+export function rememberSearchedQuery(query: string): void {
+  const trimmed = query.trim();
+  if (normalizeQuery(trimmed).length === 0 || state.recentSearches[0] === trimmed) {
+    return;
+  }
+  set({recentSearches: withRecentSearch(state.recentSearches, trimmed)});
+  void Promise.resolve()
+    .then(() => dictRememberSearch(trimmed))
+    .catch((error: unknown) => {
+      console.warn("Could not save the recent search", error);
+    });
 }
 
 function cancelPending() {
@@ -266,6 +328,7 @@ export function searchNow() {
   if (normalizeQuery(query).length === 0) {
     return;
   }
+  rememberSearchedQuery(query);
   cancelPending();
   void runSearch(query, runId);
 }

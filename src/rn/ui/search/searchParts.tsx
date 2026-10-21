@@ -131,36 +131,46 @@ export function SearchRowSeparator() {
 }
 
 /**
- * The empty state's own content: what a search can be, and one tap to try it. A chip is a choice
- * rather than typing, so it is asked for at once — anything half-typed is cancelled so it cannot
- * land over it.
+ * The empty state's own content: one tap on a word that can be searched for. Until the reader has
+ * searched at all that is the examples, over a line saying what a search can be; once they have,
+ * the examples and the line are gone and their own searched words take their place — the words they
+ * came back for, not a lesson on what the field takes. A chip is a choice rather than typing, so it
+ * is asked for at once — anything half-typed is cancelled so it cannot land over it.
  */
 export function SearchIdlePrompt() {
   const {colors} = useTheme();
+  const {recentSearches} = store.useSearchState();
+  const firstSearch = recentSearches.length === 0;
   return (
     <View style={styles.prompt}>
-      <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>
-        Look up a word
-      </Text>
-      <Text
-        style={[typeScale.bodyMedium, styles.promptHint, {color: colors.onSurfaceVariant}]}
-      >
-        Kanji, kana, a romaji reading such as neko or tokyo, or an inflected form such as
-        食べた. Gaten looks up words offline, from the dictionary on this device.
-      </Text>
-      <View style={styles.flowRow}>
-        {SEARCH_EXAMPLES.map((example) => (
+      {firstSearch && (
+        <>
+          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>
+            Look up a word
+          </Text>
+          <Text
+            style={[typeScale.bodyMedium, styles.promptHint, {color: colors.onSurfaceVariant}]}
+          >
+            Kanji, kana, a romaji reading such as neko or tokyo, or an inflected form such as
+            食べた. Gaten looks up words offline, from the dictionary on this device.
+          </Text>
+        </>
+      )}
+      <View style={[styles.flowRow, !firstSearch && styles.recentRow]}>
+        {(firstSearch ? SEARCH_EXAMPLES : recentSearches).map((word) => (
           <PressableScale
-            key={example}
+            key={word}
             accessibilityRole="button"
-            accessibilityLabel={`Search for ${example}`}
+            accessibilityLabel={`Search for ${word}`}
             onPress={() => {
-              store.onQueryChange(example);
+              store.onQueryChange(word);
               store.searchNow();
             }}
             style={[styles.exampleChip, {backgroundColor: colors.surfaceVariant}]}
           >
-            <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{example}</Text>
+            <Text numberOfLines={1} style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+              {word}
+            </Text>
           </PressableScale>
         ))}
       </View>
@@ -325,9 +335,12 @@ const styles = StyleSheet.create({
     gap: spacing.s,
     marginTop: spacing.l,
   },
+  // The searched words carry the empty state on their own: no line above them to sit under.
+  recentRow: {marginTop: 0},
   exampleChip: {
     borderRadius: shape.small,
     minHeight: 48,
+    maxWidth: "100%",
     justifyContent: "center",
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.m,

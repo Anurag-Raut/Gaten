@@ -10,7 +10,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+    <!-- Lookup mode: a media projection session the user consents to once per session, and the
+         overlay windows drawn over the app being read. SYSTEM_ALERT_WINDOW is the "display over
+         other apps" grant; the two foreground-service permissions are what Android 14 and later
+         require before a projection may be used at all; POST_NOTIFICATIONS (Android 13+) is what
+         lets the service's own notification — the one that says the screen is being captured — be
+         seen. Nothing here reads another app's content: the only pixels Gaten ever sees are the ones
+         the projection hands to it. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Reading is offline: the screenshot is recognised on-device, the dictionary is bundled and
          the Anki export is local IPC. INTERNET is here for two optional things, and neither happens
@@ -98,19 +108,31 @@
             </intent-filter>
         </activity>
 
+        <!-- The app while lookup mode is on: the projection mirror, the frozen frame and the overlay
+             windows all live here. The foreground service type is required by Android 14 before the
+             projection token may be used, and it is the only thing that keeps the overlay and the
+             projection alive while the reader is in another app. -->
         <service
-            android:name=".GatenAccessibilityService"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
+            android:name=".capture.GatenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
+        <!-- A projection token is only ever handed back to an activity, and a Quick Settings tile can
+             only close its own shade by starting one: both of these draw nothing, finish at once, and
+             exist so the app behind them is never taken off screen. -->
+        <activity
+            android:name=".capture.CaptureConsentActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Gaten.Transparent" />
+
+        <activity
+            android:name=".trigger.TileCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Gaten.Transparent" />
 
         <!-- Does nothing with notifications: it exists only so MediaSessionManager will hand
              Gaten the active media sessions, which the platform gates on notification access. -->

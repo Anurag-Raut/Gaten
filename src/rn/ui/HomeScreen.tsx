@@ -129,6 +129,12 @@ export function HomeScreen({
     }
   }, [searchMode]);
 
+  // The words the empty prompt offers are the ones kept on this device; read once, on the screen
+  // that shows them.
+  useEffect(() => {
+    store.loadRecentSearches();
+  }, []);
+
   useEffect(() => {
     if (!focused || !searchMode) {
       return;
@@ -150,6 +156,18 @@ export function HomeScreen({
       navigation?.navigate("Word", {entryId});
     },
     [navigation, onOpenWord],
+  );
+
+  /**
+   * Opening a result also remembers the query that found it: a word the reader searched with, even
+   * if the search was only the debounce's and never went through the keyboard's search action.
+   */
+  const openSearchRow = useCallback(
+    (entryId: number) => {
+      store.rememberSearchedQuery(store.getSearchState().hitsQuery);
+      openRow(entryId);
+    },
+    [openRow],
   );
 
   const openReview = useCallback(() => {
@@ -286,7 +304,7 @@ export function HomeScreen({
               entering={FadeInDown.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
               exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
             >
-              <SearchRowItem row={item} onOpen={openRow} />
+              <SearchRowItem row={item} onOpen={openSearchRow} />
             </Animated.View>
           )}
           ItemSeparatorComponent={SearchRowSeparator}

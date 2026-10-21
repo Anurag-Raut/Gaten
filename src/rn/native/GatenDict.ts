@@ -33,6 +33,8 @@ interface GatenDictNative {
   isSearchable(query: string): Promise<boolean>;
   recentLookups(): Promise<SearchResult[]>;
   rememberLookup(entry: SearchResult): Promise<void>;
+  recentSearches(): Promise<string[]>;
+  rememberSearch(query: string): Promise<void>;
 }
 
 const GatenDict = NativeModules.GatenDict as GatenDictNative;
@@ -55,4 +57,14 @@ export function recentLookups(): Promise<SearchResult[]> {
 /** Records an entry when its word-detail page opens. */
 export function rememberLookup(entry: SearchResult): Promise<void> {
   return GatenDict.rememberLookup(entry);
+}
+
+/** The six queries searched with most recently, newest first, kept on this device. */
+export function recentSearches(): Promise<string[]> {
+  return GatenDict.recentSearches();
+}
+
+/** Records a query the reader searched with. */
+export function rememberSearch(query: string): Promise<void> {
+  return GatenDict.rememberSearch(query);
 }

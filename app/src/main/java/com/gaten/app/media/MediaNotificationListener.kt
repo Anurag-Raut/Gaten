@@ -7,18 +7,60 @@
 
 package com.gaten.app.media
 
+import android.app.Notification
+import android.os.Build
 import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import com.gaten.app.capture.GatenCaptureService
+import com.gaten.app.lifecycle.LookupDismissal
+import com.gaten.app.lifecycle.NotificationEvent
+import com.gaten.app.lifecycle.classifyNotificationEvent
 
 /**
- * Empty notification listener, declared only so [MediaPauser] can read the media sessions.
+ * The notification listener, for the two things Gaten needs access to notifications for.
  *
- * The platform gates [android.media.session.MediaSessionManager.getActiveSessions] on the caller
- * holding either `MEDIA_CONTENT_CONTROL` (signature|system) or notification-listener access, and
- * Gaten will not ask for the former. This service is the component that access is checked against;
- * it deliberately does nothing with the notifications it is handed.
+ * [MediaPauser] reads the active media sessions through it — the platform gates
+ * `MediaSessionManager.getActiveSessions` on notification access, and Gaten will not ask for the
+ * signature permission — and the posted notifications themselves are the only signal left for the
+ * interruptions that used to arrive as accessibility events: an incoming call or a firing alarm
+ * takes the screen, and a lookup open at that moment closes before their own window appears.
  *
- * It is not the signal for an interruption: an incoming call or a firing alarm arrives as an
- * ordinary `TYPE_NOTIFICATION_STATE_CHANGED` accessibility event, which the accessibility service
- * already receives and acts on. Nothing here is required for that, or for a lookup at all.
+ * Only metadata is read, through [classifyNotificationEvent]: the category, the style template, the
+ * published call type and whether there is a full-screen intent. No notification title, text or
+ * other content is read, kept, logged or stored.
  */
-class MediaNotificationListener : NotificationListenerService()
+class MediaNotificationListener : NotificationListenerService() {
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        val notification = sbn?.notification ?: return
+        val dismissal = classifyNotificationEvent(
+            NotificationEvent(
+                packageName = sbn.packageName,
+                ownPackage = packageName,
+                category = notification.category,
+                styleTemplate = notification.extras?.getString(Notification.EXTRA_TEMPLATE),
+                callType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    notification.extras?.getInt(
+                        Notification.EXTRA_CALL_TYPE,
+                        Notification.CallStyle.CALL_TYPE_UNKNOWN
+                    )
+                } else {
+                    null
+                },
+                hasFullScreenIntent = notification.fullScreenIntent != null
+            )
+        )
+        if (dismissal == LookupDismissal.None) return
+        val service = GatenCaptureService.instance
+        if (service == null) {
+            Log.d(TAG, "$dismissal posted but lookup mode is off")
+            return
+        }
+        service.dismissForInterruption(dismissal, sbn.packageName)
+    }
+
+    companion object {
+        private const val TAG = "Gaten"
+    }
+}

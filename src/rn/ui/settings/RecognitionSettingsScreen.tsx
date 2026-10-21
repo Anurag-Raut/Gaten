@@ -92,7 +92,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
   const busy = state.busy;
 
   // The model directory can change while this page is not looking — a debug build copies its
-  // bundled model out on the first lookup, which the accessibility service runs with the app in
+  // bundled model out on the first lookup, which the capture service runs with the app in
   // the background — so what is installed is re-read on every arrival and every foregrounding.
   // The store drops the ask while a download or an import owns the directory.
   useEffect(() => {

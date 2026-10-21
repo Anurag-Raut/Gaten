@@ -5,11 +5,10 @@
  */
 
 /**
- * The word detail: the headword, numbered meanings, kanji strip, and pinned
- * Add-to-Anki bar. The entry is resolved by id from the shared search store — never carried
- * through the route — so a restored page resolves as soon as its search has answered.
+ * A focused dictionary entry with expandable spellings and a pinned Anki action. The entry is
+ * resolved by id from the shared search store so a restored route never carries stale result data.
  */
-import React, {useCallback, useMemo, useRef} from "react";
+import React, {useCallback, useMemo, useRef, useState} from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -21,12 +20,14 @@ import {
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
-import {Button, CommonChip, Icon, IconButton, KanjiStrip, distinctIdeographs} from "../components";
+import {Button, Icon, IconButton, distinctIdeographs} from "../components";
+import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenDict from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
+import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {hitFor, useSearchState} from "./searchStore";
 import {SearchNotice} from "./SearchScreen";
 import {useAnkiExport, type AnkiExport, type ExportState} from "./useAnkiExport";
@@ -35,15 +36,9 @@ export interface SearchWordScreenProps {
   entryId: number;
   onBack: () => void;
   onOpenKanji: (character: string) => void;
-  onOpenSettingsPage: (page: "anki" | "wanikani") => void;
 }
 
-export function SearchWordScreen({
-  entryId,
-  onBack,
-  onOpenKanji,
-  onOpenSettingsPage,
-}: SearchWordScreenProps) {
+export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScreenProps) {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
   const state = useSearchState();
@@ -51,13 +46,18 @@ export function SearchWordScreen({
   const anki = useAnkiExport();
   const exportState = anki.exportFor(entryId);
   const recordedEntryId = useRef<number | null>(null);
+  // The WaniKani kanji section is only there when WaniKani can answer for it, so the token's
+  // presence is read here rather than assumed. It is stored or forgotten on the WaniKani settings
+  // page, which this screen returns from, so reading on arrival covers every way it changes.
+  const [wanikaniConfigured, setWanikaniConfigured] = useState(false);
 
-  // Resume of the entry: status, settings and duplicate state are read again after any absence —
-  // on the way in, and again every time the reader comes back to the page. Keyed to the entry and
-  // not to the row it was resolved from: a search answering while this page is open replaces the
-  // row, and the Compose page did not re-check the duplicate state for that.
+  // Save a lookup and refresh Anki's duplicate state whenever the reader returns to this entry.
   useFocusEffect(
     useCallback(() => {
+      let cancelled = false;
+      void GatenWaniKani.isConfigured().then((configured) => {
+        if (!cancelled) setWanikaniConfigured(configured);
+      });
       const entry = hitFor(entryId);
       if (entry) {
         if (recordedEntryId.current !== entry.id) {
@@ -69,13 +69,16 @@ export function SearchWordScreen({
         }
         void anki.prepareExport(entry);
       }
+      return () => {
+        cancelled = true;
+      };
     }, [entryId]),
   );
 
   if (!hit) {
     return (
       <View style={[styles.root, {backgroundColor: colors.background}]}>
-        <WordAppBar title="Search" onBack={onBack} />
+        <WordAppBar onBack={onBack} />
         <View style={styles.body}>
           {state.status === "searching" ? (
             <SearchNotice spin title="Searching the dictionary…" />
@@ -92,7 +95,7 @@ export function SearchWordScreen({
 
   return (
     <View style={[styles.root, {backgroundColor: colors.background}]}>
-      <WordAppBar title={hit.primary} onBack={onBack} />
+      <WordAppBar onBack={onBack} />
       <ScrollView
         style={styles.body}
         contentContainerStyle={[
@@ -100,35 +103,28 @@ export function SearchWordScreen({
           {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
         ]}
       >
-        <HeadwordCard hit={hit} />
-        <MeaningsCard hit={hit} />
-        <View style={styles.strip}>
-          <KanjiStrip
+        <HeadwordSection hit={hit} />
+        <MeaningSection glosses={hit.glosses} />
+        {hit.pos.length > 0 && (
+          <DetailRow
+            label="Part of speech"
+            value={hit.pos.map(compactPartOfSpeech).join(" / ")}
+          />
+        )}
+        <OtherSpellingsRow primary={hit.primary} spellings={hit.kanji} />
+        {wanikaniConfigured && (
+          <WordKanjiSection
             characters={distinctIdeographs(hit.primary)}
-            selected={null}
-            onKanji={onOpenKanji}
-            haptic="none"
+            onOpenKanji={onOpenKanji}
           />
-        </View>
-        <View style={[styles.flowRow, styles.settingsRow]}>
-          <Button
-            variant="text"
-            label="Anki settings"
-            onPress={() => onOpenSettingsPage("anki")}
-          />
-          <Button
-            variant="text"
-            label="WaniKani settings"
-            onPress={() => onOpenSettingsPage("wanikani")}
-          />
-        </View>
+        )}
       </ScrollView>
       <AddToAnkiBar entry={hit} anki={anki} exportState={exportState} />
     </View>
   );
 }
 
-function WordAppBar({title, onBack}: {title: string; onBack: () => void}) {
+function WordAppBar({onBack}: {onBack: () => void}) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -136,107 +132,189 @@ function WordAppBar({title, onBack}: {title: string; onBack: () => void}) {
       style={[
         styles.appBar,
         {
-          backgroundColor: colors.surface,
-          // 64dp below the status bar, as the Kotlin's top bar is: padding alone would leave the
-          // row centred in what is left of a fixed 64.
+          backgroundColor: colors.background,
           minHeight: 64 + insets.top,
           paddingTop: insets.top,
+          borderBottomColor: colors.outlineVariant,
         },
       ]}
     >
       <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onBack} />
       <Text
-        numberOfLines={1}
-        style={[typeScale.headlineSmall, styles.appBarTitle, {color: colors.onSurface}]}
+        accessibilityRole="header"
+        style={[styles.appBarTitle, {color: colors.onSurface}]}
       >
-        {title}
+        Word details
       </Text>
     </View>
   );
 }
 
-function HeadwordCard({hit}: {hit: SearchResult}) {
+function HeadwordSection({hit}: {hit: SearchResult}) {
   const {colors} = useTheme();
-  return (
-      <View style={[styles.card, {borderBottomColor: colors.outlineVariant}]}>
-      <View style={styles.flowRow}>
-        <Text style={[typeScale.displaySmall, {color: colors.onSurface}]}>{hit.primary}</Text>
-        {hit.common && <CommonChip />}
-      </View>
-      {hit.kana.length > 0 && (
-        <Text
-          numberOfLines={1}
-          accessibilityLabel={hit.kana.join("・")}
-          style={[typeScale.titleSmall, styles.line, {color: colors.onSurfaceVariant}]}
-        >
-          {hit.kana.join("・")}
-        </Text>
-      )}
-      {hit.kanji.length > 1 && (
-        <Text style={[typeScale.bodyMedium, styles.line, {color: colors.onSurfaceVariant}]}>
-          Also written: {hit.kanji.slice(1).join("・")}
-        </Text>
-      )}
-      {(hit.match === "NORMALIZED" || hit.match === "LOOSE") && (
-        <Text style={[typeScale.labelMedium, styles.line, {color: colors.accent}]}>
-          from {hit.form}
-        </Text>
-      )}
-      </View>
-  );
-}
+  const readings = hit.kana.filter((reading) => reading !== hit.primary);
+  const posSummary = hit.pos[0]
+    ? compactPartOfSpeech(hit.pos[0]).split(" / ")[0].replace(/s$/i, "")
+    : null;
+  const metadata = [hit.common ? "Common" : null, posSummary]
+    .filter(Boolean)
+    .join(" · ");
 
-function MeaningsCard({hit}: {hit: SearchResult}) {
-  const {colors} = useTheme();
   return (
-    <View style={[styles.card, {borderBottomColor: colors.outlineVariant}]}>
-      <Text style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}>Meaning</Text>
-      {hit.glosses.length === 0 ? (
-        <Text
-          style={[
-            typeScale.bodyMedium,
-            styles.line,
-            {color: colors.onSurfaceVariant},
-          ]}
-        >
-          The dictionary has no gloss for this entry.
+    <View style={[styles.headwordSection, {borderBottomColor: colors.outlineVariant}]}>
+      <Text style={[styles.wordTitle, {color: colors.onSurface}]}>{hit.primary}</Text>
+      {readings.length > 0 && (
+        <Text style={[styles.reading, {color: colors.onSurfaceVariant}]}>
+          {readings.join("・")}
         </Text>
-      ) : (
-        <View style={styles.glosses}>
-          {hit.glosses.map((gloss, index) => (
-            <View key={index} style={styles.glossRow}>
-              <Text
-                style={[typeScale.bodyLarge, styles.glossNumber, {color: colors.onSurfaceVariant}]}
-              >
-                {index + 1}.
-              </Text>
-              <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]}>{gloss}</Text>
-            </View>
-          ))}
-        </View>
       )}
-      {hit.pos.length > 0 && (
-        <>
-          <Text style={[typeScale.labelLarge, styles.posCaption, {color: colors.onSurfaceVariant}]}>
-            Part of speech
-          </Text>
-          <View style={styles.posRow}>
-            {hit.pos.map((pos) => (
-              <PosPill key={pos} label={pos} />
-            ))}
-          </View>
-        </>
+      {metadata.length > 0 && (
+        <Text style={[styles.metadata, {color: colors.onSurfaceVariant}]}>
+          {metadata}
+        </Text>
       )}
     </View>
   );
 }
 
-/** One part of speech: a quiet rounded label, secondary to the headword. */
-function PosPill({label}: {label: string}) {
+function MeaningSection({glosses}: {glosses: string[]}) {
   const {colors} = useTheme();
   return (
-    <View style={[styles.posPill, {backgroundColor: colors.surfaceVariant}]}>
-      <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>{label}</Text>
+    <View style={[styles.meaningSection, {borderBottomColor: colors.outlineVariant}]}>
+      <Text
+        accessibilityRole="header"
+        style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}
+      >
+        Meaning
+      </Text>
+      {glosses.length === 0 ? (
+        <Text style={[typeScale.bodyMedium, styles.meaningFallback, {color: colors.onSurfaceVariant}]}>
+          The dictionary has no gloss for this entry.
+        </Text>
+      ) : (
+        <View style={styles.glosses}>
+          {glosses.map((gloss, index) => (
+            <Text key={`${index}-${gloss}`} style={[styles.meaning, {color: colors.onSurface}]}>
+              {gloss.length > 0 ? `${gloss[0].toUpperCase()}${gloss.slice(1)}` : gloss}
+            </Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function compactPartOfSpeech(label: string): string {
+  const shortLabel = label.split("(")[0].trim();
+  return /^expressions?$/i.test(shortLabel) ? "Expression / phrase" : shortLabel;
+}
+
+function DetailRow({label, value}: {label: string; value: string}) {
+  const {colors} = useTheme();
+  return (
+    <View style={[styles.detailRow, {borderBottomColor: colors.outlineVariant}]}>
+      <Text style={[typeScale.bodyMedium, styles.detailLabel, {color: colors.onSurfaceVariant}]}>
+        {label}
+      </Text>
+      <Text style={[typeScale.titleSmall, styles.detailValue, {color: colors.onSurface}]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function OtherSpellingsRow({primary, spellings}: {primary: string; spellings: string[]}) {
+  const {colors} = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const alternatives = [...new Set(spellings.filter((spelling) => spelling !== primary))];
+  if (alternatives.length === 0) return null;
+
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={`Other spellings, ${alternatives.length} variants`}
+      accessibilityHint={expanded ? "Collapse other spellings" : "Expand other spellings"}
+      accessibilityState={{expanded}}
+      onPress={() => setExpanded((value) => !value)}
+      style={[styles.spellingsRow, {borderBottomColor: colors.outlineVariant}]}
+    >
+      <View style={styles.detailRowContent}>
+        <Text style={[typeScale.bodyMedium, styles.detailLabel, {color: colors.onSurfaceVariant}]}>
+          Other spellings
+        </Text>
+        <View style={styles.spellingsSummary}>
+          <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>
+            {alternatives.length} {alternatives.length === 1 ? "variant" : "variants"}
+          </Text>
+          <Icon
+            name={expanded ? "keyboard_arrow_down" : "keyboard_arrow_right"}
+            size={24}
+            color={colors.onSurfaceVariant}
+          />
+        </View>
+      </View>
+      {/* One row per spelling: a list the eye can count, not variants strung together with a dot. */}
+      {expanded && (
+        <View style={styles.alternatives}>
+          {alternatives.map((spelling, index) => (
+            <View
+              key={spelling}
+              style={[
+                styles.alternativeRow,
+                index > 0
+                  ? {borderTopWidth: 1, borderTopColor: colors.outlineVariant}
+                  : null,
+              ]}
+            >
+              <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{spelling}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </PressableScale>
+  );
+}
+
+function WordKanjiSection({
+  characters,
+  onOpenKanji,
+}: {
+  characters: string[];
+  onOpenKanji: (character: string) => void;
+}) {
+  const {colors} = useTheme();
+  if (characters.length === 0) return null;
+
+  return (
+    <View style={styles.kanjiSection}>
+      <View style={styles.kanjiHeading}>
+        <Text accessibilityRole="header" style={[typeScale.titleSmall, {color: colors.onSurface}]}>
+          WaniKani kanji
+        </Text>
+        <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+          {characters.length} {characters.length === 1 ? "character" : "characters"}
+        </Text>
+      </View>
+      <View style={styles.kanjiTiles}>
+        {characters.map((character) => (
+          <PressableScale
+            key={character}
+            accessibilityRole="button"
+            accessibilityLabel={`WaniKani details for ${character}`}
+            accessibilityHint="Opens the kanji details"
+            onPress={() => onOpenKanji(character)}
+            style={[
+              styles.kanjiTile,
+              {
+                backgroundColor: colors.surfaceVariant,
+                borderColor: colors.outlineVariant,
+              },
+            ]}
+          >
+            <Text style={[styles.kanjiCharacter, {color: colors.onSurface}]}>{character}</Text>
+          </PressableScale>
+        ))}
+      </View>
     </View>
   );
 }
@@ -252,11 +330,13 @@ function AddToAnkiBar({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
 
   const share = async () => {
     try {
       const shared = await anki.shareToAnkiDroid(entry);
       if (!shared) {
+        ToastAndroid.show("AnkiDroid cannot be opened for sharing", ToastAndroid.SHORT);
         ToastAndroid.show("AnkiDroid cannot be opened for sharing", ToastAndroid.SHORT);
       }
     } catch {
@@ -282,47 +362,60 @@ function AddToAnkiBar({
       style={[
         styles.bar,
         {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.background,
           borderTopColor: colors.outlineVariant,
-          paddingBottom: insets.bottom + spacing.l,
+          paddingBottom: insets.bottom + spacing.s,
         },
       ]}
     >
-      <Text numberOfLines={1} style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>
-        Deck: {anki.ankiSettings.deckName}
-      </Text>
-      {anki.ankiStatus !== "notInstalled" && (
-        <Button
-          fullWidth
-          disabled={!enabled}
-          label={busy ? undefined : buttonLabel}
-          leading={
-            busy ? (
-              <ActivityIndicator size="small" color={colors.onActionPrimary} />
-            ) : exportState.kind === "idle" || exportState.kind === "failed" ? (
-              <Icon name="add" size={18} color={colors.onActionPrimary} />
-            ) : null
-          }
-          onPress={() => {
-            if (anki.ankiStatus === "ready") {
-              void anki.addToAnki(entry);
-            } else {
-              void GatenAnki.requestPermission();
+      <View
+        style={[
+          styles.footerContent,
+          {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
+        ]}
+      >
+        <View style={styles.deckRow}>
+          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>Anki deck</Text>
+          <Text
+            accessibilityLabel={`Anki deck: ${anki.ankiSettings.deckName}`}
+            style={[typeScale.titleSmall, styles.deckName, {color: colors.onSurface}]}
+          >
+            {anki.ankiSettings.deckName}
+          </Text>
+        </View>
+        {anki.ankiStatus !== "notInstalled" && (
+          <Button
+            fullWidth
+            disabled={!enabled}
+            label={busy ? undefined : buttonLabel}
+            leading={
+              busy ? (
+                <ActivityIndicator size="small" color={colors.onActionPrimary} />
+              ) : exportState.kind === "idle" || exportState.kind === "failed" ? (
+                <Icon name="add" size={18} color={colors.onActionPrimary} />
+              ) : null
             }
-          }}
-        />
-      )}
-      {anki.ankiStatus === "needsPermission" && (
-        <Button variant="text" label="Send to AnkiDroid instead" onPress={() => void share()} />
-      )}
-      {anki.ankiStatus === "notInstalled" && (
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-          Install AnkiDroid to add cards. You can configure Gaten cards here first.
-        </Text>
-      )}
-      {exportState.kind === "failed" && (
-        <Text style={[typeScale.bodySmall, {color: colors.error}]}>{exportState.message}</Text>
-      )}
+            onPress={() => {
+              if (anki.ankiStatus === "ready") {
+                void anki.addToAnki(entry);
+              } else {
+                void GatenAnki.requestPermission();
+              }
+            }}
+          />
+        )}
+        {anki.ankiStatus === "needsPermission" && (
+          <Button variant="text" label="Send to AnkiDroid instead" onPress={() => void share()} />
+        )}
+        {anki.ankiStatus === "notInstalled" && (
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+            Install AnkiDroid to add cards. You can configure Gaten cards here first.
+          </Text>
+        )}
+        {exportState.kind === "failed" && (
+          <Text style={[typeScale.bodySmall, {color: colors.error}]}>{exportState.message}</Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -333,37 +426,65 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.xs,
+    borderBottomWidth: 1,
   },
-  appBarTitle: {flex: 1},
+  appBarTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    fontFamily: "Inter",
+  },
   body: {flex: 1},
   scrollContent: {
     alignSelf: "center",
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
-    paddingHorizontal: spacing.contentInset,
-    paddingTop: spacing.l,
-    paddingBottom: spacing.l,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
-  card: {paddingVertical: spacing.l, borderBottomWidth: 1},
-  line: {marginTop: spacing.m},
-  strip: {marginTop: spacing.m},
-  settingsRow: {marginTop: spacing.m},
-  flowRow: {flexDirection: "row", flexWrap: "wrap", gap: spacing.s},
-  glosses: {marginTop: spacing.s, gap: spacing.xs},
-  glossRow: {flexDirection: "row"},
-  glossNumber: {width: 28},
-  posCaption: {marginTop: spacing.xl},
-  posPill: {
-    borderRadius: shape.small,
-    paddingHorizontal: spacing.m,
-    paddingVertical: spacing.xs,
+  headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
+  wordTitle: {fontSize: 36, fontWeight: "700"},
+  reading: {fontSize: 18, marginTop: spacing.s},
+  metadata: {fontSize: 14, marginTop: spacing.m},
+  meaningSection: {paddingVertical: spacing.xl, borderBottomWidth: 1},
+  glosses: {marginTop: spacing.m, gap: spacing.s},
+  meaning: {fontSize: 29, fontWeight: "700"},
+  meaningFallback: {marginTop: spacing.m},
+  detailRow: {
+    minHeight: 58,
+    paddingVertical: spacing.l,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.m,
   },
-  posRow: {flexDirection: "row", flexWrap: "wrap", gap: spacing.s, marginTop: spacing.m},
-  bar: {
-    paddingHorizontal: spacing.l,
-    paddingTop: spacing.l,
-    gap: spacing.s,
-    // A hairline is all that separates the pinned action from the page above it.
-    borderTopWidth: 1,
+  detailLabel: {flex: 1},
+  detailValue: {flexShrink: 1, textAlign: "right"},
+  spellingsRow: {borderBottomWidth: 1},
+  detailRowContent: {
+    minHeight: 58,
+    paddingVertical: spacing.l,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.m,
   },
+  spellingsSummary: {flexDirection: "row", alignItems: "center", gap: spacing.xs},
+  alternatives: {paddingBottom: spacing.l},
+  alternativeRow: {minHeight: 40, justifyContent: "center", paddingVertical: spacing.s},
+  kanjiSection: {paddingTop: spacing.xl},
+  kanjiHeading: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.s},
+  kanjiTiles: {flexDirection: "row", flexWrap: "wrap", gap: spacing.m, marginTop: spacing.m},
+  kanjiTile: {
+    width: 58,
+    height: 58,
+    borderRadius: shape.empty,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kanjiCharacter: {fontSize: 34, fontWeight: "600"},
+  bar: {borderTopWidth: 1, paddingTop: spacing.m},
+  footerContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center", gap: spacing.s},
+  deckRow: {minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.m},
+  deckName: {flexShrink: 1, textAlign: "right"},
 });

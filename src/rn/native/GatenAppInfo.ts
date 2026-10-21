@@ -1,6 +1,6 @@
 /**
  * The small facts about the app the settings pages put on screen: the version, the dictionary's
- * schema version, the optional manga-ocr model, and the accessibility service's state.
+ * schema version, the optional manga-ocr model, and whether lookup mode is on.
  */
 import { NativeModules } from "react-native";
 
@@ -17,7 +17,7 @@ interface GatenAppInfoNative {
   getAppVersion(): Promise<string>;
   getDictionarySchemaVersion(): Promise<number>;
   getMangaOcrState(): Promise<MangaOcrState>;
-  isScreenAccessEnabled(): Promise<boolean>;
+  isLookupModeActive(): Promise<boolean>;
 }
 
 const GatenAppInfo = NativeModules.GatenAppInfo as GatenAppInfoNative;
@@ -38,9 +38,10 @@ export function getMangaOcrState(): Promise<MangaOcrState> {
 }
 
 /**
- * Whether Gaten's accessibility service is enabled in the system's settings — granted outside the
- * app, so re-check on every resume rather than caching.
+ * Whether lookup mode is on right now — a live media projection, not a setting. It can also end
+ * outside the app (the status-bar chip, the screen locking, another app capturing), so re-check on
+ * every resume rather than caching.
  */
-export function isScreenAccessEnabled(): Promise<boolean> {
-  return GatenAppInfo.isScreenAccessEnabled();
+export function isLookupModeActive(): Promise<boolean> {
+  return GatenAppInfo.isLookupModeActive();
 }

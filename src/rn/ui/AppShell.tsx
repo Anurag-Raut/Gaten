@@ -190,7 +190,6 @@ function HomeWordRoute({
       onOpenKanji={(character) =>
         whenFocused(navigation, () => openKanji(navigation, character))
       }
-      onOpenSettingsPage={(page) => openSettingsPage(navigation, page)}
     />
   );
 }

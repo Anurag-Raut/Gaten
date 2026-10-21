@@ -173,7 +173,7 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
                       style={{
                         flex: 1,
                         borderRadius: 8,
-                        backgroundColor: tones?.background ?? "transparent",
+                        backgroundColor: tones?.surfaceVariant ?? "transparent",
                         alignItems: "center",
                         justifyContent: "center",
                       }}

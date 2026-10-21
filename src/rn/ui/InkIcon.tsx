@@ -14,10 +14,7 @@ export type InkIconName =
   | "cards"
   | "torii"
   | "sun"
-  | "home"
-  | "stats"
   | "user"
-  | "settings"
   | "chevron";
 
 /** The shared outline glyphs from the approved Ink preview. */
@@ -47,10 +44,7 @@ export function InkIcon({
       {name === "cards" ? <Path d="M5 5h11v11H5zM8 8h11v11H8z" /> : null}
       {name === "torii" ? <Path d="M3 7h18M6 10h12M8 10v11m8-11v11M6 15h12" /> : null}
       {name === "sun" ? <><Circle cx={12} cy={12} r={4} /><Path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></> : null}
-      {name === "home" ? <Path d="m3 11 9-8 9 8M5 10v11h6v-7h3v7h5V10" /> : null}
-      {name === "stats" ? <Path d="M5 20v-8m7 8V4m7 16v-12" /> : null}
       {name === "user" ? <><Circle cx={12} cy={12} r={9} /><Circle cx={12} cy={9} r={3} /><Path d="M6 19c.5-5 11.5-5 12 0" /></> : null}
-      {name === "settings" ? <><Circle cx={12} cy={12} r={3} /><Path d="M10 2h4l.5 3 2 1 2.8-1.2 2 3.5-2.2 2v3.5l2.2 2-2 3.5-2.8-1.2-2 1L14 22h-4l-.5-3-2-1-2.8 1.2-2-3.5 2.2-2v-3.5l-2.2-2 2-3.5L7.5 6l2-1Z" /></> : null}
       {name === "chevron" ? <Path d="m6 3 5 5-5 5" /> : null}
     </Svg>
   );

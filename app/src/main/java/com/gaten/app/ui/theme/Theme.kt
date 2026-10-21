@@ -157,7 +157,7 @@ fun GatenTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            // Taken from the view, not from its context: the overlay is drawn in the accessibility
+            // Taken from the view, not from its context: the overlay is drawn in the capture
             // service's window, which has no Activity to take a Window from. Null when the view is
             // not attached yet, and on API 29 when there is no Activity either.
             val controller = ViewCompat.getWindowInsetsController(view) ?: return@SideEffect

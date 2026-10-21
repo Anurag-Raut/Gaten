@@ -3,6 +3,14 @@
 Desk research (no on-device testing). Scope: **Android only**; iOS deliberately ignored.
 Question asked: does an app already do this whole workflow, so we don't rebuild it?
 
+> **Update — the starting repo has since migrated.** Gaten no longer uses an accessibility service at
+> all: capture now comes from a MediaProjection session the reader switches on (*lookup mode*,
+> mirroring **Dokuen Japanese Reader**), and the overlay is a `TYPE_APPLICATION_OVERLAY` window behind
+> the ordinary "display over other apps" permission. No accessibility service is enabled for it, which
+> is what apps that refuse to run beside one — most banking and payment apps — check for. Everything
+> below about "the starting repo's accessibility path" describes the version this study was written
+> against; README.md (*Setup on a phone*, *Privacy*) is the current description.
+
 The intended workflow, as 5 steps (referenced by number throughout):
 
 1. **Trigger** a selection overlay **over another app** (here: the YouTube app) without leaving it.

@@ -29,7 +29,7 @@ import {
   CONTENT_COLUMN,
   SettingsGroup,
   SettingsRow,
-  useScreenAccessRequest,
+  useLookupModeRequest,
 } from "./settings-components";
 
 /** The name of the model in place, shown on the right of the recognition row. */
@@ -61,9 +61,9 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const colors = theme.colors;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const {request: requestScreenAccess, dialog: disclosureDialog} = useScreenAccessRequest();
+  const {request: requestLookupMode, dialog: disclosureDialog} = useLookupModeRequest();
 
-  const [screenAccess, setScreenAccess] = useState(false);
+  const [lookupMode, setLookupMode] = useState(false);
   const [modelInstalled, setModelInstalled] = useState(false);
   const [modelId, setModelId] = useState<string | null>(null);
   const [ankiStatus, setAnkiStatus] = useState<AnkiStatus>("notInstalled");
@@ -72,9 +72,10 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const [versionName, setVersionName] = useState("");
   const [catalog, setCatalog] = useState<GatenRecognition.MangaOcrCatalogEntry[]>([]);
 
-  // Screen access is granted outside Gaten and a model or a token changes inside a page, so the rows
-  // are read on every arrival — the return from one of the pages this hub opens included — and every
-  // time the app comes back to the foreground while the hub is the screen on show. `isFocused` is the
+  // Lookup mode ends outside Gaten as easily as it starts — the status-bar chip, the notification,
+  // the screen locking — and a model or a token changes inside a page, so the rows are read on
+  // every arrival — the return from one of the pages this hub opens included — and every time the
+  // app comes back to the foreground while the hub is the screen on show. `isFocused` is the
   // stable thing an arrival changes that an effect can depend on: a callback rebuilt per render would
   // either read in a loop or read once and never again. Nothing is read while another screen is on
   // top, and a resume that happens somewhere else reads nothing here.
@@ -85,8 +86,8 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
     }
     let cancelled = false;
     const readAll = () => {
-      void GatenAppInfo.isScreenAccessEnabled().then((v) => {
-        if (!cancelled) setScreenAccess(v);
+      void GatenAppInfo.isLookupModeActive().then((v) => {
+        if (!cancelled) setLookupMode(v);
       });
       void GatenAppInfo.getMangaOcrState().then((v) => {
         if (cancelled) return;
@@ -141,12 +142,12 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
           <SettingsGroup bare title="Lookup" style={{marginTop: 22}}>
             <SettingsRow
               surface
-              icon={screenAccess ? "check_circle" : "shield"}
-              inkIcon={!screenAccess ? "shield" : undefined}
-              title="Screen access"
-              summary="Allow screen reading"
-              value={screenAccess ? "On" : "Off"}
-              onPress={screenAccess ? () => onOpenPage("lookup") : requestScreenAccess}
+              icon={lookupMode ? "check_circle" : "shield"}
+              inkIcon={!lookupMode ? "shield" : undefined}
+              title="Lookup mode"
+              summary="Read Japanese off any screen"
+              value={lookupMode ? "On" : "Off"}
+              onPress={lookupMode ? () => onOpenPage("lookup") : requestLookupMode}
             />
             <SettingsRow
               surface

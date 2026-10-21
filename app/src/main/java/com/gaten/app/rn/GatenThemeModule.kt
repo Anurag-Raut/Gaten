@@ -33,7 +33,7 @@ import com.gaten.app.ui.theme.paletteNeutrals
  * The app's theme choices and their resolved colours, for the RN screens.
  *
  * The choices live where they always have — [ThemePreferences]'s `gaten_settings` — so the
- * accessibility service's overlay and the RN screens read the same three values. The colours are
+ * capture service's overlay and the RN screens read the same three values. The colours are
  * resolved here, on the Kotlin side, from [accentRoles] and [paletteNeutrals]: the same palette
  * and accent functions [com.gaten.app.ui.theme.Theme] builds its Material scheme from, so JS does
  * no colour maths and renders exactly the tones Compose rendered. The role-to-key mapping mirrors
