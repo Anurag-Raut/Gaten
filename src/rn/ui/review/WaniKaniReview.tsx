@@ -21,18 +21,18 @@
  */
 import React, {useEffect, useMemo, useState} from "react";
 import {
-  KeyboardAvoidingView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {GatenCardWebView} from "../../native/GatenCardWebView";
 import {svgDocument} from "../wanikani/WaniKaniPanel";
-import {spacing} from "../tokens";
+import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {
   ActionFooter,
@@ -137,14 +137,16 @@ export function WaniKaniReview({
   if (item == null) return null;
 
   const characters = item.characters;
-  // One character takes the design's own large step; a word takes the reading step, because a
-  // three-kana vocabulary at 99 dp would not fit the width it has.
+  // A single kanji gets the larger hero step; words use a wrapped display size that leaves room
+  // for longer vocabulary on narrow screens.
   const single = characters != null && [...characters].length === 1;
   const progress = session.doneParts / Math.max(1, session.totalParts);
-
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior="padding"
+      >
         <View style={{paddingHorizontal: contentInset}}>
           <SubHeader
             title="WaniKani"
@@ -154,61 +156,92 @@ export function WaniKaniReview({
           <ProgressLine value={progress} />
         </View>
         <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           style={styles.screen}
-          contentContainerStyle={[styles.question, {paddingHorizontal: contentInset}]}
+          contentContainerStyle={styles.question}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={[styles.topic, {color: colors.onSurfaceVariant}]}>
-            {`${TYPE_LABELS[item.type]} · ${reading ? "Reading" : "Meaning"}`}
-          </Text>
-          {characters == null ? (
-            <RadicalDrawing subjectId={item.subjectId} />
-          ) : (
-            <Text
-              style={[
-                styles.prompt,
-                single ? styles.promptSingle : styles.promptWord,
-                {color: colors.onSurface},
-              ]}
-            >
-              {characters}
+          <View style={[styles.reviewContent, {paddingHorizontal: contentInset}]}>
+            <View style={styles.hero}>
+              <Text
+                accessibilityRole="header"
+                accessibilityLabel={`${TYPE_LABELS[item.type]} · ${reading ? "Reading" : "Meaning"}`}
+                style={typeScale.labelMedium}
+              >
+                <Text style={{color: colors.onSurfaceVariant}}>{TYPE_LABELS[item.type]} · </Text>
+                <Text style={{color: reading ? colors.reviewReading : colors.reviewMeaning}}>
+                  {reading ? "Reading" : "Meaning"}
+                </Text>
+              </Text>
+              {characters == null ? (
+                <RadicalDrawing subjectId={item.subjectId} />
+              ) : (
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  style={[
+                    styles.prompt,
+                    single ? styles.promptSingle : styles.promptWord,
+                    {color: colors.onSurface},
+                  ]}
+                >
+                  {characters}
+                </Text>
+              )}
+            </View>
+            <View style={styles.answerField}>
+              <AnswerInput
+                key={`${session.index}:${session.part}`}
+                value={session.entry}
+                onChangeText={onEntry}
+                placeholder=""
+                selectionColor={colors.accent}
+                editable={!busy && !submitting && !failed}
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                returnKeyType="done"
+                submitBehavior="submit"
+                accessibilityLabel={reading ? "Reading" : "Meaning"}
+                onSubmitEditing={() => {
+                  if (session.entry.trim() !== "") onCheck();
+                }}
+              />
+              {session.entry === "" && (
+                <View
+                  pointerEvents="none"
+                  accessible={false}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  style={styles.answerPlaceholderOverlay}
+                >
+                  <Text style={[styles.answerPlaceholder, {color: colors.onSurfaceVariant}]}>
+                    {reading ? "Type the reading" : "Type the meaning"}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.microNote, {color: colors.onSurfaceVariant}]}>
+              {reading ? "Japanese reading · kana or romaji" : "Answer in English"}
             </Text>
-          )}
-          <AnswerInput
-            key={`${session.index}:${session.part}`}
-            value={session.entry}
-            onChangeText={onEntry}
-            placeholder={reading ? "Type the reading" : "Type the meaning"}
-            editable={!busy && !submitting && !failed}
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            returnKeyType="done"
-            submitBehavior="submit"
-            accessibilityLabel={reading ? "Reading" : "Meaning"}
-            onSubmitEditing={() => {
-              if (session.entry.trim() !== "") onCheck();
-            }}
-          />
-          <Text style={[styles.microNote, {color: colors.fine}]}>
-            {reading ? "Answer in kana or romaji" : "Answer in English"}
-          </Text>
-          {session.feedback != null && (
-            <Feedback tone={session.feedback.tone} text={session.feedback.text} />
-          )}
-          {failed && (
-            <Text
-              accessibilityLiveRegion="polite"
-              style={[styles.failure, {color: colors.error}]}
-            >
-              {session.authRejected
-                ? "WaniKani refused the saved token, so this review was not saved. Reconnect and start the queue again."
-                : `This review was not saved: ${
-                    session.failure == null ? "WaniKani could not be reached" : FAILURE_LABELS[session.failure]
-                  }. Sending it again is safe — WaniKani records a review once.`}
-            </Text>
-          )}
+            {session.feedback != null && (
+              <Feedback tone={session.feedback.tone} text={session.feedback.text} />
+            )}
+            {failed && (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[styles.failure, {color: colors.error}]}
+              >
+                {session.authRejected
+                  ? "WaniKani refused the saved token, so this review was not saved. Reconnect and start the queue again."
+                  : `This review was not saved: ${
+                      session.failure == null ? "WaniKani could not be reached" : FAILURE_LABELS[session.failure]
+                    }. Sending it again is safe — WaniKani records a review once.`}
+              </Text>
+            )}
+          </View>
         </ScrollView>
         <ActionFooter bottomInset={insets.bottom}>
           {failed ? (
@@ -239,17 +272,27 @@ const styles = StyleSheet.create({
   screen: {flex: 1},
   question: {
     flexGrow: 1,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
+  reviewContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  hero: {alignItems: "center", marginTop: spacing.xl, marginBottom: spacing.xl},
+  prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
+  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},
+  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500"},
+  answerField: {position: "relative", width: "100%"},
+  answerPlaceholderOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 18,
-    paddingBottom: 30,
   },
-  topic: {fontSize: 12, fontWeight: "600"},
-  prompt: {fontWeight: "700", letterSpacing: -1, textAlign: "center", marginTop: 27, marginBottom: 10},
-  promptSingle: {fontSize: 99, lineHeight: 119, fontWeight: "500"},
-  promptWord: {fontSize: 34, lineHeight: 51},
+  answerPlaceholder: {fontSize: 17, lineHeight: 20, textAlign: "center"},
   drawing: {width: 99, height: 99, marginTop: 22, marginBottom: 8},
-  microNote: {fontSize: 11, lineHeight: 16, marginTop: spacing.m, textAlign: "center"},
-  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m, textAlign: "center"},
+  microNote: {fontSize: 12, lineHeight: 17, marginTop: spacing.s, textAlign: "center"},
+  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},
 });

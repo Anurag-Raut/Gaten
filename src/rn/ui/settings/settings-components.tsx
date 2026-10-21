@@ -487,7 +487,7 @@ export function DialogShell({
         >
           <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
           {scrollBody ? (
-            <ScrollView style={{maxHeight: 360, marginTop: spacing.m}}>{children}</ScrollView>
+            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: spacing.m}}>{children}</ScrollView>
           ) : (
             <View style={{marginTop: spacing.m}}>{children}</View>
           )}
@@ -731,6 +731,8 @@ export function SettingsPageScaffold({
         {help != null && <HelpAction paragraphs={help} />}
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           CONTENT_COLUMN,
           {paddingHorizontal: width < 360 ? 16 : 22, paddingBottom: insets.bottom + spacing.l},

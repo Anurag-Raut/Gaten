@@ -24,6 +24,14 @@ jmdict-simplified (JSON release used to build the asset)
 By scriptin, packaging the EDRDG data above.
 https://github.com/scriptin/jmdict-simplified
 
+Tanaka Corpus (example sentences)
+---------------------------------
+© Electronic Dictionary Research and Development Group (EDRDG)
+Licence: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+https://www.edrdg.org/wiki/index.php/Tanaka_Corpus
+https://creativecommons.org/licenses/by-sa/4.0/
+Bundled with the app as an offline SQLite asset and read with no network.
+
 ML Kit Text Recognition (Japanese)
 ----------------------------------
 © Google LLC

@@ -297,7 +297,8 @@ export function HomeScreen({
         </View>
         <FlatList<SearchRow>
           ref={list}
-          style={{marginBottom: searchMode ? 0 : BOTTOM_BAR_HEIGHT + insets.bottom}}
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           data={rows}
           keyExtractor={(row) => row.key}
           renderItem={({item}) => (
@@ -312,7 +313,13 @@ export function HomeScreen({
           contentContainerStyle={[
             SEARCH_LIST_CONTENT,
             styles.listContent,
-            {paddingHorizontal: contentInset},
+            {
+              paddingHorizontal: contentInset,
+              // Keep content visible beside the floating bar, with room to scroll the last row above it.
+              paddingBottom: searchMode
+                ? SEARCH_LIST_CONTENT.paddingBottom
+                : BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+            },
           ]}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={

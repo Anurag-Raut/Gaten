@@ -13,6 +13,7 @@ import React from "react";
 import {StyleSheet} from "react-native";
 import {GestureHandlerRootView} from "react-native-gesture-handler";
 import {SafeAreaProvider} from "react-native-safe-area-context";
+import {KeyboardProvider} from "react-native-keyboard-controller";
 import {AppShell} from "./src/rn/ui/AppShell";
 import {ThemeProvider} from "./src/rn/ui/theme";
 
@@ -20,9 +21,11 @@ function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <AppShell />
-        </ThemeProvider>
+        <KeyboardProvider>
+          <ThemeProvider>
+            <AppShell />
+          </ThemeProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

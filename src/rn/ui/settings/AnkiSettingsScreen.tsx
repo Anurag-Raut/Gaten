@@ -245,6 +245,8 @@ export function AnkiSettingsScreen({
         />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         // With the keyboard up, a tap on Save, Refresh or a row is the row's own: the keyboard is
         // dismissed by a tap that hits nothing, not by the first tap on a control.
         keyboardShouldPersistTaps="handled"
@@ -541,7 +543,7 @@ function ChoiceDialog<T extends string | number | null>({
           }}
           onPress={(event: GestureResponderEvent) => event.stopPropagation()}
         >
-          <ScrollView>
+          <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}>
             {options.map((option, index) => (
               <PressableScale
                 key={`${option.name}:${index}`}

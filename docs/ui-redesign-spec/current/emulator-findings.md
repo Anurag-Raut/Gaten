@@ -125,8 +125,8 @@ Helper used: `uiautomator dump` + `input tap/swipe/keyevent` + `exec-out screenc
 - `Download` → `Download manga-ocr (int8)?` / `About 117 MB will be downloaded from huggingface.co. Use Wi-Fi if you can.` / `Cancel`, `Download`. **Cancelled — no download started.**
 
 **Appearance (20–23)**
-- Segmented `System` (checked, accent-filled) / `Light` / `Dark`; `Palette` tiles `Gaten` (selected, ring) / `Mono` / `Cool` / `Warm` each with an `Aa` sample; `Accent` circles Indigo, Blue, Violet, Teal, Green, Rose, Graphite.
-- Accent circles wrap **6 + 1** (Graphite alone on a second row, left-aligned) and carry no visible text labels — names exist only in the a11y tree.
+- Segmented `System` (checked, accent-filled) / `Light` / `Dark`; `Palette` tiles `Gaten` (selected, ring) / `Mono` / `Cool` / `Warm` each with an `Aa` sample; `Accent` circles Indigo, Blue, Violet, Teal, Green, Rose, Black.
+- Accent circles wrap **6 + 1** (Black alone on a second row, left-aligned) and carry no visible text labels — names exist only in the a11y tree.
 - Light theme sample (21) and Violet accent sample (22) captured; palette differences are subtle in light (Cool slightly cool-white, Warm cream) and near-identical against dark cards in dark theme.
 - Restored: `System` + `Indigo` (hub summary verified again at the end).
 

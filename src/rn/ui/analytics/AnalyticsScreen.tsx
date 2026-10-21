@@ -533,8 +533,9 @@ function AnkiNotice({
   );
 }
 
-/** The one line by the heading: how fresh the numbers are, and the one refresh. The freshness sits
- *  at the right end of the row, in the reader's quiet ink, beside the refresh it describes. */
+/** The heading with the one refresh beside it, and under the heading how fresh the numbers are.
+ *  The freshness gets its own line, in the reader's quiet ink and a size down, so the longest of
+ *  its labels ("Updated 14:03 on 21 Oct") never squeezes the heading on a narrow phone. */
 function Header({
   updated,
   busy,
@@ -547,15 +548,15 @@ function Header({
   const {colors} = useTheme();
   return (
     <View style={styles.headerRow}>
-      <Text style={[typeScale.headlineSmall, styles.headerTitle, {color: colors.onSurface}]}>
-        Analytics
-      </Text>
-      <Text
-        numberOfLines={2}
-        style={[typeScale.bodyMedium, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
-      >
-        {updated ?? "Reading the numbers…"}
-      </Text>
+      <View style={styles.headerHeading}>
+        <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>Analytics</Text>
+        <Text
+          numberOfLines={1}
+          style={[typeScale.bodySmall, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
+        >
+          {updated ?? "Reading the numbers…"}
+        </Text>
+      </View>
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel="Refresh the numbers"
@@ -581,6 +582,7 @@ function DeckPicker({
   const {colors} = useTheme();
   return (
     <ScrollView
+      showsVerticalScrollIndicator={false}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.deckRow}
@@ -672,6 +674,8 @@ export function AnalyticsScreen({
   return (
     <View style={[styles.root, {backgroundColor: colors.background}]}>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={{marginTop: insets.top}}
         contentContainerStyle={[
           styles.content,
@@ -877,8 +881,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.l,
     gap: spacing.l,
   },
-  headerTitle: {flex: 1},
-  headerUpdated: {flexShrink: 1, textAlign: "right"},
+  headerHeading: {flex: 1},
+  headerUpdated: {marginTop: spacing.xs},
   refresh: {
     width: 48,
     height: 48,

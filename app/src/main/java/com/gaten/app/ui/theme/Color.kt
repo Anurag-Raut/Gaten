@@ -56,7 +56,7 @@ val DarkOnErrorContainer = Color(0xFFFFEBEE)
 // --- Accents ---
 
 /** The accent the reader picked in Settings. [Indigo] is the app's own accent and the default. */
-enum class AccentColor { Indigo, Blue, Violet, Teal, Green, Rose, Graphite }
+enum class AccentColor { Indigo, Blue, Violet, Teal, Green, Rose, Black }
 
 /** One accent's tones for one mode, kept separate from neutral and error roles. */
 data class AccentRoles(
@@ -85,32 +85,34 @@ private fun tones(
 )
 
 /*
- * Accent tones by role and mode. Indigo is the default app accent; other accent values are retained
- * for readers who selected them.
+ * Accent tones by role and mode. The ladder is pitched for contrast rather than for tinting: in
+ * light mode a primary is deep enough to carry white ink and to be read as text on the paper, and in
+ * dark mode it is light enough to carry the near-black ink `tones` gives that mode. Every accent is
+ * a three-step ramp of one hue — primary, a mid tertiary for charts, a soft container.
  */
 
 /** Default indigo accent tones. */
-private val IndigoLight = tones(0xFF7564D9, 0xFFF2EFFF, 0xFF17171A, 0xFF7564D9, dark = false)
-private val IndigoDark = tones(0xFFB0A0FF, 0xFF30295A, 0xFFF2EFFF, 0xFFB0A0FF, dark = true)
+private val IndigoLight = tones(0xFF4338CA, 0xFFEEF2FF, 0xFF1E1B4B, 0xFF6366F1, dark = false)
+private val IndigoDark = tones(0xFFA5B4FC, 0xFF312E81, 0xFFE0E7FF, 0xFF6366F1, dark = true)
 
-private val BlueLight = tones(0xFF305D8A, 0xFFE3ECF4, 0xFF113151, 0xFF5C8EC0, dark = false)
-private val BlueDark = tones(0xFF8AAED2, 0xFF1C4267, 0xFFE3ECF4, 0xFFB8CEE4, dark = true)
+private val BlueLight = tones(0xFF0B4FB8, 0xFFEFF6FF, 0xFF172554, 0xFF2563EB, dark = false)
+private val BlueDark = tones(0xFF93C5FD, 0xFF1E3A8A, 0xFFDBEAFE, 0xFF3B82F6, dark = true)
 
-private val VioletLight = tones(0xFF6641BC, 0xFFEDE9F6, 0xFF37197B, 0xFF957DCD, dark = false)
-private val VioletDark = tones(0xFFB3A2DB, 0xFF492894, 0xFFEDE9F6, 0xFFD1C6EA, dark = true)
+private val VioletLight = tones(0xFF6D28D9, 0xFFF5F3FF, 0xFF2E1065, 0xFF7C3AED, dark = false)
+private val VioletDark = tones(0xFFC4B5FD, 0xFF4C1D95, 0xFFEDE9FE, 0xFF8B5CF6, dark = true)
 
-private val TealLight = tones(0xFF236460, 0xFFD7EFEE, 0xFF0B3633, 0xFF3B9892, dark = false)
-private val TealDark = tones(0xFF4EBBB4, 0xFF134744, 0xFFD7EFEE, 0xFF96D7D3, dark = true)
+private val TealLight = tones(0xFF115E59, 0xFFF0FDFA, 0xFF042F2E, 0xFF0D9488, dark = false)
+private val TealDark = tones(0xFF5EEAD4, 0xFF134E4A, 0xFFCCFBF1, 0xFF14B8A6, dark = true)
 
-private val GreenLight = tones(0xFF246640, 0xFFD9F0E3, 0xFF0B371E, 0xFF3C9B65, dark = false)
-private val GreenDark = tones(0xFF56BE83, 0xFF14492B, 0xFFD9F0E3, 0xFF9BD9B6, dark = true)
+private val GreenLight = tones(0xFF166534, 0xFFF0FDF4, 0xFF052E16, 0xFF16A34A, dark = false)
+private val GreenDark = tones(0xFF6EE7B7, 0xFF14532D, 0xFFDCFCE7, 0xFF10B981, dark = true)
 
-private val RoseLight = tones(0xFF9A365B, 0xFFF6E7EC, 0xFF5C132E, 0xFFC76F8F, dark = false)
-private val RoseDark = tones(0xFFD899B0, 0xFF74203F, 0xFFF6E7EC, 0xFFE8C2D0, dark = true)
+private val RoseLight = tones(0xFF9F1239, 0xFFFFF1F2, 0xFF4C0519, 0xFFE11D48, dark = false)
+private val RoseDark = tones(0xFFFDA4AF, 0xFF881337, 0xFFFFE4E6, 0xFFF43F5E, dark = true)
 
-/** The colourless accent: no hue at all, the same luminance. */
-private val GraphiteLight = tones(0xFF5A5A5A, 0xFFEAEAEA, 0xFF303030, 0xFF8A8A8A, dark = false)
-private val GraphiteDark = tones(0xFFAAAAAA, 0xFF404040, 0xFFEAEAEA, 0xFFCBCBCB, dark = true)
+/** The colourless accent: the same ramp with no hue — black ink in light, white in dark. */
+private val BlackLight = tones(0xFF000000, 0xFFEAEAEA, 0xFF17171A, 0xFF4A4A4A, dark = false)
+private val BlackDark = tones(0xFFFFFFFF, 0xFF404040, 0xFFEAEAEA, 0xFFCBCBCB, dark = true)
 
 /** [accent]'s tones for [dark]. */
 fun accentRoles(accent: AccentColor, dark: Boolean): AccentRoles = when (accent) {
@@ -120,7 +122,7 @@ fun accentRoles(accent: AccentColor, dark: Boolean): AccentRoles = when (accent)
     AccentColor.Teal -> if (dark) TealDark else TealLight
     AccentColor.Green -> if (dark) GreenDark else GreenLight
     AccentColor.Rose -> if (dark) RoseDark else RoseLight
-    AccentColor.Graphite -> if (dark) GraphiteDark else GraphiteLight
+    AccentColor.Black -> if (dark) BlackDark else BlackLight
 }
 
 // --- Palettes ---

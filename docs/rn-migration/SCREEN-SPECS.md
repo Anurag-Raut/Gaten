@@ -149,7 +149,7 @@ Compose app only: `searchFocus.ts` is deleted and the pager's own keyboard dismi
 **Layout (SettingsPageScaffold "Appearance"):**
 1. **Theme** card (support "Follow your device, or keep Gaten light or dark on its own."): single-choice segmented row System / Light / Dark.
 2. **Palette** card (support "The colour of Gaten's paper. Your selected accent stays unchanged."): FlowRow of 4 palettes Gaten/Mono/Cool/Warm; each item = 64×48dp preview box (border 2dp onSurface when selected else 1dp outline, inner 4dp padding filled with the palette's neutral background for the current mode) containing "Aa" (titleMedium) + name label below. Role RadioButton. No accent in palette previews.
-3. **Accent** card (support "The one colour in Gaten: buttons, the edge outline and the lasso."): FlowRow max 4 per row of 7 accents Indigo/Blue/Violet/Teal/Green/Rose/Graphite; each = 48dp tap target containing a 40dp circle: 2dp onSurface ring when selected, 5dp inset, inner circle filled with the accent's primary for the current mode; name below. Role RadioButton + pressScale. Tick haptic ONLY when selecting a different accent (tapping the selected one changes nothing, gets nothing).
+3. **Accent** card (support "The one colour in Gaten: buttons, the edge outline and the lasso."): FlowRow max 4 per row of 7 accents Indigo/Blue/Violet/Teal/Green/Rose/Black; each = 48dp tap target containing a 40dp circle: 2dp onSurface ring when selected, 5dp inset, inner circle filled with the accent's primary for the current mode; name below. Role RadioButton + pressScale. Tick haptic ONLY when selecting a different accent (tapping the selected one changes nothing, gets nothing).
 4. Group "Feedback": row "Haptics" (summary "Follows your phone's settings.") — informational, no control; divider; **SoundsRow**: VolumeUp icon + "Sounds" + "A short cue when a word is added to Anki, and when a review session ends." + Switch (a11y "Sounds") reading/writing `feedback_sounds` (default false). Tick only when the value actually moved.
 
 ---
@@ -285,7 +285,7 @@ Shared panel drawn by the search reference screen, the review screen (inline) an
 ## 15. Preference/settings keys each screen reads (for the RN bridge slices)
 
 All in SharedPreferences file **"gaten_settings"**:
-- ThemePreferences: `theme_mode` (System|Light|Dark, default System), `palette` (Gaten|Mono|Cool|Warm, default Gaten), `accent` (Indigo|Blue|Violet|Teal|Green|Rose|Graphite, default Indigo). Read by the activity theme + overlay + bubble.
+- ThemePreferences: `theme_mode` (System|Light|Dark, default System), `palette` (Gaten|Mono|Cool|Warm, default Gaten), `accent` (Indigo|Blue|Violet|Teal|Green|Rose|Black, default Indigo). Read by the activity theme + overlay + bubble.
 - FeedbackPreferences: `feedback_sounds` (Bool, default false).
 - TriggerPreferences: floating-button enabled flag, `tileAdded`, broadcast action `ACTION_FLOATING_BUTTON_CHANGED` (explicit-package broadcast required).
 - AnkiPreferences (AnkiSettings): deckName, tags, modelId, front, back, css, modelFields, fieldSources.

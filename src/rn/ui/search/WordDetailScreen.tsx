@@ -97,6 +97,8 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
     <View style={[styles.root, {backgroundColor: colors.background}]}>
       <WordAppBar onBack={onBack} />
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.body}
         contentContainerStyle={[
           styles.scrollContent,
@@ -104,13 +106,7 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
         ]}
       >
         <HeadwordSection hit={hit} />
-        <MeaningSection glosses={hit.glosses} />
-        {hit.pos.length > 0 && (
-          <DetailRow
-            label="Part of speech"
-            value={hit.pos.map(compactPartOfSpeech).join(" / ")}
-          />
-        )}
+        <MeaningSection glosses={hit.glosses} partsOfSpeech={hit.pos} />
         <OtherSpellingsRow primary={hit.primary} spellings={hit.kanji} />
         {wanikaniConfigured && (
           <WordKanjiSection
@@ -177,7 +173,10 @@ function HeadwordSection({hit}: {hit: SearchResult}) {
   );
 }
 
-function MeaningSection({glosses}: {glosses: string[]}) {
+function MeaningSection({glosses, partsOfSpeech}: {
+  glosses: string[];
+  partsOfSpeech: string[];
+}) {
   const {colors} = useTheme();
   return (
     <View style={[styles.meaningSection, {borderBottomColor: colors.outlineVariant}]}>
@@ -200,6 +199,20 @@ function MeaningSection({glosses}: {glosses: string[]}) {
           ))}
         </View>
       )}
+      {partsOfSpeech.length > 0 && (
+        <View style={styles.partsOfSpeech}>
+          <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>Part of speech</Text>
+          <Text
+            style={[
+              typeScale.bodyMedium,
+              styles.partsOfSpeechValue,
+              {color: colors.onSurfaceVariant},
+            ]}
+          >
+            {partsOfSpeech.join(" / ")}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -207,20 +220,6 @@ function MeaningSection({glosses}: {glosses: string[]}) {
 function compactPartOfSpeech(label: string): string {
   const shortLabel = label.split("(")[0].trim();
   return /^expressions?$/i.test(shortLabel) ? "Expression / phrase" : shortLabel;
-}
-
-function DetailRow({label, value}: {label: string; value: string}) {
-  const {colors} = useTheme();
-  return (
-    <View style={[styles.detailRow, {borderBottomColor: colors.outlineVariant}]}>
-      <Text style={[typeScale.bodyMedium, styles.detailLabel, {color: colors.onSurfaceVariant}]}>
-        {label}
-      </Text>
-      <Text style={[typeScale.titleSmall, styles.detailValue, {color: colors.onSurface}]}>
-        {value}
-      </Text>
-    </View>
-  );
 }
 
 function OtherSpellingsRow({primary, spellings}: {primary: string; spellings: string[]}) {
@@ -448,18 +447,11 @@ const styles = StyleSheet.create({
   metadata: {fontSize: 14, marginTop: spacing.m},
   meaningSection: {paddingVertical: spacing.xl, borderBottomWidth: 1},
   glosses: {marginTop: spacing.m, gap: spacing.s},
+  partsOfSpeech: {marginTop: spacing.l},
+  partsOfSpeechValue: {marginTop: spacing.xs},
   meaning: {fontSize: 29, fontWeight: "700"},
   meaningFallback: {marginTop: spacing.m},
-  detailRow: {
-    minHeight: 58,
-    paddingVertical: spacing.l,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.m,
-  },
   detailLabel: {flex: 1},
-  detailValue: {flexShrink: 1, textAlign: "right"},
   spellingsRow: {borderBottomWidth: 1},
   detailRowContent: {
     minHeight: 58,

@@ -28,8 +28,15 @@ export interface SearchResult {
   form: string;
 }
 
+/** One example sentence from the bundled corpus: the Japanese line and its English translation. */
+export interface SentenceExample {
+  japanese: string;
+  english: string;
+}
+
 interface GatenDictNative {
   search(query: string): Promise<SearchResult[]>;
+  examples(term: string): Promise<SentenceExample[]>;
   isSearchable(query: string): Promise<boolean>;
   recentLookups(): Promise<SearchResult[]>;
   rememberLookup(entry: SearchResult): Promise<void>;
@@ -42,6 +49,15 @@ const GatenDict = NativeModules.GatenDict as GatenDictNative;
 /** The results for `query`, most likely first. A query the dictionary cannot answer is an empty list, not an error. */
 export function search(query: string): Promise<SearchResult[]> {
   return GatenDict.search(query);
+}
+
+/**
+ * Up to three example sentences containing `term`, shortest first, read from the bundled Tanaka
+ * Corpus. This never touches the network; an empty list means the corpus has no sentence for the
+ * word.
+ */
+export function lookupExamples(term: string): Promise<SentenceExample[]> {
+  return GatenDict.examples(term);
 }
 
 /** True when `query` is something the dictionary can be asked about: Japanese, or full romaji. */

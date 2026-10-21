@@ -26,7 +26,7 @@ import {spacing, typeScale} from "../tokens";
 const PALETTES: Palette[] = ["Gaten", "Mono", "Cool", "Warm"];
 
 /** The accents, in the order the Compose screen laid them out: a 4 + 3 block. */
-const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", "Graphite"];
+const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", "Black"];
 
 export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   const theme = useTheme();
@@ -249,8 +249,8 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
                         color: theme.colors.onSurface,
                         marginTop: spacing.xs,
                         // The swatch column is 48dp and stays 48dp so four accents keep fitting a
-                        // row; the name gets its own width and centres under the swatch, so
-                        // "Graphite" is not broken mid-word the way a 48dp-wide label would break it.
+                        // row; the name gets its own width and centres under the swatch, so a long
+                        // name is not broken mid-word the way a 48dp-wide label would break it.
                         width: 72,
                         textAlign: "center",
                       },

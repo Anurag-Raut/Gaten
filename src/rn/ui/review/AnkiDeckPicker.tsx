@@ -21,7 +21,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
-import {BusyRow, DeckRow, ScreenSubtitle, ScreenTitle, SectionCaption, SubHeader} from "./review-ui";
+import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SubHeader} from "./review-ui";
 
 /** AnkiDroid's own counts for one deck, in the design's one-line form. */
 function countsLine(deck: AnkiDeckResult): string {
@@ -57,9 +57,11 @@ export function AnkiDeckPicker({
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="Anki" right="Decks" onBack={onBack} />
+        <SubHeader title="Anki" onBack={onBack} />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.screen}
         contentContainerStyle={[
           styles.body,
@@ -70,9 +72,10 @@ export function AnkiDeckPicker({
         ]}
       >
         <ScreenTitle style={styles.title}>Choose a deck</ScreenTitle>
-        <ScreenSubtitle style={styles.summary}>
-          {ready === 1 ? "1 card ready to study" : `${ready} cards ready to study`}
-        </ScreenSubtitle>
+        <Text style={[typeScale.description, styles.summary, {color: colors.onSurfaceVariant}]}>
+          <Text style={ready > 0 ? {color: colors.accent} : undefined}>{ready}</Text>
+          {ready === 1 ? " card ready to study" : " cards ready to study"}
+        </Text>
         <SectionCaption style={styles.caption}>Available decks</SectionCaption>
         {decks.length === 0 ? (
           <Text style={[typeScale.bodyMedium, styles.empty, {color: colors.onSurfaceVariant}]}>
@@ -85,6 +88,7 @@ export function AnkiDeckPicker({
               name={deck.name}
               counts={countsLine(deck)}
               due={dueOf(deck)}
+              dueColor={colors.accent}
               onPress={() => onStart(deck)}
             />
           ))

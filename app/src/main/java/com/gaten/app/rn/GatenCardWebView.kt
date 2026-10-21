@@ -15,7 +15,8 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
-import com.facebook.react.uimanager.events.RCTEventEmitter
+import com.facebook.react.uimanager.UIManagerHelper
+import com.facebook.react.uimanager.events.Event
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -92,8 +93,8 @@ class GatenCardWebView(context: Context) : FrameLayout(context) {
     /** The last background the manager set, so a first load paints in the theme at once. */
     private var lastColor: Int = 0
 
-    /** The content height last reported, in CSS pixels; 0 until the first page finished. */
-    private var reportedCss = 0f
+    /** The content height last reported in RN dp; 0 until the first page finished. */
+    private var reportedDp = 0f
 
     /** `svg` mode renders at a fixed style height and reports none. */
     var mode: Mode = Mode.CARD
@@ -110,7 +111,7 @@ class GatenCardWebView(context: Context) : FrameLayout(context) {
     fun setDocument(document: String) {
         if (document == loadedDocument) return
         loadedDocument = document
-        reportedCss = 0f
+        reportedDp = 0f
         webView.setBackgroundColor(lastColor)
         webView.loadDataWithBaseURL(null, document, "text/html", "utf-8", null)
     }
@@ -159,44 +160,45 @@ class GatenCardWebView(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * Reports the document's height in CSS pixels — the unit a RN style height speaks — when it is
-     * known and has moved by more than a pixel since the last report. The WebView's own scale (text
-     * zoom, font scale) is part of what it reports back, so the number is the height the reader is
-     * actually looking at. A height of zero means the document has no layout yet and is left for
-     * the next call rather than reported.
+     * Reports the document's rendered height in RN dp when it is known and has moved by more than a
+     * dp since the last report. WebView content height is in CSS pixels; its scale converts that to
+     * physical pixels, which must be divided by display density before RN uses it as a style height.
+     * A height of zero means the document has no layout yet and is left for the next call.
      */
     private fun reportContentHeight(view: WebView) {
-        val contentCss = view.contentHeight * view.scale
-        if (contentCss <= 0f) return
-        if (reportedCss != 0f && abs(contentCss - reportedCss) <= 1f) return
-        reportedCss = contentCss
-        emitCardHeight(contentCss)
+        val contentDp = contentHeightDp(view)
+        if (contentDp <= 0f) return
+        if (reportedDp != 0f && abs(contentDp - reportedDp) <= 1f) return
+        reportedDp = contentDp
+        emitCardHeight(contentDp)
         // The measure pass that matters is the one after this: the frame's height answer comes from
         // the cache this just filled.
         view.requestLayout()
     }
 
-    /** The cached content height in pixels, 0 before the first page has finished. */
-    private fun contentHeightPx(): Int {
-        @Suppress("DEPRECATION")
-        val scale = webView.scale
-        val contentCss = webView.contentHeight * scale
-        if (contentCss <= 0f) return 0
-        return (contentCss * resources.displayMetrics.density).roundToInt()
+    /** The content height in RN dp, 0 before the first page has finished. */
+    @Suppress("DEPRECATION")
+    private fun contentHeightDp(view: WebView = webView): Float {
+        val density = resources.displayMetrics.density
+        if (density <= 0f) return 0f
+        return view.contentHeight * view.scale / density
     }
 
-    /** Sends one height in CSS pixels (= RN dp) to JS; quiet when nothing is listening. */
-    private fun emitCardHeight(contentCss: Float) {
+    /** The cached content height in physical pixels, 0 before the first page has finished. */
+    private fun contentHeightPx(): Int {
+        val contentDp = contentHeightDp()
+        if (contentDp <= 0f) return 0
+        return (contentDp * resources.displayMetrics.density).roundToInt()
+    }
+
+    /** Sends one measured height in RN dp to JS through the Fabric-compatible event dispatcher. */
+    private fun emitCardHeight(contentDp: Float) {
         if (mode != Mode.CARD) return
         val reactContext = context as? ReactContext ?: return
         try {
-            reactContext
-                .getJSModule(RCTEventEmitter::class.java)
-                .receiveEvent(
-                    id,
-                    EVENT_TOP_CARD_HEIGHT,
-                    Arguments.createMap().apply { putDouble("height", contentCss.toDouble()) }
-                )
+            val surfaceId = UIManagerHelper.getSurfaceId(this)
+            UIManagerHelper.getEventDispatcher(reactContext)
+                ?.dispatchEvent(CardHeightEvent(surfaceId, id, contentDp))
         } catch (e: Exception) {
             Log.w(TAG, "Could not report the card height; JS not ready", e)
         }
@@ -210,5 +212,17 @@ class GatenCardWebView(context: Context) : FrameLayout(context) {
 
         /** The native event name; the JS prop is `onCardHeight`. */
         const val EVENT_TOP_CARD_HEIGHT = "topCardHeight"
+    }
+}
+
+private class CardHeightEvent(
+    surfaceId: Int,
+    viewTag: Int,
+    private val heightDp: Float,
+) : Event<CardHeightEvent>(surfaceId, viewTag) {
+    override fun getEventName(): String = GatenCardWebView.EVENT_TOP_CARD_HEIGHT
+
+    override fun getEventData() = Arguments.createMap().apply {
+        putDouble("height", heightDp.toDouble())
     }
 }

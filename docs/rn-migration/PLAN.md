@@ -88,7 +88,7 @@ One motion language, three mechanisms, each where it belongs:
 | Review steps | `react-native-reanimated` shared value + `withTiming` in `review/StepTransition.tsx` (260 ms, 25 % parallax, z-order by direction) — **entering and leaving a session only** | Two pages are on screen at once with asymmetric z-order (incoming above going forward, below coming back) and must be retargetable mid-slide — none of which `entering`/`exiting` layout animations can express. The question→answer reveal is **not** a transition: the step is rendered directly in place (no slide, no height tween), which is what the user asked for |
 | Press feedback | Reanimated `useAnimatedStyle` scale in `PressableScale.tsx` — 0.98 over 100 ms on `pressEasing` | The Kotlin `pressScale` exactly; interruption is free (assigning a new value cancels the running one) and it stays off the JS thread |
 | List entrances | **none anywhere** | Every stagger is gone: the search results and word-detail sections never had one in Compose, and the review deck picker's index-based `FadeInDown` stagger was removed in round 2. The Compose screens animated nothing on list entry — content simply arrives |
-| Bottom bar selection | One travelling indicator pill: `translateX` interpolated from the pager's own `position` (native-driven), plus per-item glyph and label cross-fades of the two tints | The pager's `position` is continuous while a finger drags it and while a non-adjacent tap walks the pill through the middle tabs, so one node keeps the pill and the pages in step. A colour interpolation would have forced the JS driver, so the tint change is two stacked copies cross-fading |
+| Bottom bar selection | One travelling indicator pill: `translateX` interpolated from the pager's own `position` (native-driven), plus per-item glyph and label cross-fades of the two tints — and, on a tap only, one horizontal spring: the pill keeps the speed its own travel was carrying, runs ≈ 7 dp past the tab it is aiming at and settles back onto it. A drag injects nothing | The pager's `position` is continuous while a finger drags it and while a non-adjacent tap walks the pill through the middle tabs, so one node keeps the pill and the pages in step. A colour interpolation would have forced the JS driver, so the tint change is two stacked copies cross-fading. The travel is the pager's and must not be timed from the bar, so the spring sits at the *end* of it — and only at the end a tap makes: a swipe's travel ends under the reader's own finger and gets nothing after it. It is injected as velocity rather than as a target position, so the pill is never moved to a place the pager did not put it — it is just given the speed it already had. Horizontal only (≈ 7 dp of a ≈ 66 dp slot), and the glyph gestures are untouched |
 
 Deliberately **not** used: `entering`/`exiting` for the review step swap (z-order and retargeting, see above), and any Reanimated wrapper around Home's `flex: 1` card columns — a layout-animated wrapper there collapsed the column's measured height and overlapped the cards.
 
@@ -328,3 +328,34 @@ so no Metro is needed; `strings -e l` on the APK's bundle confirms `Opening Anki
   scanning those rows for the accent fill), and Home's **Anki** row still opens the deck list.
 - The bar's geometry, read off the screenshots pixel by pixel: 256.7 dp wide and 62.9 dp tall, the
   capsule 6.2 dp from its leading edge with `Home` selected and 72.0 dp with `Analytics` selected.
+
+## Bottom bar spring, on the pill's travel (2026-10-21)
+
+Asked for: a spring in the bottom bar, horizontal, on taps only — not the button-press kind of
+motion. The bar therefore gained exactly one spring; nothing else moved — not a glyph gesture, not a
+piece of geometry, not the pager's own timing.
+
+- **What it is.** On a tap, `BottomBar`'s press path hands the capsule's shared value the speed its
+  travel was carrying, in the direction it was going, 160 ms after the tap
+  (`withSpring(0, {mass: 1, stiffness: 500, damping: 20, velocity: ±270 dp/s})`). That value is a
+  horizontal `translateX` offset added on top of the pager's interpolated position, so the pill
+  arrives still carrying speed, runs ≈ 7 dp past the tab it is aiming at, swings ≈ 1.4 dp the other
+  way and settles: peak 55 ms after the injection (≈ 215 ms after the tap), motion gone by ≈ 0.4 s.
+- **Why velocity rather than a target position.** The pill is a function of the pager's `position`,
+  which is what keeps it in step with the pages, drag included. A spring that *moved* the pill to its
+  own target would be a second animation disagreeing with the first; giving it speed leaves its
+  position untouched at the instant of injection and only shapes what happens after.
+- **Why never on a swipe.** A drag's travel ends where the reader's finger leaves it, and a spring
+  after that is the bar arguing with the hand that moved it. The injection lives in `BarItem`'s
+  `onPress` and nowhere else — a drag never reaches it. `swipeStart` also cancels any pending
+  or running tap spring and resets its offset, so an interrupted tap cannot affect a manual swipe.
+- **Both capsule nodes carry the offset.** The fill and its icon-and-label content are two views over
+  one box (the fill paints *under* the plain glyphs, the content *over* them), so the offset is
+  applied to both: same box, same value, no drift between the pill and its own label.
+- **Not a button.** The glyphs' arrival gestures (Home's bounce, the chart's growth, the gear's turn)
+  are unchanged — still `withTiming` at 200/400 ms — and so is every press-scale in the app. Reduced
+  motion skips the injection entirely, and the offset is transform-only, on the UI thread.
+
+Not verified in this pass: how the spring *feels* — 7 dp may read as too little or too much on a real
+screen — is a judgement only a device can settle, and no build was installed here.
+`npx tsc --noEmit` — 0 errors; `react-native bundle` (android, dev false) — builds clean.

@@ -10,6 +10,7 @@ import {AppState} from "react-native";
 import * as Anki from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
 import type {SearchResult} from "../../native/GatenDict";
+import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {useWaniKaniStats} from "../analytics/useWaniKaniStats";
 import {primeRecentLookupHits} from "../search/searchStore";
 
@@ -50,6 +51,8 @@ export interface HomeWaniKaniState {
   /** WaniKani's existing stats response has no completed-review history. */
   completedToday: null;
   error: string | null;
+  /** The named reason the last read failed, so the card can tell "no internet" from a retry. */
+  failure: WaniKaniFailure | null;
   refreshing: boolean;
 }
 
@@ -120,6 +123,7 @@ const EMPTY_WANIKANI: HomeWaniKaniState = {
   dueNext24Hours: null,
   completedToday: null,
   error: null,
+  failure: null,
   refreshing: false,
 };
 
@@ -370,6 +374,7 @@ export function useHomeDashboard(active: boolean): HomeDashboardData {
           snapshot?.forecast.reduce((total, bucket) => total + bucket.count, 0) ?? null,
         completedToday: null,
         error: waniKaniStats.message ?? waniKaniStats.failure,
+        failure: waniKaniStats.failure,
         refreshing: waniKaniStats.status === "refreshing",
       };
       break;
@@ -385,6 +390,7 @@ export function useHomeDashboard(active: boolean): HomeDashboardData {
         ...EMPTY_WANIKANI,
         status: "error",
         error: waniKaniStats.message ?? waniKaniStats.failure,
+        failure: waniKaniStats.failure,
       };
       break;
     default:

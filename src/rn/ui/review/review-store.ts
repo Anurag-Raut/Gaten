@@ -27,6 +27,7 @@ import * as WaniKani from "../../native/GatenWaniKani";
 import type {
   AnkiCardResult,
   AnkiDeckResult,
+  AnkiPreferencesResult,
 } from "../../native/GatenAnki";
 import type {
   WaniKaniFailure,
@@ -45,6 +46,7 @@ export type ReviewFailure =
 /** One card, before (`revealed` false) or after the answer is shown. */
 export interface ReviewCard {
   noteId: number;
+  modelId: number;
   ord: number;
   deckName: string;
   question: string;
@@ -52,6 +54,9 @@ export interface ReviewCard {
   css: string;
   fieldNames: string[];
   fields: string[];
+  answerFields: {expression: string; reading: string; meaning: string} | null;
+  /** The sentence the note itself carries, readable offline; null when it has none. */
+  exampleSentence: string | null;
   typedAnswer: boolean;
 }
 
@@ -791,7 +796,10 @@ class ReviewStore {
         if (queue.kind === "empty") {
           this.set({ step: { kind: "done", deckName: deck.name } });
         } else {
-          const card = await Anki.card(queue.noteId, queue.ord);
+          const [card, preferences] = await Promise.all([
+            Anki.card(queue.noteId, queue.ord),
+            Anki.getPreferences().catch(() => null),
+          ]);
           const same =
             keep != null &&
             keep.card.noteId === card.noteId &&
@@ -801,7 +809,7 @@ class ReviewStore {
           this.set({
             step: {
               kind: "session",
-              card: toReviewCard(card),
+              card: toReviewCard(card, preferences),
               token: queue.token,
               buttonLabels: queue.buttonLabels,
               mediaFiles: queue.mediaFiles,
@@ -824,9 +832,13 @@ class ReviewStore {
   }
 }
 
-function toReviewCard(card: AnkiCardResult): ReviewCard {
+function toReviewCard(
+  card: AnkiCardResult,
+  preferences: AnkiPreferencesResult | null
+): ReviewCard {
   return {
     noteId: card.noteId,
+    modelId: card.modelId,
     ord: card.ord,
     deckName: card.deckName,
     question: card.question,
@@ -834,8 +846,87 @@ function toReviewCard(card: AnkiCardResult): ReviewCard {
     css: card.css,
     fieldNames: card.fieldNames,
     fields: card.fields,
+    answerFields: answerFieldsFor(card, preferences),
+    exampleSentence: exampleSentenceFor(card),
     typedAnswer: card.typedAnswer,
   };
+}
+
+/**
+ * The sentence Gaten's own note type stored for the word. Card-only media and the note author's
+ * `GRAYLINE_MARKER` separator are dropped; everything else is the reader's own text, read offline.
+ */
+function exampleSentenceFor(card: AnkiCardResult): string | null {
+  const index = card.fieldNames.indexOf("Sentence");
+  if (index === -1) return null;
+  const raw = card.fields[index]
+    ?.replace(/\[(?:sound|anki:play):[^\]]*\]/g, "")
+    .replace(/GRAYLINE_MARKER/g, " ")
+    .trim() ?? "";
+  return raw === "" ? null : raw;
+}
+
+/** Applies a saved field map only to its exact model, or Gaten's exact current/legacy schemas. */
+function answerFieldsFor(
+  card: AnkiCardResult,
+  preferences: AnkiPreferencesResult | null
+): ReviewCard["answerFields"] {
+  if (card.fieldNames.length !== card.fields.length) return null;
+
+  let sources: string[] | null = null;
+  if (
+    preferences?.modelId === card.modelId &&
+    preferences.validationError == null &&
+    preferences.modelFields.length === card.fieldNames.length &&
+    preferences.fieldSources.length === card.fieldNames.length &&
+    preferences.modelFields.every((name, index) => name === card.fieldNames[index])
+  ) {
+    sources = preferences.fieldSources;
+  } else if (
+    preferences?.modelId == null &&
+    (sameNames(card.fieldNames, ["Expression", "Reading", "Meaning"]) ||
+      sameNames(card.fieldNames, ["Expression", "Reading", "Meaning", "Sentence"]))
+  ) {
+    sources = card.fieldNames.map((name) => name.toUpperCase());
+  }
+  if (sources == null) return null;
+
+  const values: Record<string, string> = {
+    EXPRESSION: "",
+    READING: "",
+    MEANING: "",
+  };
+  sources.forEach((source, index) => {
+    if (values[source] === "" && card.fields[index]?.trim() !== "") {
+      values[source] = card.fields[index] ?? "";
+    }
+  });
+  const expression = values.EXPRESSION;
+  const reading = values.READING;
+  const meaning = values.MEANING;
+  if (!expression.trim() || !reading.trim() || !meaning.trim()) return null;
+
+  // Mapped user fields stay on Anki's own renderer if they carry markup or card-only media.
+  const isGatenSchema = preferences?.modelId == null &&
+    (card.fieldNames.length === 3 || card.fieldNames.length === 4);
+  if (hasUnsupportedFieldMarkup(expression) || hasUnsupportedFieldMarkup(reading)) return null;
+  if (isGatenSchema) {
+    if (hasUnsupportedFieldMarkup(meaning, true)) return null;
+  } else if (hasUnsupportedFieldMarkup(meaning)) {
+    return null;
+  }
+  return {expression, reading, meaning};
+}
+
+function sameNames(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length && actual.every((name, index) => name === expected[index]);
+}
+
+function hasUnsupportedFieldMarkup(value: string, allowGatenMeaning = false): boolean {
+  const markup = allowGatenMeaning
+    ? value.replace(/<\/?(?:br|small)\s*\/?>/gi, "")
+    : value;
+  return /<[^>]*>|\[(?:sound|anki:play):|\{\{c\d+::/i.test(markup);
 }
 
 /** The app's one review session state, outside any component. */

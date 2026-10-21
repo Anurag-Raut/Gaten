@@ -51,6 +51,8 @@ export interface WaniKaniPanelProps {
   scrollable?: boolean;
   /** Only the full-size (compact=false) rhythm is built so far. */
   compact?: boolean;
+  /** The caller already applies the content grid: keep the body flush with the panel's heading. */
+  embedded?: boolean;
   /** A component chip was tapped; the caller owns the Tick and the open-or-toggle decision. */
   onRadical?: (id: number) => void;
   /** The NeedsToken/AuthRejected notices' button: the shell opens the WaniKani settings page. */
@@ -108,6 +110,7 @@ export function WaniKaniPanel({
   onBack,
   scrollable = true,
   compact = false,
+  embedded = false,
   onRadical,
   onSettings,
 }: WaniKaniPanelProps) {
@@ -173,7 +176,7 @@ export function WaniKaniPanel({
     <View
       style={[
         styles.content,
-        {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
+        {paddingHorizontal: embedded ? 0 : width < 360 ? spacing.l : spacing.contentInset},
       ]}
     >
       {lookup === null && unreachable === null && <Skeleton compact={compact} />}
@@ -190,7 +193,6 @@ export function WaniKaniPanel({
         <AvailableContent
           kanji={lookup.subject.kind === "kanji" ? lookup.subject : null}
           radical={lookup.subject.kind === "radical" ? lookup.subject : null}
-          cached={lookup.cached}
           stale={lookup.stale}
           cacheFailure={lookup.cacheFailure}
           compact={compact}
@@ -278,7 +280,7 @@ export function WaniKaniPanel({
         </View>
       </View>
       {scrollable ? (
-        <ScrollView contentContainerStyle={styles.scrollContent}>{body}</ScrollView>
+        <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>{body}</ScrollView>
       ) : (
         body
       )}
@@ -289,7 +291,6 @@ export function WaniKaniPanel({
 function AvailableContent({
   kanji,
   radical,
-  cached,
   stale,
   cacheFailure,
   compact,
@@ -297,7 +298,6 @@ function AvailableContent({
 }: {
   kanji: KanjiSubject | null;
   radical: RadicalSubject | null;
-  cached: boolean;
   stale: boolean;
   cacheFailure: WaniKaniFailure | undefined;
   compact: boolean;
@@ -391,6 +391,7 @@ function AvailableContent({
             Radicals
           </Text>
           <ScrollView
+            showsVerticalScrollIndicator={false}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.componentRow}
@@ -444,16 +445,11 @@ function AvailableContent({
           </Text>
         </View>
       )}
-      {(cacheFailure !== undefined || cached || stale) && (
+      {(cacheFailure !== undefined || stale) && (
         <View style={styles.notes}>
           {cacheFailure !== undefined && (
             <Text style={[typeScale.labelMedium, {color: colors.error}]}>
               Some details could not be saved for offline use.
-            </Text>
-          )}
-          {cached && (
-            <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>
-              Saved on this device: readable offline.
             </Text>
           )}
           {stale && (

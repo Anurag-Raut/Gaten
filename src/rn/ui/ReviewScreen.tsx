@@ -43,10 +43,13 @@ import {
 import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as Anki from "../native/GatenAnki";
+import * as GatenDict from "../native/GatenDict";
 import * as GatenHaptics from "../native/GatenHaptics";
+import * as GatenWaniKani from "../native/GatenWaniKani";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
+import {InkIcon} from "./InkIcon";
 import {MAX_CONTENT_WIDTH, spacing, typeScale} from "./tokens";
 import {useTheme, type Theme} from "./theme";
 import {DialogShell, OutlinedButton} from "./settings/settings-components";
@@ -415,6 +418,8 @@ function BlockedView({
         <SubHeader title="Anki" onBack={onBack} />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.screen}
         contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
@@ -468,6 +473,38 @@ function AnkiSession({
   const {width} = useWindowDimensions();
   const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   const card = session.card;
+  // The note's own sentence is the example source: it is already on the device, so the answer never
+  // waits on a network and stays readable with no connection at all.
+  // The corpus is the example source; the note's own sentence is the fallback for a word the
+  // corpus does not carry. Both are on the device, so the answer never waits on a network.
+  const storedSentence = session.revealed ? card.exampleSentence : null;
+  const exampleTerm = session.revealed && card.answerFields != null
+    ? card.answerFields.expression.trim()
+    : null;
+  const [expandedExamples, setExpandedExamples] = useState<{token: number; expanded: boolean} | null>(null);
+  const examplesExpanded = expandedExamples?.token === session.token && expandedExamples.expanded;
+  const [exampleState, setExampleState] = useState<{
+    token: number;
+    examples: GatenDict.SentenceExample[] | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (exampleTerm == null || exampleTerm === "") return;
+    let cancelled = false;
+    setExampleState({token: session.token, examples: null});
+    void GatenDict.lookupExamples(exampleTerm)
+      .then((examples) => {
+        if (!cancelled) setExampleState({token: session.token, examples});
+      })
+      .catch(() => {
+        if (!cancelled) setExampleState({token: session.token, examples: []});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [exampleTerm, session.token]);
+  const corpusExamples = exampleState?.token === session.token ? exampleState.examples : null;
+  const showExamples = session.revealed && (exampleTerm != null || storedSentence != null);
 
   // The kanji the note's own fields hold, in first-occurrence order across all of them. The
   // strip is drawn after the reveal only, so a tap can never reveal part of the answer.
@@ -544,7 +581,7 @@ function AnkiSession({
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <View style={{paddingHorizontal: contentInset}}>
         <SubHeader
-          title={card.deckName}
+          title={session.revealed ? "Answer" : card.deckName}
           right={`${place} of ${total}`}
           onBack={onBack}
         />
@@ -553,6 +590,8 @@ function AnkiSession({
       {/* The deck space is one surface: the card, its kanji strip and the inline details scroll
           together. A one-word question sits in the middle of the screen; a tall card scrolls. */}
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         ref={scrollRef}
         style={styles.screen}
         onScroll={(e) => {
@@ -561,11 +600,21 @@ function AnkiSession({
         scrollEventThrottle={16}
         contentContainerStyle={styles.deckSpace}
       >
+        <View
+          style={[
+            styles.deckContent,
+            {paddingHorizontal: session.revealed ? contentInset : spacing.m},
+          ]}
+        >
         {/* The card's own rendered HTML, straight on the screen's background: the note type's text
             is the content, and a surface of its own around it is a panel the reader has to read
             through. The box is only there for the flash to sit over. */}
         <View style={styles.cardBox}>
-          <CardHtml theme={theme} card={card} revealed={session.revealed} />
+          {session.revealed && card.answerFields != null ? (
+            <StructuredAnkiAnswer theme={theme} fields={card.answerFields} />
+          ) : (
+            <CardHtml theme={theme} card={card} revealed={session.revealed} />
+          )}
           {/* The answer flash is drawn over the rendered card, never through it. */}
           {flashColor != null && (
             <Animated.View
@@ -578,17 +627,32 @@ function AnkiSession({
           )}
         </View>
 
+        {showExamples && (
+          <ExampleSentences
+            theme={theme}
+            examples={corpusExamples}
+            storedSentence={storedSentence}
+            expanded={Boolean(examplesExpanded)}
+            onToggle={() => setExpandedExamples({token: session.token, expanded: !examplesExpanded})}
+          />
+        )}
+
         {/* Answer side only: before the reveal there is no strip to tap. */}
         {session.revealed && (
           <View
+            style={[styles.waniKaniSection, {borderTopColor: colors.outlineVariant}]}
             onLayout={(e) => {
               stripY.current = e.nativeEvent.layout.y;
             }}
           >
+            <Text style={[typeScale.titleSmall, styles.waniKaniTitle, {color: colors.onSurface}]}>
+              WaniKani kanji
+            </Text>
             <KanjiStrip
               characters={kanji}
               selected={expandedKanji}
               onKanji={onKanji}
+              label={null}
               haptic="onOpen"
             />
             {/* The details move as pages, with the slide every other page change uses; the one
@@ -606,6 +670,7 @@ function AnkiSession({
                       showBack={false}
                       scrollable={false}
                       compact={false}
+                      embedded
                       onRadical={onRadical}
                     />
                     {/* One level deeper: the radical is a page opened inside the kanji's
@@ -623,6 +688,7 @@ function AnkiSession({
                               showBack={false}
                               scrollable={false}
                               compact={false}
+                              embedded
                               onRadical={onRadical}
                             />
                           </View>
@@ -635,6 +701,7 @@ function AnkiSession({
             </View>
           </View>
         )}
+        </View>
       </ScrollView>
 
       {/* Pinned: the honest notes, then the one action the reader has right now. It carries the
@@ -710,7 +777,7 @@ function CardHtml({
         card.ord,
         colors.onSurface,
         colors.background,
-        frontRule(!revealed)
+        cardRule(!revealed, colors.outlineVariant)
       ),
     [
       card.css,
@@ -719,6 +786,7 @@ function CardHtml({
       card.ord,
       colors.onSurface,
       colors.background,
+      colors.outlineVariant,
       revealed,
     ]
   );
@@ -804,16 +872,130 @@ function stripMediaTags(html: string): string {
 }
 
 /**
- * The question side carries the word the reader is being asked about, so it takes the theme's
- * display step, written in the units this viewport is laid out in (dp) with the theme's own
- * sp-derived number: the WebView already applies the reader's font scale, so no second factor,
- * nothing caps it. Said on `#content` so a note type's `.card{font-size}` cannot outrank it;
- * the line height is the theme's own ratio, unitless, so it follows text scaling.
+ * The example sentences the note itself carries, shown as quiet rows behind one accessible
+ * disclosure. It reads straight from the note, so it never needs a connection.
  */
-function frontRule(frontWord: boolean): string {
-  if (!frontWord) return "";
+function ExampleSentences({
+  theme,
+  examples,
+  storedSentence,
+  expanded,
+  onToggle,
+}: {
+  theme: Theme;
+  examples: GatenDict.SentenceExample[] | null;
+  storedSentence: string | null;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const {colors} = theme;
+  const corpus = examples ?? [];
+  const loading = examples === null && storedSentence == null;
+  // The note's own sentence is the fallback for a word the corpus does not carry.
+  const noteLines = corpus.length === 0 && storedSentence != null
+    ? displayAnkiField(storedSentence).split("\n").map((line) => line.trim()).filter((line) => line !== "")
+    : [];
+  return (
+    <View style={styles.examples}>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel="Example sentences"
+        accessibilityState={{expanded}}
+        onPress={onToggle}
+        style={[styles.examplesDisclosure, {borderColor: colors.outlineVariant}]}
+      >
+        <Text style={[typeScale.titleSmall, styles.examplesTitle, {color: colors.onSurface}]}>Example sentences</Text>
+        <View style={{transform: [{rotate: expanded ? "90deg" : "0deg"}]}}>
+          <InkIcon name="chevron" size={16} color={colors.onSurfaceVariant} />
+        </View>
+      </PressableScale>
+      {expanded && (
+        <View>
+          {loading && (
+            <Text style={[typeScale.bodySmall, styles.exampleState, {color: colors.onSurfaceVariant}]}>
+              Finding examples…
+            </Text>
+          )}
+          {corpus.map((example, index) => (
+            <View key={index} style={[styles.exampleRow, {borderBottomColor: colors.outlineVariant}]}>
+              <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>{example.japanese}</Text>
+              <Text style={[typeScale.bodySmall, styles.exampleEnglish, {color: colors.onSurfaceVariant}]}>
+                {example.english}
+              </Text>
+            </View>
+          ))}
+          {noteLines.map((line, index) => (
+            <View key={index} style={[styles.exampleRow, {borderBottomColor: colors.outlineVariant}]}>
+              <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>{line}</Text>
+            </View>
+          ))}
+          {!loading && corpus.length === 0 && noteLines.length === 0 && (
+            <Text style={[typeScale.bodySmall, styles.exampleState, {color: colors.onSurfaceVariant}]}>
+              No example sentences found for this word.
+            </Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function StructuredAnkiAnswer({
+  theme,
+  fields,
+}: {
+  theme: Theme;
+  fields: {expression: string; reading: string; meaning: string};
+}) {
+  const {colors} = theme;
+  const [glossHtml, posHtml] = fields.meaning.split(/<br\s*\/?><small>/i, 2);
+  const partOfSpeech = posHtml?.replace(/<\/small>.*$/i, "") ?? "";
+  return (
+    <View accessible accessibilityLabel={`${displayAnkiField(fields.expression)}, ${displayAnkiField(fields.reading)}, ${displayAnkiField(glossHtml ?? "")}`}>
+      <Text style={[typeScale.displayMedium, {color: colors.onSurface}]}>
+        {displayAnkiField(fields.expression)}
+      </Text>
+      <Text style={[styles.answerReading, {color: colors.onSurfaceVariant}]}>
+        {displayAnkiField(fields.reading)}
+      </Text>
+      <Text style={[styles.answerMeaning, {color: colors.onSurface}]}>
+        {displayAnkiField(glossHtml ?? "")}
+      </Text>
+      {partOfSpeech.trim() !== "" && (
+        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+          {displayAnkiField(partOfSpeech)}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function displayAnkiField(value: string): string {
+  return value
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/?small\s*>/gi, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .trim();
+}
+
+/**
+ * The question keeps its existing display treatment. The answer uses the app's body size and
+ * natural document height so imported templates that set a page-sized card do not push the
+ * WaniKani supplement away from the answer. Descendant sizing and media layout remain template-owned.
+ */
+function cardRule(frontWord: boolean, divider: string): string {
+  if (!frontWord) {
+    return `html,body,.card{height:auto !important;min-height:0 !important}` +
+      `#content{height:auto !important;min-height:0 !important;font-size:${typeScale.bodyMedium.fontSize}px;` +
+      `line-height:${typeScale.bodyMedium.lineHeight / typeScale.bodyMedium.fontSize};font-weight:400}` +
+      `#content hr#answer{border:0;border-top:1px solid ${divider};margin:${spacing.s}px 0}`;
+  }
   const face = typeScale.displayMedium;
-  return `#content{font-size:${face.fontSize}px;line-height:${face.lineHeight / face.fontSize}}`;
+  return `#content{text-align:center;font-size:${face.fontSize}px;line-height:${face.lineHeight / face.fontSize}}`;
 }
 
 /** Nothing is due: the deck is finished for now, which is not the same as a failure. */
@@ -838,6 +1020,8 @@ function DoneView({
         <SubHeader title={deckName} onBack={onFinish} />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.screen}
         contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
@@ -870,9 +1054,11 @@ function WaniKaniDoneView({
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="WaniKani" right="Reviews" onBack={onBack} />
+        <SubHeader title="WaniKani" onBack={onBack} />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.screen}
         contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
@@ -913,9 +1099,11 @@ function WaniKaniFailedView({
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="WaniKani" right="Reviews" onBack={onBack} />
+        <SubHeader title="WaniKani" onBack={onBack} />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.screen}
         contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
@@ -962,6 +1150,8 @@ function FailedView({
         <SubHeader title="Anki" onBack={onBack} />
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         style={styles.screen}
         contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
@@ -1011,11 +1201,9 @@ const styles = StyleSheet.create({
   // the question the reader is looking at — which is what "in place" means here. A taller card
   // simply scrolls.
   deckSpace: {
-    // The card's text is 12 dp from the screen edge, and the card document adds no gutter of its
-    // own (`#content` is unpadded), so this is the whole gutter rather than half of a doubled one.
-    paddingHorizontal: spacing.m,
     paddingTop: spacing.m,
   },
+  deckContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
   // The card's own box, so the answer flash has something to cover. No surface, no radius and no
   // padding of its own: the note type's text sits directly on the screen's background, and the
   // WebView measures itself, so the box is exactly as tall as the card.
@@ -1026,5 +1214,22 @@ const styles = StyleSheet.create({
   radicalIndent: {marginStart: spacing.xl},
   note: {marginBottom: spacing.s},
   mediaAction: {minHeight: 40, justifyContent: "center", marginBottom: spacing.s},
+  examples: {marginTop: spacing.l},
+  examplesDisclosure: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+  },
+  examplesTitle: {flex: 1},
+  exampleState: {marginTop: spacing.s},
+  exampleRow: {paddingVertical: spacing.s, borderBottomWidth: 1},
+  exampleEnglish: {marginTop: spacing.xs},
+  waniKaniSection: {marginTop: spacing.xl},
+  waniKaniTitle: {marginBottom: spacing.s},
+  answerReading: {marginTop: spacing.xs, fontSize: 17, lineHeight: 24, fontWeight: "400"},
+  answerMeaning: {marginTop: spacing.m, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: "Inter"},
   gapS: {height: spacing.s},
 });

@@ -479,6 +479,7 @@ class GatenAnkiModule(
 
     private fun AnkiReviewCard.Available.toJsMap(): WritableMap = Arguments.createMap().apply {
         putDouble("noteId", noteId.toDouble())
+        putDouble("modelId", modelId.toDouble())
         putInt("ord", ord)
         putString("deckName", deckName)
         putString("question", question)

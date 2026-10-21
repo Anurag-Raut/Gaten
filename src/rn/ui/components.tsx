@@ -468,7 +468,7 @@ export function KanjiStrip({
   characters: string[];
   selected?: string | null;
   onKanji: (character: string) => void;
-  label?: string;
+  label?: string | null;
   haptic?: "always" | "onOpen" | "none";
 }) {
   const {colors} = useTheme();
@@ -477,19 +477,21 @@ export function KanjiStrip({
   }
   return (
     <View>
-      <Text
-        style={[
-          typeScale.labelSmall,
-          {
-            color: colors.onSurfaceVariant,
-            marginTop: spacing.s,
-            marginBottom: spacing.xs,
-          },
-        ]}
-      >
-        {label}
-      </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: spacing.s}}>
+      {label != null && (
+        <Text
+          style={[
+            typeScale.labelSmall,
+            {
+              color: colors.onSurfaceVariant,
+              marginTop: spacing.s,
+              marginBottom: spacing.xs,
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      )}
+      <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: spacing.s}}>
         {characters.map((character) => (
           <KanjiChip
             key={character}

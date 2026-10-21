@@ -182,8 +182,39 @@ val verifyDictionaryAsset by tasks.registering {
     }
 }
 
+// The Tanaka Corpus example asset is generated the same way (tools/build_examples_db.py), so the
+// same two mistakes are caught: a missing file, and one from another schema version.
+val examplesSchemaVersion = 1
+val verifyExamplesAsset by tasks.registering {
+    val asset = layout.projectDirectory.file("src/main/assets/db/examples.sqlite")
+    description = "Fails the build when the generated example-sentence asset is missing or of another schema version."
+    doLast {
+        val file = asset.asFile
+        if (!file.isFile) {
+            error("Missing app/src/main/assets/db/examples.sqlite — generate it with: python3 tools/build_examples_db.py")
+        }
+        val header = ByteArray(64)
+        val read = file.inputStream().use { input -> input.read(header) }
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        val version = if (read == header.size && header.copyOfRange(0, magic.size).contentEquals(magic)) {
+            ((header[60].toLong() and 0xFF) shl 24) or ((header[61].toLong() and 0xFF) shl 16) or
+                ((header[62].toLong() and 0xFF) shl 8) or (header[63].toLong() and 0xFF)
+        } else {
+            -1L
+        }
+        if (version != examplesSchemaVersion.toLong()) {
+            error(
+                "app/src/main/assets/db/examples.sqlite is of schema version $version, " +
+                    "this build needs $examplesSchemaVersion — regenerate it with: " +
+                    "python3 tools/build_examples_db.py"
+            )
+        }
+    }
+}
+
 tasks.named("preBuild") {
     dependsOn(verifyDictionaryAsset)
+    dependsOn(verifyExamplesAsset)
 }
 
 // The optional manga-ocr model (~117 MB) is never shipped in a release APK: the user imports it

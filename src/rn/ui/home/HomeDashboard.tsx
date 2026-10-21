@@ -8,13 +8,13 @@ import React, {useState} from "react";
 import {ActivityIndicator, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useTheme} from "../theme";
 import {Icon} from "../components";
-import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import type {HomeDashboardData} from "./useHomeDashboard";
 import {
   AnkiServiceMark,
+  EmptyRecentArtwork,
   StreakDayMark,
   StreakFlameMark,
   ToriiServiceMark,
@@ -36,12 +36,9 @@ export function HomeDashboard({
   onOpenWaniKani,
   onOpenWord,
 }: HomeDashboardProps) {
-  const {colors} = useTheme();
-  const dark = isDarkScheme(colors.background);
-
   return (
     <View style={styles.dashboard}>
-      <StreakBanner home={home} dark={dark} onRefresh={home.refreshAnki} />
+      <StreakBanner home={home} />
       <View style={styles.serviceRow}>
         <AnkiCard
           home={home}
@@ -62,24 +59,32 @@ export function HomeDashboard({
 /** Shows the current Anki streak and seven weekday states without inferring lifetime activity. */
 function StreakBanner({
   home,
-  dark,
-  onRefresh,
 }: {
   home: HomeDashboardData;
-  dark: boolean;
-  onRefresh: () => void;
 }) {
   const {streak} = home;
   const completedToday = (streak.completedToday ?? 0) > 0;
   const {colors} = useTheme();
   const ink = colors.onSurface;
   const muted = colors.onSurfaceVariant;
-  const weekdays = home.streak.weekdays;
+  // Keep the calendar visible before Anki activity is available.
+  const today = new Date();
+  const daysSinceMonday = (today.getDay() + 6) % 7;
+  const weekdays = streak.weekdays.length > 0 ? streak.weekdays : Array.from({length: 7}, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - daysSinceMonday + index);
+    return {
+      key: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
+      label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
+      daysAgo: daysSinceMonday - index,
+      active: null,
+      completed: null,
+      today: index === daysSinceMonday,
+    };
+  });
   const hasPriorActivity = (day: (typeof weekdays)[number]) =>
     weekdays.some((olderDay) => olderDay.daysAgo > day.daysAgo && olderDay.active === true);
-  const streakDaysLabel = streak.days == null
-    ? "—"
-    : String(streak.days);
+  const streakDaysLabel = String(streak.days ?? 0);
   return (
     <View style={[styles.streakCard, {borderBottomColor: colors.outlineVariant}]}>
       <View style={styles.streakTop}>
@@ -91,16 +96,6 @@ function StreakBanner({
           >
             Daily streak
           </Text>
-          {streak.error ? (
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Refresh Anki study streak"
-              onPress={onRefresh}
-              style={styles.retryLink}
-            >
-              <Text style={[typeScale.labelMedium, {color: colors.accent}]}>Try again</Text>
-            </PressableScale>
-          ) : null}
         </View>
         <View style={styles.streakTotal}>
           <Text style={[styles.streakCount, {color: ink}]}>{streakDaysLabel}</Text>
@@ -141,7 +136,7 @@ function StreakBanner({
             accessibilityLabel={`Anki ${day.label}: ${status}${day.today ? ", today" : ""}`}
             style={styles.weekDay}
           >
-            <StreakDayMark state={state} size={29} />
+            <StreakDayMark state={state === "unknown" ? "empty" : state} size={29} />
             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={[typeScale.labelMedium, {color: day.today ? colors.accent : muted}]}>
               {day.label}
             </Text>
@@ -268,6 +263,17 @@ function WaniKaniCard({
 
   switch (waniKani.status) {
     case "connected":
+      if (waniKani.failure === "OFFLINE") {
+        // The numbers on screen are a cached read. With no connection the row says so instead of
+        // showing a stale count as if it were live.
+        status = "Internet required";
+        statusTone = "error";
+        count = null;
+        detail = "Connect to load reviews";
+        action = onOpen;
+        hint = "Opens WaniKani reviews";
+        break;
+      }
       status = waniKani.error ? "Refresh failed" : waniKani.refreshing ? "Refreshing…" : "Connected";
       statusTone = waniKani.error ? "error" : waniKani.refreshing ? "neutral" : "connected";
       count = waniKani.dueNow;
@@ -296,6 +302,15 @@ function WaniKaniCard({
       hint = "Opens the WaniKani screen";
       break;
     case "error":
+      if (waniKani.failure === "OFFLINE") {
+        status = "Internet required";
+        statusTone = "error";
+        detail = "Connect to load reviews";
+        action = onRefresh;
+        actionLabel = "Try again";
+        hint = "Retries reading WaniKani";
+        break;
+      }
       status = "Unavailable";
       statusTone = "error";
       action = onRefresh;
@@ -320,6 +335,7 @@ function WaniKaniCard({
       action={action}
       actionLabel={actionLabel}
       hint={hint}
+      offline={waniKani.failure === "OFFLINE"}
     />
   );
 }
@@ -340,6 +356,7 @@ function ServiceCard({
   action,
   actionLabel,
   hint,
+  offline = false,
 }: {
   title: string;
   status: string;
@@ -351,10 +368,14 @@ function ServiceCard({
   action?: () => void;
   actionLabel?: string;
   hint?: string;
+  /** No connection: the trailing edge shows the offline glyph instead of a stale count or line. */
+  offline?: boolean;
 }) {
   const {colors} = useTheme();
-  const {fontScale} = useWindowDimensions();
-  const stackOutcome = fontScale > 1.2;
+  const {width, fontScale} = useWindowDimensions();
+  // The single row keeps the count on the trailing edge. It only stacks when the scaled type no
+  // longer leaves the outcome enough room beside the header — a narrow screen or very large type.
+  const stackOutcome = width / fontScale < 270;
   const dark = isDarkScheme(colors.background);
   const tileColor = title === "Anki"
     ? dark ? "#182D40" : "#EAF4FF"
@@ -393,8 +414,10 @@ function ServiceCard({
         </View>
       </View>
       <View style={[styles.serviceFooter, stackOutcome && styles.serviceFooterScaled]}>
-        {count != null ? (
-          <View style={styles.serviceCountLine}>
+        {offline ? (
+          <Icon name="cloud_off" size={18} color={statusColor} />
+        ) : count != null ? (
+          <View style={[styles.serviceCountLine, stackOutcome && styles.serviceCountLineScaled]}>
             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.serviceCount, {color: ink}]}>{count}</Text>
             <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceCountLabel, {color: muted}]}>{countLabel}</Text>
           </View>
@@ -488,14 +511,11 @@ function RecentLookups({
           action={{label: "Try again", onPress: onRefresh}}
         />
       ) : (
-        <View accessible accessibilityLabel="No recent lookups. Words you search will appear here." style={styles.noRecentLookups}>
-          <View style={[styles.emptyIcon, {backgroundColor: colors.surfaceVariant}]} pointerEvents="none">
-            <InkIcon name="search" size={19} color={colors.iconSecondary} />
+        <View accessible accessibilityLabel="No recent searches found" style={styles.noRecentLookups}>
+          <View style={styles.emptyArtwork} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <EmptyRecentArtwork />
           </View>
-          <View style={styles.emptyCopy}>
-            <Text style={[styles.emptyTitle, {color: colors.onSurface}]}>No recent lookups</Text>
-            <Text style={[typeScale.bodySmall, styles.emptyMessage, {color: colors.onSurfaceVariant}]}>Words you search will appear here.</Text>
-          </View>
+          <Text style={[styles.emptyTitle, {color: colors.onSurface}]}>No recent searches found</Text>
         </View>
       )}
       {recentLookups.length > 0 && recentLookupsError ? (
@@ -522,6 +542,10 @@ function RecentLookupRow({
   onPress: () => void;
 }) {
   const {colors} = useTheme();
+  const {fontScale} = useWindowDimensions();
+  // A narrow gloss column truncates the definition once the type grows, so larger text moves the
+  // gloss under the word and lets it wrap in full instead of clipping it.
+  const stacked = fontScale > 1.2;
   const reading = hit.kana[0] ?? "";
   const gloss = hit.glosses[0] ?? "";
   return (
@@ -531,6 +555,7 @@ function RecentLookupRow({
       onPress={onPress}
       style={[
         styles.lookupRow,
+        stacked && styles.lookupRowStacked,
         !last && {borderBottomWidth: 1, borderBottomColor: colors.outlineVariant},
       ]}
     >
@@ -545,7 +570,15 @@ function RecentLookupRow({
         ) : null}
       </View>
       {gloss ? (
-        <Text numberOfLines={2} style={[typeScale.bodySmall, styles.lookupGloss, {color: colors.onSurfaceVariant}]}>
+        <Text
+          numberOfLines={stacked ? undefined : 2}
+          style={[
+            typeScale.bodySmall,
+            styles.lookupGloss,
+            stacked && styles.lookupGlossStacked,
+            {color: colors.onSurfaceVariant},
+          ]}
+        >
           {gloss}
         </Text>
       ) : null}
@@ -608,7 +641,6 @@ const styles = StyleSheet.create({
   },
   streakCopy: {flex: 1, minWidth: 0},
   streakTitle: {flexShrink: 1},
-  retryLink: {alignSelf: "flex-start", minHeight: 48, justifyContent: "center"},
   streakTotal: {minWidth: 88, alignItems: "flex-end", justifyContent: "center", gap: 3},
   streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "500"},
   streakTotalLabel: {textAlign: "right"},
@@ -642,6 +674,9 @@ const styles = StyleSheet.create({
   serviceFooter: {flexShrink: 1, maxWidth: 132, flexDirection: "row", alignItems: "center", gap: 7},
   serviceFooterScaled: {width: "100%", maxWidth: "100%", alignSelf: "flex-end", justifyContent: "flex-end"},
   serviceCountLine: {flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 7},
+  // Once the outcome drops below the header, the count needs to travel with the chevron on the
+  // trailing edge instead of stretching the full row and reading as a second title.
+  serviceCountLineScaled: {flex: 0, flexShrink: 1, marginStart: "auto", justifyContent: "flex-end"},
   serviceCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700"},
   serviceCountLabel: {flexShrink: 1},
   serviceAction: {fontSize: 13, lineHeight: 18, fontWeight: "600"},
@@ -665,13 +700,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.m,
     paddingVertical: spacing.xs,
   },
+  lookupRowStacked: {flexDirection: "column", alignItems: "stretch", gap: spacing.xs},
   lookupWord: {flex: 1, minWidth: 0},
   lookupGloss: {maxWidth: "34%", textAlign: "right"},
-  noRecentLookups: {minHeight: 39, flexDirection: "row", alignItems: "center", gap: spacing.m, marginTop: 20},
+  lookupGlossStacked: {maxWidth: "100%", textAlign: "left"},
+  noRecentLookups: {alignItems: "center", marginTop: 20, paddingBottom: spacing.m},
+  emptyArtwork: {width: "100%", maxWidth: 340, marginBottom: spacing.m},
   emptyRecent: {flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 16, paddingBottom: 16},
   emptyIcon: {width: 39, height: 39, borderRadius: shape.empty, alignItems: "center", justifyContent: "center"},
   emptyCopy: {flex: 1, minWidth: 0},
-  emptyTitle: {fontSize: 13, lineHeight: 18, fontWeight: "700"},
+  emptyTitle: {fontSize: 13, lineHeight: 18, fontWeight: "700", textAlign: "center"},
   emptyMessage: {marginTop: 4},
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},

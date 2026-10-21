@@ -297,11 +297,13 @@ export function DeckRow({
   name,
   counts,
   due,
+  dueColor,
   onPress,
 }: {
   name: string;
   counts: string;
   due: number;
+  dueColor?: string;
   onPress: () => void;
 }) {
   const {colors} = useTheme();
@@ -323,8 +325,11 @@ export function DeckRow({
           {counts}
         </Text>
       </View>
-      <View style={styles.sourceSide}>
-        <Text numberOfLines={1} style={[styles.deckDue, {color: colors.onSurface}]}>
+      <View style={[styles.sourceSide, styles.deckDueSide]}>
+        <Text
+          numberOfLines={1}
+          style={[styles.deckDue, {color: due > 0 && dueColor != null ? dueColor : colors.onSurface}]}
+        >
           {String(due)}
         </Text>
         <Text numberOfLines={1} style={[styles.sourceValueLabel, {color: colors.fine}]}>
@@ -670,6 +675,7 @@ const styles = StyleSheet.create({
   sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4},
   sourceStatus: {marginTop: 5},
   sourceSide: {alignItems: "flex-end", marginStart: spacing.m},
+  deckDueSide: {marginEnd: spacing.l},
   sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45},
   sourceValueLabel: {fontSize: 10, lineHeight: 13},
   sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right"},

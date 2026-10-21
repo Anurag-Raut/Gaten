@@ -9,6 +9,7 @@ package com.gaten.app.rn
 import android.content.Context
 import com.facebook.react.bridge.Promise
 import com.gaten.app.anki.AnkiReviewFailure
+import com.gaten.app.dict.ExampleRepository
 import com.gaten.app.dict.JmdictRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,11 +35,24 @@ internal fun rejectFailure(promise: Promise, failure: AnkiReviewFailure, detail:
 internal object GatenDictStore {
     private val mutex = Mutex()
     private var repository: JmdictRepository? = null
+    private var examples: ExampleRepository? = null
 
     suspend fun repository(context: Context): JmdictRepository {
         repository?.let { return it }
         return mutex.withLock {
             repository ?: JmdictRepository.open(context.applicationContext).also { repository = it }
+        }
+    }
+
+    /**
+     * The app's one open [ExampleRepository], extracted from the bundled Tanaka Corpus on first use
+     * exactly like the dictionary. It is a separate asset and a separate copy, so the two opens do
+     * not contend beyond the mutex's own serialisation.
+     */
+    suspend fun examples(context: Context): ExampleRepository {
+        examples?.let { return it }
+        return mutex.withLock {
+            examples ?: ExampleRepository.open(context.applicationContext).also { examples = it }
         }
     }
 }

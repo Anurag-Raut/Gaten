@@ -200,6 +200,8 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         </Text>
       </View>
       <ScrollView
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         // With the keyboard up, a tap on Connect, Disconnect or a row is the row's own.
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{

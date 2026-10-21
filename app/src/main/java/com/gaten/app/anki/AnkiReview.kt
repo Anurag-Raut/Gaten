@@ -94,10 +94,9 @@ sealed interface AnkiQueue {
 /**
  * One card of the collection, rendered by AnkiDroid.
  *
- * [question] and [answer] are AnkiDroid's own HTML for the card's templates. Whether they already
- * carry the note type's CSS depends on the AnkiDroid version — builds up to roughly 2.16 prepend
- * it, current ones send the template's HTML alone — so [css] is handed over separately for the
- * caller to place itself.
+ * [question] and [answer] are AnkiDroid's own template-rendered HTML. The provider's simplified
+ * question and purified answer omit card CSS; [css] is empty for that result so the app can style
+ * it. Older providers fall back to the full rendered answer and its note CSS.
  *
  * [fieldNames] and [fields] are the note type's field names and the note's raw values in the same
  * order, so a caller can read a field by name without parsing the rendered HTML.
@@ -105,6 +104,7 @@ sealed interface AnkiQueue {
 sealed interface AnkiReviewCard {
     data class Available(
         val noteId: Long,
+        val modelId: Long,
         val ord: Int,
         val deckName: String,
         val question: String,
@@ -356,11 +356,12 @@ object AnkiReview {
 
                 AnkiReviewCard.Available(
                     noteId = noteId,
+                    modelId = mid,
                     ord = ord,
                     deckName = deckName(resolver, rendered.deckId),
                     question = rendered.question,
                     answer = rendered.answer,
-                    css = css,
+                    css = if (rendered.simplified) "" else css,
                     fieldNames = fieldNames,
                     fields = fields,
                     typedAnswer = typedAnswer
@@ -490,18 +491,41 @@ object AnkiReview {
             UNREADABLE_CARD
         }
 
-    /** The card as AnkiDroid renders it right now, or null when the note has no such card. */
+    /**
+     * Prefer template-rendered content without note CSS; fall back only when the provider lacks
+     * those columns.
+     */
     private fun renderedCard(resolver: ContentResolver, noteId: Long, ord: Int): RenderedCard? {
-        val cursor = resolver.query(cardUri(noteId, ord), CARD_PROJECTION, null, null, null)
+        return try {
+            readRenderedCard(resolver, noteId, ord, SIMPLE_CARD_PROJECTION, simplified = true)
+        } catch (_: UnsupportedOperationException) {
+            readRenderedCard(resolver, noteId, ord, CARD_PROJECTION, simplified = false)
+        }
+    }
+
+    /** Read the provider's selected rendered HTML columns and remember whether note CSS is omitted. */
+    private fun readRenderedCard(
+        resolver: ContentResolver,
+        noteId: Long,
+        ord: Int,
+        projection: Array<String>,
+        simplified: Boolean
+    ): RenderedCard? {
+        val cursor = resolver.query(cardUri(noteId, ord), projection, null, null, null)
             ?: error("AnkiDroid returned no card cursor")
+        val questionColumn =
+            if (simplified) FlashCardsContract.Card.QUESTION_SIMPLE else FlashCardsContract.Card.QUESTION
+        val answerColumn =
+            if (simplified) FlashCardsContract.Card.ANSWER_PURE else FlashCardsContract.Card.ANSWER
         return cursor.use {
             if (!it.moveToFirst()) {
                 null
             } else {
                 RenderedCard(
-                    question = it.string(FlashCardsContract.Card.QUESTION).orEmpty(),
-                    answer = it.string(FlashCardsContract.Card.ANSWER).orEmpty(),
-                    deckId = it.long(FlashCardsContract.Card.DECK_ID)
+                    question = it.string(questionColumn).orEmpty(),
+                    answer = it.string(answerColumn).orEmpty(),
+                    deckId = it.long(FlashCardsContract.Card.DECK_ID),
+                    simplified = simplified
                 )
             }
         }
@@ -633,7 +657,12 @@ private const val CARD_DUE_COLUMN = "due"
 private val UNREADABLE_CARD = QueuedCard(type = null, dueEpochSeconds = null)
 
 /** One card as AnkiDroid has it rendered, with the deck it sits in. */
-private class RenderedCard(val question: String, val answer: String, val deckId: Long)
+private class RenderedCard(
+    val question: String,
+    val answer: String,
+    val deckId: Long,
+    val simplified: Boolean
+)
 
 /** The template of a note type's card, at the ordinal AnkiDroid addresses it by. */
 private fun templateUri(mid: Long, ord: Int): Uri =
@@ -662,6 +691,12 @@ private val NOTE_PROJECTION = arrayOf(
 private val CARD_PROJECTION = arrayOf(
     FlashCardsContract.Card.QUESTION,
     FlashCardsContract.Card.ANSWER,
+    FlashCardsContract.Card.DECK_ID
+)
+
+private val SIMPLE_CARD_PROJECTION = arrayOf(
+    FlashCardsContract.Card.QUESTION_SIMPLE,
+    FlashCardsContract.Card.ANSWER_PURE,
     FlashCardsContract.Card.DECK_ID
 )
 

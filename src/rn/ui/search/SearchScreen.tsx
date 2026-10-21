@@ -47,6 +47,8 @@ export function SearchNotice({
   const {width} = useWindowDimensions();
   return (
     <ScrollView
+      showsVerticalScrollIndicator={false}
+      showsHorizontalScrollIndicator={false}
       style={styles.noticeScroll}
       contentContainerStyle={[
         styles.notice,

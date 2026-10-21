@@ -1,0 +1,19 @@
+  Window #9 Window{8cacba1 u0 com.gaten.app/com.gaten.app.MainActivity}:
+    mDisplayId=0 rootTaskId=707 mSession=Session{38ecffa 31962:u0a10214} mClient=android.os.BinderProxy@2bfc808
+    mOwnerUid=10214 showForAllUsers=false package=com.gaten.app appop=NONE
+    mAttrs={(0,0)(fillxfill) sim={adjust=resize} ty=BASE_APPLICATION wanim=0x10302fe
+      fl=LAYOUT_IN_SCREEN FORCE_NOT_FULLSCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED DRAWS_SYSTEM_BAR_BACKGROUNDS
+      pfl=NO_MOVE_ANIMATION FORCE_DRAW_STATUS_BAR_BACKGROUND USE_BLAST APPEARANCE_CONTROLLED FIT_INSETS_CONTROLLED
+      bhv=DEFAULT
+      fitSides=}
+    Requested w=1080 h=2340 mLayoutSeq=7082
+    mBaseLayer=21000 mSubLayer=0    mToken=ActivityRecord{f122e30 u0 com.gaten.app/.MainActivity t707}
+    mActivityRecord=ActivityRecord{f122e30 u0 com.gaten.app/.MainActivity t707}
+    drawnStateEvaluated=true    mightAffectAllDrawn=true
+    mViewVisibility=0x0 mHaveFrame=true mObscured=false
+    mGivenContentInsets=[0,0][0,0] mGivenVisibleInsets=[0,0][0,0]
+    mFullConfiguration={1.3 310mcc260mnc [en_US] ldltr sw393dp w393dp h777dp 440dpi nrml long port night finger qwerty/v/v dpad/v winConfig={ mBounds=Rect(0, 0 - 1080, 2340) mAppBounds=Rect(0, 136 - 1080, 2274) mMaxBounds=Rect(0, 0 - 1080, 2340) mDisplayRotation=ROTATION_0 mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_0} as.3 s.2 fontWeightAdjustment=0}
+    mLastReportedConfiguration={1.3 310mcc260mnc [en_US] ldltr sw393dp w393dp h777dp 440dpi nrml long port night finger qwerty/v/v dpad/v winConfig={ mBounds=Rect(0, 0 - 1080, 2340) mAppBounds=Rect(0, 136 - 1080, 2274) mMaxBounds=Rect(0, 0 - 1080, 2340) mDisplayRotation=ROTATION_0 mWindowingMode=fullscreen mDisplayWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_0} as.3 s.2 fontWeightAdjustment=0}
+    mHasSurface=true isReadyForDisplay()=true mWindowRemovalAllowed=false
+    Frames: parent=[0,0][1080,2340] display=[0,0][1080,2340] frame=[0,0][1080,2340] last=[0,0][1080,2340] insetsChanged=false
+     surface=[0,0][0,0]

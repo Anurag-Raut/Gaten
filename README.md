@@ -240,15 +240,19 @@ Native toolchain.
 # 1. Generate the dictionary asset (stdlib only; downloads JMdict/JMnedict and verifies SHA-256).
 python3 tools/build_jmdict_db.py
 
-# 2. Install the JavaScript dependencies.
+# 2. Generate the example-sentence asset (stdlib only; downloads the Tanaka Corpus, SHA-256 pinned).
+python3 tools/build_examples_db.py
+
+# 3. Install the JavaScript dependencies.
 npm install
 
-# 3. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
+# 4. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
 ./gradlew :app:assembleDebug
 ```
 
-The dictionary asset (`app/src/main/assets/db/jmdict.sqlite`) is generated and gitignored, so the
-build fails early with a clear message if step 1 was skipped.
+Both database assets (`app/src/main/assets/db/jmdict.sqlite` and
+`app/src/main/assets/db/examples.sqlite`) are generated and gitignored, so the build fails early with
+a clear message if either builder was skipped.
 
 ## Optional stylized-text model (manga-ocr)
 
@@ -572,6 +576,10 @@ documented here rather than left implicit.
   (EDRDG), used under
   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see
   <https://www.edrdg.org/>.
+- **Example sentences** — the Tanaka Corpus, © Electronic Dictionary Research and Development Group
+  (EDRDG), used under
+  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); bundled with the app as an
+  offline SQLite asset and read with no network.
 - **WaniKani reference content** — [WaniKani](https://www.wanikani.com/) (Tofugu LLC), read through
   its [public API](https://docs.api.wanikani.com/20170710) under WaniKani's own terms when the reader
   connects a token. Nothing from WaniKani is bundled with the app: each kanji or radical page is

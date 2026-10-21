@@ -122,14 +122,18 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
 
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
-      {/* The hub scrolls as one, exactly as the Compose hub did: the bar below owns the bottom
-          inset while it is on screen, so only the top is taken here and nothing above the bar is
-          padded twice. The content column is the pages' own. The top inset is padding on the
-          scroller itself rather than on its content, because Compose's hub took safeDrawing's top
-          inset outside its scroller: its content never slid under the status bar, where a content
-          inset let this page's title run under the clock as soon as it scrolled. */}
-      <ScrollView style={{marginTop: insets.top, marginBottom: BOTTOM_BAR_HEIGHT + insets.bottom}}>
-        <View style={[CONTENT_COLUMN, {paddingHorizontal: width < 360 ? 16 : 22}]}>
+      {/* Keep the title below the status bar. Bottom padding lets rows scroll above the floating
+          bar while remaining visible beside it, matching Analytics. */}
+      <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{marginTop: insets.top}}>
+        <View
+          style={[
+            CONTENT_COLUMN,
+            {
+              paddingHorizontal: width < 360 ? 16 : 22,
+              paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
+            },
+          ]}
+        >
           {/* One confident heading with room to breathe above it, then nothing but rows. */}
           <View style={{marginTop: 23}}>
             <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
@@ -204,7 +208,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               onPress={() => onOpenPage("about")}
             />
           </SettingsGroup>
-          <View style={{height: 18}} />
         </View>
       </ScrollView>
       {disclosureDialog}

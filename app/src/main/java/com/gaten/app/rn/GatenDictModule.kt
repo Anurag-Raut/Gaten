@@ -85,6 +85,33 @@ class GatenDictModule(
     }
 
     /**
+     * Up to three example sentences for [term], shortest first, read from the bundled Tanaka
+     * Corpus with no network at all. [term] is the card's dictionary form; an empty list means the
+     * corpus has no sentence for it, which is not an error.
+     */
+    @ReactMethod
+    fun examples(term: String, promise: Promise) {
+        scope.launch {
+            try {
+                val repository = GatenDictStore.examples(reactApplicationContext)
+                val examples = repository.lookup(term.trim(), 3)
+                promise.resolve(Arguments.createArray().apply {
+                    for (example in examples) {
+                        pushMap(Arguments.createMap().apply {
+                            putString("japanese", example.japanese)
+                            putString("english", example.english)
+                        })
+                    }
+                })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_EXAMPLES, "Could not read examples: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
      * True when [query] is something the search can be asked about — Japanese, or romaji the
      * converter reads in full ([DictionarySearch.isSearchable]). The screen uses this to tell a
      * query it has no answer for from one it has not looked up yet.
@@ -300,6 +327,7 @@ class GatenDictModule(
         /** The only failure the search can produce: the repository never opened. */
         const val CODE_OPEN_FAILED = "E_DICT_OPEN"
         const val CODE_HISTORY = "E_DICT_HISTORY"
+        const val CODE_EXAMPLES = "E_DICT_EXAMPLES"
         const val CODE_HISTORY_INPUT = "E_DICT_HISTORY_INPUT"
 
         private const val PREFERENCES = "gaten_dictionary_history"

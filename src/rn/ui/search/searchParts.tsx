@@ -17,6 +17,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import Animated, {
   interpolateColor,
@@ -37,10 +38,14 @@ import {
   typeScale,
 } from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
+import {SearchArtwork} from "./SearchArtwork";
 import * as store from "./searchStore";
 
 /** How long the field's focus ring takes to fade in or out. */
 const FOCUS_MS = 150;
+
+/** The empty search's drawing is drawn for this column; wider, and it stops reading as a mark. */
+const ART_MAX_WIDTH = 300;
 
 /** The examples the empty prompt offers, as a direct choice rather than something to type. */
 export const SEARCH_EXAMPLES = ["猫", "たべる", "食べた", "ありがとう", "学校", "面白い"];
@@ -131,30 +136,27 @@ export function SearchRowSeparator() {
 }
 
 /**
- * The empty state's own content: one tap on a word that can be searched for. Until the reader has
- * searched at all that is the examples, over a line saying what a search can be; once they have,
- * the examples and the line are gone and their own searched words take their place — the words they
- * came back for, not a lesson on what the field takes. A chip is a choice rather than typing, so it
- * is asked for at once — anything half-typed is cancelled so it cannot land over it.
+ * The empty search's own content: the words to tap rather than type, and the drawing under them.
+ * Until the reader has searched at all those words are the examples; once they have, their own
+ * searched words take their place under a line naming them — the words they came back for, not a
+ * lesson on what the field takes. A chip is a choice rather than typing, so it is asked for at once
+ * — anything half-typed is cancelled so it cannot land over it.
  */
 export function SearchIdlePrompt() {
   const {colors} = useTheme();
+  const {width} = useWindowDimensions();
   const {recentSearches} = store.useSearchState();
   const firstSearch = recentSearches.length === 0;
+  // The list already insets itself by the screen's own content inset; the drawing takes what is
+  // left of that column, up to the width it is drawn for.
+  const inset = width < 360 ? spacing.l : spacing.contentInset;
+  const artWidth = Math.min(ART_MAX_WIDTH, width - (inset + spacing.l) * 2);
   return (
     <View style={styles.prompt}>
-      {firstSearch && (
-        <>
-          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>
-            Look up a word
-          </Text>
-          <Text
-            style={[typeScale.bodyMedium, styles.promptHint, {color: colors.onSurfaceVariant}]}
-          >
-            Kanji, kana, a romaji reading such as neko or tokyo, or an inflected form such as
-            食べた. Gaten looks up words offline, from the dictionary on this device.
-          </Text>
-        </>
+      {!firstSearch && (
+        <Text style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}>
+          Recent searches
+        </Text>
       )}
       <View style={[styles.flowRow, !firstSearch && styles.recentRow]}>
         {(firstSearch ? SEARCH_EXAMPLES : recentSearches).map((word) => (
@@ -173,6 +175,12 @@ export function SearchIdlePrompt() {
             </Text>
           </PressableScale>
         ))}
+      </View>
+      <View style={styles.art}>
+        <SearchArtwork width={artWidth} />
+        <Text style={[typeScale.bodyMedium, styles.artCaption, {color: colors.onSurfaceVariant}]}>
+          Find your next Japanese word
+        </Text>
       </View>
     </View>
   );
@@ -328,15 +336,16 @@ export const SEARCH_LIST_CONTENT = {
 
 const styles = StyleSheet.create({
   prompt: {padding: spacing.l},
-  promptHint: {marginTop: spacing.s},
   flowRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.s,
     marginTop: spacing.l,
   },
-  // The searched words carry the empty state on their own: no line above them to sit under.
-  recentRow: {marginTop: 0},
+  // The searched words sit under the line that names them, a step closer to it than to nothing.
+  recentRow: {marginTop: spacing.s},
+  art: {alignItems: "center", marginTop: spacing.xl},
+  artCaption: {marginTop: spacing.m, maxWidth: ART_MAX_WIDTH, textAlign: "center"},
   exampleChip: {
     borderRadius: shape.small,
     minHeight: 48,

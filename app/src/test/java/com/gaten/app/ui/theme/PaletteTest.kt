@@ -172,19 +172,35 @@ class PaletteTest {
         }
     }
 
+    /** Black is the colourless accent: the neutral axis at its extremes, not a tinted one. */
     @Test
-    fun graphiteIsColourless() {
-        for (dark in listOf(false, true)) {
-            val primary = accentRoles(AccentColor.Graphite, dark).primary
-            assertTrue(
-                "Graphite's accent is not grey: $primary (dark=$dark)",
-                primary.red == primary.green && primary.green == primary.blue
-            )
-            assertNotEquals(
-                "Graphite's accent is the shipped one (dark=$dark)",
-                accentRoles(AccentColor.Indigo, dark).primary,
-                primary
-            )
+    fun blackIsTheColourlessAccent() {
+        assertEquals(Color(0xFF000000), accentRoles(AccentColor.Black, dark = false).primary)
+        assertEquals(Color(0xFFFFFFFF), accentRoles(AccentColor.Black, dark = true).primary)
+    }
+
+    /**
+     * The accent ladder's own contract: a primary carries the ink its label is written in — white in
+     * light, near-black in dark — and reads as text on the paper it is drawn against. The floor is
+     * WCAG's 4.5:1, which the selected pill's small label and every accent-coloured link depend on.
+     */
+    @Test
+    fun everyAccentCarriesItsInkAndReadsOnThePaper() {
+        for (accent in AccentColor.entries) {
+            for (dark in listOf(false, true)) {
+                val tone = accentRoles(accent, dark)
+                val paper = paletteNeutrals(Palette.Gaten, dark).background
+                val ink = contrast(tone.primary, tone.onPrimary)
+                assertTrue(
+                    "$accent (dark=$dark): primary carries its ink at only $ink:1",
+                    ink >= 4.5f
+                )
+                val onPaper = contrast(tone.primary, paper)
+                assertTrue(
+                    "$accent (dark=$dark): primary on the paper is only $onPaper:1",
+                    onPaper >= 4.5f
+                )
+            }
         }
     }
 
@@ -200,8 +216,8 @@ class PaletteTest {
         assertEquals(Color(0xFFB42335), LightError)
 
         val indigo = accentRoles(AccentColor.Indigo, dark = false)
-        assertEquals(Color(0xFF7564D9), indigo.primary)
-        assertEquals(Color(0xFFF2EFFF), indigo.primaryContainer)
+        assertEquals(Color(0xFF4338CA), indigo.primary)
+        assertEquals(Color(0xFFEEF2FF), indigo.primaryContainer)
 
         val dark = paletteNeutrals(Palette.Gaten, dark = true)
         assertEquals(Color(0xFF101114), dark.background)
@@ -210,6 +226,6 @@ class PaletteTest {
         assertEquals(Color(0xFFF5F5F6), dark.onSurface)
         assertEquals(Color(0xFFB0B0BA), dark.onSurfaceVariant)
         assertEquals(Color(0xFF303136), dark.outline)
-        assertEquals(Color(0xFFB0A0FF), accentRoles(AccentColor.Indigo, dark = true).primary)
+        assertEquals(Color(0xFFA5B4FC), accentRoles(AccentColor.Indigo, dark = true).primary)
     }
 }

@@ -16,6 +16,10 @@ plugins {
     id("com.facebook.react.rootproject")
 }
 
+// Older autolinked libraries look for React Native's prebuilt android/ directory.
+// RN 0.86 keeps its sources under ReactAndroid, so point those checks at the package root.
+extra["reactNativeAndroidRoot"] = file("node_modules/react-native")
+
 // React Native ecosystem libraries read these from the root project ext (the `safeExtGet` pattern
 // in their android/build.gradle) instead of hardcoding SDK levels. Kept in sync with the app
 // module's minSdk/targetSdk/compileSdk.

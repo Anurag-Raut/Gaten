@@ -25,7 +25,7 @@ export type Accent =
   | "Teal"
   | "Green"
   | "Rose"
-  | "Graphite";
+  | "Black";
 
 /** The three choices, the shape getTheme() answers with. */
 export interface ThemeChoices {

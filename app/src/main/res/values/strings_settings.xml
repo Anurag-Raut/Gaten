@@ -137,7 +137,7 @@
     <string name="settings_appearance_accent_teal">Teal</string>
     <string name="settings_appearance_accent_green">Green</string>
     <string name="settings_appearance_accent_rose">Rose</string>
-    <string name="settings_appearance_accent_graphite">Graphite</string>
+    <string name="settings_appearance_accent_black">Black</string>
 
     <!-- About: version, what stays on the device, and who made what -->
     <string name="settings_about_title">About</string>

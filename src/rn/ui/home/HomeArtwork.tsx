@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import Svg, {Circle, Path, SvgXml} from "react-native-svg";
+import Svg, {Circle, Ellipse, G, Path, Rect, SvgXml} from "react-native-svg";
 import {useTheme} from "../theme";
 import {homeSvgXml} from "./HomeSvgAssets";
 
@@ -157,3 +157,29 @@ export function NoStreakArtwork({width = 110, height = 105, dark = false}: Artwo
   return <Artwork name="sprout_no_streak" width={width} height={height} dark={dark} />;
 }
 
+/** An open, empty history tray; neutral outlines carry the shape and accent stays in small details. */
+export function EmptyRecentArtwork() {
+  const {colors} = useTheme();
+  return (
+    <Svg width="100%" height={148} viewBox="0 0 340 148" fill="none" style={{maxWidth: 340}}>
+      <Ellipse cx={170} cy={130} rx={65} ry={4} fill={colors.onSurfaceVariant} fillOpacity={0.04} />
+      <G stroke={colors.iconSecondary} strokeOpacity={0.5} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M112 82l16-27h84l16 27v30a10 10 0 0 1-10 10h-96a10 10 0 0 1-10-10Z" fill={colors.surface} />
+        <Path d="M120 82l13-19h74l13 19" fill={colors.surfaceVariant} fillOpacity={0.45} strokeOpacity={0.2} />
+        <Path d="M112 82h34c2 12 10 18 24 18s22-6 24-18h34v30a10 10 0 0 1-10 10h-96a10 10 0 0 1-10-10Z" fill={colors.surface} />
+        <Path d="M158 111h24" strokeOpacity={0.25} />
+      </G>
+
+      <Circle cx={170} cy={36} r={22} fill={colors.surface} />
+      <G stroke={colors.iconSecondary} strokeOpacity={0.6} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M151 34a19 19 0 1 1 5 15" />
+        <Path d="M150 25v10h10M170 25v12l8 5" />
+      </G>
+      <Circle cx={170} cy={36} r={14} fill={colors.accent} fillOpacity={0.03} />
+      <Path d="M153 38v5M170 7V2M187 38v5" stroke={colors.iconSecondary} strokeOpacity={0.12} strokeWidth={1.5} strokeLinecap="round" />
+      <Circle cx={98} cy={62} r={4} fill={colors.accent} fillOpacity={0.08} />
+      <Circle cx={243} cy={96} r={2.5} fill={colors.iconSecondary} fillOpacity={0.18} />
+      <Path d="M238 45h10M243 40v10" stroke={colors.accent} strokeOpacity={0.08} strokeWidth={1.7} strokeLinecap="round" />
+    </Svg>
+  );
+}

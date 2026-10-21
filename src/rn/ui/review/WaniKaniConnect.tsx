@@ -98,9 +98,11 @@ export function WaniKaniConnect({
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <View style={{paddingHorizontal: contentInset}}>
-          <SubHeader title="WaniKani" right="Connection" onBack={onBack} />
+          <SubHeader title="WaniKani" onBack={onBack} />
         </View>
         <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           style={styles.screen}
           contentContainerStyle={[styles.body, {paddingHorizontal: contentInset}]}
           keyboardShouldPersistTaps="handled"

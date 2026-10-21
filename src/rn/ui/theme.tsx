@@ -43,6 +43,8 @@ export interface ThemeColors extends ThemeColorMap {
   iconSecondary: string;
   accent: string;
   accentSubtle: string;
+  reviewMeaning: string;
+  reviewReading: string;
   success: string;
   warning: string;
   disabled: string;
@@ -151,6 +153,9 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         iconSecondary: dark ? "#909099" : "#83838C",
         accent: colorMap.primary,
         accentSubtle: colorMap.primaryContainer,
+        // Review task colors stay distinct regardless of the reader's chosen accent or palette.
+        reviewMeaning: dark ? "#8FC5CA" : "#2B7178",
+        reviewReading: dark ? "#B0A0FF" : "#6D28D9",
         success: dark ? "#53C99B" : "#16A476",
         warning: dark ? "#EF8A96" : "#DC6673",
         disabled: dark ? colorMap.surfaceContainerHighest : "#E9E9ED",

@@ -23,6 +23,11 @@
  * feeds through the native driver — so the bar stays in step with the pager rather than a frame
  * behind. Each label is measured at the reader's font scale, so its selected capsule is only as
  * wide as it needs to be, and it shrinks to fit a narrow screen.
+ *
+ * The travel belongs to the pager and must not be timed here, but the *end* of it — on a tap — is the
+ * bar's own: the pill is given the speed that travel was carrying, runs a few dp past the tab it is
+ * aiming at and springs back onto it. A drag injects nothing, because the finger has already decided
+ * where that travel stops.
  */
 import React, {useEffect, useRef, useState} from "react";
 import {
@@ -36,11 +41,13 @@ import {
   useColorScheme,
 } from "react-native";
 import Reanimated, {
+  cancelAnimation,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import type {MaterialTopTabBarProps} from "@react-navigation/material-top-tabs";
@@ -88,6 +95,11 @@ const TAB_ICONS: Record<string, IconName> = {
  * detached from the tap.
  */
 const ICON_MOTION_DELAY = 160;
+
+// A small horizontal overshoot layered over the pager's travel, only after a tab tap.
+const SLIDE_SPRING = {mass: 1, stiffness: 500, damping: 20};
+const SLIDE_VELOCITY = 270;
+const SLIDE_SETTLE_DELAY = 160;
 
 /** Draws the tab's own Material Symbols glyph: the bar's shared size, in the ink it is given. */
 function TabIcon({name, color}: {name: IconName; color: string}) {
@@ -279,6 +291,7 @@ function BarItem({
 export function BottomBar({
   state,
   navigation,
+  descriptors,
   position,
   layout,
   searchActive = false,
@@ -286,8 +299,11 @@ export function BottomBar({
   const {colors, mode} = useTheme();
   const systemMode = useColorScheme();
   const dark = mode === "Dark" || (mode === "System" && systemMode === "dark");
-  const capsuleColor = colors.actionPrimary;
-  const capsuleInk = colors.onActionPrimary;
+  // The selected pill wears the reader's accent, not the neutral action fill: the bar's active
+  // state is the one place the accent is always visible, and `onPrimary` is already the ink that
+  // reads on that tone in either mode.
+  const capsuleColor = colors.accent;
+  const capsuleInk = colors.onPrimary;
   const barColor = colors.bottom;
   const iconColor = colors.fine;
   const background = colors.background;
@@ -323,6 +339,28 @@ export function BottomBar({
     );
     return () => subscription.remove();
   }, [atNonHomeRoot, navigation]);
+
+  // The capsule's settle: its travel is the pager's, so the one part of the pill's motion the bar
+  // owns is the end of that travel. `capsule` is the extra distance the pill is carrying past its
+  // tab, in dp — zero at rest, and only ever nonzero while a tap's spring is settling.
+  const reducedMotion = useReducedMotion();
+  const capsule = useSharedValue(0);
+
+  const swipeNavigation = descriptors[state.routes[0].key].navigation;
+  useEffect(() => {
+    const unsubscribe = swipeNavigation.addListener("swipeStart", () => {
+      cancelAnimation(capsule);
+      capsule.value = 0;
+    });
+    return () => {
+      unsubscribe();
+      cancelAnimation(capsule);
+    };
+  }, [swipeNavigation, capsule]);
+
+  const capsuleSettle = useAnimatedStyle(() => ({
+    transform: [{translateX: capsule.value}],
+  }));
 
   if (!visible) {
     return null;
@@ -470,12 +508,28 @@ export function BottomBar({
               }
               Haptics.play("tick");
               navigation.navigate(route.name);
+              cancelAnimation(capsule);
+              capsule.value = 0;
+              if (reducedMotion) {
+                return;
+              }
+              // Only taps add horizontal overshoot; manual swipes use the pager position alone.
+              capsule.value = withDelay(
+                SLIDE_SETTLE_DELAY,
+                withSpring(0, {
+                  ...SLIDE_SPRING,
+                  velocity: (index > state.index ? 1 : -1) * rtl * SLIDE_VELOCITY,
+                }),
+              );
             }}
           />
         ))}
         {/*
           The capsule: one accent pill carrying its own glyph and label, cross-faded and drifted per
-          tab, so it reads as the selected item opening rather than as two pills swapping.
+          tab, so it reads as the selected item opening rather than as two pills swapping. The fill
+          and the content are two nodes over one box — the fill paints below the plain glyphs, the
+          content above them — so the tap's settle wraps both: same box, same offset, and the pill
+          moves as one object.
         */}
         <Animated.View
           pointerEvents="none"
@@ -489,12 +543,14 @@ export function BottomBar({
             },
           ]}
         >
-          <Animated.View
-            style={[
-              styles.capsuleFill,
-              {backgroundColor: capsuleColor, transform: [{scaleX: capsuleScaleX}]},
-            ]}
-          />
+          <Reanimated.View style={[styles.capsuleInner, capsuleSettle]}>
+            <Animated.View
+              style={[
+                styles.capsuleFill,
+                {backgroundColor: capsuleColor, transform: [{scaleX: capsuleScaleX}]},
+              ]}
+            />
+          </Reanimated.View>
         </Animated.View>
         <Animated.View
           pointerEvents="none"
@@ -505,63 +561,65 @@ export function BottomBar({
             {width: widestCapsuleWidth, transform: [{translateX: capsuleOffsetX}]},
           ]}
         >
-          {state.routes.map((route, index) => {
-            const icon = TAB_ICONS[route.name] ?? "settings";
-            return (
-            <Animated.View
-              key={route.key}
-              style={[
-                styles.capsuleContent,
-                {
-                  opacity: position.interpolate({
-                    inputRange,
-                    outputRange: inputRange.map((candidate) =>
-                      candidate === index ? 1 : 0,
-                    ),
-                    extrapolate: "clamp",
-                  }),
-                  transform: [
-                    {
-                      translateX: position.interpolate({
-                        inputRange,
-                        outputRange: inputRange.map((candidate) =>
-                          rtl * (candidate - index) * CONTENT_DRIFT,
-                        ),
-                        extrapolate: "clamp",
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              <MotionIcon
-                name={icon}
-                color={capsuleInk}
-                active={index === state.index}
-              />
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
+          <Reanimated.View style={[styles.capsuleContentSettle, capsuleSettle]}>
+            {state.routes.map((route, index) => {
+              const icon = TAB_ICONS[route.name] ?? "settings";
+              return (
+              <Animated.View
+                key={route.key}
                 style={[
-                  styles.capsuleLabel,
+                  styles.capsuleContent,
                   {
-                    color: capsuleInk,
-                    maxWidth: Math.max(
-                      0,
-                      capsuleWidths[index] -
-                        CAPSULE_PADDING * 2 -
-                        ICON_SIZE -
-                        CONTENT_GAP,
-                    ),
+                    opacity: position.interpolate({
+                      inputRange,
+                      outputRange: inputRange.map((candidate) =>
+                        candidate === index ? 1 : 0,
+                      ),
+                      extrapolate: "clamp",
+                    }),
+                    transform: [
+                      {
+                        translateX: position.interpolate({
+                          inputRange,
+                          outputRange: inputRange.map((candidate) =>
+                            rtl * (candidate - index) * CONTENT_DRIFT,
+                          ),
+                          extrapolate: "clamp",
+                        }),
+                      },
+                    ],
                   },
                 ]}
               >
-                {route.name}
-              </Text>
-            </Animated.View>
-            );
-          })}
+                <MotionIcon
+                  name={icon}
+                  color={capsuleInk}
+                  active={index === state.index}
+                />
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  style={[
+                    styles.capsuleLabel,
+                    {
+                      color: capsuleInk,
+                      maxWidth: Math.max(
+                        0,
+                        capsuleWidths[index] -
+                          CAPSULE_PADDING * 2 -
+                          ICON_SIZE -
+                          CONTENT_GAP,
+                      ),
+                    },
+                  ]}
+                >
+                  {route.name}
+                </Text>
+              </Animated.View>
+              );
+            })}
+          </Reanimated.View>
         </Animated.View>
         {/*
           The capsule's own touch shield: it swallows taps that land on the selected pill (which, as
@@ -610,12 +668,14 @@ const styles = StyleSheet.create({
     borderRadius: shape.navActive,
     overflow: "hidden",
   },
+  capsuleInner: {flex: 1},
   capsuleContentFrame: {
     position: "absolute",
     top: (BAR_HEIGHT - CAPSULE_HEIGHT) / 2,
     bottom: (BAR_HEIGHT - CAPSULE_HEIGHT) / 2,
     start: 0,
   },
+  capsuleContentSettle: {position: "absolute", top: 0, bottom: 0, start: 0, end: 0},
   capsuleContent: {
     position: "absolute",
     top: 0,

@@ -18,7 +18,7 @@ Use the shared tokens and components for new work. Keep component-specific excep
 
 ## Theme model and color
 
-The user selects three independent preferences: mode (`System`, `Light`, `Dark`), neutral palette (`Gaten`, `Mono`, `Cool`, `Warm`), and accent (`Indigo`, `Blue`, `Violet`, `Teal`, `Green`, `Rose`, `Graphite`). Defaults are System, Gaten, and Indigo. System mode follows the live OS setting; explicit Light or Dark wins over it. Wallpaper-based dynamic color is not used. React Native screens read semantic roles through `useTheme`; the provider waits for its first resolved color map and refreshes on OS scheme and native preference changes.
+The user selects three independent preferences: mode (`System`, `Light`, `Dark`), neutral palette (`Gaten`, `Mono`, `Cool`, `Warm`), and accent (`Indigo`, `Blue`, `Violet`, `Teal`, `Green`, `Rose`, `Black`). Defaults are System, Gaten, and Indigo. System mode follows the live OS setting; explicit Light or Dark wins over it. Wallpaper-based dynamic color is not used. React Native screens read semantic roles through `useTheme`; the provider waits for its first resolved color map and refreshes on OS scheme and native preference changes.
 
 Palette changes retint the neutral ladder while preserving its shipped relative luminance. Accent changes only accent roles. Errors remain red. The Kotlin theme bridge is authoritative: consume its semantic roles instead of calculating colors in a screen.
 
@@ -45,15 +45,17 @@ Mono uses zero hue and saturation. Cool uses hue 215°; its paper/ink saturation
 
 The following tuples are `(primary, primaryContainer, onPrimaryContainer, tertiary)`. `onPrimary` is `#FFFFFF` in Light and `#111111` in Dark for every accent.
 
+Every accent is pitched for contrast, not tinting: a Light primary is deep enough to carry white ink and to be read as text on the paper, and a Dark primary is light enough to carry the near-black ink — both at 4.5:1 or better, held by `PaletteTest.everyAccentCarriesItsInkAndReadsOnThePaper`. Black is the colourless accent, the same ramp with no hue.
+
 | Accent | Light | Dark |
 |---|---|---|
-| Indigo | `#3949AB`, `#E8EAF6`, `#1A237E`, `#7986CB` | `#9FA8DA`, `#283593`, `#E8EAF6`, `#C5CAE9` |
-| Blue | `#305D8A`, `#E3ECF4`, `#113151`, `#5C8EC0` | `#8AAED2`, `#1C4267`, `#E3ECF4`, `#B8CEE4` |
-| Violet | `#6641BC`, `#EDE9F6`, `#37197B`, `#957DCD` | `#B3A2DB`, `#492894`, `#EDE9F6`, `#D1C6EA` |
-| Teal | `#236460`, `#D7EFEE`, `#0B3633`, `#3B9892` | `#4EBBB4`, `#134744`, `#D7EFEE`, `#96D7D3` |
-| Green | `#246640`, `#D9F0E3`, `#0B371E`, `#3C9B65` | `#56BE83`, `#14492B`, `#D9F0E3`, `#9BD9B6` |
-| Rose | `#9A365B`, `#F6E7EC`, `#5C132E`, `#C76F8F` | `#D899B0`, `#74203F`, `#F6E7EC`, `#E8C2D0` |
-| Graphite | `#5A5A5A`, `#EAEAEA`, `#303030`, `#8A8A8A` | `#AAAAAA`, `#404040`, `#EAEAEA`, `#CBCBCB` |
+| Indigo | `#4338CA`, `#EEF2FF`, `#1E1B4B`, `#6366F1` | `#A5B4FC`, `#312E81`, `#E0E7FF`, `#6366F1` |
+| Blue | `#0B4FB8`, `#EFF6FF`, `#172554`, `#2563EB` | `#93C5FD`, `#1E3A8A`, `#DBEAFE`, `#3B82F6` |
+| Violet | `#6D28D9`, `#F5F3FF`, `#2E1065`, `#7C3AED` | `#C4B5FD`, `#4C1D95`, `#EDE9FE`, `#8B5CF6` |
+| Teal | `#115E59`, `#F0FDFA`, `#042F2E`, `#0D9488` | `#5EEAD4`, `#134E4A`, `#CCFBF1`, `#14B8A6` |
+| Green | `#166534`, `#F0FDF4`, `#052E16`, `#16A34A` | `#6EE7B7`, `#14532D`, `#DCFCE7`, `#10B981` |
+| Rose | `#9F1239`, `#FFF1F2`, `#4C0519`, `#E11D48` | `#FDA4AF`, `#881337`, `#FFE4E6`, `#F43F5E` |
+| Black | `#000000`, `#EAEAEA`, `#17171A`, `#4A4A4A` | `#FFFFFF`, `#404040`, `#EAEAEA`, `#CBCBCB` |
 
 ## Spacing, layout, and shape
 

@@ -38,12 +38,14 @@ export type NextCard =
 /** One card of the collection as AnkiDroid rendered it. */
 export interface AnkiCardResult {
   noteId: number;
+  /** AnkiDroid note type ID; used to apply only the mapping configured for this exact model. */
+  modelId: number;
   ord: number;
   deckName: string;
-  /** AnkiDroid's own HTML for the card's front and back templates. */
+  /** AnkiDroid-rendered template HTML: simplified without card CSS where the provider supports it. */
   question: string;
   answer: string;
-  /** The note type's CSS, handed over separately for the caller to place. */
+  /** Note CSS for legacy provider output; empty when question/answer omit card CSS. */
   css: string;
   /** The note type's field names and the note's raw values, in the same order. */
   fieldNames: string[];
