@@ -13,8 +13,9 @@
  * `ui/settings/` assemble them, and the copy stays in each page. Cards, buttons, icons and the
  * press-scale come from `ui/components` / `ui/PressableScale`, so every tab draws them alike.
  */
-import React, {useState} from "react";
+import React, {useEffect, useState} from "react";
 import {
+  AppState,
   Modal,
   PermissionsAndroid,
   Platform,
@@ -451,12 +452,15 @@ export function DialogShell({
   actions,
   onDismiss,
   scrollBody = false,
+  footer,
 }: {
   title: string;
   children: React.ReactNode;
   actions: React.ReactNode;
   onDismiss: () => void;
   scrollBody?: boolean;
+  /** Pinned under the body, scrolling or not: what the reader must reach whatever the body's length. */
+  footer?: React.ReactNode;
 }) {
   const {colors} = useTheme();
   return (
@@ -487,6 +491,7 @@ export function DialogShell({
           ) : (
             <View style={{marginTop: spacing.m}}>{children}</View>
           )}
+          {footer}
           <View style={{flexDirection: "row", justifyContent: "flex-end", marginTop: spacing.l}}>
             {actions}
           </View>
@@ -573,41 +578,55 @@ export function LookupModeDisclosureDialog({
           <Button variant="text" label="Turn on" disabled={!agreed} onPress={onAccept} />
         </>
       }
+      footer={
+        // Pinned rather than a child of the scrolling body: the body is long enough on a phone that
+        // the checkbox lands below the fold, and "Turn on" then looks broken instead of gated.
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{checked: agreed}}
+          onPress={() => setAgreed(!agreed)}
+          style={{flexDirection: "row", alignItems: "center", marginTop: spacing.l}}
+        >
+          <View
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 2,
+              borderWidth: 2,
+              borderColor: agreed ? colors.accent : colors.iconSecondary,
+              backgroundColor: agreed ? colors.accent : "transparent",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {agreed && <Icon name="check" size={14} color={colors.onActionPrimary} />}
+          </View>
+          <Text
+            style={[
+              typeScale.bodySmall,
+              {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s},
+            ]}
+          >
+            I understand how these permissions will be used and agree to proceed
+          </Text>
+        </Pressable>
+      }
     >
       <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
         {
           "Gaten reads Japanese off your screen only while you ask it to. Turning lookup mode on asks for two things:\n\n• Screen capture — Android shows its own dialog, and a privacy chip stays in the status bar while the capture is live. Tap that chip or turn lookup mode off and the capture ends at once; on Android 15 QPR1 and later, locking the screen ends it too.\n• Display over other apps — how the frozen frame, the lasso and the floating bubble are drawn on top of what you are reading.\n\nNothing is recorded and nothing leaves the device: a frame is taken when you start a lookup, recognised and looked up offline, and then dropped — between lookups the screen is not being captured. Gaten does not ask for accessibility at all: no accessibility service is enabled for it, it never inspects another app's accessibility tree, and it does not read notification message text.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character's page. With a token connected, Gaten also reads your own study progress from wanikani.com — the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages — and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device."
         }
       </Text>
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{checked: agreed}}
-        onPress={() => setAgreed(!agreed)}
-        style={{flexDirection: "row", alignItems: "center", marginTop: spacing.l}}
-      >
-        <View
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 2,
-            borderWidth: 2,
-            borderColor: agreed ? colors.accent : colors.iconSecondary,
-            backgroundColor: agreed ? colors.accent : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {agreed && <Icon name="check" size={14} color={colors.onActionPrimary} />}
-        </View>
-        <Text
-          style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s}]}
-        >
-          I understand how these permissions will be used and agree to proceed
-        </Text>
-      </Pressable>
     </DialogShell>
   );
 }
+
+/**
+ * True between sending the reader to the "display over other apps" screen and their coming back:
+ * the grant is a system screen, so the turn-on they already asked for is carried on afterwards
+ * instead of leaving them to start over.
+ */
+let awaitingOverlayGrant = false;
 
 /**
  * Turns lookup mode on, in the order the permissions can actually be asked for: display over other
@@ -618,12 +637,15 @@ export function LookupModeDisclosureDialog({
  */
 async function turnOnLookupMode() {
   if (!(await canDrawOverlays())) {
-    void toast("Allow Gaten to display over other apps, then turn lookup mode on again");
+    awaitingOverlayGrant = true;
+    void toast("Allow Gaten to display over other apps, then come back here");
     if (!(await openOverlaySettings())) {
+      awaitingOverlayGrant = false;
       void toast("Could not open the Display over other apps settings");
     }
     return;
   }
+  awaitingOverlayGrant = false;
   if (Platform.OS === "android" && Number(Platform.Version) >= 33) {
     await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
   }
@@ -638,6 +660,20 @@ async function turnOnLookupMode() {
 export function useLookupModeRequest() {
   const [showDisclosure, setShowDisclosure] = useState(false);
   const request = () => setShowDisclosure(true);
+
+  // The one permission that cannot be asked for in a dialog takes the reader to a system screen.
+  // Coming back with it granted picks the sequence up where it stopped; coming back without it
+  // leaves the button they tapped exactly where it was.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !awaitingOverlayGrant) return;
+      void canDrawOverlays().then((granted) => {
+        if (granted) void turnOnLookupMode();
+      });
+    });
+    return () => subscription.remove();
+  }, []);
+
   const dialog = showDisclosure ? (
     <LookupModeDisclosureDialog
       onAccept={() => {
