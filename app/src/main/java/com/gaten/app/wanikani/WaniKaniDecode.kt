@@ -201,6 +201,77 @@ private fun decodeReviewReadings(array: JSONArray?): List<String> {
 }
 
 /**
+ * Every subject in a `GET /subjects?ids=…` collection as a lesson item, for all four kinds WaniKani
+ * teaches, paired with its assignment id through [assignmentIds] (subject id to assignment id).
+ * Subjects with nothing to quiz on, and subjects the map does not name, are dropped; null is returned
+ * when the body is not a collection at all - a malformed answer and an empty one mean different
+ * things to the caller.
+ */
+internal fun decodeLessonSubjectCollection(
+    text: String,
+    assignmentIds: Map<Int, Int>
+): List<WaniKaniLessonItem>? {
+    val items = jsonObject(text)?.optJSONArray("data") ?: return null
+    val subjects = ArrayList<WaniKaniLessonItem>(items.length())
+    for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index) ?: continue
+        // The subjects endpoint carries no assignment id, so a subject without one in the map is not
+        // part of this queue - the assignments are the queue, and the subjects are only its content.
+        val assignmentId = assignmentIds[item.optInt("id", 0)] ?: continue
+        decodeLessonSubject(item, assignmentId)?.let { subjects.add(it) }
+    }
+    return subjects
+}
+
+/**
+ * One lesson item in a subject resource, or null when it is not a kind WaniKani teaches. The
+ * assignment id is paired in by [decodeLessonSubjectCollection], which is the side that read the
+ * assignments: the subject endpoint does not carry it.
+ */
+internal fun decodeLessonSubject(resource: JSONObject, assignmentId: Int): WaniKaniLessonItem? {
+    val id = resource.optInt("id", 0)
+    if (id <= 0) return null
+    val type = resource.optionalText("object") ?: return null
+    if (type !in REVIEW_TYPES) return null
+    val data = resource.optJSONObject("data") ?: return null
+
+    val meanings = decodeReviewMeanings(data)
+    val accepted = meanings.ifEmpty { data.optionalText("slug")?.let { listOf(it) } ?: return null }
+    val readings = decodeReviewReadings(data.optJSONArray("readings"))
+    return WaniKaniLessonItem(
+        assignmentId = assignmentId,
+        subjectId = id,
+        type = type,
+        characters = data.optionalText("characters"),
+        level = data.optInt("level", 0),
+        lessonPosition = data.optInt("lesson_position", 0),
+        meanings = accepted,
+        primaryMeaning = accepted.first(),
+        readings = readings,
+        primaryReading = readings.firstOrNull(),
+        readingMnemonic = plainWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
+        meaningMnemonic = plainWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
+        components = decodeIds(data.optJSONArray("component_subject_ids"))
+            .map { WaniKaniComponent(it, null, null) },
+        contextSentences = decodeContextSentences(data.optJSONArray("context_sentences")),
+        documentUrl = decodeDocumentUrl(data.optionalText("document_url"))
+    )
+}
+
+/** The `ja`/`en` pairs of a subject's `context_sentences`, dropping any entry missing either half. */
+private fun decodeContextSentences(array: JSONArray?): List<WaniKaniContextSentence> {
+    if (array == null) return emptyList()
+    val sentences = ArrayList<WaniKaniContextSentence>(array.length())
+    for (index in 0 until array.length()) {
+        val entry = array.optJSONObject(index) ?: continue
+        val japanese = entry.optionalText("ja") ?: continue
+        val english = entry.optionalText("en") ?: continue
+        sentences.add(WaniKaniContextSentence(japanese, english))
+    }
+    return sentences
+}
+
+/**
  * The subject's page on wanikani.com, or null when [url] is not one - see
  * [WaniKaniSubject.documentUrl]. Applied on every decode, so a cached value is re-checked on the way
  * out and can never point the UI anywhere the API would not have.

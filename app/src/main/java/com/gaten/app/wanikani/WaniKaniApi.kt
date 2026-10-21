@@ -84,8 +84,8 @@ internal sealed interface WaniKaniFetchWithMeta {
 }
 
 /**
- * The only code in Gaten that talks to WaniKani: GETs over HTTPS, plus the one POST that finishes a
- * review.
+ * The only code in Gaten that talks to WaniKani: GETs over HTTPS, plus the two writes - the POST that
+ * finishes a review and the PUT that starts a lesson.
  *
  * What it refuses, and why:
  *  - Any URL [WaniKaniPolicy] does not allow, before a socket is touched - the API and its image
@@ -95,8 +95,8 @@ internal sealed interface WaniKaniFetchWithMeta {
  *    whoever a redirect points at.
  *  - An `Authorization` header on an image request, by construction: only [get], [getWithMeta] and
  *    [post] take a token, and only the API's own URL is ever passed to one.
- *  - A request body anywhere but on [post]: a GET is written as a GET with no output stream, so no
- *    body can be sent by accident.
+ *  - A request body anywhere but on [post] and [put]: a GET is written as a GET with no output
+ *    stream, so no body can be sent by accident.
  *  - Bodies over a fixed size, by declared length and while reading, so a wrong URL or a hostile
  *    answer cannot make the app allocate an unbounded amount.
  *  - An image body that is not SVG, because that text goes to a WebView in the UI.
@@ -186,7 +186,7 @@ internal open class WaniKaniApi {
     /**
      * `POST <base>/<path>` with the token and [body] as the request.
      *
-     * The one write Gaten makes to WaniKani, used to finish a review. The policy is the same as
+     * One of the two writes Gaten makes to WaniKani, used to finish a review. The policy is the same as
      * [get]'s - the url is checked against [WaniKaniPolicy] before a socket is touched, redirects are
      * never followed, and the answer is bounded - and the body is written as UTF-8 JSON.
      *
@@ -194,7 +194,21 @@ internal open class WaniKaniApi {
      * a subject that is not due, counts that make no sense - and that is the request being wrong
      * rather than the network, so the caller has to fix it rather than try it again.
      */
-    open suspend fun post(path: String, body: String, token: String): WaniKaniFetch {
+    open suspend fun post(path: String, body: String, token: String): WaniKaniFetch =
+        write("POST", path, body, token)
+
+    /**
+     * `PUT <base>/<path>` with the token and [body] as the request.
+     *
+     * The other write Gaten makes to WaniKani, used to start a lesson
+     * (`PUT /assignments/<id>/start`), which is the only documented way to finish one. Same policy
+     * as [post] - the url is checked against [WaniKaniPolicy] before a socket is touched, redirects
+     * are never followed, and the answer is bounded - and the body is written as UTF-8 JSON.
+     */
+    open suspend fun put(path: String, body: String, token: String): WaniKaniFetch =
+        write("PUT", path, body, token)
+
+    private suspend fun write(method: String, path: String, body: String, token: String): WaniKaniFetch {
         if (!looksLikeToken(token)) return WaniKaniFetch.Failed(WaniKaniFailure.MALFORMED)
         val url = try {
             resolve(path, emptyList())
@@ -203,7 +217,7 @@ internal open class WaniKaniApi {
         }
         if (!WaniKaniPolicy.isAllowed(url)) return WaniKaniFetch.Failed(WaniKaniFailure.MALFORMED)
         return withContext(Dispatchers.IO) {
-            when (val exchange = exchange(url, token, MAX_JSON_BYTES, null, body)) {
+            when (val exchange = exchange(url, token, MAX_JSON_BYTES, null, body, method)) {
                 is WaniKaniExchange.Failed -> WaniKaniFetch.Failed(exchange.failure)
                 is WaniKaniExchange.Answered -> when (exchange.code) {
                     in 200..299 -> exchange.text?.let { WaniKaniFetch.Body(it) }
@@ -254,14 +268,15 @@ internal open class WaniKaniApi {
         token: String?,
         maxBytes: Int,
         ifNoneMatch: String?,
-        body: String? = null
+        body: String? = null,
+        method: String? = null
     ): WaniKaniExchange {
         val connection = try {
             url.toURL().openConnection() as HttpURLConnection
         } catch (e: IOException) {
             return WaniKaniExchange.Failed(WaniKaniFailure.OFFLINE)
         }
-        connection.requestMethod = if (body == null) "GET" else "POST"
+        connection.requestMethod = method ?: if (body == null) "GET" else "POST"
         connection.instanceFollowRedirects = false
         connection.connectTimeout = CONNECT_TIMEOUT_MS
         connection.readTimeout = READ_TIMEOUT_MS
