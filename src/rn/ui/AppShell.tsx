@@ -262,7 +262,11 @@ const STACK_SCREEN_OPTIONS: NativeStackNavigationOptions = {
  * - `animationEnabled` off when the system asks for reduced motion, so a tap lands on the spot
  *   instead of sliding there. A swipe is the reader's own gesture and stays available.
  *
- * `lazy` keeps a tab that has never been opened from mounting, as the bottom tab navigator did.
+ * Every tab's scene is mounted up front (`lazy: false`). With lazy mounting, a tap that crosses a
+ * tab the reader has never opened mounts that screen — its native stack and its first render —
+ * inside the pager's own animation, which is exactly where a dropped frame is most visible. A
+ * four-tab bar is small enough to keep all four scenes alive; each screen's data work is already
+ * gated on focus, so nothing is fetched until its tab is actually selected.
  */
 const Tab = createMaterialTopTabNavigator<RootTabParamList>();
 
@@ -492,7 +496,7 @@ export function AppShell() {
           // `NavigationRoute`.
           screenOptions={({route}: {route: NavigationRoute<ParamListBase, string>}) => ({
             headerShown: false,
-            lazy: true,
+            lazy: false,
             animationEnabled: !reducedMotion,
             swipeEnabled: !sessionActive && (route.state?.index ?? 0) === 0,
           })}
