@@ -28,11 +28,14 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface PressableScaleProps extends Omit<PressableProps, "style"> {
   style?: StyleProp<ViewStyle>;
+  /** Draw the accent focus ring; off for controls whose platform focus highlight is unwanted. */
+  showFocusRing?: boolean;
 }
 
 export function PressableScale({
   style,
   children,
+  showFocusRing = true,
   onPressIn,
   onPressOut,
   onFocus,
@@ -71,7 +74,15 @@ export function PressableScale({
         setFocused(false);
         onBlur?.(event);
       }}
-      style={[style, pressStyle, focused && {outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 2}]}
+      style={[
+        style,
+        pressStyle,
+        showFocusRing && focused && {
+          outlineWidth: 2,
+          outlineColor: colors.accent,
+          outlineOffset: 2,
+        },
+      ]}
     >
       {children}
     </AnimatedPressable>

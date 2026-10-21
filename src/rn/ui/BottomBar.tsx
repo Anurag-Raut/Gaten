@@ -25,7 +25,7 @@
  * behind it. Each label is measured at the reader's font scale, so its selected capsule is only as
  * wide as it needs to be, and it shrinks to fit a narrow screen.
  */
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {
   Animated,
   BackHandler,
@@ -36,7 +36,14 @@ import {
   View,
   useColorScheme,
 } from "react-native";
-import {useReducedMotion} from "react-native-reanimated";
+import Reanimated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import type {MaterialTopTabBarProps} from "@react-navigation/material-top-tabs";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {PressableScale} from "./PressableScale";
@@ -68,47 +75,46 @@ const CONTENT_GAP = 8;
 const BAR_RADIUS = shape.medium;
 const CONTENT_DRIFT = 18;
 
+/** Each tab route's glyph, so the bar and its arrival motion never disagree about one. */
+const TAB_ICONS: Record<string, IconName> = {
+  Home: "home",
+  Analytics: "bar_chart",
+  Review: "school",
+  Settings: "settings",
+};
+
 /**
- * The selected glyph's arrival, as offsets from its own tab's pager index: the glyph stays still
- * until the capsule is 28% of a page away, swells to [ICON_POP_SCALE] with a [ICON_POP_LIFT] dp
- * rise by 14% out, and is back at rest exactly as the capsule lands. Because it is a function of
- * `position` like the rest of the bar, a swipe plays it while arriving, a slow drag holds it under
- * the finger, and a tap that reverses retargets it.
+ * How long the glyph waits before its arrival gesture: the pager's own settle is ~250 ms, so
+ * starting a little before that keeps the gesture clear of the capsule's travel without feeling
+ * detached from the tap.
  */
-const ICON_POP_OUT = 0.28;
-const ICON_POP_IN = 0.14;
-const ICON_POP_SCALE = 1.16;
-const ICON_POP_LIFT = 1.5;
+const ICON_MOTION_DELAY = 160;
 
 /** Draws the tab's own Material Symbols glyph: the bar's shared size, in the ink it is given. */
-function TabIcon({label, color}: {label: string; color: string}) {
-  const name: IconName = label === "Home"
-    ? "home"
-    : label === "Analytics"
-      ? "bar_chart"
-      : label === "Review"
-        ? "school"
-        : "settings";
+function TabIcon({name, color}: {name: IconName; color: string}) {
   return <Icon name={name} size={ICON_SIZE} color={color} />;
 }
 
 /**
- * The capsule's glyph, which pops once when its tab becomes the selected one. The first render is
- * skipped so launching the app on Home does not play the movement; leaving a tab resets silently,
- * because that glyph is fading out under the capsule anyway. Reduced motion keeps the glyph still.
+ * Each tab's own arrival gesture. The glyphs are filled Material Symbols paths, so the motion is
+ * transform-only: Home bounces, Analytics grows from its baseline like a chart drawn upward,
+ * Review tosses the mortarboard up and back, and Settings spins once. The gesture starts
+ * [ICON_MOTION_DELAY] ms after selection — about when the capsule has landed — so it is seen
+ * rather than smeared across the pager transition. Home, Analytics and Review return to rest;
+ * the gear finishes at 360°, which is visually identical to 0°, so resetting it is invisible.
+ * Reduced motion leaves every glyph still.
  */
-function PopIcon({
-  label,
+function MotionIcon({
+  name,
   color,
   active,
 }: {
-  label: string;
+  name: IconName;
   color: string;
   active: boolean;
 }) {
   const reducedMotion = useReducedMotion();
-  const scale = useSharedValue(1);
-  const lift = useSharedValue(0);
+  const progress = useSharedValue(0);
   const firstRender = useRef(true);
 
   useEffect(() => {
@@ -116,32 +122,54 @@ function PopIcon({
       firstRender.current = false;
       return;
     }
-    if (!active) {
-      scale.value = 1;
-      lift.value = 0;
+    if (!active || reducedMotion) {
+      progress.value = 0;
       return;
     }
-    if (reducedMotion) {
-      return;
-    }
-    const away = {duration: ICON_POP_MS, easing: PRESS_EASING_REANIMATED};
-    scale.value = withSequence(
-      withTiming(ICON_POP_SCALE, away),
-      withSpring(1, ICON_SETTLE_SPRING),
+    const out = {
+      duration: name === "settings" ? 400 : 200,
+      easing: PRESS_EASING_REANIMATED,
+    };
+    progress.value = withDelay(
+      ICON_MOTION_DELAY,
+      name === "settings"
+        ? withTiming(1, out, (finished) => {
+            // A whole turn ends where it began; reset without another frame of movement.
+            if (finished) {
+              progress.value = 0;
+            }
+          })
+        : withSequence(withTiming(1, out), withTiming(0, out)),
     );
-    lift.value = withSequence(
-      withTiming(-ICON_POP_LIFT, away),
-      withSpring(0, ICON_SETTLE_SPRING),
-    );
-  }, [active, reducedMotion, scale, lift]);
+  }, [active, reducedMotion, name, progress]);
 
-  const style = useAnimatedStyle(() => ({
-    transform: [{translateY: lift.value}, {scale: scale.value}],
-  }));
+  const motion = useAnimatedStyle(() => {
+    const p = progress.value;
+    switch (name) {
+      case "home":
+        return {transform: [{translateY: -2.5 * p}, {scale: 1 + 0.16 * p}]};
+      case "bar_chart":
+        return {transform: [{scaleY: 1 + 0.25 * p}]};
+      case "school":
+        return {
+          transform: [
+            {translateY: -3 * p},
+            {rotate: `${-10 * p}deg`},
+          ],
+        };
+      default:
+        return {transform: [{rotate: `${360 * p}deg`}]};
+    }
+  });
 
   return (
-    <Reanimated.View style={style}>
-      <TabIcon label={label} color={color} />
+    <Reanimated.View
+      style={[
+        {transformOrigin: name === "bar_chart" ? "bottom" : "center"},
+        motion,
+      ]}
+    >
+      <TabIcon name={name} color={color} />
     </Reanimated.View>
   );
 }
@@ -199,6 +227,7 @@ function layoutAt(
  */
 function BarItem({
   label,
+  icon,
   index,
   selected,
   iconColor,
@@ -210,6 +239,7 @@ function BarItem({
   onPress,
 }: {
   label: string;
+  icon: IconName;
   index: number;
   selected: boolean;
   iconColor: string;
@@ -241,13 +271,14 @@ function BarItem({
     >
       <PressableScale
         style={styles.slotPress}
+        showFocusRing={false}
         accessibilityRole="tab"
         accessibilityState={{selected}}
         accessibilityLabel={label}
         onPress={onPress}
       >
         <Animated.View style={{opacity: plain}}>
-          <TabIcon label={label} color={iconColor} />
+          <TabIcon name={icon} color={iconColor} />
         </Animated.View>
       </PressableScale>
     </Animated.View>
@@ -434,6 +465,7 @@ export function BottomBar({
           <BarItem
             key={route.key}
             label={route.name}
+            icon={TAB_ICONS[route.name] ?? "settings"}
             index={index}
             selected={index === state.index}
             iconColor={iconColor}
@@ -484,7 +516,9 @@ export function BottomBar({
             {width: widestCapsuleWidth, transform: [{translateX: capsuleOffsetX}]},
           ]}
         >
-          {state.routes.map((route, index) => (
+          {state.routes.map((route, index) => {
+            const icon = TAB_ICONS[route.name] ?? "settings";
+            return (
             <Animated.View
               key={route.key}
               style={[
@@ -511,8 +545,8 @@ export function BottomBar({
                 },
               ]}
             >
-              <PopIcon
-                label={route.name}
+              <MotionIcon
+                name={icon}
                 color={capsuleInk}
                 active={index === state.index}
               />
@@ -537,7 +571,8 @@ export function BottomBar({
                 {route.name}
               </Text>
             </Animated.View>
-          ))}
+            );
+          })}
         </Animated.View>
         {/*
           The capsule's own touch shield: it swallows taps that land on the selected pill (which, as

@@ -9,7 +9,13 @@
 
 <resources>
 
-    <style name="Theme.Gaten" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <!-- RN's `focusable={false}` deliberately keeps a view focusable for accessibility, so the
+         platform's default focus highlight cannot be turned off per view from JS. Gaten draws its
+         own focus treatments (PressableScale) and its tab bar must stay clean under a hardware
+         keyboard or mouse, so the platform highlight colour is transparent. -->
+    <style name="Theme.Gaten" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:colorControlHighlight">@android:color/transparent</item>
+    </style>
 
     <!-- For the two activities that exist only to receive a result or to close the Quick Settings
          shade: nothing is drawn, so the app behind them keeps the screen it had. -->
