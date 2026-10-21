@@ -135,9 +135,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
             <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
               Settings
             </Text>
-            <Text style={[typeScale.description, {color: colors.onSurfaceVariant, marginTop: 10}]}>
-              Manage your Gaten preferences.
-            </Text>
           </View>
           <SettingsGroup bare title="Lookup" style={{marginTop: 22}}>
             <SettingsRow

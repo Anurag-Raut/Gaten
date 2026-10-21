@@ -5,15 +5,14 @@
  */
 
 /**
- * The app's bottom bar: four tabs, drawn by hand rather than by the navigator, because a page pushed
- * over a tab has to be full-screen with no bar and the bar has to disappear entirely while a review
- * session is on screen.
+ * The app's bottom bar: three tabs, drawn by hand rather than by the navigator, because a page pushed
+ * over a tab has to be full-screen with no bar.
  *
  * A rounded surface holds a filled selected pill with the selected glyph and label inline; every
  * other tab is a muted glyph on its own. Light and dark modes share the same geometry.
  *
  * The bar never moves (it is a sibling of the pager), and everything inside it is one continuous
- * function of the pager's own `position`: the capsule travels between item centres, the four glyphs
+ * function of the pager's own `position`: the capsule travels between item centres, the three glyphs
  * part to make room for it, and the capsule's own glyph-and-label pair cross-fades and drifts as it
  * goes. So a swipe drags all of it frame by frame, a tap on a non-adjacent tab walks it across the
  * tabs between, and a tap that lands mid-flight simply retargets the same values. The capsule takes
@@ -22,7 +21,7 @@
  *
  * Every one of those is a `transform`, `width` or an `opacity` interpolated from `position`, which the library
  * feeds through the native driver — so the bar stays in step with the pager rather than a frame
- * behind it. Each label is measured at the reader's font scale, so its selected capsule is only as
+ * behind. Each label is measured at the reader's font scale, so its selected capsule is only as
  * wide as it needs to be, and it shrinks to fit a narrow screen.
  */
 import React, {useEffect, useRef, useState} from "react";
@@ -48,7 +47,6 @@ import type {MaterialTopTabBarProps} from "@react-navigation/material-top-tabs";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
-import {useSessionActive} from "./session";
 import * as ThemeBridge from "../native/GatenTheme";
 import * as Haptics from "../native/GatenHaptics";
 import {PRESS_EASING_REANIMATED, shape, typeScale} from "./tokens";
@@ -58,8 +56,10 @@ import type {IconName} from "./icons";
 /**
  * The bar's own geometry, in dp: a 46 dp capsule inside a 63 dp content box, above whatever the
  * gesture inset needs. `SLOT_WIDTH` is one *inactive* tab — its glyph and its whole touch area — and
- * `MIN_SLOT` is how far it may close up on a narrow screen before the capsule starts giving up width
- * instead. 48 dp is still an accessible target.
+ * is also what the bar is sized from: it is as wide as the widest capsule plus one slot per other
+ * tab plus its inner padding, capped by the display. `MIN_SLOT` is how far a slot may close up on a
+ * screen too narrow for that, before the capsule starts giving up width instead. 48 dp is still an
+ * accessible target.
  */
 const BAR_HEIGHT = 63;
 const CAPSULE_HEIGHT = 46;
@@ -79,7 +79,6 @@ const CONTENT_DRIFT = 18;
 const TAB_ICONS: Record<string, IconName> = {
   Home: "home",
   Analytics: "bar_chart",
-  Review: "school",
   Settings: "settings",
 };
 
@@ -97,12 +96,11 @@ function TabIcon({name, color}: {name: IconName; color: string}) {
 
 /**
  * Each tab's own arrival gesture. The glyphs are filled Material Symbols paths, so the motion is
- * transform-only: Home bounces, Analytics grows from its baseline like a chart drawn upward,
- * Review tosses the mortarboard up and back, and Settings spins once. The gesture starts
- * [ICON_MOTION_DELAY] ms after selection — about when the capsule has landed — so it is seen
- * rather than smeared across the pager transition. Home, Analytics and Review return to rest;
- * the gear finishes at 360°, which is visually identical to 0°, so resetting it is invisible.
- * Reduced motion leaves every glyph still.
+ * transform-only: Home bounces, Analytics grows from its baseline like a chart drawn upward, and
+ * Settings spins once. The gesture starts [ICON_MOTION_DELAY] ms after selection — about when the
+ * capsule has landed — so it is seen rather than smeared across the pager transition. Home and
+ * Analytics return to rest; the gear finishes at 360°, which is visually identical to 0°, so
+ * resetting it is invisible. Reduced motion leaves every glyph still.
  */
 function MotionIcon({
   name,
@@ -150,13 +148,6 @@ function MotionIcon({
         return {transform: [{translateY: -2.5 * p}, {scale: 1 + 0.16 * p}]};
       case "bar_chart":
         return {transform: [{scaleY: 1 + 0.25 * p}]};
-      case "school":
-        return {
-          transform: [
-            {translateY: -3 * p},
-            {rotate: `${-10 * p}deg`},
-          ],
-        };
       default:
         return {transform: [{rotate: `${360 * p}deg`}]};
     }
@@ -301,12 +292,11 @@ export function BottomBar({
   const iconColor = colors.fine;
   const background = colors.background;
   const insets = useSafeAreaInsets();
-  const sessionActive = useSessionActive();
   // The one measured thing in the bar: how wide each label is, at the reader's own font scale.
   const [labelWidths, setLabelWidths] = useState<number[] | null>(null);
 
   const depth = stackDepth(state, state.routes[state.index]?.name ?? "");
-  const visible = !sessionActive && depth === 0 && !searchActive;
+  const visible = depth === 0 && !searchActive;
   const atNonHomeRoot = visible && state.index !== 0;
 
   useEffect(() => {
@@ -368,11 +358,14 @@ export function BottomBar({
   );
 
   const count = state.routes.length;
-  const width = Math.min(380, Math.max(0, layout.width - BAR_SIDE_MARGIN * 2));
+  // The room the bar may take: the display, less its own side margins.
+  const available = Math.max(0, layout.width - BAR_SIDE_MARGIN * 2);
 
-  // Until the labels have been measured — one layout pass — there is nothing to size the capsules
-  // with, so the bar is drawn empty rather than at a width that would jump.
-  if (labelWidths == null || width === 0 || count === 0) {
+  // Until the labels have been measured — one layout pass — how wide the bar needs to be is not
+  // known, so only the invisible measuring row is mounted. The bar is absolutely positioned, so it
+  // appears at its final width on the next pass rather than at a width that would jump, and nothing
+  // reflows either way.
+  if (labelWidths == null || count === 0 || available === 0) {
     return (
       <View
         style={{
@@ -383,20 +376,7 @@ export function BottomBar({
           height: BAR_HEIGHT + insets.bottom,
         }}
       >
-        <View
-          style={[
-            styles.surface,
-            {
-              height: BAR_HEIGHT,
-              width,
-              backgroundColor: barColor,
-            },
-          ]}
-        >
-          <View style={{height: BAR_HEIGHT, width, alignSelf: "center"}}>
-            {measureRow}
-          </View>
-        </View>
+        {measureRow}
       </View>
     );
   }
@@ -407,8 +387,17 @@ export function BottomBar({
   const capsuleIdeals = labelWidths.map(
     (labelWidth, index) => Math.max(state.routes[index].name === "Home" ? 113 : 0, CAPSULE_PADDING * 2 + ICON_SIZE + CONTENT_GAP + labelWidth),
   );
+  const widestCapsule = Math.max(...capsuleIdeals);
+  // The bar is only as wide as the tabs it holds — the widest capsule, the others at their own touch
+  // width, and the inner padding — so a bar of three does not strand its glyphs in empty space. It is
+  // a function of the measured labels alone, never of the selection, so the surface stays put while
+  // the capsule travels inside it; a display too narrow for that gets the room it has.
+  const width = Math.min(
+    available,
+    BAR_INNER_PADDING * 2 + widestCapsule + (count - 1) * SLOT_WIDTH,
+  );
   const spare =
-    count > 1 ? (width - BAR_INNER_PADDING * 2 - Math.max(...capsuleIdeals)) / (count - 1) : SLOT_WIDTH;
+    count > 1 ? (width - BAR_INNER_PADDING * 2 - widestCapsule) / (count - 1) : SLOT_WIDTH;
   const slot = Math.max(MIN_SLOT, Math.min(SLOT_WIDTH, spare));
   const capsuleWidths = capsuleIdeals.map((ideal) =>
     Math.max(0, Math.min(ideal, width - BAR_INNER_PADDING * 2 - (count - 1) * slot)),

@@ -15,8 +15,8 @@
 MainActivity (ReactActivity, component "Gaten")
   └─ MainApplication (ReactApplication → DefaultReactHost, bridgeless, newArchEnabled)
        └─ JS app (index.js → App.js → src/rn/ui/)
-            ├─ AppShell: 4 tabs (Home/Search/Review/Settings), per-tab stacks,
-            │  custom BottomBar (hidden during review sessions / pushed pages)
+            ├─ AppShell: 3 tabs (Home/Analytics/Settings), per-tab stacks,
+            │  custom BottomBar (hidden under pushed pages, the review flow included)
             ├─ Home dashboard, Settings hub + 6 pages, Search + word detail,
             │  WaniKani panel, Anki review — rebuilt per SCREEN-SPECS.md
             └─ Kotlin bridge modules (app/src/main/java/com/gaten/app/rn/):
@@ -165,3 +165,166 @@ note that used to explain it is gone (the reader is told nothing about media for
 - `:app:testDebugUnitTest` — 519 tests, 0 failures.
 - On device (moto g35 5G, Android 15, 1080×2400): installed, cold-launched, all four tabs exercised, a real romaji search (`neko` → 猫, exact hits then prefix group), a word detail page, and a full review session (deck picker → question → answer → rating bar with AnkiDroid's own intervals). No crashes; insets verified against the device's 108 px status bar.
 - Fixed during that pass: `[sound:…]`/`[anki:play:…]` tags no longer print their own source text on a card (AnkiDroid renders them as players; the app cannot play them).
+
+## Ink review workflow (2026-10-21)
+
+The Review tab was rebuilt to the approved Gaten Ink review workflow (`interactive-preview.html` and
+the five snapshots in the handoff kit), and WaniKani gained a real review session. Home, Analytics
+and Settings were not touched.
+
+### What the tab was, and why it is gone (same day)
+
+The workflow first landed as a fourth tab with one root — a landing page offering the two services —
+and every other step inside it. The landing page was removed the same day it shipped: it restated
+what Home's cards and Analytics' metric cards already say, and studying is something the reader does,
+not a place they browse. The shell now has **three tabs** (Home / Analytics / Settings) and the flow
+is a page pushed onto Home's stack, opened by the two service cards.
+
+| Step | Notes |
+|---|---|
+| `opening` | the read that precedes a step: `Anki` / `WaniKani` sub-header, one quiet busy row |
+| `blocked` | what stops AnkiDroid, and the one thing that fixes it |
+| `decks` | `Anki` sub-header, `Choose a deck`, one row per deck, tap starts it |
+| `session` | compact header, thin progress line, pinned reveal/rating |
+| `done`, `failed` | quiet states, no cards |
+| `wkConnect` | connection state, token field, pinned action |
+| `wkReview` | topic, prompt, answer field, pinned check |
+| `wkDone`, `wkFailed` | caught-up and failure states |
+
+Every step is full-screen with no bottom bar: a pushed page hides the bar by the shell's own rule
+(`BottomBar`'s `depth === 0`), so no step has to ask for it, and `session.ts` — the `ownsScreen` /
+`SessionContext` plumbing that existed only to hide the bar for review steps — is gone, along with
+`review-store`'s `ownsScreen` / `onOwnsScreen` and `AppShell`'s subscription to them.
+
+`review-store.ts` owns all of it; `useReview.ts` (was `useAnkiReview.ts`) subscribes and drives the
+lifecycle.
+
+### One way in from Home
+
+Home's two service cards used to lead elsewhere — the Anki card to the Review tab's root, the WaniKani
+card to its settings page. Both now push the matching screen of the flow: the card moves the store to
+that service's step (`openAnki`, `openWaniKani`) and then pushes the page, so a tap lands on the deck
+list (or on the state that stops it) or on the connection state (or the queue behind it) rather than
+on a landing page. The Settings pages are untouched and still hold the configuration.
+
+Home's **Start studying** button went with the tab: once the Anki row opened the deck list itself, the
+button was a second way to the same screen, and it was the only filled primary action on Home. That
+is a deliberate deviation from the supplied Ink document ("one strong action per screen"), recorded
+in `docs/design-language.md`; `home.canReview` — which existed only to disable it — went too.
+
+A step is still not a route, and now it is not a tab either: `HomeStackParamList` gained a single
+`Review: undefined` entry, and Back is that page's pop. `openAnki` / `openWaniKani` are the only ways
+in, so the old `refresh()` — what entering the tab asked for, which left a live session and a
+deliberate `blocked` state alone — was deleted with the tab: re-entering resumes a live card session
+or a live WaniKani queue, and reads the collection again for everything else.
+
+### Native additions (the app is no longer read-only on WaniKani)
+
+| File | Change |
+|---|---|
+| `WaniKaniApi.kt` | `post(path, body, token)` — same allow-list, timeouts, caps and redirect refusal; a body is the only thing that makes a request a POST |
+| `WaniKaniReview.kt` | new: the queue/submission shapes, `readingAnswerHiragana` (NFKC, whitespace, katakana fold, romaji via the vendored WaniKana) |
+| `WaniKaniDecode.kt` | assignment and review-subject decoders; accepted meanings (`accepted_answer` + whitelist auxiliaries, slug fallback) and accepted readings folded to hiragana |
+| `WaniKaniClient.kt` | `reviewQueue()` (assignments due now, then one `GET /subjects?ids=…`, ordered by `available_at`) and `submitReview()` (`POST /reviews`) |
+| `GatenWaniKaniModule.kt` | `reviewQueue`, `readingAnswer`, `submitReview` |
+
+`src/rn/native/GatenWaniKani.ts` carries the same three calls; the review outcomes resolve rather
+than reject so a rate limit's `retryAfterSeconds` can travel with them, matching the stats precedent.
+
+### Verification
+
+- `npx tsc --noEmit` — 0 errors.
+- `:app:testDebugUnitTest` — 45 suites, 0 failures (15 of them new in `WaniKaniReviewTest`).
+- `:app:installDebug` (x86_64) on `emulator-5554`, Android 14, 1080×2340 @ 440 dpi.
+- Exercised on the device, light and dark: the landing page with AnkiDroid's real counts
+  (`2 new · 5 to review`, `7 due now`) and `Not connected`/`Connect to use`; the deck picker;
+  a real card session (question → reveal → a real interval-labelled rating row → the next card, the
+  header and progress line advancing 1 of 7 → 2 of 7); the connection screen against the live API
+  (a bogus token came back `invalidToken` and the screen said so); the permission-missing hub row and
+  the AnkiDroid-access state; the tab switch that keeps the picker and its fresh counts.
+- Enter motion measured from `screenrecord` frames: the `Choose a deck` heading travels 22 px (8 dp)
+  and settles over ~120 ms of captured frames, with the fade visible in the frame luminance. With
+  `animator_duration_scale=0` and a fresh launch the same navigation shows the heading at its final
+  position in the first frame — the reduced-motion path skips the transition.
+- 130 % font scale: the hub and a card session grow without clipping; the pinned action stays above
+  the keyboard on the connection screen.
+- **The WaniKani review screen itself was verified against a stubbed queue**, because there is no
+  WaniKani account on this emulator: `reviewQueue()`/`submitReview()`/`isConfigured()` were replaced
+  for one build only (real `readingAnswer`), the flow was walked (wrong meaning → the answer shown →
+  retyped → the reading prompt → `yama` accepted as やま → the next subject → the completion state),
+  and the file was restored and rebuilt. The four screenshots taken that way are
+  `after/verify-review-wanikani-review-light.png`, `…-dark.png`, `…-wrong-answer.png` and
+  `…-complete.png`; every other screenshot above is the unmodified app.
+- Screenshots: `after/verify-review-*.png` (light and dark for each screen, plus the wrong-answer,
+  completion, permission and blocked states and the 130 % hub).
+
+### Limitations worth knowing
+
+- A queue deeper than 500 due assignments is read one page deep; the reader can finish it and open
+  the queue again.
+- An image-only radical is drawn from WaniKani's cached SVG through the reference lookup; if that
+  image cannot be fetched the prompt is empty rather than showing the subject's name, which is the
+  answer.
+- WaniKani's own accepted-answer set is the subject's own plus its whitelisted auxiliary meanings;
+  a reader's personal synonyms (study materials) are not read, so an answer that only their account
+  accepts is marked wrong here.
+
+## The Review tab removed (2026-10-21, later the same day)
+
+Three tabs (Home / Analytics / Settings), and the review flow is a page pushed onto Home's stack.
+
+| File | Change |
+|---|---|
+| `navigation.ts` | `RootTabParamList` loses `Review`; `HomeStackParamList` gains `Review: undefined`; `ReviewStackParamList` deleted |
+| `AppShell.tsx` | `ReviewStack` / `ReviewTabStack` / the fourth `Tab.Screen` deleted; `Review` registered on `HomeStack`; `openReview(navigation, ask)` asks the store and pushes, guarded against a second copy; `screenOwned` state, its `reviewStore.onOwnsScreen` subscription, the `SessionContext.Provider` and `SwipeGate`'s prop all deleted |
+| `ReviewScreen.tsx` | `ReviewTab` → `ReviewScreen({onExit})`; the `hub` case gone, `opening` added; `leave()` pops instead of returning to a hub; the Back handler now registers only for a card session or a failure inside a deck; `stateBody` no longer reserves room for a bar |
+| `review-store.ts` | `hub` step and state, `HubAnki`, `readHub()`, `openHub()`, `refresh()`, `ownsScreen()` / `onOwnsScreen()` / `screenListeners` deleted; `openAnki` / `openWaniKani` are the only ways in and resume a live session or queue |
+| `review/useReview.ts` | `openHub` / `refresh` gone from the actions; the focus-driven entry read gone; `ownsScreen` gone from the return |
+| `review/ReviewHub.tsx`, `session.ts` | deleted |
+| `BottomBar.tsx` | `Review`/`school` icon and its arrival motion gone; `visible = depth === 0 && !searchActive` |
+| `HomeScreen.tsx` | both fallback paths push the `Review` route |
+| `home/HomeDashboard.tsx` | the `Start studying` button and its three styles deleted; the `react-native-svg` import went with it |
+| `home/useHomeDashboard.ts` | `canReview` deleted — the button was its only reader |
+
+### Bottom bar
+
+The bar is no longer a fixed 380 dp with the tabs spread across it: it is as wide as the tabs it
+holds — the widest capsule, one `SLOT_WIDTH` per other tab, and the inner padding — capped by the
+display. It is a function of the measured labels alone, never of the selection, so the surface stays
+put while the capsule travels inside it. The one-layout-pass placeholder is now just the invisible
+measuring row, because the bar's own width cannot be known before the labels are measured.
+
+Measured on the emulator (1080×2340 @ 440 dpi, so 392.7 dp wide): the bar went from **348.7 dp
+(953 px, 88 % of the display)** to **256.7 dp (706 px, 65 %)**; the capsule lands at a 6.2 dp inset
+with `Home` selected and 72.0 dp with `Analytics` selected, both matching `layoutAt`'s own arithmetic
+(6 + 0 × inactiveSlot, and 6 + 1 × 66).
+
+### Verification
+
+- `npx tsc --noEmit` — 0 errors.
+- `:app:assembleDebug` — BUILD SUCCESSFUL (APKs for all three ABIs).
+- `react-native bundle` (android, dev false) — bundles clean; the output contains `Opening AnkiDroid`
+  and `Reading WaniKani`, and contains neither `Choose where to study` nor any `school` glyph entry,
+  so the removed screens are gone from the graph rather than merely unreferenced.
+- Device walkthrough below — every path this change touches was exercised, including the bar's own
+  geometry, which was measured from the screenshots rather than eyeballed.
+
+### Device walkthrough
+
+`app-x86_64-debug.apk` installed on `emulator-5554` (the debug build bundles `index.android.bundle`,
+so no Metro is needed; `strings -e l` on the APK's bundle confirms `Opening AnkiDroid` and
+`Reading WaniKani` are in it and `Choose where to study` is not).
+
+- Cold launch → Home with a **three-item bar** (Home / Analytics / Settings); the Review glyph and its
+  slot are gone, and the capsule's travel still lands each label on its own tab.
+- Tap Home's **Anki** card → the deck picker directly (`Anki` / `Choose a deck`, `6 cards ready to
+  study`, `Default — 1 new · 1 learning · 4 reviews`), full-screen with no bar. No landing page.
+- Tap `Default` → the card session (`Default`, `1 of 6`, 条, pinned `Show answer`).
+- System Back → `Leave the review session?` (Stay / Leave); `Leave` → the deck list; Back → Home.
+- Tap Home's **WaniKani** card → the connection screen directly (`WaniKani` / `Connection`, token
+  field, pinned `Connect WaniKani`); Back → Home.
+- Analytics and Settings tabs: unchanged and intact.
+- Home has no `Start studying` button (no filled action band above `Recently looked up`, checked by
+  scanning those rows for the accent fill), and Home's **Anki** row still opens the deck list.
+- The bar's geometry, read off the screenshots pixel by pixel: 256.7 dp wide and 62.9 dp tall, the
+  capsule 6.2 dp from its leading edge with `Home` selected and 72.0 dp with `Analytics` selected.

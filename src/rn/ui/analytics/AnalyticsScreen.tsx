@@ -533,7 +533,8 @@ function AnkiNotice({
   );
 }
 
-/** The quiet line under the heading: how fresh the numbers are, and the one refresh. */
+/** The one line by the heading: how fresh the numbers are, and the one refresh. The freshness sits
+ *  at the right end of the row, in the reader's quiet ink, beside the refresh it describes. */
 function Header({
   updated,
   busy,
@@ -546,12 +547,15 @@ function Header({
   const {colors} = useTheme();
   return (
     <View style={styles.headerRow}>
-      <View style={styles.headerText}>
-        <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>Analytics</Text>
-        <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-          {updated ?? "Reading the numbers…"}
-        </Text>
-      </View>
+      <Text style={[typeScale.headlineSmall, styles.headerTitle, {color: colors.onSurface}]}>
+        Analytics
+      </Text>
+      <Text
+        numberOfLines={2}
+        style={[typeScale.bodyMedium, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
+      >
+        {updated ?? "Reading the numbers…"}
+      </Text>
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel="Refresh the numbers"
@@ -869,11 +873,12 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginTop: spacing.l,
     gap: spacing.l,
   },
-  headerText: {flex: 1},
+  headerTitle: {flex: 1},
+  headerUpdated: {flexShrink: 1, textAlign: "right"},
   refresh: {
     width: 48,
     height: 48,

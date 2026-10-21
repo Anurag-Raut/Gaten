@@ -72,6 +72,134 @@ internal fun decodeSubjectCollection(text: String): List<DecodedSubject>? {
     return subjects
 }
 
+/** One assignment of a `GET /assignments` collection: which subject is due, and when. */
+internal data class DecodedAssignment(
+    /** The assignment's own id, the tie-breaker when two subjects became available at once. */
+    val id: Int,
+    val subjectId: Int,
+    /** When the assignment came up, in epoch milliseconds; 0 when WaniKani sent an unreadable one. */
+    val availableAt: Long
+)
+
+/**
+ * Every assignment in a `GET /assignments` collection, hidden ones dropped. Null when the body is not
+ * a collection at all - the same "try again" a malformed subject body means, never an empty queue.
+ *
+ * This is the count-only reads' fuller sibling (see `WaniKaniStats`): the same collection, but here
+ * the ids are what the queue needs, and WaniKani's own ordering is left alone so the caller can sort
+ * the assignments the way it shows them.
+ */
+internal fun decodeAssignmentCollection(text: String): List<DecodedAssignment>? {
+    val items = jsonObject(text)?.optJSONArray("data") ?: return null
+    val assignments = ArrayList<DecodedAssignment>(items.length())
+    for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index) ?: continue
+        val data = item.optJSONObject("data") ?: continue
+        if (data.optBoolean("hidden", false)) continue
+        val id = item.optInt("id", 0)
+        val subjectId = data.optInt("subject_id", 0)
+        if (id <= 0 || subjectId <= 0) continue
+        assignments.add(
+            DecodedAssignment(id, subjectId, instantMillis(data.optionalText("available_at")) ?: 0L)
+        )
+    }
+    return assignments
+}
+
+/**
+ * Every subject in a `GET /subjects?ids=…` collection as a review item; items of a kind the review
+ * does not quiz are dropped, as are subjects that carry nothing to be quizzed on. Null when the body
+ * is not a collection at all.
+ */
+internal fun decodeReviewSubjectCollection(text: String): List<WaniKaniReviewItem>? {
+    val items = jsonObject(text)?.optJSONArray("data") ?: return null
+    val subjects = ArrayList<WaniKaniReviewItem>(items.length())
+    for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index) ?: continue
+        decodeReviewSubject(item)?.let { subjects.add(it) }
+    }
+    return subjects
+}
+
+/** One review item in a subject resource, or null when it is not a kind the review quizzes. */
+private fun decodeReviewSubject(resource: JSONObject): WaniKaniReviewItem? {
+    val id = resource.optInt("id", 0)
+    if (id <= 0) return null
+    val type = resource.optionalText("object") ?: return null
+    if (type !in REVIEW_TYPES) return null
+    val data = resource.optJSONObject("data") ?: return null
+
+    // A subject whose every meaning is rejected and which has no whitelisted auxiliary meaning still
+    // has its slug, which is WaniKani's own short name for it: the screen always has an answer to
+    // judge against, exactly as the reference decode falls back for a subject's primary meaning.
+    val meanings = decodeReviewMeanings(data)
+    val accepted = meanings.ifEmpty { data.optionalText("slug")?.let { listOf(it) } ?: return null }
+    val readings = decodeReviewReadings(data.optJSONArray("readings"))
+    return WaniKaniReviewItem(
+        subjectId = id,
+        type = type,
+        characters = data.optionalText("characters"),
+        meanings = accepted,
+        primaryMeaning = accepted.first(),
+        readings = readings,
+        primaryReading = readings.firstOrNull()
+    )
+}
+
+/**
+ * The accepted meanings of one subject, the primary one first, the whitelist auxiliary meanings after
+ * them, without repeats.
+ *
+ * The primary meaning is placed first rather than left where the array holds it, so a `meanings[]`
+ * entry marked non-primary cannot be offered as the one the subject is taught as.
+ */
+private fun decodeReviewMeanings(data: JSONObject): List<String> {
+    val meanings = data.optJSONArray("meanings")
+    val primary = ArrayList<String>(1)
+    val rest = ArrayList<String>(meanings?.length() ?: 0)
+    if (meanings != null) {
+        for (index in 0 until meanings.length()) {
+            val entry = meanings.optJSONObject(index) ?: continue
+            if (!entry.optBoolean("accepted_answer", false)) continue
+            val meaning = entry.optionalText("meaning") ?: continue
+            if (entry.optBoolean("primary", false) && primary.isEmpty()) primary.add(meaning) else rest.add(meaning)
+        }
+    }
+    val auxiliary = data.optJSONArray("auxiliary_meanings")
+    if (auxiliary != null) {
+        for (index in 0 until auxiliary.length()) {
+            val entry = auxiliary.optJSONObject(index) ?: continue
+            // Only the whitelist: a blacklist auxiliary meaning is deliberately wrong, and accepting
+            // it here would mark a wrong answer right.
+            if (entry.optionalText("type") != "whitelist") continue
+            entry.optionalText("meaning")?.let { rest.add(it) }
+        }
+    }
+    return (primary + rest).distinct()
+}
+
+/**
+ * The accepted readings of one subject, folded to hiragana, the primary one first, without repeats.
+ *
+ * An empty list means the subject is not quizzed on its reading at all - a radical or a kana
+ * vocabulary has no `readings` array, and neither gets one built here - so the UI can tell "no
+ * reading to ask for" from "a reading the reader has not answered yet".
+ */
+private fun decodeReviewReadings(array: JSONArray?): List<String> {
+    if (array == null) return emptyList()
+    val primary = ArrayList<String>(1)
+    val rest = ArrayList<String>(array.length())
+    for (index in 0 until array.length()) {
+        val entry = array.optJSONObject(index) ?: continue
+        if (!entry.optBoolean("accepted_answer", false)) continue
+        val reading = entry.optionalText("reading") ?: continue
+        val folded = readingAnswerHiragana(reading)
+        if (folded.isEmpty()) continue
+        if (entry.optBoolean("primary", false)) primary.add(folded) else rest.add(folded)
+    }
+    return (primary + rest).distinct()
+}
+
 /**
  * The subject's page on wanikani.com, or null when [url] is not one - see
  * [WaniKaniSubject.documentUrl]. Applied on every decode, so a cached value is re-checked on the way
@@ -268,6 +396,9 @@ private fun instantMillis(text: String?): Long? {
         null
     }
 }
+
+/** The four kinds WaniKani quizzes; any other `object` is not a review item. */
+private val REVIEW_TYPES = setOf("radical", "kanji", "vocabulary", "kana_vocabulary")
 
 private val MARKUP = Regex("<[^>]*>")
 

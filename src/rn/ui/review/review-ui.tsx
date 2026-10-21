@@ -5,407 +5,406 @@
  */
 
 /**
- * The review screen's own primitives: the buttons, notes, badges and chips the review surface is
- * built from, drawn locally because they are this screen's visual language rather than the app's
- * shared kit.
+ * The review flow's own primitives, drawn from the approved Ink review workflow: the page title, the
+ * Ink integration row, the sub-screen header, the thin progress line, the deck row, the pinned
+ * action and the rating row.
  *
- * Controls use rounded rectangles, flat white surfaces, a small badge behind a state's glyph, one
- * dark primary action per surface and quiet, legible metadata. Every control is at least a 48 dp
- * touch target (Android's own minimum for interactive elements, developer.android.com
- * `guide/topics/ui/accessibility/apps`), and shapes come from the app's shared tokens.
+ * They live here rather than in the shared kit because they are this workflow's visual language —
+ * rows separated by hairlines, one dark action, quiet metadata — and because the app's own screens
+ * already share the tokens these are built from (`tokens.ts`), so a change to the scale reaches them
+ * all. Every measurement is the approved design's, in dp: a 43 dp brand holder at radius 12, a 101 dp
+ * source row, a 52 dp action at radius 13, a 63 dp nav capsule drawn by `BottomBar`.
+ *
+ * Motion is the design's own, and only ever the result of something the reader did: a nested screen
+ * entering (8 dp horizontally, 70% to full opacity), the progress line moving to its new value, and
+ * the press feedback every control in the app already answers with (`PressableScale`). All of it is
+ * skipped when the system asks for reduced motion.
  */
-import React from "react";
-import {ActivityIndicator, StyleSheet, Text, View} from "react-native";
-import {Icon} from "../components";
-import type {IconName} from "../icons";
+import React, {useEffect, useRef, useState} from "react";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type TextInputProps,
+  type TextStyle,
+  type ViewStyle,
+} from "react-native";
+import Animated, {
+  Easing as ReanimatedEasing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
-import type {Theme} from "../theme";
+import {useTheme} from "../theme";
+import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
 
-/** The screen's dominant action: a dark fill with a high-contrast label. */
-export function FilledAction({
-  theme,
-  label,
-  onPress,
-  disabled,
-  minHeight = 52,
+/** The curve every short Ink transition uses: fast out, settled in — the app's own emphasized one. */
+const INK_EASING = ReanimatedEasing.bezier(0.2, 0, 0, 1);
+
+/** How long a nested screen takes to arrive, and how far it travels: 8 dp, per the design. */
+const ENTER_MS = 200;
+const ENTER_TRAVEL = 8;
+
+/** How long the progress line takes to reach a new value. */
+const PROGRESS_MS = 180;
+
+/** The page title: the same 35 dp Ink heading Home, Analytics and Settings use. */
+export function ScreenTitle({
+  children,
+  style,
 }: {
-  theme: Theme;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  minHeight?: number;
+  children: string;
+  style?: StyleProp<TextStyle>;
 }) {
+  const {colors} = useTheme();
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{disabled: disabled ?? false}}
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.pill,
-        {
-          minHeight,
-          width: "100%",
-          backgroundColor: disabled ? theme.colors.disabled : theme.colors.actionPrimary,
-        },
-      ]}
+    <Text
+      accessibilityRole="header"
+      style={[typeScale.headlineSmall, {color: colors.onSurface}, styles.title, style]}
     >
-      <Text
-        style={[
-          typeScale.labelLarge,
-          {
-            color: disabled ? theme.colors.onDisabled : theme.colors.onActionPrimary,
-          },
-        ]}
-      >
-        {label}
-      </Text>
-    </PressableScale>
+      {children}
+    </Text>
   );
 }
 
-/** One neutral secondary action beside the dark primary action. */
-export function OutlinedAction({
-  theme,
-  label,
-  onPress,
-  disabled,
-  minHeight = 52,
+/** One short line under a title: what the page is for, in the reader's quiet ink. */
+export function ScreenSubtitle({
+  children,
+  style,
 }: {
-  theme: Theme;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  minHeight?: number;
+  children: string;
+  style?: StyleProp<TextStyle>;
 }) {
+  const {colors} = useTheme();
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{disabled: disabled ?? false}}
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.pill,
-        {
-          minHeight,
-          width: "100%",
-          backgroundColor: disabled ? theme.colors.disabled : theme.colors.actionSecondary,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          typeScale.labelLarge,
-          {
-            color: disabled
-              ? theme.colors.onDisabled
-              : theme.colors.onActionSecondary,
-          },
-        ]}
-      >
-        {label}
-      </Text>
-    </PressableScale>
+    <Text style={[typeScale.description, {color: colors.onSurfaceVariant}, styles.subtitle, style]}>
+      {children}
+    </Text>
   );
 }
 
-/** One tonal action: the rating bar's category color, or a neutral disabled state. */
-export function TonalAction({
-  theme,
-  content,
-  onPress,
-  disabled,
-  container,
-  minHeight = 64,
+/** The small caption over a group of rows. */
+export function SectionCaption({
+  children,
+  style,
 }: {
-  theme: Theme;
-  content: React.ReactNode;
-  onPress: () => void;
-  disabled?: boolean;
-  /** Overrides the default tonal pair — the rating bar's "Again" takes the error tones. */
-  container?: string;
-  minHeight?: number;
+  children: string;
+  style?: StyleProp<TextStyle>;
 }) {
+  const {colors} = useTheme();
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityState={{disabled: disabled ?? false}}
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.pill,
-        {
-          minHeight,
-          backgroundColor: disabled
-            ? theme.colors.disabled
-            : container ?? theme.colors.actionSecondary,
-          // The bar's buttons are as wide as their share of the row, so their content padding is
-          // the library's own 4dp rather than the roomier pill the full-width actions take.
-          paddingHorizontal: spacing.xs,
-        },
-      ]}
+    <Text
+      style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}, styles.caption, style]}
+      accessibilityRole="header"
     >
-      {content}
-    </PressableScale>
-  );
-}
-
-/** One text-only action, for the moves beside a surface's main one. */
-export function TextAction({
-  theme,
-  label,
-  onPress,
-  disabled,
-}: {
-  theme: Theme;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{disabled: disabled ?? false}}
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.pill, {minHeight: 48, paddingHorizontal: spacing.m}]}
-    >
-      <Text
-        style={[
-          typeScale.labelLarge,
-          {color: disabled ? theme.colors.onDisabled : theme.colors.accent},
-        ]}
-      >
-        {label}
-      </Text>
-    </PressableScale>
+      {children}
+    </Text>
   );
 }
 
 /**
- * The badge a glyph sits in: a rounded square on a subtle neutral surface, so a state reads at a
- * glance before its text is read.
+ * The brand mark in its own holder: the app's real Anki or WaniKani logo on the service's own tint,
+ * which is the one place a brand colour belongs. The tint is read from the canvas rather than from a
+ * theme role because it is a brand surface, not an app one.
  */
-export function IconBadge({
-  theme,
-  name,
-  size = 44,
-  onContainer,
+export function BrandTile({
+  brand,
+  size = 43,
+  radius = 12,
 }: {
-  theme: Theme;
-  name: IconName;
+  brand: "anki" | "wanikani";
   size?: number;
-  /** Whether the badge sits on a variant-filled card, which takes the page's own colour instead. */
-  onContainer?: boolean;
+  radius?: number;
 }) {
-  const glyph = Math.round(size * 0.5);
+  const {colors} = useTheme();
+  const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
+  const background =
+    brand === "anki"
+      ? dark
+        ? "#182D40"
+        : "#EAF4FF"
+      : dark
+        ? "#38212A"
+        : "#FFF0F2";
+  const glyph = Math.round(size * 0.7);
   return (
     <View
-      style={[
-        styles.badge,
-        {
-          width: size,
-          height: size,
-          backgroundColor: onContainer
-            ? theme.colors.surface
-            : theme.colors.surfaceVariant,
-        },
-      ]}
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.tile, {width: size, height: size, borderRadius: radius, backgroundColor: background}]}
     >
-      <Icon name={name} size={glyph} color={theme.colors.onSurfaceVariant} />
+      {brand === "anki" ? (
+        <AnkiServiceMark size={glyph} />
+      ) : (
+        <ToriiServiceMark size={glyph} />
+      )}
     </View>
   );
 }
 
 /**
- * A state with nothing to act on yet — loading, empty, failed — as one coherent surface: a badge,
- * a short hierarchy of title over body, and the surface's own recovery actions.
+ * The Ink integration row: a brand mark, the service's name, one quiet status line, and the one thing
+ * waiting on the right — a count, or the action this state needs. The whole row is the target; there
+ * is no button inside it, because the row *is* the button.
  */
-export function StateCard({
-  theme,
-  icon,
+export function SourceRow({
+  brand,
   title,
-  body,
-  note,
-  tone = "neutral",
-  spin = false,
-  children,
+  status,
+  value,
+  valueLabel,
+  actionLabel,
+  onPress,
+  first = false,
+  accessibilityLabel,
 }: {
-  theme: Theme;
-  icon: IconName;
+  brand: "anki" | "wanikani";
   title: string;
-  body?: string;
-  /** A second, smaller paragraph for what the state means rather than what it is. */
-  note?: string;
-  /** The only state that takes colour: something failed. */
-  tone?: "neutral" | "error";
-  /** A loading badge rather than a glyph one. */
-  spin?: boolean;
-  children?: React.ReactNode;
+  status: string;
+  /** A count for the right-hand side, in the design's numeric step. */
+  value?: string | null;
+  /** What that count is, under it. */
+  valueLabel?: string | null;
+  /** What the row does, when there is no count to show instead. */
+  actionLabel?: string | null;
+  onPress: () => void;
+  /** The first row of a group carries the group's top hairline; every row carries its bottom one. */
+  first?: boolean;
+  accessibilityLabel?: string;
 }) {
-  const {colors} = theme;
-  const failed = tone === "error";
+  const {colors} = useTheme();
   return (
-    <View style={[styles.stateCard, {backgroundColor: colors.surface}]}>
-      <View
-        style={[
-          styles.stateBadge,
-          {
-            backgroundColor: failed
-              ? colors.errorContainer
-              : colors.surfaceVariant,
-          },
-        ]}
-      >
-        {spin ? (
-          <ActivityIndicator size="small" color={colors.accent} />
-        ) : (
-          <Icon
-            name={icon}
-            size={24}
-            color={failed ? colors.onErrorContainer : colors.onSurfaceVariant}
-          />
-        )}
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? `${title}, ${status}`}
+      onPress={onPress}
+      style={[
+        styles.source,
+        {
+          borderBottomColor: colors.outlineVariant,
+          borderTopColor: colors.outlineVariant,
+          borderTopWidth: first ? 1 : 0,
+        },
+      ]}
+    >
+      <BrandTile brand={brand} />
+      <View style={styles.sourceMain}>
+        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.sourceName, {color: colors.onSurface}]}>
+          {title}
+        </Text>
+        <Text numberOfLines={2} style={[typeScale.bodySmall, styles.sourceStatus, {color: colors.onSurfaceVariant}]}>
+          {status}
+        </Text>
       </View>
-      <Text style={[typeScale.titleSmall, styles.stateTitle, {color: colors.onSurface}]}>
+      <View style={styles.sourceSide}>
+        {value != null ? (
+          <>
+            <Text numberOfLines={1} style={[styles.sourceValue, {color: colors.onSurface}]}>
+              {value}
+            </Text>
+            {valueLabel != null && (
+              <Text numberOfLines={1} style={[styles.sourceValueLabel, {color: colors.fine}]}>
+                {valueLabel}
+              </Text>
+            )}
+          </>
+        ) : actionLabel != null ? (
+          <Text numberOfLines={2} style={[styles.sourceAction, {color: colors.onSurfaceVariant}]}>
+            {actionLabel}
+          </Text>
+        ) : null}
+      </View>
+      <InkIcon name="chevron" size={15} color={colors.fine} />
+    </PressableScale>
+  );
+}
+
+/**
+ * The compact header of a step inside the flow: the way back, what the screen is, and — when
+ * there is one — the count or state that belongs to it. The glyph is the design's 21 dp; its target is
+ * Android's own 48 dp, so the arrow sits where the design puts it without being hard to hit.
+ */
+export function SubHeader({
+  title,
+  right,
+  onBack,
+}: {
+  title: string;
+  right?: string | null;
+  onBack: () => void;
+}) {
+  const {colors} = useTheme();
+  return (
+    <View style={styles.subHeader}>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={onBack}
+        style={styles.backButton}
+      >
+        <InkIcon name="back" size={21} color={colors.onSurface} />
+      </PressableScale>
+      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.subHeaderTitle, {color: colors.onSurface}]}>
         {title}
       </Text>
-      {body != null && (
-        <Text style={[typeScale.bodyMedium, styles.stateBody, {color: colors.onSurfaceVariant}]}>
-          {body}
+      {right != null && (
+        <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.fine}]}>
+          {right}
         </Text>
       )}
-      {note != null && (
-        <Text style={[typeScale.bodySmall, styles.stateNote, {color: colors.onSurfaceVariant}]}>
-          {note}
+    </View>
+  );
+}
+
+/**
+ * The session's progress: a 2 dp hairline the accent fills to the reader's place in the queue. It
+ * animates to its new value and never bounces, and it is the only thing on the screen that moves
+ * while a card is being answered.
+ */
+export function ProgressLine({value}: {value: number}) {
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const progress = useSharedValue(value);
+  const clamped = Math.max(0, Math.min(1, value));
+
+  useEffect(() => {
+    progress.value = reducedMotion
+      ? clamped
+      : withTiming(clamped, {duration: PROGRESS_MS, easing: INK_EASING});
+  }, [clamped, progress, reducedMotion]);
+
+  const fill = useAnimatedStyle(() => ({width: `${progress.value * 100}%`}));
+
+  return (
+    <View style={styles.progressArea} accessible accessibilityRole="progressbar" accessibilityValue={{min: 0, max: 100, now: Math.round(clamped * 100)}}>
+      <View style={[styles.progressTrack, {backgroundColor: colors.outlineVariant}]}>
+        <Animated.View style={[styles.progressFill, {backgroundColor: colors.accent}, fill]} />
+      </View>
+    </View>
+  );
+}
+
+/** One deck of the collection: its name, AnkiDroid's own counts, and what is due in it right now. */
+export function DeckRow({
+  name,
+  counts,
+  due,
+  onPress,
+}: {
+  name: string;
+  counts: string;
+  due: number;
+  onPress: () => void;
+}) {
+  const {colors} = useTheme();
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={`${name}, ${counts}, ${due} due`}
+      onPress={onPress}
+      style={[
+        styles.deckRow,
+        {borderBottomColor: colors.outlineVariant, borderTopColor: colors.outlineVariant},
+      ]}
+    >
+      <View style={styles.deckMain}>
+        <Text numberOfLines={2} ellipsizeMode="tail" style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+          {name}
         </Text>
-      )}
-      {children != null && <View style={styles.stateActions}>{children}</View>}
-    </View>
+        <Text numberOfLines={2} style={[styles.deckCounts, {color: colors.onSurfaceVariant}]}>
+          {counts}
+        </Text>
+      </View>
+      <View style={styles.sourceSide}>
+        <Text numberOfLines={1} style={[styles.deckDue, {color: colors.onSurface}]}>
+          {String(due)}
+        </Text>
+        <Text numberOfLines={1} style={[styles.sourceValueLabel, {color: colors.fine}]}>
+          due
+        </Text>
+      </View>
+      <InkIcon name="chevron" size={15} color={colors.fine} />
+    </PressableScale>
   );
 }
 
-/** "The next card is on its way": spinner and message on a quiet card. */
-export function BusyRow({theme, message}: {theme: Theme; message: string}) {
+/** The screen's one dominant action: a flat fill at the design's 52 dp and 13 dp radius. */
+export function FilledAction({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const {colors} = useTheme();
   return (
-    <View
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{disabled: disabled ?? false}}
+      disabled={disabled}
+      onPress={onPress}
       style={[
-        styles.rowCard,
-        {backgroundColor: theme.colors.surfaceVariant, padding: spacing.m},
+        styles.action,
+        {backgroundColor: disabled ? colors.disabled : colors.actionPrimary},
       ]}
     >
-      <ActivityIndicator size="small" color={theme.colors.accent} />
       <Text
         style={[
-          typeScale.bodyMedium,
-          {
-            color: theme.colors.onSurfaceVariant,
-            marginStart: spacing.m,
-            flexShrink: 1,
-          },
+          styles.actionLabel,
+          {color: disabled ? colors.onDisabled : colors.onActionPrimary},
         ]}
       >
-        {message}
+        {label}
       </Text>
-    </View>
+    </PressableScale>
   );
 }
 
-/** One of the screen's honest notes, with the action that answers it when there is one. */
-export function NoteCard({
-  theme,
-  text,
-  actionLabel,
-  onAction,
+/**
+ * The actions pinned above the system navigation: one hairline, the screen's own canvas behind them,
+ * and the reader's gesture inset inside the padding. Nothing here scrolls, so a control the reader
+ * needs is never under the keyboard or the gesture bar.
+ */
+export function ActionFooter({
+  children,
+  bottomInset,
+  style,
 }: {
-  theme: Theme;
-  text: string;
-  actionLabel?: string;
-  onAction?: () => void;
+  children: React.ReactNode;
+  bottomInset: number;
+  style?: StyleProp<ViewStyle>;
 }) {
+  const {colors} = useTheme();
   return (
     <View
       style={[
-        styles.rowCard,
-        {backgroundColor: theme.colors.surfaceVariant, padding: spacing.m},
-      ]}
-    >
-      <IconBadge theme={theme} name="info" size={36} onContainer />
-      <Text
-        style={[
-          typeScale.bodyMedium,
-          {color: theme.colors.onSurfaceVariant, marginStart: spacing.m, flex: 1},
-        ]}
-      >
-        {text}
-      </Text>
-      {actionLabel != null && onAction != null && (
-        <View style={{marginStart: spacing.xs}}>
-          <TextAction theme={theme} label={actionLabel} onPress={onAction} />
-        </View>
-      )}
-    </View>
-  );
-}
-
-/** The side of the card on screen: the accent for the answer, a quiet neutral for the question. */
-export function CardSideTag({
-  theme,
-  revealed,
-}: {
-  theme: Theme;
-  revealed: boolean;
-}) {
-  return (
-    <View
-      style={[
-        styles.chip,
+        styles.footer,
         {
-          backgroundColor: revealed
-            ? theme.colors.accentSubtle
-            : theme.colors.surfaceVariant,
-          alignSelf: "flex-start",
+          backgroundColor: colors.background,
+          borderTopColor: colors.outlineVariant,
+          paddingBottom: spacing.s + bottomInset,
         },
+        style,
       ]}
     >
-      <Text
-        style={[
-          typeScale.labelMedium,
-          {
-            color: revealed
-              ? theme.colors.accent
-              : theme.colors.onSurfaceVariant,
-          },
-        ]}
-      >
-        {revealed ? "Answer" : "Question"}
-      </Text>
-    </View>
-  );
-}
-
-/** One of AnkiDroid's own counts, as a tag on the deck's card. */
-export function CountTag({theme, text}: {theme: Theme; text: string}) {
-  return (
-    <View
-      style={[
-        styles.chip,
-        {backgroundColor: theme.colors.surface, alignSelf: "auto"},
-      ]}
-    >
-      <Text style={[typeScale.labelMedium, {color: theme.colors.onSurfaceVariant}]}>
-        {text}
-      </Text>
+      {children}
     </View>
   );
 }
 
 /** One rating button: the name to show, and the ease Anki expects for it. */
-export interface Rating {
+interface Rating {
   name: string;
   ease: number;
 }
@@ -416,7 +415,7 @@ export interface Rating {
  * positional — button `i` is ease `i + 1` — because that is how AnkiDroid computed the interval
  * labels in the same answer.
  */
-export function ratingsFor(buttonCount: number): Rating[] {
+function ratingsFor(buttonCount: number): Rating[] {
   const again: Rating = {name: "Again", ease: 1};
   const good: Rating = {name: "Good", ease: 2};
   const easy: Rating = {name: "Easy", ease: 3};
@@ -437,62 +436,54 @@ export function ratingsFor(buttonCount: number): Rating[] {
 }
 
 /**
- * The deck's ratings. The label over each button is the interval the scheduler itself reported
- * for that rating's position, so a tap sends back exactly the rating its interval was computed
- * for. "Again" takes the error tones; the rest the tonal pair the theme points at the accent's
- * container. Each button is a floor rather than a fixed height, and its two lines may wrap.
+ * The deck's ratings: one row of quiet buttons under the answer, each labelled with the interval the
+ * scheduler itself reported for that position, so a tap sends back exactly the rating its interval
+ * was computed for. "Again" is the only one that takes the error ink — it is the one answer that
+ * means the card was not known.
  */
 export function RatingBar({
-  theme,
   labels,
   enabled,
   onGrade,
 }: {
-  theme: Theme;
   labels: string[];
   enabled: boolean;
   onGrade: (ease: number) => void;
 }) {
+  const {colors} = useTheme();
   const ratings = ratingsFor(labels.length);
   return (
-    <View style={{flexDirection: "row", width: "100%"}}>
+    <View style={styles.ratingRow}>
       {ratings.map((rating, index) => {
         const isAgain = rating.ease === 1;
-        const color = !enabled
-          ? theme.colors.onDisabled
+        const ink = !enabled
+          ? colors.onDisabled
           : isAgain
-            ? theme.colors.onErrorContainer
-            : theme.colors.onSecondaryContainer;
+            ? colors.error
+            : colors.onSurface;
         return (
-          <View
-            key={rating.ease}
-            style={{flex: 1, marginStart: index > 0 ? spacing.s : 0}}
-          >
-            <TonalAction
-              theme={theme}
+          <View key={rating.ease} style={[styles.ratingCell, index > 0 && styles.ratingCellSpaced]}>
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={`${rating.name} ${labels[rating.ease - 1] ?? ""}`.trim()}
+              accessibilityState={{disabled: !enabled}}
               disabled={!enabled}
-              minHeight={64}
-              container={isAgain ? theme.colors.errorContainer : undefined}
-              content={
-                <View style={{alignItems: "center", paddingVertical: spacing.s}}>
-                  <Text
-                    style={[typeScale.labelLarge, {color}]}
-                    numberOfLines={2}
-                    ellipsizeMode="tail"
-                  >
-                    {rating.name}
-                  </Text>
-                  <Text
-                    style={[typeScale.labelSmall, {color, opacity: 0.8}]}
-                    numberOfLines={2}
-                    ellipsizeMode="tail"
-                  >
-                    {labels[rating.ease - 1] ?? ""}
-                  </Text>
-                </View>
-              }
               onPress={() => onGrade(rating.ease)}
-            />
+              style={[
+                styles.ratingButton,
+                {
+                  backgroundColor: colors.surfaceVariant,
+                  borderColor: colors.outlineVariant,
+                },
+              ]}
+            >
+              <Text numberOfLines={1} style={[styles.ratingName, {color: ink}]}>
+                {rating.name}
+              </Text>
+              <Text numberOfLines={1} style={[styles.ratingInterval, {color: ink, opacity: 0.75}]}>
+                {labels[rating.ease - 1] ?? ""}
+              </Text>
+            </PressableScale>
           </View>
         );
       })}
@@ -500,44 +491,271 @@ export function RatingBar({
   );
 }
 
+/**
+ * The field a WaniKani answer is typed into: the design's own line rather than a box, centred, in the
+ * reader's ink. Its underline takes the accent while it has focus, which is the one focus indicator
+ * this screen draws.
+ */
+export function AnswerInput(props: TextInputProps) {
+  const {colors} = useTheme();
+  const [focused, setFocused] = useState(false);
+  return (
+    <TextInput
+      {...props}
+      onFocus={(event) => {
+        setFocused(true);
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setFocused(false);
+        props.onBlur?.(event);
+      }}
+      placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
+      underlineColorAndroid="transparent"
+      style={[
+        styles.input,
+        {color: colors.onSurface, borderBottomColor: focused ? colors.accent : colors.outlineVariant},
+        props.style,
+      ]}
+    />
+  );
+}
+
+/**
+ * The one line of feedback an answer gets: what happened, and — when the answer was wrong — what the
+ * right one was. Colour is never the only signal; the words say it too.
+ */
+export function Feedback({
+  tone,
+  text,
+}: {
+  tone: "right" | "wrong";
+  text: string;
+}) {
+  const {colors} = useTheme();
+  return (
+    <Text
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.feedback,
+        {color: tone === "right" ? colors.success : colors.error},
+      ]}
+    >
+      {text}
+    </Text>
+  );
+}
+
+/**
+ * A screen with nothing to show yet: a loading state, an empty queue, a failure, or the connection
+ * state. One mark, a title, one short paragraph, and the actions that answer it — centred, with no
+ * card around it, because there is no content here for a surface to hold.
+ */
+export function StateBlock({
+  mark,
+  title,
+  body,
+  note,
+  children,
+}: {
+  /** The mark above the title: a brand tile, or the state's own glyph. */
+  mark?: React.ReactNode;
+  title: string;
+  body?: string;
+  note?: string;
+  children?: React.ReactNode;
+}) {
+  const {colors} = useTheme();
+  return (
+    <View style={styles.stateBlock}>
+      {mark != null && <View style={styles.stateMark}>{mark}</View>}
+      <Text style={[styles.stateTitle, {color: colors.onSurface}]}>{title}</Text>
+      {body != null && (
+        <Text style={[typeScale.description, styles.stateBody, {color: colors.onSurfaceVariant}]}>
+          {body}
+        </Text>
+      )}
+      {note != null && (
+        <Text style={[typeScale.bodySmall, styles.stateNote, {color: colors.onSurfaceVariant}]}>
+          {note}
+        </Text>
+      )}
+      {children != null && <View style={styles.stateActions}>{children}</View>}
+    </View>
+  );
+}
+
+/** One quiet chip, for a state that is a fact rather than an action: `Not connected`. */
+export function StateChip({label}: {label: string}) {
+  const {colors} = useTheme();
+  return (
+    <View style={[styles.chip, {borderColor: colors.outlineVariant}]}>
+      <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>{label}</Text>
+    </View>
+  );
+}
+
+/** "Something is on its way": one small spinner beside its own line, at the layout's own rhythm. */
+export function BusyRow({message}: {message: string}) {
+  const {colors} = useTheme();
+  return (
+    <View style={styles.busyRow} accessible accessibilityLabel={message}>
+      <ActivityIndicator size="small" color={colors.accent} />
+      <Text style={[typeScale.bodySmall, styles.busyText, {color: colors.onSurfaceVariant}]}>
+        {message}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * The arrival of a nested screen: 8 dp from the trailing edge, and 70% to full opacity, over the
+ * design's 200 ms. It keys on the screen's own identity, so moving between two cards of one session
+ * changes nothing here — the design's motion belongs to entering a screen, not to every redraw. A back
+ * move enters from the leading edge, which is the same gesture reversed.
+ *
+ * The first render after mount is not an arrival: this screen was already the one being looked at
+ * (the shell mounts every tab's scene up front), so nothing animates until the page key changes.
+ */
+export function StepEnter({
+  pageKey,
+  forward,
+  children,
+}: {
+  pageKey: string;
+  forward: boolean;
+  children: React.ReactNode;
+}) {
+  const reducedMotion = useReducedMotion();
+  const progress = useSharedValue(1);
+  const shown = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (shown.current === null) {
+      shown.current = pageKey;
+      return;
+    }
+    if (shown.current === pageKey) return;
+    shown.current = pageKey;
+    if (reducedMotion) {
+      progress.value = 1;
+      return;
+    }
+    progress.value = 0;
+    progress.value = withTiming(1, {duration: ENTER_MS, easing: INK_EASING});
+  }, [pageKey, reducedMotion, progress]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.7 + 0.3 * progress.value,
+    transform: [{translateX: (1 - progress.value) * (forward ? ENTER_TRAVEL : -ENTER_TRAVEL)}],
+  }));
+
+  return <Animated.View style={[styles.enter, style]}>{children}</Animated.View>;
+}
+
 const styles = StyleSheet.create({
-  pill: {
+  title: {marginTop: 23},
+  subtitle: {marginTop: 11},
+  caption: {marginTop: 34, marginBottom: 10},
+  tile: {alignItems: "center", justifyContent: "center", flexShrink: 0},
+  source: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 101,
+    paddingVertical: 19,
+    borderBottomWidth: 1,
+    width: "100%",
+  },
+  sourceMain: {flex: 1, minWidth: 0, marginStart: 14},
+  sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4},
+  sourceStatus: {marginTop: 5},
+  sourceSide: {alignItems: "flex-end", marginStart: spacing.m},
+  sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45},
+  sourceValueLabel: {fontSize: 10, lineHeight: 13},
+  sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right"},
+  subHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 66,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  subHeaderTitle: {fontSize: 14, fontWeight: "700", letterSpacing: -0.3, marginStart: 2},
+  subHeaderRight: {fontSize: 11, marginStart: "auto", paddingStart: spacing.m},
+  progressArea: {marginTop: 2},
+  progressTrack: {height: 2, width: "100%", overflow: "hidden"},
+  progressFill: {height: 2},
+  deckRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 84,
+    paddingVertical: 18,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    width: "100%",
+  },
+  deckMain: {flex: 1, minWidth: 0},
+  deckCounts: {fontSize: 11, lineHeight: 15, marginTop: 6},
+  deckDue: {fontSize: 25, fontWeight: "700", letterSpacing: -0.8},
+  action: {
+    height: 52,
     borderRadius: shape.button,
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
     paddingHorizontal: spacing.xl,
   },
-  rowCard: {
-    borderRadius: shape.medium,
-    flexDirection: "row",
-    alignItems: "center",
+  actionLabel: {fontSize: 15, fontWeight: "600", letterSpacing: -0.18},
+  footer: {
+    paddingHorizontal: spacing.contentInset,
+    paddingTop: 17,
+    borderTopWidth: 1,
     width: "100%",
   },
-  badge: {
-    borderRadius: shape.small,
+  ratingRow: {flexDirection: "row", width: "100%"},
+  ratingCell: {flex: 1, minWidth: 0},
+  ratingCellSpaced: {marginStart: 7},
+  ratingButton: {
+    minHeight: 49,
+    borderRadius: 11,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: spacing.s,
+    paddingHorizontal: spacing.xs,
   },
-  chip: {
-    borderRadius: shape.small,
-    paddingHorizontal: spacing.m,
-    paddingVertical: spacing.xs,
-  },
-  stateCard: {
-    borderRadius: shape.medium,
-    padding: spacing.xl,
+  ratingName: {fontSize: 12, fontWeight: "600"},
+  ratingInterval: {fontSize: 10, lineHeight: 13, marginTop: 2},
+  input: {
+    fontSize: 17,
+    textAlign: "center",
     width: "100%",
-    alignItems: "center",
+    paddingVertical: 13,
+    paddingHorizontal: spacing.s,
+    borderBottomWidth: 1,
   },
-  stateBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: shape.medium,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stateTitle: {marginTop: spacing.l, textAlign: "center"},
-  stateBody: {marginTop: spacing.s, textAlign: "center"},
+  feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17},
+  stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
+  stateMark: {marginBottom: 21},
+  stateTitle: {fontSize: 23, fontWeight: "700", letterSpacing: -0.7, textAlign: "center"},
+  stateBody: {marginTop: 14, textAlign: "center"},
   stateNote: {marginTop: spacing.m, textAlign: "center"},
-  stateActions: {marginTop: spacing.xl, width: "100%", gap: spacing.m},
+  stateActions: {marginTop: 21, width: "100%", gap: spacing.m},
+  chip: {
+    borderWidth: 1,
+    borderRadius: 9,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
+    marginTop: 21,
+    alignSelf: "center",
+  },
+  busyRow: {flexDirection: "row", alignItems: "center", minHeight: 21},
+  busyText: {marginStart: spacing.m, flexShrink: 1},
+  enter: {flex: 1},
 });

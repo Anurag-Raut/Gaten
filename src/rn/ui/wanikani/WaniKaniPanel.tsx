@@ -91,7 +91,7 @@ function openExternal(url: string) {
 }
 
 /** The locked-down HTML document a radical's SVG is loaded into. */
-function svgDocument(svg: string, dark: boolean): string {
+export function svgDocument(svg: string, dark: boolean): string {
   const invert = dark ? "<style>svg{filter:invert(1)}</style>" : "";
   return (
     '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">' +

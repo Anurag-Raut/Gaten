@@ -10,15 +10,17 @@
  * KanjiKey(character) and RadicalKey(id) belong to the tab the reader searched from — Home, where the
  * search lives — and a settings page belongs to the tab it was opened from, so every tab that can
  * open one carries it. Only an outside launch picks the Settings tab for a page.
+ *
+ * The review flow is a pushed page rather than a tab: Home's two service cards are the only ways in,
+ * and the flow is something the reader does, not a place they browse.
  */
 import {Keyboard} from "react-native";
 import type {NavigationState, NavigatorScreenParams} from "@react-navigation/native";
 
-/** The four tabs, in the order the bar shows them. Each holds a nested stack (v7's typing). */
+/** The three tabs, in the order the bar shows them. Each holds a nested stack (v7's typing). */
 export type RootTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList> | undefined;
   Analytics: NavigatorScreenParams<AnalyticsStackParamList> | undefined;
-  Review: NavigatorScreenParams<ReviewStackParamList> | undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };
 
@@ -30,12 +32,18 @@ export type RootTabParamList = {
 export type SettingsPageParams = {page: SettingsPageName; instance: string};
 
 /**
- * The Home tab: the dashboard with its own search on it, the pages that search opens, and the
- * settings page a card on Home or a footer link on a word reaches. All of them stay on Home, so Back
- * returns the reader to the card or the word they came from.
+ * The Home tab: the dashboard with its own search on it, the pages that search opens, the settings
+ * page a card on Home or a footer link on a word reaches, and the review flow. All of them stay on
+ * Home, so Back returns the reader to the card or the word they came from.
  */
 export type HomeStackParamList = {
   HomeTab: undefined;
+  /**
+   * Studying: AnkiDroid's deck list and its cards, or WaniKani's connection screen and its queue.
+   * Which of the two this is — and which step of it — is the review store's own state, set before
+   * this page is pushed, so the page has no params: it draws whatever the store was asked for.
+   */
+  Review: undefined;
   /** A dictionary entry, by its JMdict/JMnedict id. */
   Word: {entryId: number};
   /** A WaniKani kanji, by its character. */
@@ -52,14 +60,6 @@ export type HomeStackParamList = {
 export type AnalyticsStackParamList = {
   AnalyticsTab: undefined;
   SettingsPage: SettingsPageParams;
-};
-
-/**
- * The Review tab: the picker and the session. A session is session state inside the root screen, not
- * a second back-stack entry, and nothing on Review opens a settings page of its own.
- */
-export type ReviewStackParamList = {
-  ReviewTab: undefined;
 };
 
 /** The Settings tab: the hub, and the pages it lists. */

@@ -32,7 +32,7 @@ const WANIKANI_LEVELS = 60;
 const WANIKANI_TOKEN_URL = "https://www.wanikani.com/settings/personal_access_tokens";
 
 /** The sentence each failure string shows in "Could not connect to WaniKani: …". */
-const FAILURE_LABELS: Record<WaniKaniFailure, string> = {
+export const FAILURE_LABELS: Record<WaniKaniFailure, string> = {
   OFFLINE: "no connection",
   TIMEOUT: "the request timed out",
   RATE_LIMITED: "WaniKani is limiting requests just now",

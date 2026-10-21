@@ -32,6 +32,8 @@ internal object WaniKaniJson {
         level: Int = 1,
         componentIds: List<Int> = listOf(1),
         primaryMeaning: String = "One",
+        reading: String = "いち",
+        auxiliary: List<Pair<String, String>> = listOf("one" to "blacklist"),
         documentUrl: String = "https://www.wanikani.com/kanji/%E4%B8%80"
     ): String = """
         {
@@ -41,7 +43,7 @@ internal object WaniKaniJson {
           "data_updated_at": "2018-03-29T23:14:30.805034Z",
           "data": {
             "amalgamation_subject_ids": [56, 88, 91],
-            "auxiliary_meanings": [{"meaning": "one", "type": "blacklist"}],
+            "auxiliary_meanings": [${auxiliary.joinToString(", ") { """{"meaning": "${it.first}", "type": "${it.second}"}""" }}],
             "characters": "$character",
             "component_subject_ids": [${componentIds.joinToString(", ")}],
             "created_at": "2012-02-27T19:55:19.000000Z",
@@ -56,11 +58,11 @@ internal object WaniKaniJson {
             "meaning_hint": null,
             "meaning_mnemonic": "The <radical>ground</radical> holds a single <kanji>$primaryMeaning</kanji> stroke.",
             "readings": [
-              {"type": "onyomi", "primary": true, "accepted_answer": true, "reading": "いち"},
+              {"type": "onyomi", "primary": true, "accepted_answer": true, "reading": "$reading"},
               {"type": "kunyomi", "primary": false, "accepted_answer": false, "reading": "ひと"},
               {"type": "nanori", "primary": false, "accepted_answer": false, "reading": "かず"}
             ],
-            "reading_mnemonic": "Say <reading>specimen</reading> (いち) next to the <kanji>$primaryMeaning</kanji>.",
+            "reading_mnemonic": "Say <reading>specimen</reading> ($reading) next to the <kanji>$primaryMeaning</kanji>.",
             "reading_hint": null,
             "slug": "$character",
             "visually_similar_subject_ids": [],
@@ -126,6 +128,90 @@ internal object WaniKaniJson {
             "slug": "$character",
             "document_url": "https://www.wanikani.com/vocabulary/%E4%B8%80",
             "component_subject_ids": [440]
+          }
+        }
+    """.trimIndent()
+
+    /**
+     * A kana vocabulary resource: the reference's example for ねこ, the awkward case for a review -
+     * a subject quizzed on its meaning only, whose characters are its own reading, so it carries no
+     * `readings` array at all.
+     */
+    fun kanaVocabulary(
+        id: Int = 917,
+        character: String = "ねこ",
+        meaning: String = "Cat"
+    ): String = """
+        {
+          "id": $id,
+          "object": "kana_vocabulary",
+          "url": "https://api.wanikani.com/v2/subjects/$id",
+          "data_updated_at": "2020-07-22T21:12:17.303117Z",
+          "data": {
+            "characters": "$character",
+            "level": 5,
+            "meanings": [{"meaning": "$meaning", "primary": true, "accepted_answer": true}],
+            "auxiliary_meanings": [],
+            "slug": "$character",
+            "document_url": "https://www.wanikani.com/vocabulary/$character",
+            "component_subject_ids": [],
+            "parts_of_speech": ["noun"]
+          }
+        }
+    """.trimIndent()
+
+    /**
+     * One assignment of a `GET /assignments` collection: which subject is due, and when. The fields
+     * Gaten reads are parameterised; the rest is the reference's example.
+     */
+    fun assignment(
+        id: Int,
+        subjectId: Int,
+        subjectType: String,
+        availableAt: String,
+        hidden: Boolean = false
+    ): String = """
+        {
+          "id": $id,
+          "object": "assignment",
+          "url": "https://api.wanikani.com/v2/assignments/$id",
+          "data_updated_at": "2017-09-05T23:38:10.348180Z",
+          "data": {
+            "created_at": "2017-09-05T23:38:10.251517Z",
+            "subject_id": $subjectId,
+            "subject_type": "$subjectType",
+            "srs_stage": 1,
+            "unlocked_at": "2017-09-05T23:38:10.251517Z",
+            "started_at": "2017-09-05T23:38:10.251517Z",
+            "passed_at": null,
+            "burned_at": null,
+            "available_at": "$availableAt",
+            "resurrected_at": null,
+            "hidden": $hidden
+          }
+        }
+    """.trimIndent()
+
+    /**
+     * A subject whose every meaning is rejected and which has no whitelisted auxiliary meaning - the
+     * case a review has to fall back to the slug for, so the screen is never left without an answer
+     * to judge against.
+     */
+    fun rejectedMeaningsRadical(id: Int = 42, slug: String = "ground"): String = """
+        {
+          "id": $id,
+          "object": "radical",
+          "url": "https://api.wanikani.com/v2/subjects/$id",
+          "data_updated_at": "2018-03-29T23:13:14.064836Z",
+          "data": {
+            "auxiliary_meanings": [{"meaning": "ground", "type": "blacklist"}],
+            "characters": null,
+            "character_images": [],
+            "level": 1,
+            "meanings": [{"meaning": "Ground", "primary": true, "accepted_answer": false}],
+            "meaning_mnemonic": "",
+            "slug": "$slug",
+            "spaced_repetition_system_id": 2
           }
         }
     """.trimIndent()

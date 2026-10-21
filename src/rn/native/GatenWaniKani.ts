@@ -128,6 +128,44 @@ export type WaniKaniStatsResult =
   | {status: "authRejected"}
   | {status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number};
 
+/**
+ * One subject of the review queue, with what its answer is judged against. The answers come from the
+ * subject itself: every meaning WaniKani accepts (its own `meanings` and the whitelisted auxiliary
+ * ones) and every reading it accepts, folded to hiragana. Readings are empty for the subjects WaniKani
+ * does not quiz on a reading — radicals and kana vocabulary — which is what makes those prompts
+ * meaning-only.
+ */
+export interface WaniKaniReviewItem {
+  /** WaniKani's subject id, which is what a completed review is submitted for. */
+  subjectId: number;
+  type: "radical" | "kanji" | "vocabulary" | "kana_vocabulary";
+  /** The characters to prompt with; null for a radical that exists only as an image. */
+  characters: string | null;
+  /** Every meaning WaniKani accepts, the primary one first. */
+  meanings: string[];
+  /** The meaning WaniKani marks primary: what a wrong answer is corrected with. */
+  primaryMeaning: string;
+  /** Every reading WaniKani accepts, in hiragana, the primary one first. Empty when none is quizzed. */
+  readings: string[];
+  /** The primary reading, or null when the subject is not quizzed on one. */
+  primaryReading: string | null;
+}
+
+/** What the queue answered: the subjects due now, or the one thing that is missing. */
+export type WaniKaniReviewQueueResult =
+  | { status: "available"; items: WaniKaniReviewItem[] }
+  | { status: "empty" }
+  | { status: "needsToken" }
+  | { status: "authRejected" }
+  | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
+
+/** What submitting one completed review answered. */
+export type WaniKaniReviewSubmissionResult =
+  | { status: "accepted" }
+  | { status: "needsToken" }
+  | { status: "authRejected" }
+  | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
+
 interface GatenWaniKaniNative {
   isConfigured(): Promise<boolean>;
   connect(token: string): Promise<WaniKaniConnectionResult>;
@@ -137,6 +175,13 @@ interface GatenWaniKaniNative {
   lookupRadical(id: number, refresh: boolean): Promise<WaniKaniLookupResult>;
   stats(): Promise<WaniKaniStatsResult>;
   refreshStats(): Promise<WaniKaniStatsResult>;
+  reviewQueue(): Promise<WaniKaniReviewQueueResult>;
+  readingAnswer(text: string): Promise<string>;
+  submitReview(
+    subjectId: number,
+    incorrectMeaningAnswers: number,
+    incorrectReadingAnswers: number
+  ): Promise<WaniKaniReviewSubmissionResult>;
 }
 
 const GatenWaniKani = NativeModules.GatenWaniKani as GatenWaniKaniNative;
@@ -188,4 +233,39 @@ export function stats(): Promise<WaniKaniStatsResult> {
 /** Asks WaniKani again whatever the cache says — the dashboard's refresh action. */
 export function refreshStats(): Promise<WaniKaniStatsResult> {
   return GatenWaniKani.refreshStats();
+}
+
+/**
+ * The subjects WaniKani has available for review right now, in the order they are due. Read fresh
+ * every time: a queue is live data, and the copy this answered with is not kept anywhere.
+ */
+export function reviewQueue(): Promise<WaniKaniReviewQueueResult> {
+  return GatenWaniKani.reviewQueue();
+}
+
+/**
+ * The kana a typed reading spells: romaji converted, katakana folded to hiragana, spacing removed.
+ * A text that is not romaji the converter can read in full comes back normalized but unconverted, so
+ * comparing it against the item's own readings answers "was this the reading" without any kana
+ * handling in the UI.
+ */
+export function readingAnswer(text: string): Promise<string> {
+  return GatenWaniKani.readingAnswer(text);
+}
+
+/**
+ * Records one completed review for [subjectId], with how many times its meaning and its reading were
+ * answered wrongly. Sending it twice would advance the subject twice, so the caller is the one that
+ * decides a review is finished — never a timer, and never an animation.
+ */
+export function submitReview(
+  subjectId: number,
+  incorrectMeaningAnswers: number,
+  incorrectReadingAnswers: number
+): Promise<WaniKaniReviewSubmissionResult> {
+  return GatenWaniKani.submitReview(
+    subjectId,
+    incorrectMeaningAnswers,
+    incorrectReadingAnswers
+  );
 }

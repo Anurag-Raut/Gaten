@@ -1,21 +1,39 @@
 /**
- * The review session's state, held in a module singleton so the state survives tab switches —
- * the RN port of the shell-owned AnkiReviewViewModel. A session left open keeps its card, its
- * timer and its open WaniKani details; coming back to the Review tab lands on the card the
- * reader left, and everything before a card is re-read on entry (see useAnkiReview).
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+/**
+ * The review flow's state, held in a module singleton so it survives leaving the page — the RN port
+ * of the shell-owned review view model. A session left open keeps its card, its timer and its open
+ * WaniKani details; pushing the page again mid-session lands on the card the reader left.
  *
- * Every provider call goes through the GatenAnki bridge; failures come back as rejections whose
- * `code` is the Kotlin failure's own name (`ANKI_NOT_INSTALLED`, `ANKI_PROVIDER`, …) with the
- * wrapped detail as the message. Nothing here is left in a component: the shell reads
- * `sessionActive()` through `onSessionActive` to hide its bottom bar while a card is up.
+ * The flow is one pushed page, not a tab: Home's two service cards ask this store for a step and then
+ * push the page, which draws whatever step it finds. The steps are the Anki deck list and card
+ * session, and the WaniKani connection and review; none of them is a route of its own, because a step
+ * is not a page the reader navigates to — Back is the page's own pop.
+ *
+ * Every provider call goes through a bridge; failures come back as rejections whose `code` is the
+ * Kotlin failure's own name (`ANKI_NOT_INSTALLED`, `WK_OFFLINE`, …) with the wrapped detail as the
+ * message. AnkiDroid keeps Anki's schedule and WaniKani keeps its own: this file decides what is on
+ * screen and when a review is finished, and never what a card or a subject is scheduled for.
+ *
+ * Nothing here is left in a component, and nothing here hides anything in the shell: a pushed page is
+ * full-screen with no bottom bar by the shell's own rule, so the flow does not have to ask for it.
  */
 import * as Anki from "../../native/GatenAnki";
+import * as WaniKani from "../../native/GatenWaniKani";
 import type {
   AnkiCardResult,
   AnkiDeckResult,
 } from "../../native/GatenAnki";
+import type {
+  WaniKaniFailure,
+  WaniKaniReviewItem,
+} from "../../native/GatenWaniKani";
 
-/** Why review cannot go on — the Kotlin AnkiReviewFailure's own names. */
+/** Why an Anki review cannot go on — the Kotlin AnkiReviewFailure's own names. */
 export type ReviewFailure =
   | "NOT_INSTALLED"
   | "PERMISSION"
@@ -37,9 +55,49 @@ export interface ReviewCard {
   typedAnswer: boolean;
 }
 
-/** What the review screen is doing — the Kotlin Step, verbatim. */
+/**
+ * One subject of a WaniKani review in progress, and how far the reader is through it. The counts are
+ * the ones WaniKani's own `POST /reviews` asks for: how many times this subject's meaning and reading
+ * were answered wrongly, which is why a wrong attempt is counted where it happened rather than
+ * reported at the end.
+ */
+export interface WaniKaniSession {
+  items: WaniKaniReviewItem[];
+  /** The parts the whole queue asks for: a meaning always, and a reading when the subject has one. */
+  totalParts: number;
+  /** The parts finished before the one on screen, across the whole queue. */
+  doneParts: number;
+  index: number;
+  part: "meaning" | "reading";
+  /** What is in the field right now. */
+  entry: string;
+  incorrectMeaning: number;
+  incorrectReading: number;
+  feedback: {tone: "right" | "wrong"; text: string} | null;
+  /**
+   * True once a part has been answered wrongly and not yet answered correctly: WaniKani asks for the
+   * right answer to be typed before the subject moves on, so the next correct check finishes the part
+   * the wrong one opened.
+   */
+  retrying: boolean;
+  phase: "answering" | "submitting" | "submitFailed";
+  /** Why the last submission failed, or null when it has not failed — or the token was refused. */
+  failure: WaniKaniFailure | null;
+  /** True when the submission was refused for the token rather than for the network. */
+  authRejected: boolean;
+}
+
+/** What the review screen is doing. */
 export type ReviewStep =
-  | { kind: "starting" }
+  | {
+      /**
+       * The read that precedes a step: AnkiDroid's status and deck list, or WaniKani's token and
+       * queue. The page is pushed before this answers, so it has something honest to draw rather
+       * than the step the reader left last time.
+       */
+      kind: "opening";
+      source: "anki" | "waniKani";
+    }
   | { kind: "blocked"; failure: ReviewFailure }
   | { kind: "decks"; decks: AnkiDeckResult[]; configuredDeckName: string }
   | {
@@ -50,6 +108,9 @@ export type ReviewStep =
       mediaFiles: string[];
       startedAt: number;
       revealed: boolean;
+      /** Cards finished in this deck, and how many were due when the session started. */
+      answered: number;
+      total: number;
     }
   | { kind: "done"; deckName: string }
   | {
@@ -57,6 +118,14 @@ export type ReviewStep =
       failure: ReviewFailure;
       detail?: string;
       afterGrade: boolean;
+    }
+  | { kind: "wkConnect"; rejected: boolean }
+  | { kind: "wkReview"; session: WaniKaniSession }
+  | { kind: "wkDone"; nextReviewAt: number | null }
+  | {
+      kind: "wkFailed";
+      failure: WaniKaniFailure;
+      retryAfterSeconds: number | null;
     };
 
 /** The whole observable state the screen renders from. */
@@ -68,48 +137,38 @@ export interface ReviewState {
   expandedRadical: number | null;
 }
 
+/** What connecting from the connection screen answered, for that screen to say. */
+export type WaniKaniConnectOutcome =
+  | { status: "connected" }
+  | { status: "invalidToken" }
+  | { status: "failed"; failure: WaniKaniFailure }
+  | { status: "bridge"; message: string };
+
 /**
- * How deep a step sits, so a move to a deeper one slides forward and a move back slides back.
- * The two failure-shaped steps stand where the reader met them.
+ * How deep a step sits, so the screen that arrives slides in from the side it was opened from: a move
+ * to a deeper step enters forward, a move back enters from the leading edge. The failure-shaped steps
+ * stand where the reader met them.
  */
 export function stepDepth(step: ReviewStep): number {
   switch (step.kind) {
-    case "starting":
+    case "opening":
     case "blocked":
+    case "wkFailed":
       return 0;
     case "decks":
+    case "wkConnect":
+    case "wkDone":
       return 1;
     case "session":
     case "failed":
+    case "wkReview":
       return 2;
     case "done":
       return 3;
   }
 }
 
-/**
- * Whether the step is a card session, and so whether the shell's bottom bar has to stay out of
- * the way: a card on screen, the wait for one, or a card whose read or answer just failed inside
- * the deck the reader chose. `deck` separates a failure inside a deck from a failure that never
- * got that far; the finished deck is not a session.
- */
-export function holdsSession(
-  step: ReviewStep,
-  deck: AnkiDeckResult | null
-): boolean {
-  switch (step.kind) {
-    case "session":
-      return true;
-    case "failed":
-      return deck != null;
-    case "decks":
-      return deck != null;
-    default:
-      return false;
-  }
-}
-
-/** The failure a bridge rejection carried, without any of the provider's internals. */
+/** The failure an Anki bridge rejection carried, without any of the provider's internals. */
 function failureOf(error: unknown): { failure: ReviewFailure; detail?: string } {
   if (typeof error !== "object" || error == null) {
     return { failure: "PROVIDER" };
@@ -126,12 +185,50 @@ function failureOf(error: unknown): { failure: ReviewFailure; detail?: string } 
   return { failure: "PROVIDER", detail };
 }
 
+/** The WaniKani failure a bridge rejection carried; a bridge-level error is the network's own. */
+function waniKaniFailureOf(error: unknown): WaniKaniFailure {
+  if (typeof error === "object" && error != null && "code" in error) {
+    const code = error.code;
+    const match = typeof code === "string" ? /^WK_([A-Z_]+)$/.exec(code) : null;
+    if (match) return match[1] as WaniKaniFailure;
+  }
+  return "SERVER";
+}
+
+/** How a meaning is compared: WaniKani answers are case-insensitive and their spacing does not count. */
+function normalizeMeaning(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** The parts one subject asks for: its meaning, and its reading when WaniKani quizzes one. */
+function partsOf(item: WaniKaniReviewItem): number {
+  return item.readings.length > 0 ? 2 : 1;
+}
+
+/** A fresh session over [items], at the first part of the first subject. */
+function startWaniKaniSession(items: WaniKaniReviewItem[]): WaniKaniSession {
+  return {
+    items,
+    totalParts: items.reduce((total, item) => total + partsOf(item), 0),
+    doneParts: 0,
+    index: 0,
+    part: "meaning",
+    entry: "",
+    incorrectMeaning: 0,
+    incorrectReading: 0,
+    feedback: null,
+    retrying: false,
+    phase: "answering",
+    failure: null,
+    authRejected: false,
+  };
+}
+
 type StepListener = (state: ReviewState) => void;
-type SessionListener = (active: boolean) => void;
 
 class ReviewStore {
   private state: ReviewState = {
-    step: { kind: "starting" },
+    step: { kind: "opening", source: "anki" },
     deck: null,
     busy: false,
     expandedKanji: null,
@@ -139,8 +236,6 @@ class ReviewStore {
   };
 
   private stepListeners = new Set<StepListener>();
-  private sessionListeners = new Set<SessionListener>();
-  private lastSessionActive = false;
 
   /** When the app went to the background with a card on screen, so the time spent away can be
    *  taken back out of AnkiDroid's answer time. */
@@ -155,25 +250,9 @@ class ReviewStore {
     return { remove: () => this.stepListeners.delete(listener) };
   }
 
-  /** Whether a card session is open — the shell reads this to hide its bottom bar. */
-  sessionActive(): boolean {
-    return holdsSession(this.state.step, this.state.deck);
-  }
-
-  /** Reported whenever that fact changes — and only then. */
-  onSessionActive(listener: SessionListener): { remove: () => void } {
-    this.sessionListeners.add(listener);
-    return { remove: () => this.sessionListeners.delete(listener) };
-  }
-
   private set(patch: Partial<ReviewState>) {
     this.state = { ...this.state, ...patch };
     for (const listener of this.stepListeners) listener(this.state);
-    const active = this.sessionActive();
-    if (active !== this.lastSessionActive) {
-      this.lastSessionActive = active;
-      for (const listener of this.sessionListeners) listener(active);
-    }
   }
 
   private setBusy(busy: boolean) {
@@ -190,38 +269,39 @@ class ReviewStore {
     this.set({ expandedKanji: null, expandedRadical: null });
   }
 
-  /** Reads AnkiDroid's status, then its deck list. */
-  private async start(): Promise<void> {
-    try {
-      const status = await Anki.status();
-      if (status === "notInstalled") {
-        this.set({ step: { kind: "blocked", failure: "NOT_INSTALLED" } });
-      } else if (status === "needsPermission") {
-        this.set({ step: { kind: "blocked", failure: "PERMISSION" } });
-      } else {
-        this.openDecks();
-      }
-    } catch (error) {
-      const { failure } = failureOf(error);
-      this.set({ step: { kind: "blocked", failure } });
-    }
-  }
-
-  /** The permission dialog came back refused, so review cannot run yet. */
-  permissionDenied() {
-    this.set({ step: { kind: "blocked", failure: "PERMISSION" } });
-  }
-
   /**
-   * Reads what review can do from scratch, from outside a deck: AnkiDroid's status, then its
-   * deck list, with no deck chosen. This is what entering the screen asks for whenever the
-   * reader is not already inside a session — everything it re-reads can have changed while the
-   * screen was away.
+   * What entering the flow from Home's Anki card asks for: AnkiDroid's own status first, then its
+   * deck list. A service that cannot be used at all — not installed, no permission, no collection —
+   * is stated where the reader tapped, rather than as an empty deck list.
+   *
+   * A card session is the reader's own place and is left exactly as it was: the page they pushed is
+   * the card they were on, so re-entering resumes it rather than reading the collection again.
    */
-  refresh() {
+  openAnki() {
+    if (this.state.step.kind === "session") return;
     this.ifIdle(() => {
-      this.set({ deck: null });
-      void this.start();
+      // Back to the picker, whatever step was left behind: the deck that was being studied is not
+      // the one this entry chose.
+      this.set({ deck: null, step: { kind: "opening", source: "anki" } });
+      this.setBusy(true);
+      void (async () => {
+        let blocked: ReviewStep | null = null;
+        try {
+          const status = await Anki.status();
+          if (status === "notInstalled") {
+            blocked = { kind: "blocked", failure: "NOT_INSTALLED" };
+          } else if (status === "needsPermission") {
+            blocked = { kind: "blocked", failure: "PERMISSION" };
+          }
+        } catch (error) {
+          blocked = { kind: "blocked", failure: failureOf(error).failure };
+        }
+        this.setBusy(false);
+        // The read of the deck list is its own busy step: it takes over from here, so a status that
+        // can be used goes straight into the picker with no second tap.
+        if (blocked == null) this.openDecks();
+        else this.set({ step: blocked });
+      })();
     });
   }
 
@@ -252,7 +332,335 @@ class ReviewStore {
     })();
   }
 
-  /** Starts reviewing `deck`. */
+  /** The permission dialog came back refused, so review cannot run yet. */
+  permissionDenied() {
+    this.set({ step: { kind: "blocked", failure: "PERMISSION" } });
+  }
+
+  /**
+   * What entering the flow from Home's WaniKani card asks for: the stored token first, then the real
+   * queue. A reader with no token gets the connection screen; a connected one goes straight into the
+   * review, with no second start step, and a queue with nothing due is the caught-up state rather
+   * than an empty review.
+   *
+   * A review already in progress is the reader's own place and is left exactly as it was.
+   */
+  openWaniKani() {
+    if (this.state.step.kind === "wkReview") return;
+    this.ifIdle(() => {
+      this.set({ deck: null, step: { kind: "opening", source: "waniKani" } });
+      this.setBusy(true);
+      void (async () => {
+        try {
+          const configured = await WaniKani.isConfigured();
+          if (!configured) {
+            this.set({ step: { kind: "wkConnect", rejected: false } });
+            return;
+          }
+          await this.enterWaniKaniReview();
+        } catch (error) {
+          this.set({
+            step: {
+              kind: "wkFailed",
+              failure: waniKaniFailureOf(error),
+              retryAfterSeconds: null,
+            },
+          });
+        } finally {
+          this.setBusy(false);
+        }
+      })();
+    });
+  }
+
+  /**
+   * Reads WaniKani's review queue and enters it. Called with a token already stored — the connection
+   * screen calls it right after a token works, which is what makes connecting land in the review
+   * itself rather than on a screen that has to be tapped again.
+   */
+  private async enterWaniKaniReview(): Promise<void> {
+    const queue = await WaniKani.reviewQueue();
+    switch (queue.status) {
+      case "available":
+        if (queue.items.length === 0) {
+          this.finishWaniKani();
+          return;
+        }
+        this.set({ step: { kind: "wkReview", session: startWaniKaniSession(queue.items) } });
+        return;
+      case "empty":
+        this.finishWaniKani();
+        return;
+      case "needsToken":
+        this.set({ step: { kind: "wkConnect", rejected: false } });
+        return;
+      case "authRejected":
+        this.set({ step: { kind: "wkConnect", rejected: true } });
+        return;
+      case "failed":
+        this.set({
+          step: {
+            kind: "wkFailed",
+            failure: queue.failure,
+            retryAfterSeconds: queue.retryAfterSeconds ?? null,
+          },
+        });
+    }
+  }
+
+  /**
+   * The queue is finished. WaniKani knows when the next one is due, so the caught-up state asks it
+   * rather than guessing — and only fills the time in if the answer arrives while this is still the
+   * step on screen.
+   */
+  private finishWaniKani() {
+    this.set({ step: { kind: "wkDone", nextReviewAt: null } });
+    void WaniKani.stats()
+      .then((result) => {
+        if (result.status !== "available") return;
+        const current = this.state.step;
+        if (current.kind !== "wkDone") return;
+        this.set({
+          step: { kind: "wkDone", nextReviewAt: result.snapshot.nextReviewAt },
+        });
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Connects with [token] and, when it works, goes straight into the queue. The outcome is returned
+   * for the connection screen to say — a rejected token, an unreachable WaniKani — while a working one
+   * replaces the screen with the review.
+   */
+  async connectWaniKani(token: string): Promise<WaniKaniConnectOutcome> {
+    this.setBusy(true);
+    try {
+      const result = await WaniKani.connect(token);
+      if (result.status === "invalidToken") {
+        return { status: "invalidToken" };
+      }
+      await this.enterWaniKaniReview();
+      return { status: "connected" };
+    } catch (error) {
+      return { status: "failed", failure: waniKaniFailureOf(error) };
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  /** One keystroke in the review's answer field. */
+  wkEntry(text: string) {
+    const step = this.state.step;
+    if (step.kind !== "wkReview") return;
+    this.set({ step: { kind: "wkReview", session: { ...step.session, entry: text } } });
+  }
+
+  /**
+   * Checks the answer on screen. A correct one finishes the part — and, when the subject asks for a
+   * reading too, moves the reader to it; a wrong one is counted against the part, shows the right
+   * answer, and asks for it to be typed before the subject moves on, which is WaniKani's own rule.
+   *
+   * Nothing is submitted here: the review is sent when every part of the subject is finished, and
+   * never because a part was merely typed.
+   */
+  wkCheck() {
+    const step = this.state.step;
+    if (step.kind !== "wkReview") return;
+    const session = step.session;
+    if (session.phase !== "answering" || session.entry.trim() === "") return;
+    const item = session.items[session.index];
+    if (item == null) return;
+
+    this.setBusy(true);
+    void (async () => {
+      try {
+        const typed = session.entry.trim();
+        let correct: boolean;
+        if (session.part === "reading") {
+          // A reading is compared in kana: what the reader typed is handed to the converter, so a
+          // romaji answer is judged as the reading it spells rather than as its letters.
+          const kana = await WaniKani.readingAnswer(typed);
+          correct = item.readings.includes(kana);
+        } else {
+          const answer = normalizeMeaning(typed);
+          correct = item.meanings.some(
+            (meaning) => normalizeMeaning(meaning) === answer
+          );
+        }
+        // The step may have been left while the answer was being read.
+        const current = this.state.step;
+        if (current.kind !== "wkReview") return;
+        const live = current.session;
+        if (!correct) {
+          const answer =
+            session.part === "reading"
+              ? item.primaryReading ?? ""
+              : item.primaryMeaning;
+          const counted =
+            session.part === "reading"
+              ? { incorrectReading: live.incorrectReading + 1 }
+              : { incorrectMeaning: live.incorrectMeaning + 1 };
+          this.set({
+            step: {
+              kind: "wkReview",
+              session: {
+                ...live,
+                ...counted,
+                entry: "",
+                retrying: true,
+                feedback: { tone: "wrong", text: `Incorrect — the answer is ${answer}` },
+              },
+            },
+          });
+          return;
+        }
+        if (session.part === "meaning" && item.readings.length > 0) {
+          this.set({
+            step: {
+              kind: "wkReview",
+              session: {
+                ...live,
+                part: "reading",
+                entry: "",
+                retrying: false,
+                feedback: null,
+                doneParts: live.doneParts + 1,
+              },
+            },
+          });
+          return;
+        }
+        this.submitWaniKani();
+      } finally {
+        this.setBusy(false);
+      }
+    })();
+  }
+
+  /**
+   * Sends the subject's completed review. The counters are the ones WaniKani asks for, taken from the
+   * session as they were counted; a subject that was answered wrongly is still submitted, because that
+   * is how WaniKani learns the answer was wrong.
+   */
+  private submitWaniKani() {
+    const step = this.state.step;
+    if (step.kind !== "wkReview") return;
+    const session = step.session;
+    if (session.phase === "submitting") return;
+    const item = session.items[session.index];
+    if (item == null) return;
+    this.set({
+      step: { kind: "wkReview", session: { ...session, phase: "submitting", failure: null, authRejected: false } },
+    });
+    void (async () => {
+      try {
+        const result = await WaniKani.submitReview(
+          item.subjectId,
+          session.incorrectMeaning,
+          session.incorrectReading
+        );
+        const current = this.state.step;
+        if (current.kind !== "wkReview") return;
+        if (result.status === "accepted") {
+          this.advanceWaniKani(current.session);
+          return;
+        }
+        const rejected =
+          result.status === "authRejected" || result.status === "needsToken";
+        this.set({
+          step: {
+            kind: "wkReview",
+            session: {
+              ...current.session,
+              phase: "submitFailed",
+              failure: rejected ? null : result.status === "failed" ? result.failure : null,
+              authRejected: rejected,
+            },
+          },
+        });
+      } catch (error) {
+        const current = this.state.step;
+        if (current.kind !== "wkReview") return;
+        this.set({
+          step: {
+            kind: "wkReview",
+            session: {
+              ...current.session,
+              phase: "submitFailed",
+              failure: waniKaniFailureOf(error),
+              authRejected: false,
+            },
+          },
+        });
+      }
+    })();
+  }
+
+  /** Sends the failed submission again, from the state the reader left it in. */
+  wkRetrySubmit() {
+    const step = this.state.step;
+    if (step.kind !== "wkReview") return;
+    if (step.session.phase !== "submitFailed" || step.session.authRejected) return;
+    this.set({
+      step: { kind: "wkReview", session: { ...step.session, phase: "answering" } },
+    });
+    this.submitWaniKani();
+  }
+
+  /** The subject is saved: the next one, or the caught-up state when the queue is done. */
+  private advanceWaniKani(session: WaniKaniSession) {
+    const item = session.items[session.index];
+    const done = session.doneParts + (item == null ? 0 : partsOf(item));
+    const next = session.index + 1;
+    if (next >= session.items.length) {
+      this.finishWaniKani();
+      return;
+    }
+    this.set({
+      step: {
+        kind: "wkReview",
+        session: {
+          ...session,
+          index: next,
+          part: "meaning",
+          entry: "",
+          incorrectMeaning: 0,
+          incorrectReading: 0,
+          feedback: null,
+          retrying: false,
+          doneParts: done,
+          phase: "answering",
+          failure: null,
+          authRejected: false,
+        },
+      },
+    });
+  }
+
+  /** The review queue's own failure, retried from the state that reported it. */
+  retryWaniKani() {
+    this.ifIdle(() => {
+      this.setBusy(true);
+      void (async () => {
+        try {
+          await this.enterWaniKaniReview();
+        } catch (error) {
+          this.set({
+            step: {
+              kind: "wkFailed",
+              failure: waniKaniFailureOf(error),
+              retryAfterSeconds: null,
+            },
+          });
+        } finally {
+          this.setBusy(false);
+        }
+      })();
+    });
+  }
+
+  /** Starts reviewing `deck`. The deck's own due count is what the session's progress is measured
+   *  against, read at the moment it starts and never re-read under the reader's feet. */
   startDeck(deck: AnkiDeckResult) {
     this.ifIdle(() => {
       this.set({ deck });
@@ -295,7 +703,7 @@ class ReviewStore {
         // actually due. NotFound/Ignored: the card is gone, or nothing was sent at all — the
         // queue is read as it is either way. All three end this card, and busy stays set
         // through the hand-off, so two taps cannot answer two.
-        this.nextCard();
+        this.nextCard(undefined, session.answered + 1, session.total);
       } catch (error) {
         // The answer may have landed anyway, and the provider cannot undo one, so the only way
         // on is a fresh read from the scheduler.
@@ -346,10 +754,11 @@ class ReviewStore {
     if (this.state.busy) return;
     const { step } = this.state;
     if (step.kind !== "session") return;
-    this.nextCard({
-      ...step,
-      startedAt: step.startedAt + (away ?? 0),
-    });
+    this.nextCard(
+      { ...step, startedAt: step.startedAt + (away ?? 0) },
+      step.answered,
+      step.total
+    );
   }
 
   /**
@@ -357,10 +766,23 @@ class ReviewStore {
    * card the reader is already on: when the scheduler hands out the same card again it keeps
    * its revealed side and its timer, so coming back from another app does not reset the
    * reader's place. A different card always starts from the front.
+   *
+   * `answered` and `total` are the session's own progress, carried across the hand-off: the deck's
+   * due count when it started, and how many cards of it are done. A deck can hand back a card that
+   * was rated Again, so the total is raised to meet the count rather than being left behind by it.
    */
-  private nextCard(keep?: Extract<ReviewStep, { kind: "session" }>) {
+  private nextCard(
+    keep?: Extract<ReviewStep, { kind: "session" }>,
+    answered = 0,
+    total = 0
+  ) {
     const deck = this.state.deck;
     if (deck == null) return;
+    const sessionTotal = Math.max(
+      total,
+      answered + 1,
+      deck.newCount + deck.learnCount + deck.reviewCount
+    );
     this.setBusy(true);
     this.collapseDetails();
     void (async () => {
@@ -385,6 +807,8 @@ class ReviewStore {
               mediaFiles: queue.mediaFiles,
               startedAt: same?.startedAt ?? Date.now(),
               revealed: same?.revealed === true,
+              answered,
+              total: sessionTotal,
             },
           });
         }

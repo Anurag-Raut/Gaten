@@ -15,9 +15,13 @@ import com.gaten.app.wanikani.WaniKaniConnection
 import com.gaten.app.wanikani.WaniKaniFailure
 import com.gaten.app.wanikani.WaniKaniLookup
 import com.gaten.app.wanikani.WaniKaniRepository
+import com.gaten.app.wanikani.WaniKaniReviewItem
+import com.gaten.app.wanikani.WaniKaniReviewQueue
+import com.gaten.app.wanikani.WaniKaniReviewSubmission
 import com.gaten.app.wanikani.WaniKaniStatsResult
 import com.gaten.app.wanikani.WaniKaniSubject
 import com.gaten.app.wanikani.WaniKaniTarget
+import com.gaten.app.wanikani.readingAnswerHiragana
 import com.gaten.app.wanikani.waniKaniStats
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
@@ -32,11 +36,18 @@ import kotlinx.coroutines.launch
  * three ways to change it, and the lookup behind a tapped character — a kanji by its character, a
  * radical by its subject id, the same targets [com.gaten.app.ui.wanikani.WaniKaniDetail] offers.
  * Vocabulary is not a target the repository knows, so there is no vocabulary lookup here either.
+ * Beside that are the dashboard's numbers (`stats`, `refreshStats`) and the review screen's three
+ * pieces: the live queue (`reviewQueue`), the fold an answer is compared with (`readingAnswer`) and
+ * the finished review that goes back (`submitReview`). Only the ids and the counts of wrong answers
+ * ever cross to WaniKani; the reader's typed answers never leave the device, and the token never
+ * reaches JS.
  *
  * Failures follow the wrapped shapes: a lookup's `Unreachable` rejects with `WK_<failure>`
  * (OFFLINE, TIMEOUT, RATE_LIMITED, SERVER, TOO_LARGE, MALFORMED, STORAGE), and the states that are
  * answers rather than errors — no entry, restricted by the subscription, no token, a rejected
- * token — resolve as the lookup's `status`.
+ * token — resolve as the lookup's `status`. The stats read and the two review calls instead resolve
+ * *every* outcome as a `status`, a failure included (`{ status: "failed", failure }` with the
+ * seconds to wait when WaniKani asked for one), because a rejected promise cannot carry that wait.
  */
 class GatenWaniKaniModule(
     reactContext: com.facebook.react.bridge.ReactApplicationContext,
@@ -163,6 +174,104 @@ class GatenWaniKaniModule(
     }
 
     /**
+     * The review queue: the subjects due right now, for the review screen to ask one after another.
+     *
+     * Resolves `{ status: "available", items: [...] }` — one entry per due subject, the earliest
+     * first, in the shape [submitReview] and [readingAnswer] work with: `characters` absent for an
+     * image-only radical, `readings` empty (and `primaryReading` absent) for a subject that is not
+     * quizzed on its reading. The states that are answers rather than errors resolve too:
+     * `{ status: "empty" }`, `{ status: "needsToken" }`, `{ status: "authRejected" }`.
+     *
+     * A queue that could not be read *resolves* as `{ status: "failed", failure }`, with
+     * `retryAfterSeconds` when WaniKani asked for a wait: a rejected promise cannot carry that wait,
+     * and the screen shows the failure beside its own retry action.
+     */
+    @ReactMethod
+    fun reviewQueue(promise: Promise) {
+        scope.launch {
+            try {
+                when (val queue = WaniKaniRepository.reviewQueue(reactApplicationContext)) {
+                    is WaniKaniReviewQueue.Available -> promise.resolve(
+                        Arguments.createMap().apply {
+                            putString("status", "available")
+                            putArray(
+                                "items",
+                                Arguments.createArray().apply {
+                                    queue.items.forEach { pushMap(it.toJsMap()) }
+                                }
+                            )
+                        }
+                    )
+
+                    WaniKaniReviewQueue.Empty -> promise.resolve(status("empty"))
+                    WaniKaniReviewQueue.NeedsToken -> promise.resolve(status("needsToken"))
+                    WaniKaniReviewQueue.AuthRejected -> promise.resolve(status("authRejected"))
+                    is WaniKaniReviewQueue.Unreachable -> promise.resolve(
+                        unreachable(queue.failure, queue.retryAfterSeconds)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
+            }
+        }
+    }
+
+    /**
+     * [text] as an answer to compare with an item's `readings`: NFKC-composed, every whitespace
+     * removed, katakana folded to hiragana, and a fully-ASCII romaji answer transliterated — the same
+     * fold the queue's own readings were built with, so the screen can compare the two directly.
+     * Pure and synchronous: no network, no dispatcher.
+     */
+    @ReactMethod
+    fun readingAnswer(text: String, promise: Promise) {
+        promise.resolve(readingAnswerHiragana(text))
+    }
+
+    /**
+     * Sends one finished review back: the subject, and how many times its meaning and its reading
+     * were answered incorrectly — 0 and 0 for an item answered right first time. The typed answers
+     * themselves never leave the device.
+     *
+     * Resolves `{ status: "accepted" }`, `{ status: "needsToken" }` or `{ status: "authRejected" }`,
+     * and a submission that did not go through resolves as `{ status: "failed", failure }` with
+     * `retryAfterSeconds` when there is one — whether WaniKani refused the request or never answered
+     * it — exactly as [reviewQueue] does.
+     */
+    @ReactMethod
+    fun submitReview(
+        subjectId: Double,
+        incorrectMeaningAnswers: Double,
+        incorrectReadingAnswers: Double,
+        promise: Promise
+    ) {
+        scope.launch {
+            try {
+                when (
+                    val submission = WaniKaniRepository.submitReview(
+                        reactApplicationContext,
+                        subjectId.toInt(),
+                        incorrectMeaningAnswers.toInt(),
+                        incorrectReadingAnswers.toInt()
+                    )
+                ) {
+                    WaniKaniReviewSubmission.Submitted -> promise.resolve(status("accepted"))
+                    WaniKaniReviewSubmission.NeedsToken -> promise.resolve(status("needsToken"))
+                    WaniKaniReviewSubmission.AuthRejected -> promise.resolve(status("authRejected"))
+                    is WaniKaniReviewSubmission.Unreachable -> promise.resolve(
+                        unreachable(submission.failure, submission.retryAfterSeconds)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
+            }
+        }
+    }
+
+    /**
      * The account's own numbers for the dashboard: the level, what is due now, the next review time,
      * the next 24 hours by the hour, and the SRS spread of everything the account has started.
      *
@@ -194,11 +303,7 @@ class GatenWaniKaniModule(
                     WaniKaniStatsResult.NeedsToken -> promise.resolve(status("needsToken"))
                     WaniKaniStatsResult.AuthRejected -> promise.resolve(status("authRejected"))
                     is WaniKaniStatsResult.Unreachable -> promise.resolve(
-                        Arguments.createMap().apply {
-                            putString("status", "failed")
-                            putString("failure", result.failure.name)
-                            result.retryAfterSeconds?.let { putDouble("retryAfterSeconds", it.toDouble()) }
-                        }
+                        unreachable(result.failure, result.retryAfterSeconds)
                     )
                 }
             } catch (e: CancellationException) {
@@ -259,6 +364,29 @@ class GatenWaniKaniModule(
 
     private fun status(value: String): WritableMap =
         Arguments.createMap().apply { putString("status", value) }
+
+    /**
+     * A request that did not go through: the failure's name, and the wait WaniKani asked for when
+     * there is one.
+     */
+    private fun unreachable(failure: WaniKaniFailure, retryAfterSeconds: Long?): WritableMap =
+        Arguments.createMap().apply {
+            putString("status", "failed")
+            putString("failure", failure.name)
+            retryAfterSeconds?.let { putDouble("retryAfterSeconds", it.toDouble()) }
+        }
+
+    private fun WaniKaniReviewItem.toJsMap(): WritableMap = Arguments.createMap().apply {
+        putInt("subjectId", subjectId)
+        putString("type", type)
+        // Both are written even when they are null: the screen reads `characters` and
+        // `primaryReading` as nullable rather than as possibly absent.
+        putString("characters", characters)
+        putArray("meanings", meanings.toJsArray())
+        putString("primaryMeaning", primaryMeaning)
+        putArray("readings", readings.toJsArray())
+        putString("primaryReading", primaryReading)
+    }
 
     private fun WaniKaniConnection.toJsMap(): WritableMap = Arguments.createMap().apply {
         when (this@toJsMap) {

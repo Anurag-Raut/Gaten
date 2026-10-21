@@ -5,16 +5,18 @@
  */
 
 /**
- * The app shell: four tabs, each with its own persistent stack, the custom bottom bar, the theme
- * from the bridge, and the two pieces of cross-tab coordination the Compose shell owned — the
- * settings page an outside launch asked for, and whether a review session currently holds the
- * Review tab.
+ * The app shell: three tabs, each with its own persistent stack, the custom bottom bar, the theme
+ * from the bridge, and the one piece of cross-tab coordination the Compose shell owned — the settings
+ * page an outside launch asked for.
  *
- * A settings page opened from inside the app never crosses a tab: it is pushed onto the stack of the
- * tab the reader is on, so the move is the platform's own push and Back returns them to the card or
- * the word they left. Only an outside launch selects the Settings tab for a page.
+ * A page opened from inside the app never crosses a tab: it is pushed onto the stack of the tab the
+ * reader is on, so the move is the platform's own push and Back returns them to the card or the word
+ * they left. Only an outside launch selects the Settings tab for a page.
+ *
+ * Studying is one of those pushed pages, not a tab: Home's two service cards ask the review store for
+ * a step and push the flow onto Home's own stack.
  */
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo} from "react";
 import {
   DeviceEventEmitter,
   StatusBar,
@@ -50,16 +52,14 @@ import {
   SearchRadicalScreen,
   SearchWordScreen,
 } from "./SearchScreen";
-import {ReviewTab} from "./ReviewScreen";
+import {ReviewScreen} from "./ReviewScreen";
 import {SettingsTab, SettingsPageScreen} from "./SettingsScreen";
-import {SessionContext} from "./session";
 import {
   SETTINGS_PAGES,
   freshSettingsInstance,
   openSettingsPage,
   type AnalyticsStackParamList,
   type HomeStackParamList,
-  type ReviewStackParamList,
   type RootTabParamList,
   type SettingsPageName,
   type SettingsPageParams,
@@ -70,7 +70,7 @@ import * as Haptics from "../native/GatenHaptics";
 import {reviewStore} from "./review/review-store";
 import * as searchStore from "./search/searchStore";
 
-/** The Home root's props: its own stack plus the tab level above it, for the Review tab's card. */
+/** The Home root's props: its own stack plus the tab level above it, for the review flow's page. */
 type HomeRouteProps<RouteName extends keyof HomeStackParamList> =
   CompositeScreenProps<
     NativeStackScreenProps<HomeStackParamList, RouteName>,
@@ -86,6 +86,19 @@ type HomeStackNavigation = NativeStackScreenProps<
 function topRoute(navigation: HomeStackNavigation) {
   const state = navigation.getState();
   return state.routes[state.index];
+}
+
+/**
+ * Opens the review flow above Home: `ask` moves the store to the step this page is to draw, and then
+ * the page is pushed. A second tap while the flow is already on top must not stack a second copy of
+ * it — nor read the collection a second time — which is the same guard the word route uses.
+ */
+function openReview(navigation: HomeStackNavigation, ask: () => void): void {
+  if (topRoute(navigation).name === "Review") {
+    return;
+  }
+  ask();
+  navigation.push("Review");
 }
 
 /**
@@ -170,13 +183,22 @@ function HomeRoute({navigation}: HomeRouteProps<"HomeTab">) {
         }
         navigation.push("Word", {entryId});
       }}
-      onOpenSettingsPage={(page) => openSettingsPage(navigation, page)}
-      // The Review tab's own ground — the picker — wherever its stack was left.
-      onOpenReview={() =>
-        navigation.navigate("Review", {screen: "ReviewTab", pop: true})
-      }
+      // The review flow's two service screens, each opened on its own step: Home's Anki card asks the
+      // store for the Anki step and then pushes the flow, so the reader lands on the deck list (or on
+      // the AnkiDroid state that stops it) rather than on a page that has to be tapped again.
+      onOpenAnki={() => openReview(navigation, () => reviewStore.openAnki())}
+      onOpenWaniKani={() => openReview(navigation, () => reviewStore.openWaniKani())}
     />
   );
+}
+
+/**
+ * The review flow, on Home's own stack: AnkiDroid's deck list and cards, or WaniKani's connection
+ * screen and queue. Which of the two it is — and which step of it — is the store's own state, set
+ * before this page was pushed; Back pops the page, which is the whole of leaving a step.
+ */
+function ReviewRoute({navigation}: NativeStackScreenProps<HomeStackParamList, "Review">) {
+  return <ReviewScreen onExit={() => navigation.goBack()} />;
 }
 
 function HomeWordRoute({
@@ -249,7 +271,7 @@ const STACK_SCREEN_OPTIONS: NativeStackNavigationOptions = {
 };
 
 /**
- * The four tabs are one horizontal pager — `@react-navigation/material-top-tabs`, its bar at the
+ * The three tabs are one horizontal pager — `@react-navigation/material-top-tabs`, its bar at the
  * bottom — so a tab change is the page itself sliding across at the gesture's own pace, exactly as
  * a page moves inside a tab. The pager is the library's, its `position` value is what the bar's
  * indicator is read from, and nothing about the move is animated by hand.
@@ -257,28 +279,28 @@ const STACK_SCREEN_OPTIONS: NativeStackNavigationOptions = {
  * Two things on it are gated, both as screen options so they follow the focused tab:
  *
  * - `swipeEnabled` only while that tab is on its own ground. A page pushed inside a tab (a word, a
- *   kanji, a settings page) or a running review session owns the screen whole, and a swipe there
- *   would be fighting the page's own horizontal gestures — the kanji strip, a card's own scrollers.
+ *   kanji, a settings page, the review flow) owns the screen whole, and a swipe there would be
+ *   fighting the page's own horizontal gestures — the kanji strip, a card's own scrollers.
  * - `animationEnabled` off when the system asks for reduced motion, so a tap lands on the spot
  *   instead of sliding there. A swipe is the reader's own gesture and stays available.
  *
  * Every tab's scene is mounted up front (`lazy: false`). With lazy mounting, a tap that crosses a
  * tab the reader has never opened mounts that screen — its native stack and its first render —
  * inside the pager's own animation, which is exactly where a dropped frame is most visible. A
- * four-tab bar is small enough to keep all four scenes alive; each screen's data work is already
+ * three-tab bar is small enough to keep all three scenes alive; each screen's data work is already
  * gated on focus, so nothing is fetched until its tab is actually selected.
  */
 const Tab = createMaterialTopTabNavigator<RootTabParamList>();
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const AnalyticsStack = createNativeStackNavigator<AnalyticsStackParamList>();
-const ReviewStack = createNativeStackNavigator<ReviewStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
 function HomeTabStack() {
   return (
     <HomeStack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
       <HomeStack.Screen name="HomeTab" component={HomeRoute} />
+      <HomeStack.Screen name="Review" component={ReviewRoute} />
       <HomeStack.Screen name="Word" component={HomeWordRoute} />
       <HomeStack.Screen name="Kanji" component={HomeKanjiRoute} />
       <HomeStack.Screen name="Radical" component={HomeRadicalRoute} />
@@ -293,14 +315,6 @@ function AnalyticsTabStack() {
       <AnalyticsStack.Screen name="AnalyticsTab" component={AnalyticsRoute} />
       <AnalyticsStack.Screen name="SettingsPage" component={SettingsPageRoute} />
     </AnalyticsStack.Navigator>
-  );
-}
-
-function ReviewTabStack() {
-  return (
-    <ReviewStack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
-      <ReviewStack.Screen name="ReviewTab" component={ReviewTab} />
-    </ReviewStack.Navigator>
   );
 }
 
@@ -324,30 +338,26 @@ function SettingsPageRoute({route}: {route: {params: SettingsPageParams}}) {
 
 /**
  * Keeps the pager still while the focused tab is not on its own ground: a page pushed inside a tab
- * (a word, a settings page) must not be swiped away, and a live review session owns the screen
- * outright.
+ * (a word, a kanji, a settings page, the review flow) must not be swiped away.
  *
  * Applied through `navigation.setOptions` rather than declared in the navigator's `screenOptions`
  * alone, because the declarative gate did not hold: on the moto g35 a horizontal drag on the pushed
  * word detail moved the pager to the next tab. `setOptions` is the documented way to change a mounted
- * screen's options, and the state it is computed from is the one the bar already hides itself with —
+ * screen's options, and the depth it is computed from is the one the bar already hides itself with —
  * which is demonstrably live.
  */
 function SwipeGate({
   state,
   descriptors,
-  sessionActive,
-}: Pick<MaterialTopTabBarProps, "state" | "descriptors"> & {
-  sessionActive: boolean;
-}) {
+}: Pick<MaterialTopTabBarProps, "state" | "descriptors">) {
   const focused = state.routes[state.index];
   const depth = focused?.state?.index ?? 0;
   // The focused tab screen's own navigation prop: `setOptions` is what changes a mounted screen's
   // options, and it targets exactly this route.
   const setOptions = descriptors[focused?.key ?? ""]?.navigation.setOptions;
   useEffect(() => {
-    setOptions?.({swipeEnabled: !sessionActive && depth === 0});
-  }, [setOptions, sessionActive, depth]);
+    setOptions?.({swipeEnabled: depth === 0});
+  }, [setOptions, depth]);
   return null;
 }
 
@@ -357,18 +367,10 @@ export function AppShell() {
   const systemScheme = useColorScheme();
   const dark = mode === "Dark" || (mode === "System" && systemScheme === "dark");
   const navigationRef = useNavigationContainerRef<RootTabParamList>();
-  const [sessionActive, setSessionActive] = useState(
-    reviewStore.sessionActive(),
-  );
   // The pager's own first guess at its size, so the bar's indicator is already at the right tab on
   // the first frame — the navigator measures itself a frame later. Only the width matters; the bar's
   // height comes from its own constant and the scene takes the rest.
   const {width} = useWindowDimensions();
-
-  useEffect(() => {
-    const subscription = reviewStore.onSessionActive(setSessionActive);
-    return () => subscription.remove();
-  }, []);
 
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
@@ -455,13 +457,12 @@ export function AppShell() {
     };
   }, [colors, mode, systemScheme]);
 
-  const session = useMemo(() => ({sessionActive}), [sessionActive]);
   // A tap on a tab slides the pager to it (that is what `animationEnabled` means to the library);
   // with reduced motion on it lands on the spot, as every other animation in the app does.
   const reducedMotion = useReducedMotion();
 
   return (
-    <SessionContext.Provider value={session}>
+    <>
       <StatusBar
         barStyle={dark ? "light-content" : "dark-content"}
         backgroundColor={colors.background}
@@ -481,7 +482,6 @@ export function AppShell() {
               <SwipeGate
                 state={props.state}
                 descriptors={props.descriptors}
-                sessionActive={sessionActive}
               />
               <BottomBar
                 {...props}
@@ -498,15 +498,14 @@ export function AppShell() {
             headerShown: false,
             lazy: false,
             animationEnabled: !reducedMotion,
-            swipeEnabled: !sessionActive && (route.state?.index ?? 0) === 0,
+            swipeEnabled: (route.state?.index ?? 0) === 0,
           })}
         >
           <Tab.Screen name="Home" component={HomeTabStack} />
           <Tab.Screen name="Analytics" component={AnalyticsTabStack} />
-          <Tab.Screen name="Review" component={ReviewTabStack} />
           <Tab.Screen name="Settings" component={SettingsTabStack} />
         </Tab.Navigator>
       </NavigationContainer>
-    </SessionContext.Provider>
+    </>
   );
 }

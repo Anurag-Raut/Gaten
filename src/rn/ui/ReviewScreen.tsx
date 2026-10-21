@@ -5,16 +5,27 @@
  */
 
 /**
- * Reviews AnkiDroid's own decks inside Gaten, with AnkiDroid doing the scheduling: the queue, the
- * intervals on the rating buttons and the answer itself all come from AnkiDroid's content
- * provider, and Gaten keeps no progress of its own. The RN port of AnkiReviewScreen.kt; the
- * session's state lives in review-store, outside any component, so a tab switch keeps the card,
- * its timer and its open WaniKani details.
+ * The review flow's page: AnkiDroid's deck list and card session, and WaniKani's connection and
+ * review — one step at a time, all of them on this page's own ground.
  *
- * The flow is AnkiDroid's: pick a deck (the configured Gaten deck preselected), see the question,
- * reveal the answer, rate it once. Each rating is sent once and only once; the next card always
- * comes from a fresh query. WaniKani rides on the answer side only, from the note's own raw
+ * The page is pushed from Home's two service cards, and the step it draws is the review store's own
+ * state, decided before the push. Back is the page's pop, which is the whole of leaving a step; there
+ * is no landing page underneath it to come back to.
+ *
+ * Anki is AnkiDroid's own: the queue, the intervals on the rating buttons and the answer itself all
+ * come from its content provider, and Gaten keeps no progress of its own. The RN port of
+ * AnkiReviewScreen.kt; the session's state lives in review-store, outside any component, so leaving
+ * the page mid-session keeps the card, its timer and its open WaniKani details.
+ *
+ * The flow is AnkiDroid's: pick a deck (the deck Gaten exports to first, if it is there), see the
+ * question, reveal the answer, rate it once. Each rating is sent once and only once; the next card
+ * always comes from a fresh query. WaniKani rides on the answer side only, from the note's own raw
  * fields — the card the reader is being graded on cannot leak its answer through a kanji page.
+ *
+ * The card is drawn as AnkiDroid rendered it, inside the workflow's own chrome: the design's compact
+ * header, its thin progress line and its pinned actions. The prototype's centred question is a
+ * mockup of a five-word card, and the card's own template decides where its text goes — what the
+ * chrome fixes is where the deck's name, the reader's place and the one action they have live.
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
@@ -26,38 +37,37 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
-import {
-  NavigationProp,
-  useIsFocused,
-  useNavigation,
-} from "@react-navigation/native";
+import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as Anki from "../native/GatenAnki";
 import * as GatenHaptics from "../native/GatenHaptics";
 import {GatenCardWebView} from "../native/GatenCardWebView";
-import {distinctIdeographs, Icon, IconButton, KanjiStrip} from "./components";
+import {distinctIdeographs, Icon, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
-import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "./tokens";
+import {MAX_CONTENT_WIDTH, spacing, typeScale} from "./tokens";
 import {useTheme, type Theme} from "./theme";
-import {DialogShell} from "./settings/settings-components";
+import {DialogShell, OutlinedButton} from "./settings/settings-components";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
-import type {RootTabParamList} from "./navigation";
-import {type ReviewFailure, type ReviewStep} from "./review/review-store";
-import {reviewActions, useAnkiReview} from "./review/useAnkiReview";
+import {stepDepth, type ReviewFailure, type ReviewStep} from "./review/review-store";
+import {reviewActions, useReview} from "./review/useReview";
 import {StepTransition} from "./review/StepTransition";
+import {AnkiDeckPicker} from "./review/AnkiDeckPicker";
+import {WaniKaniConnect} from "./review/WaniKaniConnect";
+import {WaniKaniReview} from "./review/WaniKaniReview";
 import {
+  ActionFooter,
   BusyRow,
-  CardSideTag,
-  CountTag,
   FilledAction,
-  NoteCard,
-  OutlinedAction,
+  ProgressLine,
   RatingBar,
-  StateCard,
-  TextAction,
+  StateBlock,
+  StepEnter,
+  SubHeader,
 } from "./review/review-ui";
-import type {AnkiDeckResult} from "../native/GatenAnki";
+import type {WaniKaniFailure} from "../native/GatenWaniKani";
 
 /** How long a rating's answer flash lasts: half fading in, half fading out. */
 const FLASH_MS = 250;
@@ -68,7 +78,7 @@ const FLASH_ALPHA = 0.18;
 /** The curve a press — and the flash's half-sweep — answers with. */
 const FLASH_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 
-/** The line for a failure, without any of the provider's internals. */
+/** The line for an AnkiDroid failure, without any of the provider's internals. */
 function failureMessage(failure: ReviewFailure, detail?: string): string {
   if (failure === "PROVIDER" && detail != null) {
     return `AnkiDroid could not do that: ${detail}`;
@@ -89,143 +99,145 @@ function failureMessage(failure: ReviewFailure, detail?: string): string {
   }
 }
 
+/** Why a WaniKani read failed, in the same words the rest of the app uses for it. */
+const WANIKANI_FAILURE_LABELS: Record<WaniKaniFailure, string> = {
+  OFFLINE: "Gaten could not reach WaniKani",
+  TIMEOUT: "the request timed out",
+  RATE_LIMITED: "WaniKani is limiting requests just now",
+  SERVER: "WaniKani reported a server error",
+  TOO_LARGE: "the answer was too large to keep",
+  MALFORMED: "WaniKani sent something Gaten could not read",
+  STORAGE: "this device could not save the answer",
+};
+
+/** When WaniKani's next reviews come up: a clock time today, and a weekday when it is later. */
+function nextReviewLabel(at: number): string {
+  const when = new Date(at);
+  const sameDay = when.toDateString() === new Date().toDateString();
+  return sameDay
+    ? when.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})
+    : when.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"});
+}
+
 /** Opens AnkiDroid itself, for the media or the session this screen cannot show. */
 function openAnkiDroid() {
   void Anki.openAnkiDroid().catch(() => {});
 }
 
-/** The Review tab's screen, as the shell mounts it. */
-export function ReviewTab() {
+/**
+ * The body of one of the page's own states: centred in the display it owns outright. The page is
+ * pushed, so the shell's floating bar is not under it and nothing has to be reserved for it.
+ */
+function stateBody(bottomInset: number, contentInset: number): StyleProp<ViewStyle> {
+  return [
+    styles.centred,
+    {
+      paddingHorizontal: contentInset,
+      paddingBottom: bottomInset + spacing.l,
+    },
+  ];
+}
+
+/** The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it. */
+export function ReviewScreen({onExit}: {onExit: () => void}) {
   const theme = useTheme();
   const {colors} = theme;
-  const insets = useSafeAreaInsets();
-  const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
-  const review = useAnkiReview();
-  const navigation = useNavigation<NavigationProp<RootTabParamList>>();
+  const review = useReview();
   const isFocused = useIsFocused();
   const [confirmLeave, setConfirmLeave] = useState(false);
-
-  const onClose = useCallback(() => {
-    navigation.navigate("Home");
-  }, [navigation]);
+  const step = review.step;
 
   /**
-   * Back from this screen. Inside a deck it stays inside the review flow: with a card on screen
-   * it asks first, and confirming goes back to the picker, as does a card that failed. While a
-   * card is being read or an answer is being written, Back waits for it instead — the same
-   * window the hidden bottom bar agrees with. Everything else leaves for Home at once.
+   * Back from this screen. With a card on screen it asks first, and confirming goes back to the
+   * picker, as does a card that failed: leaving a session is not leaving the deck. Every other step
+   * is the page's own pop — the deck list, WaniKani's connection screen and its queue were all opened
+   * from Home, and Back returns there. Nothing unsent is lost by any of it: Anki grades only what was
+   * rated, and a WaniKani review is sent when a subject is finished.
    */
   const leave = useCallback(() => {
-    if (review.busy && review.sessionActive) return;
-    if (review.step.kind === "session") {
-      setConfirmLeave(true);
-      return;
+    if (review.busy) return;
+    switch (review.step.kind) {
+      case "session":
+        setConfirmLeave(true);
+        return;
+      case "failed":
+        if (review.deck != null) {
+          reviewActions.changeDeck();
+          return;
+        }
+        onExit();
+        return;
+      default:
+        onExit();
     }
-    if (review.step.kind === "failed" && review.sessionActive) {
-      review.actions.changeDeck();
-      return;
-    }
-    onClose();
-  }, [review.busy, review.sessionActive, review.step, review.actions, onClose]);
+  }, [review.busy, review.step.kind, review.deck, onExit]);
 
-  // Registered only while a card session is open and this screen is the one on top — an
-  // outgoing scene can remain mounted through a transition; only the current page guards Back.
+  // Back is guarded only where leaving is a decision: a card on screen, or a failure that belongs to
+  // a deck the reader is still in. Every other step is the page's own pop, which the stack already
+  // performs — a handler there would only take the platform's Back away and hand it straight back.
   useEffect(() => {
-    if (!review.sessionActive || !isFocused) return;
+    if (!isFocused) return;
+    const insideADeck =
+      review.step.kind === "session" ||
+      (review.step.kind === "failed" && review.deck != null);
+    if (!insideADeck) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       leave();
       return true;
     });
     return () => subscription.remove();
-  }, [review.sessionActive, isFocused, leave]);
+  }, [isFocused, review.step.kind, review.deck, leave]);
 
   const requestAnkiPermission = useCallback(() => {
     void Anki.requestPermission()
       .then((granted) => {
-        if (granted) reviewActions.openDecks();
+        if (granted) reviewActions.openAnki();
         else reviewActions.permissionDenied();
       })
       .catch(() => reviewActions.permissionDenied());
   }, []);
 
-  const step = review.step;
+  // The side a screen arrives from: deeper than the step before it means it was opened from here,
+  // and a move back enters from the leading edge.
+  const depth = stepDepth(step);
+  const lastDepth = useRef(depth);
+  const forward = depth >= lastDepth.current;
+  useEffect(() => {
+    lastDepth.current = depth;
+  }, [depth]);
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background}]}>
-      {/* The screen's own bar: deck name or the bare title, Back, and Change deck. */}
-      <View
-        style={[
-          styles.topBar,
-          {
-            backgroundColor: colors.surface,
-            // The Compose top bar is 64dp tall *below* the status bar. Padding alone would leave
-            // the title centred in what is left of a fixed 64 — higher than the Kotlin's, and a
-            // bar 16dp short of it.
-            minHeight: 64 + insets.top,
-            paddingTop: insets.top,
-          },
-        ]}
-      >
-        <BackButton theme={theme} onPress={leave} />
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]}
-        >
-          {review.deck?.name ?? "Review cards"}
-        </Text>
-        {review.deck != null && (
-          <View style={styles.topBarAction}>
-            <TextAction
-              theme={theme}
-              label="Change deck"
-              disabled={review.busy}
-              onPress={() => reviewActions.changeDeck()}
-            />
-          </View>
-        )}
-        {/* With a card on screen, one quiet way out to AnkiDroid itself: a note type this app
-            cannot draw, or a card that is only media, is complete there and blank here. It is an
-            action, not a warning — nothing is claimed about what the card holds. */}
-        {review.step.kind === "session" && (
-          <IconButton
-            name="open_in_new"
-            accessibilityLabel="Open in AnkiDroid"
-            onPress={openAnkiDroid}
-          />
-        )}
-      </View>
-
-      {/* The step is drawn directly: no page slide and no animated size between the deck picker,
-          the session and its states, so starting a deck is instant, revealing the answer changes
-          nothing but the card, and a step is never remounted by a change of its own content. */}
-      <View style={styles.flex}>
-        {step.kind === "starting" ? (
-          <View style={[styles.pagePadding, {paddingHorizontal: contentInset}]}>
-            <StateCard theme={theme} spin icon="refresh" title="Reading AnkiDroid…" />
-          </View>
+      <StepEnter pageKey={step.kind} forward={forward}>
+        {step.kind === "opening" ? (
+          <OpeningView source={step.source} onBack={onExit} />
         ) : step.kind === "blocked" ? (
-          <BlockedView theme={theme} failure={step.failure} onGrant={requestAnkiPermission} />
-        ) : step.kind === "decks" ? (
-          <DeckPicker
+          <BlockedView
             theme={theme}
-            decks={step.decks}
-            configured={step.configuredDeckName}
+            failure={step.failure}
             busy={review.busy}
+            onBack={leave}
+            onGrant={requestAnkiPermission}
+          />
+        ) : step.kind === "decks" ? (
+          <AnkiDeckPicker
+            decks={step.decks}
+            busy={review.busy}
+            onBack={leave}
             onStart={(deck) => reviewActions.startDeck(deck)}
           />
         ) : step.kind === "session" ? (
-          <SessionView
+          <AnkiSession
             theme={theme}
             session={step}
             busy={review.busy}
             expandedKanji={review.expandedKanji}
             expandedRadical={review.expandedRadical}
+            onBack={leave}
             onReveal={() => reviewActions.reveal()}
             onGrade={(ease) => {
-              // Submitting a rating changes the state of the card, so it ticks — the same tick
-              // a chip's selection gets, not a firmer one.
+              // Submitting a rating changes the state of the card, so it ticks — the same tick a
+              // chip's selection gets, not a firmer one.
               void GatenHaptics.play("tick").catch(() => {});
               reviewActions.grade(step, ease);
             }}
@@ -240,24 +252,45 @@ export function ReviewTab() {
             }}
             onCloseDetails={() => reviewActions.closeDetails()}
           />
-        ) : step.kind === "done" ? (
-          <DoneView
-            theme={theme}
-            deckName={step.deckName}
+        ) : step.kind === "wkConnect" ? (
+          <WaniKaniConnect
+            rejected={step.rejected}
             busy={review.busy}
-            onFinish={onClose}
-            onChangeDeck={() => reviewActions.changeDeck()}
+            onBack={leave}
+            onConnect={(token) => reviewActions.connectWaniKani(token)}
           />
+        ) : step.kind === "wkReview" ? (
+          <WaniKaniReview
+            session={step.session}
+            busy={review.busy}
+            onBack={leave}
+            onEntry={(text) => reviewActions.wkEntry(text)}
+            onCheck={() => reviewActions.wkCheck()}
+            onRetrySubmit={() => reviewActions.wkRetrySubmit()}
+          />
+        ) : step.kind === "wkDone" ? (
+          <WaniKaniDoneView theme={theme} step={step} onBack={leave} />
+        ) : step.kind === "wkFailed" ? (
+          <WaniKaniFailedView
+            theme={theme}
+            step={step}
+            busy={review.busy}
+            onBack={leave}
+            onRetry={() => reviewActions.retryWaniKani()}
+          />
+        ) : step.kind === "done" ? (
+          <DoneView theme={theme} deckName={step.deckName} busy={review.busy} onFinish={leave} />
         ) : (
           <FailedView
             theme={theme}
             step={step}
             busy={review.busy}
+            onBack={leave}
             onRetry={() => reviewActions.retry()}
             onChangeDeck={() => reviewActions.changeDeck()}
           />
         )}
-      </View>
+      </StepEnter>
 
       {/* A card is on screen, so leaving is worth one question — never a grade, never a discard. */}
       {confirmLeave && (
@@ -294,17 +327,59 @@ export function ReviewTab() {
   );
 }
 
-/** The top bar's back arrow. */
-function BackButton({theme, onPress}: {theme: Theme; onPress: () => void}) {
+/** One text-only action, for the moves beside a surface's main one. */
+function TextAction({
+  theme,
+  label,
+  onPress,
+}: {
+  theme: Theme;
+  label: string;
+  onPress: () => void;
+}) {
   return (
     <PressableScale
       accessibilityRole="button"
-      accessibilityLabel="Back"
+      accessibilityLabel={label}
       onPress={onPress}
-      style={styles.backButton}
+      style={styles.textAction}
     >
-      <Icon name="arrow_back" color={theme.colors.onSurfaceVariant} />
+      <Text style={[typeScale.labelLarge, {color: theme.colors.accent}]}>{label}</Text>
     </PressableScale>
+  );
+}
+
+/**
+ * The read that precedes a step: the page is pushed before AnkiDroid's status or WaniKani's token has
+ * answered, so it says what is being opened rather than drawing whatever step the reader left behind.
+ */
+function OpeningView({
+  source,
+  onBack,
+}: {
+  source: "anki" | "waniKani";
+  onBack: () => void;
+}) {
+  const {colors} = useTheme();
+  const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  return (
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader title={source === "anki" ? "Anki" : "WaniKani"} onBack={onBack} />
+      </View>
+      <View
+        style={[
+          styles.centred,
+          {paddingHorizontal: contentInset, paddingBottom: insets.bottom + spacing.l},
+        ]}
+      >
+        <BusyRow
+          message={source === "anki" ? "Opening AnkiDroid…" : "Reading WaniKani…"}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -312,242 +387,50 @@ function BackButton({theme, onPress}: {theme: Theme; onPress: () => void}) {
 function BlockedView({
   theme,
   failure,
+  busy,
+  onBack,
   onGrant,
 }: {
   theme: Theme;
   failure: ReviewFailure;
+  busy: boolean;
+  onBack: () => void;
   onGrant: () => void;
 }) {
-  const {width} = useWindowDimensions();
+  const {colors} = theme;
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
   const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const title =
+    failure === "NOT_INSTALLED"
+      ? "AnkiDroid is not installed"
+      : failure === "NOT_SET_UP"
+        ? "AnkiDroid is not set up"
+        : failure === "PERMISSION"
+          ? "AnkiDroid access is needed"
+          : "Review unavailable";
   return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={[
-        styles.pagePadding,
-        {
-          paddingHorizontal: contentInset,
-          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
-        },
-      ]}
-    >
-      <StateCard
-        theme={theme}
-        icon={failure === "PERMISSION" ? "key" : "error"}
-        title="Review unavailable"
-        body={failureMessage(failure)}
-      >
-        {failure === "PERMISSION" && (
-          <FilledAction
-            theme={theme}
-            label="Allow AnkiDroid access"
-            onPress={onGrant}
-          />
-        )}
-        {failure === "NOT_SET_UP" && (
-          <OutlinedAction
-            theme={theme}
-            label="Open AnkiDroid"
-            onPress={openAnkiDroid}
-          />
-        )}
-      </StateCard>
-    </ScrollView>
-  );
-}
-
-/**
- * The deck picker: every deck AnkiDroid reports, with its own counts, and the deck Gaten exports
- * to preselected. The counts are AnkiDroid's, not a promise about this session.
- */
-function DeckPicker({
-  theme,
-  decks,
-  configured,
-  busy,
-  onStart,
-}: {
-  theme: Theme;
-  decks: AnkiDeckResult[];
-  configured: string;
-  busy: boolean;
-  onStart: (deck: AnkiDeckResult) => void;
-}) {
-  const {colors} = theme;
-  const {width} = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  // The reader's own pick, once they have made one. Until then the selection is what the read
-  // arrived with — the deck Gaten exports to, or the first — so the preselection is in place on the
-  // picker's first frame rather than moving under the reader a tick later.
-  const [chosenId, setChosenId] = useState<number | null>(null);
-  const selected =
-    decks.find((deck) => deck.id === chosenId) ??
-    decks.find((deck) => deck.name === configured) ??
-    decks[0] ??
-    null;
-
-  return (
-    <View
-      style={[
-        styles.picker,
-        {
-          paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset,
-          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
-        },
-      ]}
-    >
-      <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
-        Choose a deck
-      </Text>
-      <Text
-        style={[
-          typeScale.bodyMedium,
-          {color: colors.onSurfaceVariant, marginTop: spacing.s},
-        ]}
-      >
-        AnkiDroid keeps the schedule. Choose a deck to review what is due now.
-      </Text>
-      {decks.length === 0 ? (
-        <Text
-          style={[
-            typeScale.bodyMedium,
-            {color: colors.onSurfaceVariant, marginTop: spacing.l},
-          ]}
-        >
-          AnkiDroid has no decks yet.
-        </Text>
-      ) : (
-        <>
-          <ScrollView
-            accessibilityRole="radiogroup"
-            style={styles.flex}
-            contentContainerStyle={{paddingTop: spacing.xl}}
-          >
-            {decks.map((deck) => (
-              <DeckRow
-                key={deck.id}
-                theme={theme}
-                deck={deck}
-                selected={deck.id === selected?.id}
-                configured={deck.name === configured}
-                onSelect={() => {
-                  // A selection *change*: tapping the deck already selected changes nothing, so
-                  // it gives nothing back.
-                  if (deck.id === selected?.id) return;
-                  setChosenId(deck.id);
-                  void GatenHaptics.play("tick").catch(() => {});
-                }}
-              />
-            ))}
-          </ScrollView>
-          {/* The list and the action below it are 12dp apart, as the picker has always been. */}
-          <View style={styles.gapM} />
-          {/* The tap's own answer, while the chosen deck's first card is on its way: the button
-              below is already disabled by then, so this is what says the screen is working rather
-              than stuck. It sits above the button, which stays where the finger left it. */}
-          {busy ? (
-            <>
-              <BusyRow theme={theme} message="Reading AnkiDroid…" />
-              <View style={styles.gapS} />
-            </>
-          ) : null}
-          <FilledAction
-            theme={theme}
-            label="Start reviewing"
-            disabled={selected == null || busy}
-            minHeight={52}
-            onPress={() => {
-              if (selected == null) return;
-              onStart(selected);
-            }}
-          />
-          <View style={styles.bottomGap} />
-        </>
-      )}
-    </View>
-  );
-}
-
-/**
- * One deck row: a radio, its name, AnkiDroid's own counts as tags, and — when it is the deck Gaten
- * exports to — what that means. The whole row is the target and states the radio role.
- */
-function DeckRow({
-  theme,
-  deck,
-  selected,
-  configured,
-  onSelect,
-}: {
-  theme: Theme;
-  deck: AnkiDeckResult;
-  selected: boolean;
-  configured: boolean;
-  onSelect: () => void;
-}) {
-  const {colors} = theme;
-  return (
-    <PressableScale
-      accessibilityRole="radio"
-      accessibilityLabel={deck.name}
-      accessibilityState={{checked: selected, disabled: false}}
-      onPress={onSelect}
-      style={[
-        styles.deckCard,
-        {borderBottomColor: colors.outlineVariant},
-      ]}
-    >
-      <View style={styles.deckHead}>
-        <RadioDot theme={theme} selected={selected} />
-        <Text
-          numberOfLines={2}
-          ellipsizeMode="tail"
-          style={[
-            typeScale.titleSmall,
-            {
-              color: colors.onSurface,
-              flex: 1,
-              marginStart: spacing.s,
-            },
-          ]}
-        >
-          {deck.name}
-        </Text>
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader title="Anki" onBack={onBack} />
       </View>
-      <View style={styles.tagRow}>
-        <CountTag theme={theme} text={`${deck.newCount} new`} />
-        <CountTag theme={theme} text={`${deck.learnCount} learning`} />
-        <CountTag theme={theme} text={`${deck.reviewCount} to review`} />
-        {deck.filtered && <CountTag theme={theme} text="filtered" />}
-      </View>
-      {configured && (
-        <Text
-          style={[
-            typeScale.labelMedium,
-            {color: colors.onSurfaceVariant, marginTop: spacing.m},
-          ]}
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={stateBody(insets.bottom, contentInset)}
+      >
+        <StateBlock
+          mark={<Icon name={failure === "PERMISSION" ? "key" : "error"} size={30} color={colors.onSurfaceVariant} />}
+          title={title}
+          body={failureMessage(failure)}
         >
-          Gaten exports here
-        </Text>
-      )}
-    </PressableScale>
-  );
-}
-
-/** The drawn radio, decoration over the row that is the real target. */
-function RadioDot({theme, selected}: {theme: Theme; selected: boolean}) {
-  const {colors} = theme;
-  return (
-    <View
-      style={[
-        styles.radioOuter,
-        {borderColor: selected ? colors.accent : colors.onSurfaceVariant},
-      ]}
-    >
-      {selected && (
-        <View style={[styles.radioInner, {backgroundColor: colors.accent}]} />
-      )}
+          {failure === "PERMISSION" && (
+            <FilledAction label="Allow AnkiDroid access" disabled={busy} onPress={onGrant} />
+          )}
+          {failure === "NOT_SET_UP" && (
+            <OutlinedButton label="Open AnkiDroid" onPress={openAnkiDroid} />
+          )}
+        </StateBlock>
+      </ScrollView>
     </View>
   );
 }
@@ -555,12 +438,13 @@ function RadioDot({theme, selected}: {theme: Theme; selected: boolean}) {
 /** One card: its own rendered HTML, the kanji of the note's fields under it, and the actions
  *  pinned at the bottom. WaniKani opens in place: a kanji expands its details under the strip
  *  as a page of its own, and a radical inside opens one level deeper. */
-function SessionView({
+function AnkiSession({
   theme,
   session,
   busy,
   expandedKanji,
   expandedRadical,
+  onBack,
   onReveal,
   onGrade,
   onKanji,
@@ -572,6 +456,7 @@ function SessionView({
   busy: boolean;
   expandedKanji: string | null;
   expandedRadical: number | null;
+  onBack: () => void;
   onReveal: () => void;
   onGrade: (ease: number) => void;
   onKanji: (character: string) => void;
@@ -580,6 +465,8 @@ function SessionView({
 }) {
   const {colors} = theme;
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   const card = session.card;
 
   // The kanji the note's own fields hold, in first-occurrence order across all of them. The
@@ -650,20 +537,30 @@ function SessionView({
     }
   }, [detailsOpen]);
 
+  const total = Math.max(1, session.total);
+  const place = Math.min(session.answered + 1, total);
+
   return (
-    <View style={styles.flex}>
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader
+          title={card.deckName}
+          right={`${place} of ${total}`}
+          onBack={onBack}
+        />
+        <ProgressLine value={place / total} />
+      </View>
       {/* The deck space is one surface: the card, its kanji strip and the inline details scroll
           together. A one-word question sits in the middle of the screen; a tall card scrolls. */}
       <ScrollView
         ref={scrollRef}
-        style={styles.flex}
+        style={styles.screen}
         onScroll={(e) => {
           scrollY.current = e.nativeEvent.contentOffset.y;
         }}
         scrollEventThrottle={16}
         contentContainerStyle={styles.deckSpace}
       >
-        <CardSideTag theme={theme} revealed={session.revealed} />
         {/* The card's own rendered HTML, straight on the screen's background: the note type's text
             is the content, and a surface of its own around it is a panel the reader has to read
             through. The box is only there for the flash to sit over. */}
@@ -742,61 +639,51 @@ function SessionView({
 
       {/* Pinned: the honest notes, then the one action the reader has right now. It carries the
           navigation-bar inset itself, so the row sits clear of the gesture band. */}
-      <View
-        style={[
-          styles.pinned,
-          {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.outlineVariant,
-            paddingBottom: spacing.m + insets.bottom,
-          },
-        ]}
-      >
+      <ActionFooter bottomInset={insets.bottom}>
         {session.revealed && card.typedAnswer && (
           <>
-            <NoteCard
-              theme={theme}
-              text="This card expects typed input. Gaten shows the answer as AnkiDroid renders it, but the interactive comparison is not supported here, so rate it yourself."
-            />
-            <View style={styles.gapS} />
-          </>
-        )}
-        {!session.revealed ? (
-          // The reveal is an ordinary tap: the page slide and the flash are what it gives
-          // back, so it gets no tick of its own.
-          <FilledAction
-            theme={theme}
-            label="Show answer"
-            disabled={busy}
-            minHeight={52}
-            onPress={onReveal}
-          />
-        ) : (
-          <>
-            <Text style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}>
-              How did that go?
+            <Text style={[typeScale.bodySmall, styles.note, {color: colors.onSurfaceVariant}]}>
+              This card expects typed input. Gaten shows the answer as AnkiDroid renders it, but the
+              interactive comparison is not supported here, so rate it yourself.
             </Text>
             <View style={styles.gapS} />
-            <RatingBar
-              theme={theme}
-              labels={session.buttonLabels}
-              enabled={!busy}
-              onGrade={(ease) => {
-                // The rating that goes back is also what the card flashes with: "Again" is
-                // the one answer that means the card was not known.
-                setFlashTint(ease === 1 ? colors.error : colors.accent);
-                onGrade(ease);
-              }}
-            />
           </>
+        )}
+        {/* A card this app cannot draw — one whose content is media — is complete in AnkiDroid, so
+            the way there is offered exactly when there is something Gaten is not showing. */}
+        {session.mediaFiles.length > 0 && (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Open in AnkiDroid"
+            onPress={openAnkiDroid}
+            style={styles.mediaAction}
+          >
+            <Text style={[typeScale.labelMedium, {color: colors.accent}]}>
+              This card has media. Open in AnkiDroid
+            </Text>
+          </PressableScale>
+        )}
+        {!session.revealed ? (
+          // The reveal is an ordinary tap: the flash is what it gives back, so it gets no tick.
+          <FilledAction label="Show answer" disabled={busy} onPress={onReveal} />
+        ) : (
+          <RatingBar
+            labels={session.buttonLabels}
+            enabled={!busy}
+            onGrade={(ease) => {
+              // The rating that goes back is also what the card flashes with: "Again" is
+              // the one answer that means the card was not known.
+              setFlashTint(ease === 1 ? colors.error : colors.accent);
+              onGrade(ease);
+            }}
+          />
         )}
         {busy && (
-          <>
-            <View style={styles.gapS} />
-            <BusyRow theme={theme} message="Saving to AnkiDroid…" />
-          </>
+          <View style={styles.gapS}>
+            <BusyRow message="Saving to AnkiDroid…" />
+          </View>
         )}
-      </View>
+      </ActionFooter>
     </View>
   );
 }
@@ -935,158 +822,190 @@ function DoneView({
   deckName,
   busy,
   onFinish,
-  onChangeDeck,
 }: {
   theme: Theme;
   deckName: string;
   busy: boolean;
   onFinish: () => void;
-  onChangeDeck: () => void;
 }) {
-  const {width} = useWindowDimensions();
+  const {colors} = theme;
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
   const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={[
-        styles.pagePadding,
-        {
-          paddingHorizontal: contentInset,
-          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
-        },
-      ]}
-    >
-      <StateCard
-        theme={theme}
-        icon="check_circle"
-        title="All caught up"
-        body={`Nothing is due in ${deckName}.`}
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader title={deckName} onBack={onFinish} />
+      </View>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
-        <FilledAction theme={theme} label="Finish" onPress={onFinish} />
-        <OutlinedAction
-          theme={theme}
-          label="Change deck"
-          disabled={busy}
-          onPress={onChangeDeck}
-        />
-      </StateCard>
-    </ScrollView>
+        <StateBlock
+          mark={<Icon name="check_circle" size={34} color={colors.success} />}
+          title="All caught up"
+          body={`Nothing is due in ${deckName}.`}
+        >
+          <FilledAction label="Back to Review" disabled={busy} onPress={onFinish} />
+        </StateBlock>
+      </ScrollView>
+    </View>
   );
 }
 
-/** Something went wrong: what it was, and the one action that can follow it. */
+/** WaniKani has nothing to review: the queue is empty, which is the good outcome. */
+function WaniKaniDoneView({
+  theme,
+  step,
+  onBack,
+}: {
+  theme: Theme;
+  step: Extract<ReviewStep, {kind: "wkDone"}>;
+  onBack: () => void;
+}) {
+  const {colors} = theme;
+  const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  return (
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader title="WaniKani" right="Reviews" onBack={onBack} />
+      </View>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={stateBody(insets.bottom, contentInset)}
+      >
+        <StateBlock
+          mark={<Icon name="check_circle" size={34} color={colors.success} />}
+          title="Review complete"
+          body={
+            step.nextReviewAt == null
+              ? "Nothing is due right now."
+              : `Nothing is due right now. The next reviews come up at ${nextReviewLabel(step.nextReviewAt)}.`
+          }
+        >
+          <FilledAction label="Back to Review" onPress={onBack} />
+        </StateBlock>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** WaniKani could not be read: what happened, and the one action that can follow it. */
+function WaniKaniFailedView({
+  theme,
+  step,
+  busy,
+  onBack,
+  onRetry,
+}: {
+  theme: Theme;
+  step: Extract<ReviewStep, {kind: "wkFailed"}>;
+  busy: boolean;
+  onBack: () => void;
+  onRetry: () => void;
+}) {
+  const {colors} = theme;
+  const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  return (
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader title="WaniKani" right="Reviews" onBack={onBack} />
+      </View>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={stateBody(insets.bottom, contentInset)}
+      >
+        <StateBlock
+          mark={<Icon name="cloud_off" size={30} color={colors.onSurfaceVariant} />}
+          title="Reviews unavailable"
+          body={WANIKANI_FAILURE_LABELS[step.failure]}
+          note={
+            step.retryAfterSeconds == null
+              ? undefined
+              : `WaniKani asked Gaten to wait ${step.retryAfterSeconds} seconds before asking again.`
+          }
+        >
+          <FilledAction label="Try again" disabled={busy} onPress={onRetry} />
+        </StateBlock>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Something went wrong inside Anki: what it was, and the one action that can follow it. */
 function FailedView({
   theme,
   step,
   busy,
+  onBack,
   onRetry,
   onChangeDeck,
 }: {
   theme: Theme;
   step: Extract<ReviewStep, {kind: "failed"}>;
   busy: boolean;
+  onBack: () => void;
   onRetry: () => void;
   onChangeDeck: () => void;
 }) {
-  const {width} = useWindowDimensions();
+  const {colors} = theme;
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
   const contentInset = width < 360 ? spacing.l : spacing.contentInset;
-  const message = failureMessage(step.failure, step.detail);
   return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={[
-        styles.pagePadding,
-        {
-          paddingHorizontal: contentInset,
-          paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
-        },
-      ]}
-    >
-      <StateCard
-        theme={theme}
-        icon="error"
-        tone="error"
-        title="Something went wrong"
-        body={message}
-        note={
-          step.afterGrade
-            ? "AnkiDroid may or may not have saved that answer, so Gaten will not send it again."
-            : undefined
-        }
+    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <View style={{paddingHorizontal: contentInset}}>
+        <SubHeader title="Anki" onBack={onBack} />
+      </View>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={stateBody(insets.bottom, contentInset)}
       >
-        <FilledAction
-          theme={theme}
-          label={step.afterGrade ? "Next card" : "Retry"}
-          disabled={busy}
-          onPress={onRetry}
-        />
-        {step.failure === "PROVIDER" && (
-          <OutlinedAction
-            theme={theme}
-            label="Open AnkiDroid"
-            onPress={openAnkiDroid}
+        <StateBlock
+          mark={<Icon name="error" size={30} color={colors.error} />}
+          title="Something went wrong"
+          body={failureMessage(step.failure, step.detail)}
+          note={
+            step.afterGrade
+              ? "AnkiDroid may or may not have saved that answer, so Gaten will not send it again."
+              : undefined
+          }
+        >
+          <FilledAction
+            label={step.afterGrade ? "Next card" : "Try again"}
+            disabled={busy}
+            onPress={onRetry}
           />
-        )}
-        <OutlinedAction
-          theme={theme}
-          label="Change deck"
-          disabled={busy}
-          onPress={onChangeDeck}
-        />
-      </StateCard>
-    </ScrollView>
+          {step.failure === "PROVIDER" && (
+            <OutlinedButton label="Open AnkiDroid" onPress={openAnkiDroid} />
+          )}
+          <OutlinedButton label="Change deck" disabled={busy} onPress={onChangeDeck} />
+        </StateBlock>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
-  flex: {flex: 1},
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    // No height here: it is the status-bar inset plus the Compose bar's own 64dp, applied with
-    // the inset in the screen (see the top bar's own comment).
-    paddingStart: 4,
-    paddingEnd: spacing.s,
-  },
-  topBarAction: {marginStart: spacing.s},
-  backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  centred: {
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
-  },
-  pagePadding: {paddingVertical: spacing.l, paddingHorizontal: spacing.contentInset},
-  picker: {
-    flex: 1,
-    paddingHorizontal: spacing.contentInset,
-    paddingTop: spacing.l,
-  },
-  deckCard: {
-    borderBottomWidth: 1,
-    paddingVertical: spacing.m,
     width: "100%",
+    maxWidth: MAX_CONTENT_WIDTH,
+    alignSelf: "center",
   },
-  deckHead: {flexDirection: "row", alignItems: "center"},
-  tagRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.s,
-    marginTop: spacing.m,
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
+  textAction: {
+    minHeight: 48,
+    paddingHorizontal: spacing.m,
     alignItems: "center",
     justifyContent: "center",
   },
-  radioInner: {width: 10, height: 10, borderRadius: 5},
-  bottomGap: {height: spacing.l},
   // The reading surface starts at the top of the step area and grows with the card. Nothing centres
   // it: revealing the answer then adds to what is already on screen, below it, instead of moving
   // the question the reader is looking at — which is what "in place" means here. A taller card
@@ -1105,14 +1024,7 @@ const styles = StyleSheet.create({
   detailsWidth: {width: "100%"},
   radicalSlot: {marginTop: spacing.s},
   radicalIndent: {marginStart: spacing.xl},
-  pinned: {
-    // The same 12 dp gutter the card's own text uses, so the actions line up with it.
-    paddingHorizontal: spacing.m,
-    paddingTop: spacing.m,
-    width: "100%",
-    // A hairline is all that separates the actions from the card above them.
-    borderTopWidth: 1,
-  },
+  note: {marginBottom: spacing.s},
+  mediaAction: {minHeight: 40, justifyContent: "center", marginBottom: spacing.s},
   gapS: {height: spacing.s},
-  gapM: {height: spacing.m},
 });

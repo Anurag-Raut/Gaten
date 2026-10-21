@@ -6,14 +6,12 @@
 
 import React, {useState} from "react";
 import {ActivityIndicator, StyleSheet, Text, View, useWindowDimensions} from "react-native";
-import Svg, {Path} from "react-native-svg";
 import {useTheme} from "../theme";
 import {Icon} from "../components";
 import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
-import type {SettingsPageName} from "../navigation";
 import type {HomeDashboardData} from "./useHomeDashboard";
 import {
   AnkiServiceMark,
@@ -24,21 +22,22 @@ import {
 
 type HomeDashboardProps = {
   home: HomeDashboardData;
-  onOpenReview: () => void;
-  onOpenSettingsPage: (page: SettingsPageName) => void;
+  /** The review flow on AnkiDroid: its deck list, or the state that stops it. */
+  onOpenAnki: () => void;
+  /** The review flow on WaniKani: its connection state, or the queue behind it. */
+  onOpenWaniKani: () => void;
   onOpenWord: (entryId: number) => void;
 };
 
 /** The home dashboard follows the reader's actual Anki activity and service snapshots. */
 export function HomeDashboard({
   home,
-  onOpenReview,
-  onOpenSettingsPage,
+  onOpenAnki,
+  onOpenWaniKani,
   onOpenWord,
 }: HomeDashboardProps) {
   const {colors} = useTheme();
   const dark = isDarkScheme(colors.background);
-  const canReview = home.canReview;
 
   return (
     <View style={styles.dashboard}>
@@ -46,31 +45,15 @@ export function HomeDashboard({
       <View style={styles.serviceRow}>
         <AnkiCard
           home={home}
-          onReview={onOpenReview}
-          onSettings={() => onOpenSettingsPage("anki")}
+          onOpen={onOpenAnki}
           onRefresh={home.refreshAnki}
         />
         <WaniKaniCard
           home={home}
-          onSettings={() => onOpenSettingsPage("wanikani")}
+          onOpen={onOpenWaniKani}
           onRefresh={home.refreshWaniKani}
         />
       </View>
-      <PressableScale
-        accessibilityRole="button"
-        accessibilityLabel={canReview ? "Start studying" : "Connect Anki to start studying"}
-        accessibilityState={{disabled: !canReview}}
-        disabled={!canReview}
-        onPress={onOpenReview}
-        style={[styles.studyButton, {backgroundColor: canReview ? colors.actionPrimary : colors.disabled}]}
-      >
-        <Text style={[typeScale.labelLarge, styles.studyButtonLabel, {color: canReview ? colors.onActionPrimary : colors.onDisabled}]}>
-          Start studying
-        </Text>
-        <View pointerEvents="none" style={styles.studyButtonArrow}>
-          <Svg width={18} height={18} viewBox="0 0 20 20"><Path d="m7 4 6 6-6 6" fill="none" stroke={canReview ? colors.onActionPrimary : colors.onDisabled} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" /></Svg>
-        </View>
-      </PressableScale>
       <RecentLookups home={home} onOpenWord={onOpenWord} onRefresh={home.refreshRecentLookups} />
     </View>
   );
@@ -173,13 +156,12 @@ function StreakBanner({
 /** Shows Anki's live due count while keeping connection, permission, and retry states explicit. */
 function AnkiCard({
   home,
-  onReview,
-  onSettings,
+  onOpen,
   onRefresh,
 }: {
   home: HomeDashboardData;
-  onReview: () => void;
-  onSettings: () => void;
+  /** Opens the review flow on AnkiDroid, whatever state AnkiDroid is in. */
+  onOpen: () => void;
   onRefresh: () => void;
 }) {
   const {anki} = home;
@@ -198,8 +180,8 @@ function AnkiCard({
     case "connected":
       status = anki.refreshing ? "Refreshing…" : "Connected";
       statusTone = anki.refreshing ? "neutral" : "connected";
-      action = onReview;
-      hint = "Opens the review session";
+      action = onOpen;
+      hint = "Opens AnkiDroid's decks";
       if (due != null) {
         count = due;
         countLabel = completed != null && completed > 0 ? "remaining" : "reviews due";
@@ -210,23 +192,23 @@ function AnkiCard({
     case "missing":
       status = "Not connected";
       statusTone = "disconnected";
-      action = onSettings;
-      actionLabel = "Connect";
-      hint = "Opens Anki settings";
+      action = onOpen;
+      actionLabel = "Open Anki";
+      hint = "Opens the Anki screen";
       break;
     case "permissionNeeded":
       status = "Permission needed";
       statusTone = "error";
-      action = onReview;
+      action = onOpen;
       actionLabel = "Grant access";
-      hint = "Opens the review screen to grant AnkiDroid access";
+      hint = "Opens the Anki screen to grant AnkiDroid access";
       break;
     case "notSetUp":
       status = "Not set up";
       statusTone = "disconnected";
-      action = onSettings;
-      actionLabel = "Set up AnkiDroid";
-      hint = "Opens Anki settings";
+      action = onOpen;
+      actionLabel = "Open Anki";
+      hint = "Opens the Anki screen";
       break;
     case "error":
       status = "Refresh failed";
@@ -267,11 +249,12 @@ function AnkiCard({
 /** Shows WaniKani's due-now count without inventing completed or remaining-review history. */
 function WaniKaniCard({
   home,
-  onSettings,
+  onOpen,
   onRefresh,
 }: {
   home: HomeDashboardData;
-  onSettings: () => void;
+  /** Opens the review flow on WaniKani — its connection state, or its queue. */
+  onOpen: () => void;
   onRefresh: () => void;
 }) {
   const {waniKani} = home;
@@ -294,23 +277,23 @@ function WaniKaniCard({
         actionLabel = "Retry reading WaniKani";
         hint = "Retries reading WaniKani";
       } else {
-        action = onSettings;
-        hint = "Opens WaniKani settings";
+        action = onOpen;
+        hint = "Opens WaniKani reviews";
       }
       break;
     case "disconnected":
       status = "Not connected";
       statusTone = "disconnected";
-      action = onSettings;
+      action = onOpen;
       actionLabel = "Connect";
-      hint = "Opens WaniKani settings";
+      hint = "Opens the WaniKani screen";
       break;
     case "authRejected":
       status = "Reconnect required";
       statusTone = "error";
-      action = onSettings;
+      action = onOpen;
       actionLabel = "Reconnect";
-      hint = "Opens WaniKani settings";
+      hint = "Opens the WaniKani screen";
       break;
     case "error":
       status = "Unavailable";
@@ -663,19 +646,6 @@ const styles = StyleSheet.create({
   serviceCountLabel: {flexShrink: 1},
   serviceAction: {fontSize: 13, lineHeight: 18, fontWeight: "600"},
   serviceDetail: {flexShrink: 1},
-  studyButton: {
-    minHeight: 52,
-    marginTop: 22,
-    borderRadius: shape.button,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.m,
-    overflow: "hidden",
-  },
-  studyButtonLabel: {flex: 1, textAlign: "center"},
-  studyButtonArrow: {position: "absolute", end: spacing.l},
   recentSection: {marginTop: 34},
   recentHeading: {
     minHeight: 28,

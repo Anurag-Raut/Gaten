@@ -15,7 +15,8 @@ export type InkIconName =
   | "torii"
   | "sun"
   | "user"
-  | "chevron";
+  | "chevron"
+  | "back";
 
 /** The shared outline glyphs from the approved Ink preview. */
 export function InkIcon({
@@ -46,6 +47,7 @@ export function InkIcon({
       {name === "sun" ? <><Circle cx={12} cy={12} r={4} /><Path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></> : null}
       {name === "user" ? <><Circle cx={12} cy={12} r={9} /><Circle cx={12} cy={9} r={3} /><Path d="M6 19c.5-5 11.5-5 12 0" /></> : null}
       {name === "chevron" ? <Path d="m6 3 5 5-5 5" /> : null}
+      {name === "back" ? <Path d="M20 12H4m7-7-7 7 7 7" /> : null}
     </Svg>
   );
 }

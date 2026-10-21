@@ -26,7 +26,11 @@ kept verbatim in this directory.
 - Named corner radii: brand marks 10, setting icon tiles 11, empty-state icons 12, buttons 13, inputs 14, selected navigation 15, settings rows 17, floating navigation/contained groups 20.
 - Separators and visible row borders are 1 dp. Focus indicators are 2 dp. Content surfaces have no shadows.
 - Settings subpage sections use rounded tiles filled with the neutral secondary surface (`surfaceVariant`); form fields use the main surface with a quiet outline so they remain distinct inside a tile.
-- Preserve the application's real Home, Analytics, Review and Settings destinations. The mockup's Profile tab is not a new feature request.
+- Preserve the application's real Home, Analytics and Settings destinations, and the review flow
+  Home's two service cards open. The mockup's Profile tab is not a new feature request.
+- Home has no filled primary action: the Ink source row *is* the action, and Anki's row opens the
+  deck list. This deviates from the supplied Ink document's "one strong action per screen" ("Start
+  studying"), which was removed on the user's call once the Anki row opened the decks itself.
 - Japanese reading/display text retains native glyph fallback and readable sizes. Imported Anki card HTML keeps its own authored styling.
 - Native status/gesture bars use Android insets; no mock system bars are drawn in the application.
 
@@ -35,7 +39,8 @@ kept verbatim in this directory.
 The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference for Home and the Settings hub. Its inline outline icons and Anki/WaniKani SVG marks replace the previous in-app glyphs for those elements; the service marks use the preview's light/dark tinted holders. Keep platform status/gesture bars native and retain live app data.
 
 - Home shows only the flame and `Daily streak` on the left; the current recorded-day value and `days recorded` stay on the right.
-- The third tab keeps opening Review while using the preview's person outline. The App settings row keeps its real About label and destination.
+- Settings is the third tab, with the app's own gear glyph rather than the preview's person outline.
+  The App settings row keeps its real About label and destination.
 - Settings rows follow the preview's 72 dp minimum height and grow with font scale; small copy remains readable and scalable.
 - Preview geometry never changes route behavior or replaces actual values with sample content.
 

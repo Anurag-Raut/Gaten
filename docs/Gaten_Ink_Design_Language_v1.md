@@ -162,7 +162,7 @@ Alternative only. Two equal-width columns with 11 px gap; tiles about 152 px tal
 
 # 7. Settings screen specification
 
-Use the **same font, ink colors, content inset, hairlines and nav** as Home. Header: `Settings` at 35 px/745, with a single 13 px muted sentence (`Manage your Gaten preferences.`). Avoid paragraphs before every control.
+Use the **same font, ink colors, content inset, hairlines and nav** as Home. Header: `Settings` at 35 px/745, standing alone — no sentence under the heading (the user removed the `Manage your Gaten preferences.` subtitle). Avoid paragraphs before every control.
 
 Groups: **Lookup / Study / App**. Group label 12 px/650, about 10 px above group. Settings items are 78 px minimum visual height, 17 px radius, 1 px border, approximately 12–13 px vertical/horizontal padding, 38 px neutral icon tile, 14 px title, optional 11 px micro-description, right-aligned value, chevron. Item separation 10 px; group separation 23 px.
 

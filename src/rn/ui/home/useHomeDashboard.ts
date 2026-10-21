@@ -87,8 +87,6 @@ export interface HomeDashboardData {
   recentLookups: SearchResult[];
   recentLookupsStatus: RecentLookupsStatus;
   recentLookupsError: string | null;
-  /** True when AnkiDroid can open its collection deck picker. */
-  canReview: boolean;
   refreshAnki: () => void;
   refreshWaniKani: () => void;
   refreshRecentLookups: () => void;
@@ -400,7 +398,6 @@ export function useHomeDashboard(active: boolean): HomeDashboardData {
     recentLookups,
     recentLookupsStatus,
     recentLookupsError,
-    canReview: anki.status === "connected",
     refreshAnki: loadAnki,
     refreshWaniKani: waniKaniStats.refresh,
     refreshRecentLookups: loadRecentLookups,

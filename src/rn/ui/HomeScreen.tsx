@@ -45,13 +45,9 @@ import {
 import {PressableScale} from "./PressableScale";
 import * as store from "./search/searchStore";
 import {SearchNotice} from "./search/SearchScreen";
-import {
-  freshSettingsInstance,
-  type HomeStackParamList,
-  type RootTabParamList,
-  type SettingsPageName,
-} from "./navigation";
+import {type HomeStackParamList, type RootTabParamList} from "./navigation";
 import {useHomeDashboard} from "./home/useHomeDashboard";
+import {reviewStore} from "./review/review-store";
 
 type HomeScreenProps = Partial<
   CompositeScreenProps<
@@ -60,15 +56,17 @@ type HomeScreenProps = Partial<
   >
 > & {
   onOpenWord?: (entryId: number) => void;
-  onOpenReview?: () => void;
-  onOpenSettingsPage?: (page: SettingsPageName) => void;
+  /** Opens the review flow on AnkiDroid — its deck list, or the state that stops it. */
+  onOpenAnki?: () => void;
+  /** Opens the review flow on WaniKani — its connection state, or its queue. */
+  onOpenWaniKani?: () => void;
 };
 
 export function HomeScreen({
   navigation,
   onOpenWord,
-  onOpenReview,
-  onOpenSettingsPage,
+  onOpenAnki,
+  onOpenWaniKani,
 }: HomeScreenProps) {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
@@ -170,27 +168,30 @@ export function HomeScreen({
     [openRow],
   );
 
-  const openReview = useCallback(() => {
-    if (onOpenReview != null) {
-      onOpenReview();
+  /**
+   * The review flow's two service screens. Opening one means asking the review store for that
+   * service's step *and* pushing the page, so a tap on Home's Anki or WaniKani card lands on that
+   * service rather than on a page that has to be tapped again. The shell owns both when it passes the
+   * callback; without one — a mount that has no tab above it — this screen does the same two things
+   * itself, exactly as it does for a word or a settings page.
+   */
+  const openAnki = useCallback(() => {
+    if (onOpenAnki != null) {
+      onOpenAnki();
       return;
     }
-    navigation?.navigate("Review", {screen: "ReviewTab", pop: true});
-  }, [navigation, onOpenReview]);
+    reviewStore.openAnki();
+    navigation?.push("Review");
+  }, [navigation, onOpenAnki]);
 
-  const openSettings = useCallback(
-    (page: SettingsPageName) => {
-      if (onOpenSettingsPage != null) {
-        onOpenSettingsPage(page);
-        return;
-      }
-      navigation?.navigate("Settings", {
-        screen: "SettingsPage",
-        params: {page, instance: freshSettingsInstance()},
-      });
-    },
-    [navigation, onOpenSettingsPage],
-  );
+  const openWaniKani = useCallback(() => {
+    if (onOpenWaniKani != null) {
+      onOpenWaniKani();
+      return;
+    }
+    reviewStore.openWaniKani();
+    navigation?.push("Review");
+  }, [navigation, onOpenWaniKani]);
 
   const searchStateNotice =
     searchState.status === "unsupported" ? (
@@ -238,8 +239,8 @@ export function HomeScreen({
         >
           <HomeDashboard
             home={home}
-            onOpenReview={openReview}
-            onOpenSettingsPage={openSettings}
+            onOpenAnki={openAnki}
+            onOpenWaniKani={openWaniKani}
             onOpenWord={openRow}
           />
         </Animated.View>
