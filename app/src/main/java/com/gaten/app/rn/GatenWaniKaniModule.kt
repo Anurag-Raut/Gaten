@@ -297,6 +297,7 @@ class GatenWaniKaniModule(
                     )
 
                     WaniKaniLessonQueue.Empty -> promise.resolve(status("empty"))
+                    WaniKaniLessonQueue.Locked -> promise.resolve(status("locked"))
                     WaniKaniLessonQueue.NeedsToken -> promise.resolve(status("needsToken"))
                     WaniKaniLessonQueue.AuthRejected -> promise.resolve(status("authRejected"))
                     is WaniKaniLessonQueue.Unreachable -> promise.resolve(

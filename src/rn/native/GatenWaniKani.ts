@@ -210,6 +210,8 @@ export interface WaniKaniLessonItem {
 export type WaniKaniLessonQueueResult =
   | { status: "available"; items: WaniKaniLessonItem[] }
   | { status: "empty" }
+  /** WaniKani has lessons, but every one is above what this account's level or plan grants. */
+  | { status: "locked" }
   | { status: "needsToken" }
   | { status: "authRejected" }
   | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };

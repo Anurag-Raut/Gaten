@@ -47,25 +47,48 @@ kept verbatim in this directory.
 
 ## WaniKani hub and lessons (21 October 2026)
 
-- The WaniKani page is **one page, not tabs**: a **Reviews** section and a **New cards** section,
-each with its own count, its own one-line status and its own action, separated by a hairline. A
-section with nothing behind it shows a quiet sentence instead of an action. The counts come from
-`GET /summary` (already part of the stats read) and are only an indicator — starting either queue
-reads it fresh, which is where a stale count becomes a specific answer rather than a wrong one.
+- The WaniKani page is **one page with exactly two vertically stacked cards**, **Reviews** and **New
+  cards** - no tabs, no third "Coming up" module, no chart. Each card is an independent queue
+  snapshot with one strong action inside it; the global "one strong action per screen" rule is
+  deliberately adapted because the two study destinations are mutually exclusive.
+- Page geometry: back glyph, **WaniKani** centred with the sync state on the trailing edge; the
+  **Your study** page title at 35 sp and a 13 sp state subtitle; 14 dp between the two cards. Cards
+  are the page canvas with a 1 dp hairline, radius 21, 19 dp padding, and no shadow or fill tint.
+  The light canvas is `#FDFDFD` and dark `#101114`; light and dark share exactly the same geometry.
+- Card anatomy: an accent-outlined icon (`history` for reviews, `library_books` for new cards), a
+  17/700 title, an 11 sp state word on the trailing edge, a 46 sp tabular numeral with a 13 sp unit,
+  a hairline, two 12 sp key/value rows, then either a 52 dp neutral action (label leading, arrow
+  trailing) or a quiet `surfaceVariant` completed row with a check. The reader's accent colours only
+  the card icons; filled actions stay neutral (`actionPrimary`), inverting in dark mode.
+- Card states are real, not counts: **loading** (stable skeleton, no action), **ready** (count plus
+  next review and next-hour arrivals, or next batch size), **caught up** (a fetched zero, quiet row,
+  no action), **cached** (offline: last-known counts, no session), **sync issue** (last-known counts
+  plus **Retry sync**), **unavailable** (lessons above the account's grant), and **in progress**
+  (batch left part-way: remaining count, `x of y completed`, **Resume lessons**). A zero with no data
+  is never drawn as caught up, and an unknown count is an em dash, never a zero.
+- The counts come from `GET /summary` (already part of the stats read). The page forces that read on
+  entry so the sync label is honest; starting either queue reads it fresh, which is where a stale
+  count becomes a specific answer rather than a wrong one.
 - The lesson flow teaches a batch of subjects one card at a time, then quizzes them. A teach card
-carries the kind and level, the character (or the radical image), the meanings and readings with
-their mnemonics, and up to two example sentences for vocabulary. Meaning keeps the semantic teal and
-Reading the violet, as in a review. The quiz reuses the review's field, placeholder, feedback and
-pinned footer exactly; a wrong answer shows the right one and asks for it to be typed.
-- A finished lesson is sent with `PUT /assignments/<id>/start` — never as a review, which WaniKani's
-reference forbids. Each subject is started the moment its quiz is passed, so leaving mid-batch keeps
-what was finished. Starting is idempotent, so a retry is always safe.
-- Visual references: [the hub](../artifacts/visual-review/lessons-09-hub-single-page.png),
-  [a radical teach card](../artifacts/visual-review/lessons-03-teach-radical.png),
-  [a vocabulary teach card with examples](../artifacts/visual-review/lessons-05-teach-vocab.png),
-  and [a wrong lesson answer](../artifacts/visual-review/lessons-08-quiz-wrong-feedback.png). The
-  lesson captures use a local in-memory fixture with submission disabled; they do not represent a
-  live lesson queue.
+  carries the kind and level, the character (or the radical image), the meanings and readings with
+  their mnemonics, and up to two example sentences for vocabulary. Meaning keeps the semantic teal and
+  Reading the violet, as in a review. The quiz reuses the review's field, placeholder, feedback and
+  pinned footer exactly; a wrong answer shows the right one and asks for it to be typed.
+- A finished lesson is sent with `PUT /assignments/<id>/start` - never as a review, which WaniKani's
+  reference forbids. Each subject is started the moment its quiz is passed, so leaving mid-batch keeps
+  what was finished; the hub then offers **Resume lessons**. Starting is idempotent, so a retry is
+  always safe.
+- Visual references: [both ready](../artifacts/visual-review/hub-ready-no.png),
+  [both ready in dark](../artifacts/visual-review/hub-ready-dark.png),
+  [both caught up](../artifacts/visual-review/hub-bothDone.png),
+  [cached/offline](../artifacts/visual-review/hub-live-offline.png),
+  [sync issue](../artifacts/visual-review/hub-error.png),
+  [lessons restricted](../artifacts/visual-review/hub-locked.png),
+  [batch in progress](../artifacts/visual-review/hub-paused.png),
+  [loading](../artifacts/visual-review/hub-loading.png),
+  [130 % text](../artifacts/visual-review/hub-ready-130.png), and
+  [320 dp](../artifacts/visual-review/hub-ready-320.png). The fixture captures use local values;
+  the `hub-live-*` captures show the reader's real account, with no review or lesson write made.
 
 ## User-approved preview refinements
 
@@ -82,7 +105,9 @@ The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference fo
 - TypeScript compilation and Android debug build pass; the native unit suite (including the lesson
   decode, queue ordering, entitlement filter and `PUT …/start` tests) passes.
 - Emulator inspected: Home, Settings, Analytics and review deck selection at normal scale;
-  Home and Settings at 320 dp / 160% text; dark Home at 130% text; the WaniKani hub at normal and
-  130% text; the lesson teach and quiz screens against a local fixture, with no live write made.
+  Home and Settings at 320 dp / 160% text; dark Home at 130% text; the WaniKani hub in the ready,
+  caught-up, cached/offline, sync-issue, restricted, in-progress and loading states, light and dark,
+  at 100 %, 130 % text and 320 dp; the live lesson teach and quiz screens against the real account,
+  with no review or lesson write made.
 - Larger text keeps the Home integration rows on one line — the due count stays on the trailing edge beside the chevron — until the scaled type genuinely needs the outcome below the header, and moves it to the trailing edge there too. Recent-lookup glosses move under the word and wrap in full once type grows instead of clipping.
 - The full width/scale matrix, TalkBack navigation and native screen-lookup overlay have not been exercised in this pass.

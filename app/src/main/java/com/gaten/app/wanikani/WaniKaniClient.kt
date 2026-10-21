@@ -209,8 +209,9 @@ internal class WaniKaniClient(
      * WaniKani presents them - by level, then by the subject's own lesson position.
      *
      * Subjects above the subscription's granted level are dropped rather than shown, because the API
-     * rejects a lesson above it. A malformed body is [WaniKaniFailure.MALFORMED], never an empty
-     * queue: an empty queue is an answer about the account.
+     * rejects a lesson above it; when every waiting lesson is above it, the queue is
+     * [WaniKaniLessonQueue.Locked] rather than empty. A malformed body is [WaniKaniFailure.MALFORMED],
+     * never an empty queue: an empty queue is an answer about the account.
      */
     suspend fun lessonsQueue(): WaniKaniLessonQueue = serialized {
         val token = credentials.read() ?: return@serialized WaniKaniLessonQueue.NeedsToken
@@ -249,10 +250,14 @@ internal class WaniKaniClient(
         }
 
         val maxLevel = entitlementLevel()
-        val items = subjects
-            .filter { it.level <= maxLevel }
+        val granted = subjects.filter { it.level <= maxLevel }
+        val items = granted
             .sortedWith(compareBy({ it.level }, { it.lessonPosition }, { it.assignmentId }))
-        if (items.isEmpty()) WaniKaniLessonQueue.Empty else WaniKaniLessonQueue.Available(items)
+        when {
+            items.isNotEmpty() -> WaniKaniLessonQueue.Available(items)
+            subjects.isNotEmpty() -> WaniKaniLessonQueue.Locked
+            else -> WaniKaniLessonQueue.Empty
+        }
     }
 
     /**

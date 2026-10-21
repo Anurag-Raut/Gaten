@@ -258,10 +258,14 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
         ) : step.kind === "wkHome" ? (
           <WaniKaniHome
             summary={step.summary}
+            failed={step.failed}
+            lessonsLocked={step.lessonsLocked}
+            pausedLesson={step.pausedLesson}
             busy={review.busy}
             onBack={leave}
             onStartReviews={() => reviewActions.startReviews()}
             onStartLessons={() => reviewActions.startLessons()}
+            onRetrySync={() => reviewActions.retryWaniKaniSync()}
           />
         ) : step.kind === "wkReview" ? (
           <WaniKaniReview

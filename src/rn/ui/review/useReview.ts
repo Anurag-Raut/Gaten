@@ -31,6 +31,7 @@ export const reviewActions = {
   connectWaniKani: (token: string) => reviewStore.connectWaniKani(token),
   startReviews: () => reviewStore.startReviews(),
   startLessons: () => reviewStore.startLessons(),
+  retryWaniKaniSync: () => reviewStore.retryWaniKaniSync(),
   lessonNext: () => reviewStore.lessonNext(),
   lessonEntry: (text: string) => reviewStore.lessonEntry(text),
   lessonCheck: () => reviewStore.lessonCheck(),

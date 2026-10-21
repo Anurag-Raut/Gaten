@@ -88,6 +88,13 @@ sealed interface WaniKaniLessonQueue {
     /** Nothing new: every subject has been started, or the account has none. */
     data object Empty : WaniKaniLessonQueue
 
+    /**
+     * WaniKani has lessons waiting, but every one of them is above what the subscription grants, so
+     * none can be started until the level or plan allows it. Distinct from [Empty], which is a real
+     * zero: the hub says the account is restricted rather than that there is nothing to learn.
+     */
+    data object Locked : WaniKaniLessonQueue
+
     /** No token is configured. */
     data object NeedsToken : WaniKaniLessonQueue
 

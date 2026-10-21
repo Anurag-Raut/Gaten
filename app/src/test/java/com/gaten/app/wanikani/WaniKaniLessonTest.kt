@@ -97,19 +97,40 @@ class WaniKaniLessonTest {
         }
 
     @Test
-    fun `a subject above the granted level is dropped`() = runBlocking {
+    fun `a subject above the granted level is dropped, and a wholly restricted queue is locked`() =
+        runBlocking {
+            val api = lessonApi(
+                assignments = WaniKaniJson.collection(
+                    WaniKaniJson.assignment(1, 500, "kanji", AVAILABLE)
+                ),
+                subjects = WaniKaniJson.collection(
+                    WaniKaniJson.kanji(id = 500, character = "語", level = 5, componentIds = emptyList())
+                ),
+                user = WaniKaniJson.user(type = "free", maxLevelGranted = 3, periodEndsAt = null)
+            )
+            val client = client(api)
+            client.connect(TOKEN)
+            // Not Empty: WaniKani has a lesson, the account's grant just does not reach it.
+            assertEquals(WaniKaniLessonQueue.Locked, client.lessonsQueue())
+        }
+
+    @Test
+    fun `a restricted subject is dropped while a granted one is still taught`() = runBlocking {
         val api = lessonApi(
             assignments = WaniKaniJson.collection(
-                WaniKaniJson.assignment(1, 500, "kanji", AVAILABLE)
+                WaniKaniJson.assignment(1, 1, "radical", AVAILABLE),
+                WaniKaniJson.assignment(2, 500, "kanji", AVAILABLE)
             ),
             subjects = WaniKaniJson.collection(
+                WaniKaniJson.radical(id = 1, character = null, level = 1),
                 WaniKaniJson.kanji(id = 500, character = "語", level = 5, componentIds = emptyList())
             ),
             user = WaniKaniJson.user(type = "free", maxLevelGranted = 3, periodEndsAt = null)
         )
         val client = client(api)
         client.connect(TOKEN)
-        assertEquals(WaniKaniLessonQueue.Empty, client.lessonsQueue())
+        val queue = client.lessonsQueue() as WaniKaniLessonQueue.Available
+        assertEquals(listOf(1), queue.items.map { it.subjectId })
     }
 
     @Test

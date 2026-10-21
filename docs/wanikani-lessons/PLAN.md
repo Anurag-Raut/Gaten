@@ -240,14 +240,16 @@ cannot drift apart.
 
 ### 5.3 Hub UI — `src/rn/ui/review/WaniKaniHome.tsx` (new)
 
-- `SubHeader title="WaniKani"` with the back arrow.
-- **One page, no tabs** (the user's call): a **Reviews** section and a **New cards** section stacked
-  on the same scroll, separated by a 1 dp hairline. Each section is a `HubSection`: a caption, then
-  either the count, its label and a `FilledAction` ("Start reviews" / "Start lessons"), or a quiet
-  sentence when there is nothing behind it.
-- The counts come from the stats snapshot (`dueNow`, the new `lessonsNow`); the hub reads stats on
-  entry and `refreshStats()` after a session so the numbers are not a minute behind, and renders the
-  last snapshot while it waits.
+Final design, from the approved `Gaten_WaniKani_Hub_Refined_Ink_Handoff` direction: one page with
+**exactly two vertically stacked cards**, no tabs.
+
+- Header: back glyph, **WaniKani** centred, the sync state trailing; then the **Your study** title and
+  a state subtitle.
+- Each card: accent icon + title + state word, a 46 sp numeral with its unit, a hairline, two 12 sp
+  detail rows, then either the one neutral action (label leading, arrow trailing) or a quiet completed
+  row. `docs/design-language.md` carries the full geometry and the state list.
+- The counts come from the stats snapshot (`dueNow`, `lessonsNow`, `nextReviewAt`, and the next-hour
+  forecast bucket); the page forces `refreshStats()` on entry so the synced/cached label is honest.
 
 ### 5.4 Lesson UI — `src/rn/ui/review/WaniKaniLesson.tsx` (new)
 
@@ -331,8 +333,12 @@ lessons or reviews during verification.
    would be dead data. Context sentences are carried and shown.
 4. **`wkDone` retired.** The hub is what a finished queue returns to; its caught-up state is the
    review tab's empty state. The finished-queue haptic now fires on the session-to-hub move.
-5. **One page, not tabs.** On the user's call the hub shows both sections stacked on a single page
-   rather than behind a segmented tab control.
+5. **One page, not tabs.** On the user's call the hub shows both queues on a single page. It was
+   first built as two hairline sections and then refined to the approved two-card Ink direction
+   (`Gaten_WaniKani_Hub_Refined_Ink_Handoff`): two bordered cards, real per-card states, and a
+   **Resume lessons** state for a batch left part-way. That refinement also added
+   `WaniKaniLessonQueue.Locked`, so a queue whose every lesson is above the account's grant is told
+   apart from a real zero.
 
 ## 9. Task breakdown
 
@@ -352,7 +358,7 @@ All phases below are complete.
 - [x] `npx tsc --noEmit`.
 
 **Phase 2 — hub**
-- [x] The hub's two sections in `WaniKaniHome.tsx` (one page, no tab control).
+- [x] The hub's two cards in `WaniKaniHome.tsx` (one page, no tab control).
 - [x] `ReviewStep` `wkHome`, `ReviewStore.openWaniKani` → hub, `refreshStats` on entry, `stepDepth`.
 - [x] `WaniKaniHome.tsx` (both tabs, counts, start actions, caught-up states).
 - [x] `ReviewScreen.tsx` arm; `wkDone` decision.
