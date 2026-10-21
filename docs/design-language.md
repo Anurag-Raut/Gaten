@@ -45,6 +45,28 @@ kept verbatim in this directory.
 - Text uses scalable React Native sizes, controls retain 48 dp or larger targets, longer screen content scrolls, and feedback stays below the prompt/input so it does not move the learning target.
 - Visual references: [Anki answer, collapsed examples](../artifacts/visual-review/60-answer-collapsed-latest.png), [Anki answer with sourced examples and WaniKani](../artifacts/visual-review/62-answer-expanded-wk-visible.png), [WaniKani Reading fixture](../artifacts/visual-review/56-wk-reading-no-keyboard.png), [WaniKani dark at 130% text](../artifacts/visual-review/79-wk-meaning-dark-130.png), and [WaniKani compact at 160% text](../artifacts/visual-review/67-wk-reading-320-160.png). WaniKani captures use local in-memory fixtures with submission disabled; they do not represent a live queue.
 
+## WaniKani hub and lessons (21 October 2026)
+
+- The WaniKani page is **one page, not tabs**: a **Reviews** section and a **New cards** section,
+each with its own count, its own one-line status and its own action, separated by a hairline. A
+section with nothing behind it shows a quiet sentence instead of an action. The counts come from
+`GET /summary` (already part of the stats read) and are only an indicator — starting either queue
+reads it fresh, which is where a stale count becomes a specific answer rather than a wrong one.
+- The lesson flow teaches a batch of subjects one card at a time, then quizzes them. A teach card
+carries the kind and level, the character (or the radical image), the meanings and readings with
+their mnemonics, and up to two example sentences for vocabulary. Meaning keeps the semantic teal and
+Reading the violet, as in a review. The quiz reuses the review's field, placeholder, feedback and
+pinned footer exactly; a wrong answer shows the right one and asks for it to be typed.
+- A finished lesson is sent with `PUT /assignments/<id>/start` — never as a review, which WaniKani's
+reference forbids. Each subject is started the moment its quiz is passed, so leaving mid-batch keeps
+what was finished. Starting is idempotent, so a retry is always safe.
+- Visual references: [the hub](../artifacts/visual-review/lessons-09-hub-single-page.png),
+  [a radical teach card](../artifacts/visual-review/lessons-03-teach-radical.png),
+  [a vocabulary teach card with examples](../artifacts/visual-review/lessons-05-teach-vocab.png),
+  and [a wrong lesson answer](../artifacts/visual-review/lessons-08-quiz-wrong-feedback.png). The
+  lesson captures use a local in-memory fixture with submission disabled; they do not represent a
+  live lesson queue.
+
 ## User-approved preview refinements
 
 The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference for Home and the Settings hub. Its inline outline icons and Anki/WaniKani SVG marks replace the previous in-app glyphs for those elements; the service marks use the preview's light/dark tinted holders. Keep platform status/gesture bars native and retain live app data.
@@ -57,8 +79,10 @@ The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference fo
 
 ## Implementation checks (21 October 2026)
 
-- TypeScript compilation and Android debug build pass; eight native palette tests pass.
+- TypeScript compilation and Android debug build pass; the native unit suite (including the lesson
+  decode, queue ordering, entitlement filter and `PUT …/start` tests) passes.
 - Emulator inspected: Home, Settings, Analytics and review deck selection at normal scale;
-  Home and Settings at 320 dp / 160% text; dark Home at 130% text.
+  Home and Settings at 320 dp / 160% text; dark Home at 130% text; the WaniKani hub at normal and
+  130% text; the lesson teach and quiz screens against a local fixture, with no live write made.
 - Larger text keeps the Home integration rows on one line — the due count stays on the trailing edge beside the chevron — until the scaled type genuinely needs the outcome below the header, and moves it to the trailing edge there too. Recent-lookup glosses move under the word and wrap in full once type grows instead of clipping.
 - The full width/scale matrix, TalkBack navigation and native screen-lookup overlay have not been exercised in this pass.

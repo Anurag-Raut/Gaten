@@ -13,6 +13,9 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.gaten.app.wanikani.WaniKaniConnection
 import com.gaten.app.wanikani.WaniKaniFailure
+import com.gaten.app.wanikani.WaniKaniLessonItem
+import com.gaten.app.wanikani.WaniKaniLessonQueue
+import com.gaten.app.wanikani.WaniKaniLessonStart
 import com.gaten.app.wanikani.WaniKaniLookup
 import com.gaten.app.wanikani.WaniKaniRepository
 import com.gaten.app.wanikani.WaniKaniReviewItem
@@ -36,9 +39,10 @@ import kotlinx.coroutines.launch
  * three ways to change it, and the lookup behind a tapped character — a kanji by its character, a
  * radical by its subject id, the same targets [com.gaten.app.ui.wanikani.WaniKaniDetail] offers.
  * Vocabulary is not a target the repository knows, so there is no vocabulary lookup here either.
- * Beside that are the dashboard's numbers (`stats`, `refreshStats`) and the review screen's three
- * pieces: the live queue (`reviewQueue`), the fold an answer is compared with (`readingAnswer`) and
- * the finished review that goes back (`submitReview`). Only the ids and the counts of wrong answers
+ * Beside that are the dashboard's numbers (`stats`, `refreshStats`) and the review screen's pieces:
+ * the two live queues (`reviewQueue`, `lessonsQueue`), the fold an answer is compared with
+ * (`readingAnswer`), the finished review that goes back (`submitReview`) and the lesson that is
+ * started (`startLesson`). Only the ids and the counts of wrong answers
  * ever cross to WaniKani; the reader's typed answers never leave the device, and the token never
  * reaches JS.
  *
@@ -272,6 +276,72 @@ class GatenWaniKaniModule(
     }
 
     /**
+     * The lesson queue: the subjects waiting to be learned, for the lesson screen to teach and quiz
+     * one after another. Same shape and same states as [reviewQueue], against the lessons filter.
+     */
+    @ReactMethod
+    fun lessonsQueue(promise: Promise) {
+        scope.launch {
+            try {
+                when (val queue = WaniKaniRepository.lessonsQueue(reactApplicationContext)) {
+                    is WaniKaniLessonQueue.Available -> promise.resolve(
+                        Arguments.createMap().apply {
+                            putString("status", "available")
+                            putArray(
+                                "items",
+                                Arguments.createArray().apply {
+                                    queue.items.forEach { pushMap(it.toJsMap()) }
+                                }
+                            )
+                        }
+                    )
+
+                    WaniKaniLessonQueue.Empty -> promise.resolve(status("empty"))
+                    WaniKaniLessonQueue.NeedsToken -> promise.resolve(status("needsToken"))
+                    WaniKaniLessonQueue.AuthRejected -> promise.resolve(status("authRejected"))
+                    is WaniKaniLessonQueue.Unreachable -> promise.resolve(
+                        unreachable(queue.failure, queue.retryAfterSeconds)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
+            }
+        }
+    }
+
+    /**
+     * Starts one lesson with `PUT /assignments/<id>/start`, which moves it into the review queue.
+     * Resolves `{ status: "started" }`, `{ status: "needsToken" }`, `{ status: "authRejected" }` or
+     * `{ status: "failed", failure, retryAfterSeconds? }`, exactly as [submitReview] does.
+     */
+    @ReactMethod
+    fun startLesson(assignmentId: Double, promise: Promise) {
+        scope.launch {
+            try {
+                when (
+                    val result = WaniKaniRepository.startLesson(
+                        reactApplicationContext,
+                        assignmentId.toInt()
+                    )
+                ) {
+                    WaniKaniLessonStart.Started -> promise.resolve(status("started"))
+                    WaniKaniLessonStart.NeedsToken -> promise.resolve(status("needsToken"))
+                    WaniKaniLessonStart.AuthRejected -> promise.resolve(status("authRejected"))
+                    is WaniKaniLessonStart.Unreachable -> promise.resolve(
+                        unreachable(result.failure, result.retryAfterSeconds)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
+            }
+        }
+    }
+
+    /**
      * The account's own numbers for the dashboard: the level, what is due now, the next review time,
      * the next 24 hours by the hour, and the SRS spread of everything the account has started.
      *
@@ -329,6 +399,7 @@ class GatenWaniKaniModule(
                 putInt("maxLevelGranted", snapshot.maxLevelGranted)
                 putString("subscriptionType", snapshot.subscriptionType)
                 putInt("dueNow", snapshot.dueNow)
+                putInt("lessonsNow", snapshot.lessonsNow)
                 snapshot.nextReviewAt?.let { putDouble("nextReviewAt", it.toDouble()) }
                 putArray(
                     "forecast",
@@ -386,6 +457,50 @@ class GatenWaniKaniModule(
         putString("primaryMeaning", primaryMeaning)
         putArray("readings", readings.toJsArray())
         putString("primaryReading", primaryReading)
+    }
+
+    private fun WaniKaniLessonItem.toJsMap(): WritableMap = Arguments.createMap().apply {
+        putInt("assignmentId", assignmentId)
+        putInt("subjectId", subjectId)
+        putString("type", type)
+        // Written even when null: the screen reads `characters` and `primaryReading` as nullable
+        // rather than as possibly absent, exactly as the review item does.
+        putString("characters", characters)
+        putInt("level", level)
+        putArray("meanings", meanings.toJsArray())
+        putString("primaryMeaning", primaryMeaning)
+        putArray("readings", readings.toJsArray())
+        putString("primaryReading", primaryReading)
+        putString("readingMnemonic", readingMnemonic)
+        putString("meaningMnemonic", meaningMnemonic)
+        putArray(
+            "components",
+            Arguments.createArray().apply {
+                components.forEach { component ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putInt("id", component.id)
+                            component.character?.let { putString("character", it) }
+                            component.name?.let { putString("name", it) }
+                        }
+                    )
+                }
+            }
+        )
+        putArray(
+            "contextSentences",
+            Arguments.createArray().apply {
+                contextSentences.forEach { sentence ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putString("japanese", sentence.japanese)
+                            putString("english", sentence.english)
+                        }
+                    )
+                }
+            }
+        )
+        documentUrl?.let { putString("documentUrl", it) }
     }
 
     private fun WaniKaniConnection.toJsMap(): WritableMap = Arguments.createMap().apply {

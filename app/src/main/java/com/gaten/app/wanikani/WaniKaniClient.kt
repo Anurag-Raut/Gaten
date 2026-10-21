@@ -40,10 +40,11 @@ import java.io.File
  * cache a `disconnect` has just cleared cannot be written back by a request that was already in
  * flight. Nothing here throws: the outcomes are values.
  *
- * The review queue and its submission live here too, because they are the same kind of operation:
- * a request made on the app's own credential, serialized with everything else, answered with a
- * value. They are the only ones that are not the reference lookup - [reviewQueue] reads what is due
- * now and keeps none of it, and [submitReview] is the one thing Gaten ever sends back to WaniKani.
+ * The queues and their writes live here too, because they are the same kind of operation: a request
+ * made on the app's own credential, serialized with everything else, answered with a value. They are
+ * the only ones that are not the reference lookup - [reviewQueue] and [lessonsQueue] read what is
+ * due now and keep none of it, [submitReview] finishes a review, and [startLesson] starts a lesson.
+ * Those last two are the only things Gaten ever sends back to WaniKani.
  */
 internal class WaniKaniClient(
     dir: File,
@@ -196,6 +197,81 @@ internal class WaniKaniClient(
             WaniKaniFetch.Unauthorized -> WaniKaniReviewSubmission.AuthRejected
             WaniKaniFetch.NotFound -> WaniKaniReviewSubmission.Unreachable(WaniKaniFailure.SERVER)
             is WaniKaniFetch.Failed -> WaniKaniReviewSubmission.Unreachable(
+                fetch.failure,
+                fetch.retryAfterSeconds
+            )
+        }
+    }
+
+    /**
+     * The subjects waiting to be learned, asked of WaniKani every time and kept nowhere: the same two
+     * requests the review queue makes, against the lessons filter, then joined and ordered the way
+     * WaniKani presents them - by level, then by the subject's own lesson position.
+     *
+     * Subjects above the subscription's granted level are dropped rather than shown, because the API
+     * rejects a lesson above it. A malformed body is [WaniKaniFailure.MALFORMED], never an empty
+     * queue: an empty queue is an answer about the account.
+     */
+    suspend fun lessonsQueue(): WaniKaniLessonQueue = serialized {
+        val token = credentials.read() ?: return@serialized WaniKaniLessonQueue.NeedsToken
+        val assignments = when (
+            val fetch = api.get(
+                "assignments",
+                listOf("immediately_available_for_lessons" to "true", "hidden" to "false"),
+                token
+            )
+        ) {
+            is WaniKaniFetch.Body -> decodeAssignmentCollection(fetch.text)
+                ?: return@serialized WaniKaniLessonQueue.Unreachable(WaniKaniFailure.MALFORMED)
+
+            WaniKaniFetch.Unauthorized -> return@serialized WaniKaniLessonQueue.AuthRejected
+            WaniKaniFetch.NotFound -> return@serialized WaniKaniLessonQueue.Unreachable(WaniKaniFailure.SERVER)
+            is WaniKaniFetch.Failed -> return@serialized WaniKaniLessonQueue.Unreachable(
+                fetch.failure,
+                fetch.retryAfterSeconds
+            )
+        }
+        if (assignments.isEmpty()) return@serialized WaniKaniLessonQueue.Empty
+
+        val assignmentIds = assignments.associate { it.subjectId to it.id }
+        val subjects = when (
+            val fetch = api.get("subjects", listOf("ids" to assignmentIds.keys.joinToString(",")), token)
+        ) {
+            is WaniKaniFetch.Body -> decodeLessonSubjectCollection(fetch.text, assignmentIds)
+                ?: return@serialized WaniKaniLessonQueue.Unreachable(WaniKaniFailure.MALFORMED)
+
+            WaniKaniFetch.Unauthorized -> return@serialized WaniKaniLessonQueue.AuthRejected
+            WaniKaniFetch.NotFound -> return@serialized WaniKaniLessonQueue.Unreachable(WaniKaniFailure.SERVER)
+            is WaniKaniFetch.Failed -> return@serialized WaniKaniLessonQueue.Unreachable(
+                fetch.failure,
+                fetch.retryAfterSeconds
+            )
+        }
+
+        val maxLevel = entitlementLevel()
+        val items = subjects
+            .filter { it.level <= maxLevel }
+            .sortedWith(compareBy({ it.level }, { it.lessonPosition }, { it.assignmentId }))
+        if (items.isEmpty()) WaniKaniLessonQueue.Empty else WaniKaniLessonQueue.Available(items)
+    }
+
+    /**
+     * Starts one lesson: `PUT /assignments/<id>/start`, the only documented way to finish one, which
+     * moves the assignment out of the lessons queue and into the review queue. A lesson quiz is never
+     * sent as a review, so this is a different write from [submitReview] and takes the assignment id
+     * rather than the subject id.
+     *
+     * An id that cannot be sent is refused as [WaniKaniFailure.MALFORMED] without a request: a lesson
+     * for assignment 0 is the caller's own bug.
+     */
+    suspend fun startLesson(assignmentId: Int): WaniKaniLessonStart = serialized {
+        if (assignmentId <= 0) return@serialized WaniKaniLessonStart.Unreachable(WaniKaniFailure.MALFORMED)
+        val token = credentials.read() ?: return@serialized WaniKaniLessonStart.NeedsToken
+        when (val fetch = api.put("assignments/$assignmentId/start", "{}", token)) {
+            is WaniKaniFetch.Body -> WaniKaniLessonStart.Started
+            WaniKaniFetch.Unauthorized -> WaniKaniLessonStart.AuthRejected
+            WaniKaniFetch.NotFound -> WaniKaniLessonStart.Unreachable(WaniKaniFailure.SERVER)
+            is WaniKaniFetch.Failed -> WaniKaniLessonStart.Unreachable(
                 fetch.failure,
                 fetch.retryAfterSeconds
             )

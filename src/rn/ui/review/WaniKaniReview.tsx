@@ -19,7 +19,7 @@
  * reference lookup the kanji pages use and cached on the device. That is the only way such a subject
  * can be asked about at all — its name is the answer, so the name cannot be the prompt.
  */
-import React, {useEffect, useMemo, useState} from "react";
+import React from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -29,9 +29,6 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import * as GatenWaniKani from "../../native/GatenWaniKani";
-import {GatenCardWebView} from "../../native/GatenCardWebView";
-import {svgDocument} from "../wanikani/WaniKaniPanel";
 import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {
@@ -43,72 +40,9 @@ import {
   ProgressLine,
   SubHeader,
 } from "./review-ui";
+import {RadicalDrawing} from "./WaniKaniRadical";
+import {WANIKANI_FAILURE_LABELS, WANIKANI_TYPE_LABELS} from "./wanikani-labels";
 import type {WaniKaniSession} from "./review-store";
-import type {WaniKaniFailure, WaniKaniReviewItem} from "../../native/GatenWaniKani";
-
-/** What each subject kind is called in the prompt's topic line. */
-const TYPE_LABELS: Record<WaniKaniReviewItem["type"], string> = {
-  radical: "Radical",
-  kanji: "Kanji",
-  vocabulary: "Vocabulary",
-  kana_vocabulary: "Kana vocabulary",
-};
-
-/** Why a submission failed, in the same words the rest of the app uses for WaniKani. */
-const FAILURE_LABELS: Record<WaniKaniFailure, string> = {
-  OFFLINE: "no connection",
-  TIMEOUT: "the request timed out",
-  RATE_LIMITED: "WaniKani is limiting requests just now",
-  SERVER: "WaniKani reported a server error",
-  TOO_LARGE: "the answer was too large to keep",
-  MALFORMED: "WaniKani sent something Gaten could not read",
-  STORAGE: "this device could not save the answer",
-};
-
-/**
- * The drawing of a radical WaniKani has no character for. It comes from the same lookup the kanji
- * pages use, so it is cached after the first time; while it is on its way the prompt is simply empty
- * rather than a word the reader is being asked for.
- */
-function RadicalDrawing({subjectId}: {subjectId: number}) {
-  const {colors, mode} = useTheme();
-  const [svg, setSvg] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSvg(null);
-    void GatenWaniKani.lookupRadical(subjectId)
-      .then((result) => {
-        if (cancelled) return;
-        setSvg(
-          result.status === "available" && result.subject.kind === "radical"
-            ? result.subject.svg ?? null
-            : null
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [subjectId]);
-
-  const document = useMemo(
-    () => (svg == null ? null : svgDocument(svg, mode === "Dark")),
-    [svg, mode]
-  );
-
-  if (document == null) return <View style={styles.drawing} />;
-  return (
-    <View style={styles.drawing} accessibilityLabel="Radical">
-      <GatenCardWebView
-        document={document}
-        backgroundColor={colors.background}
-        mode="svg"
-        style={styles.drawing}
-      />
-    </View>
-  );
-}
 
 export function WaniKaniReview({
   session,
@@ -166,10 +100,10 @@ export function WaniKaniReview({
             <View style={styles.hero}>
               <Text
                 accessibilityRole="header"
-                accessibilityLabel={`${TYPE_LABELS[item.type]} · ${reading ? "Reading" : "Meaning"}`}
+                accessibilityLabel={`${WANIKANI_TYPE_LABELS[item.type]} · ${reading ? "Reading" : "Meaning"}`}
                 style={typeScale.labelMedium}
               >
-                <Text style={{color: colors.onSurfaceVariant}}>{TYPE_LABELS[item.type]} · </Text>
+                <Text style={{color: colors.onSurfaceVariant}}>{WANIKANI_TYPE_LABELS[item.type]} · </Text>
                 <Text style={{color: reading ? colors.reviewReading : colors.reviewMeaning}}>
                   {reading ? "Reading" : "Meaning"}
                 </Text>
@@ -237,7 +171,7 @@ export function WaniKaniReview({
                 {session.authRejected
                   ? "WaniKani refused the saved token, so this review was not saved. Reconnect and start the queue again."
                   : `This review was not saved: ${
-                      session.failure == null ? "WaniKani could not be reached" : FAILURE_LABELS[session.failure]
+                      session.failure == null ? "WaniKani could not be reached" : WANIKANI_FAILURE_LABELS[session.failure]
                     }. Sending it again is safe — WaniKani records a review once.`}
               </Text>
             )}
@@ -291,7 +225,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   answerPlaceholder: {fontSize: 17, lineHeight: 20, textAlign: "center"},
-  drawing: {width: 99, height: 99, marginTop: 22, marginBottom: 8},
   microNote: {fontSize: 12, lineHeight: 17, marginTop: spacing.s, textAlign: "center"},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},

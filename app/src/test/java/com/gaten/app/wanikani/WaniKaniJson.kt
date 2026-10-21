@@ -113,8 +113,16 @@ internal object WaniKaniJson {
         """.trimIndent()
     }
 
-    /** A subject of a kind Gaten never looks up, to check it is refused rather than half-read. */
-    fun vocabulary(id: Int = 2467, character: String = "一"): String = """
+    /** A subject of a kind Gaten's reference never looks up, with the fields a lesson teaches. */
+    fun vocabulary(
+        id: Int = 2467,
+        character: String = "一",
+        level: Int = 1,
+        lessonPosition: Int = 3,
+        contextSentences: List<Pair<String, String>> = listOf("一" to "one"),
+        meaningMnemonic: String = "A single <radical>ground</radical> stroke.",
+        readingMnemonic: String = "It is read <reading>いち</reading>."
+    ): String = """
         {
           "id": $id,
           "object": "vocabulary",
@@ -122,9 +130,13 @@ internal object WaniKaniJson {
           "data_updated_at": "2018-12-12T23:09:52.234049Z",
           "data": {
             "characters": "$character",
-            "level": 1,
+            "level": $level,
+            "lesson_position": $lessonPosition,
             "meanings": [{"meaning": "One", "primary": true, "accepted_answer": true}],
             "readings": [{"type": "onyomi", "primary": true, "accepted_answer": true, "reading": "いち"}],
+            "meaning_mnemonic": "$meaningMnemonic",
+            "reading_mnemonic": "$readingMnemonic",
+            "context_sentences": [${contextSentences.joinToString(", ") { """{"ja": "${it.first}", "en": "${it.second}"}""" }}],
             "slug": "$character",
             "document_url": "https://www.wanikani.com/vocabulary/%E4%B8%80",
             "component_subject_ids": [440]

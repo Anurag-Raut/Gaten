@@ -55,6 +55,15 @@ const ENTER_TRAVEL = 8;
 /** How long the progress line takes to reach a new value. */
 const PROGRESS_MS = 180;
 
+/** When WaniKani's next reviews come up: a clock time today, and a weekday when it is later. */
+export function nextReviewLabel(at: number): string {
+  const when = new Date(at);
+  const sameDay = when.toDateString() === new Date().toDateString();
+  return sameDay
+    ? when.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})
+    : when.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"});
+}
+
 /** The page title: the same 35 dp Ink heading Home, Analytics and Settings use. */
 export function ScreenTitle({
   children,

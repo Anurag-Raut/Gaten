@@ -77,8 +77,9 @@ The bottom navigation separates four tasks:
   screen-access permission or either optional integration.
 - **Review** — the landing page offers the two places you can study: AnkiDroid's decks, and WaniKani
   when a token is connected. Choosing a deck starts its session immediately; WaniKani connects first
-  if it has to, then opens what is due. An active session keeps the reveal, the rating controls or the
-  answer field in focus, with bottom navigation hidden until you leave it (see *Reviewing in Gaten*).
+  if it has to, then opens a page showing what is due for review and what new cards are waiting to be
+  learned. An active session keeps the reveal, the rating controls or the answer field in focus, with
+  bottom navigation hidden until you leave it (see *Reviewing in Gaten*).
 - **Settings** — focused pages for Screen lookup, Text recognition, Anki cards, WaniKani, Appearance,
   and About. Hardware-key setup and model management live here rather than on Home.
 
@@ -333,10 +334,12 @@ than shown (a free account covers levels 1–3). And with a token connected, the
 the account's study progress: the level, the reviews available now and over the next 24 hours
 (`GET /summary`), and how many items sit in each of WaniKani's review stages — six count-only
 `GET /assignments` requests that ask for the count of a filtered scope and throw the page away. The
-**Review** tab reads the queue itself — `GET /assignments?immediately_available_for_review=true` and
-the `GET /subjects` behind its ids — and sends each finished subject back with one `POST /reviews`
-(see *Reviewing WaniKani subjects in Gaten*). It never reads a lesson and never submits one, no other
-account data is read, and the one write is a review the reader has just answered. The Anki
+**Review** page reads the review queue itself — `GET /assignments?immediately_available_for_review=true`
+and the `GET /subjects` behind its ids — and sends each finished subject back with one `POST /reviews`.
+It also reads the lesson queue (`GET /assignments?immediately_available_for_lessons=true`) and starts
+a finished lesson with `PUT /assignments/<id>/start` — the only documented way to complete one, since
+a lesson quiz is never sent as a review (see *Reviewing WaniKani subjects in Gaten*). No other account
+data is read, and the only writes are the review or lesson the reader has just finished. The Anki
 export is untouched: nothing from WaniKani goes into a note, and no Anki card gains a WaniKani view.
 
 **Connecting.** Create a token on WaniKani's *Personal access tokens* page — read access alone is
@@ -372,9 +375,10 @@ subject id, with a kanji's composition adding its own radicals' ids. All of it g
 character. Redirects are refused outright and the token is never logged. The scanned sentence, the
 other words of the lookup and the screenshot are never sent. The account's own study progress — the
 level, the review availability and the per-stage counts the Analytics tab shows — is requested only
-for that tab, from `api.wanikani.com` alone, and kept on this device; the queue the **Review** tab
-opens is requested only for that tab and kept nowhere. Nothing else about the account is read, and
-the one write is a review the reader has just finished — see *Reviewing WaniKani subjects in Gaten*.
+for that tab, from `api.wanikani.com` alone, and kept on this device; the queues the **Review** page
+opens are requested only for that page and kept nowhere. Nothing else about the account is read, and
+the only writes are the review or lesson the reader has just finished — see *Reviewing WaniKani
+subjects in Gaten*.
 
 **Attribution.** WaniKani and its content belong to [Tofugu LLC](https://www.wanikani.com/). Gaten's
 WaniKani pages are an unofficial third-party reference: Gaten is not affiliated with or endorsed by
@@ -386,9 +390,10 @@ through the public API when the reader asks, and cached on that device.
 There is no Review tab: the bottom navigation is **Home / Analytics / Settings**, and studying is a
 page Home opens. Home's **Anki** and **WaniKani** cards are the two ways in — the Anki card opens the
 deck list directly (or the state that stops it: no AnkiDroid, no permission, no collection), and the
-WaniKani card opens the connection state, or the queue behind it once a token works. There is no
-landing page and no separate start step: choosing a deck opens its session, and WaniKani opens what is
-due once it is connected. The page is full-screen, so the floating bottom navigation is away for all
+WaniKani card opens the connection state, or the WaniKani page once a token works. There is no
+landing page and no separate start step: choosing a deck opens its session, and WaniKani opens a page
+showing what is due for review and what new cards are waiting, each with the one action that starts
+it. The page is full-screen, so the floating bottom navigation is away for all
 of it and Back is one step out.
 
 ### Reviewing Anki cards
@@ -421,9 +426,11 @@ on Gaten's side, and no network is involved — this is on-device provider acces
 
 ### Reviewing WaniKani subjects
 
-With a token connected, the landing page's WaniKani row opens what WaniKani says is due right now;
-without one it opens the connection screen first, and a token that works goes straight into the queue.
-A queue with nothing in it is the caught-up state, with the next review time when WaniKani gives one.
+With a token connected, Home's WaniKani row opens one page with two sections: what is due for review,
+and what new cards are waiting to be learned. Without a token it opens the connection screen first.
+Each section shows its count and its own action, or a quiet line when there is nothing behind it; a
+review queue with nothing due shows the caught-up state, with the next review time when WaniKani gives
+one.
 
 - **The queue** is WaniKani's: `GET /assignments?immediately_available_for_review=true&hidden=false`,
   then one `GET /subjects?ids=…` for the subjects behind those assignments, ordered by when each came
@@ -443,6 +450,14 @@ A queue with nothing in it is the caught-up state, with the next review time whe
   fails keeps the finished answer and offers **Send again**; a token WaniKani refuses asks for a
   reconnect instead, because retrying a refused token would only fail again. Nothing is ever sent
   because an animation finished, and a review whose answer is still in the field is not sent at all.
+- **New cards.** The page's second section reads the lesson queue
+  (`GET /assignments?immediately_available_for_lessons=true&hidden=false`) and teaches a batch of five
+  one card at a time — the character or its image, the meanings and readings with their mnemonics, and
+  example sentences for vocabulary — then quizzes each one exactly like a review. A subject is finished
+  with `PUT /assignments/<id>/start`, which moves it into the review queue; WaniKani's own reference is
+  explicit that a lesson quiz is not submitted as a review. Each subject is started the moment its quiz
+  is passed, so leaving mid-batch keeps what was finished, and a failed start keeps the answer and
+  offers **Send again** — starting an assignment twice is the same as starting it once.
 
 ## Project layout
 

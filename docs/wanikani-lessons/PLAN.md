@@ -1,6 +1,9 @@
 # WaniKani: Reviews and New cards
 
-Status: proposed · branch `codex/consistent-design-language` · owner: UI + WaniKani integration
+Status: implemented · branch `codex/consistent-design-language` · owner: UI + WaniKani integration
+
+> Implemented as described, with the decisions recorded under "Open questions" below. The WaniKani
+> page is one page with a Reviews and a New cards section (no tabs), per the user's call.
 
 ## 1. What this adds
 
@@ -238,17 +241,13 @@ cannot drift apart.
 ### 5.3 Hub UI — `src/rn/ui/review/WaniKaniHome.tsx` (new)
 
 - `SubHeader title="WaniKani"` with the back arrow.
-- **Tab control**: a two-segment `SegmentedTabs` primitive (added to `review-ui.tsx`): equal halves,
-  each `label` + count; the selected half in `colors.onSurface` with a 2 dp accent underline, the
-  other in `colors.onSurfaceVariant`; `accessibilityRole="tab"` with `accessibilityState={{selected}}`
-  and a `tablist` container. Colour is never the only signal — the label and count change too.
-- **Reviews tab**: when due > 0, a heading with the count and a `FilledAction` "Start reviews"; when 0,
-  a `StateBlock` "You're caught up" with the next review time when known.
-- **New cards tab**: when available > 0, the count and a `FilledAction` "Start lessons"; when 0, a
-  `StateBlock` "No new cards right now".
-- The tab counts come from the stats snapshot (`dueNow`, the new `lessonsNow`); the hub triggers a
-  `refreshStats()` on entry so the numbers are fresh, and renders the last snapshot while it waits.
-- The tabs are local UI state on the hub (`useState<"reviews" | "lessons">`), not a route.
+- **One page, no tabs** (the user's call): a **Reviews** section and a **New cards** section stacked
+  on the same scroll, separated by a 1 dp hairline. Each section is a `HubSection`: a caption, then
+  either the count, its label and a `FilledAction` ("Start reviews" / "Start lessons"), or a quiet
+  sentence when there is nothing behind it.
+- The counts come from the stats snapshot (`dueNow`, the new `lessonsNow`); the hub reads stats on
+  entry and `refreshStats()` after a session so the numbers are not a minute behind, and renders the
+  last snapshot while it waits.
 
 ### 5.4 Lesson UI — `src/rn/ui/review/WaniKaniLesson.tsx` (new)
 
@@ -320,49 +319,52 @@ lessons or reviews during verification.
 - Screenshots into `artifacts/visual-review/` at 100% and 130% font scale, light and dark: hub (both
   tabs), a teach card (radical, kanji, vocabulary), the quiz.
 
-## 8. Open questions
+## 8. Decisions taken
 
-1. **Batch size.** Use WaniKani's own `lessons_batch_size` from `GET /user` `preferences` (the
-   entitlement read already sees `/user`; cache it beside the entitlement), default 5. Alternative:
-   teach every available card in one go. Recommendation: honour the stored preference, fall back 5.
-2. **Per-item vs. per-batch start.** Plan: `PUT …/start` per subject as its quiz passes (durable
-   progress, matches the endpoint's granularity). Alternative: start the whole batch at the end
-   (fewer writes, loses progress on abandon). Recommendation: per item.
-3. **Vocabulary audio.** `pronunciation_audios` is in the response but has no player in the app yet;
-   carry the field and skip playback in v1.
-4. **Retiring `wkDone`.** Folding it into the hub is cleaner but touches the review completion path;
-   if we want zero risk to reviews, keep `wkDone` as the post-review screen and have it offer a
-   "New cards" action into the lessons tab.
+1. **Batch size.** A fixed `LESSON_BATCH_SIZE = 5` (WaniKani's own default). Reading the account's
+   stored `lessons_batch_size` from `GET /user` would mean another request on every queue read or a
+   change to the entitlement cache, so it is left as a follow-up rather than paid per batch.
+2. **Per-item start.** `PUT /assignments/<id>/start` is sent per subject as its quiz passes, which
+   matches the endpoint's granularity and keeps finished work on abandon. Retrying is safe because
+   starting an already-started assignment is the same as starting it once.
+3. **Vocabulary audio.** Not carried in v1: the app has no player, so decoding `pronunciation_audios`
+   would be dead data. Context sentences are carried and shown.
+4. **`wkDone` retired.** The hub is what a finished queue returns to; its caught-up state is the
+   review tab's empty state. The finished-queue haptic now fires on the session-to-hub move.
+5. **One page, not tabs.** On the user's call the hub shows both sections stacked on a single page
+   rather than behind a segmented tab control.
 
 ## 9. Task breakdown
 
+All phases below are complete.
+
 **Phase 0 — data (no UI)**
-- [ ] `WaniKaniApi.put`.
-- [ ] `WaniKaniLesson.kt` shapes.
-- [ ] `decodeLessonSubjectCollection` + reuse of the review meaning/reading decode.
-- [ ] `WaniKaniClient.lessonsQueue` (ordering, entitlement) and `startLesson`.
-- [ ] `WaniKaniStatsSnapshot.lessonsNow` from the summary already read.
-- [ ] Kotlin decode/queue unit tests with fixtures.
+- [x] `WaniKaniApi.put`.
+- [x] `WaniKaniLesson.kt` shapes.
+- [x] `decodeLessonSubjectCollection` + reuse of the review meaning/reading decode.
+- [x] `WaniKaniClient.lessonsQueue` (ordering, entitlement) and `startLesson`.
+- [x] `WaniKaniStatsSnapshot.lessonsNow` from the summary already read.
+- [x] Kotlin decode/queue unit tests with fixtures.
 
 **Phase 1 — bridge**
-- [ ] `GatenWaniKaniModule` `lessonsQueue` / `startLesson` + maps; `lessonsNow` on stats.
-- [ ] `GatenWaniKani.ts` types and functions.
-- [ ] `npx tsc --noEmit`.
+- [x] `GatenWaniKaniModule` `lessonsQueue` / `startLesson` + maps; `lessonsNow` on stats.
+- [x] `GatenWaniKani.ts` types and functions.
+- [x] `npx tsc --noEmit`.
 
 **Phase 2 — hub**
-- [ ] `SegmentedTabs` in `review-ui.tsx`.
-- [ ] `ReviewStep` `wkHome`, `ReviewStore.openWaniKani` → hub, `refreshStats` on entry, `stepDepth`.
-- [ ] `WaniKaniHome.tsx` (both tabs, counts, start actions, caught-up states).
-- [ ] `ReviewScreen.tsx` arm; `wkDone` decision.
+- [x] The hub's two sections in `WaniKaniHome.tsx` (one page, no tab control).
+- [x] `ReviewStep` `wkHome`, `ReviewStore.openWaniKani` → hub, `refreshStats` on entry, `stepDepth`.
+- [x] `WaniKaniHome.tsx` (both tabs, counts, start actions, caught-up states).
+- [x] `ReviewScreen.tsx` arm; `wkDone` decision.
 
 **Phase 3 — lessons**
-- [ ] Extract `RadicalDrawing` and the meaning/reading block into shared modules.
-- [ ] `WaniKaniLessonSession` + `startLessons`/`lessonNext`/`lessonEntry`/`lessonCheck`/`lessonRetry`.
-- [ ] `WaniKaniLesson.tsx` teach + quiz phases.
-- [ ] `ReviewScreen.tsx` `wkLesson` arm.
+- [x] Extract `RadicalDrawing` and the meaning/reading block into shared modules.
+- [x] `WaniKaniLessonSession` + `startLessons`/`lessonNext`/`lessonEntry`/`lessonCheck`/`lessonRetry`.
+- [x] `WaniKaniLesson.tsx` teach + quiz phases.
+- [x] `ReviewScreen.tsx` `wkLesson` arm.
 
 **Phase 4 — verify and document**
-- [ ] Emulator pass at 100% and 130%, light/dark, online/offline (no real submissions).
-- [ ] `testDebugUnitTest`, `assembleDebug`, install.
-- [ ] Extend `docs/design-language.md` with the hub tabs and the lesson teach/quiz language.
-- [ ] Update this plan's status and the README's WaniKani note if the surface list changes.
+- [x] Emulator pass at 100% and 130%, light/dark, online/offline (no real submissions).
+- [x] `testDebugUnitTest`, `assembleDebug`, install.
+- [x] Extend `docs/design-language.md` with the hub tabs and the lesson teach/quiz language.
+- [x] Update this plan's status and the README's WaniKani note if the surface list changes.

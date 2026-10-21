@@ -29,6 +29,12 @@ export const reviewActions = {
   openDecks: () => reviewStore.openDecks(),
   openWaniKani: () => reviewStore.openWaniKani(),
   connectWaniKani: (token: string) => reviewStore.connectWaniKani(token),
+  startReviews: () => reviewStore.startReviews(),
+  startLessons: () => reviewStore.startLessons(),
+  lessonNext: () => reviewStore.lessonNext(),
+  lessonEntry: (text: string) => reviewStore.lessonEntry(text),
+  lessonCheck: () => reviewStore.lessonCheck(),
+  lessonRetrySubmit: () => reviewStore.lessonRetrySubmit(),
   permissionDenied: () => reviewStore.permissionDenied(),
   startDeck: (deck: Parameters<typeof reviewStore.startDeck>[0]) =>
     reviewStore.startDeck(deck),
@@ -86,10 +92,14 @@ export function useReview(): ReviewState & {
   // a deck that is done.
   const seenStep = useRef<ReviewStep>(state.step);
   useEffect(() => {
-    const finished = state.step.kind === "done" || state.step.kind === "wkDone";
-    const wasFinished =
-      seenStep.current.kind === "done" || seenStep.current.kind === "wkDone";
-    if (finished && !wasFinished) {
+    const previous = seenStep.current;
+    const finishedAnki = state.step.kind === "done" && previous.kind !== "done";
+    // WaniKani has no separate finished step: the hub is what a queue returns to, and it is reached
+    // from a session only when every subject in it was saved.
+    const finishedWaniKani =
+      state.step.kind === "wkHome" &&
+      (previous.kind === "wkReview" || previous.kind === "wkLesson");
+    if (finishedAnki || finishedWaniKani) {
       void Haptics.play("confirm");
       void Haptics.play("done");
     }

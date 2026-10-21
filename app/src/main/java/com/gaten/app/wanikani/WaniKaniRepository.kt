@@ -19,10 +19,11 @@ import java.io.File
  * to respect what the subscription grants. Nothing WaniKani owns is bundled in the APK, and no
  * dictionary or Anki path here reads it.
  *
- * The review screen is the one thing that goes the other way: [reviewQueue] reads what is due now
- * (through the same allow-listed client, and keeping none of it), and [submitReview] sends the
- * finished review back with `POST /reviews`. That is the only write Gaten ever makes to WaniKani, and
- * it carries nothing but the subject's id and the two counts of wrong answers.
+ * The review screen is the one thing that goes the other way: [reviewQueue] and [lessonsQueue] read
+ * what is due now (through the same allow-listed client, and keeping none of it), [submitReview]
+ * sends a finished review back with `POST /reviews`, and [startLesson] starts a lesson with
+ * `PUT /assignments/<id>/start`. Those two writes are the only ones Gaten ever makes to WaniKani, and
+ * they carry nothing but the subject's (or assignment's) id and the two counts of wrong answers.
  *
  * Everything is synchronous-or-suspend over the app's own directories: the credential in
  * `noBackupFilesDir/wanikani/token` and the cache in `noBackupFilesDir/wanikani/cache`, so neither
@@ -79,6 +80,20 @@ object WaniKaniRepository {
         incorrectReadingAnswers: Int
     ): WaniKaniReviewSubmission = client(context)
         .submitReview(subjectId, incorrectMeaningAnswers, incorrectReadingAnswers)
+
+    /**
+     * The subjects waiting to be learned right now, freshly asked of WaniKani and kept nowhere. The
+     * lesson half of the queue read: the same two requests, against the lessons filter.
+     */
+    suspend fun lessonsQueue(context: Context): WaniKaniLessonQueue = client(context).lessonsQueue()
+
+    /**
+     * Starts one lesson with `PUT /assignments/<id>/start` - the only documented way to finish one,
+     * which moves the assignment out of the lessons queue and into reviews. A lesson quiz is never
+     * sent as a review.
+     */
+    suspend fun startLesson(context: Context, assignmentId: Int): WaniKaniLessonStart =
+        client(context).startLesson(assignmentId)
 
     /** A client over the app's own directories, cheap enough to build per call. */
     private fun client(context: Context): WaniKaniClient {

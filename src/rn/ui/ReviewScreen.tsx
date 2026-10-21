@@ -59,6 +59,8 @@ import {reviewActions, useReview} from "./review/useReview";
 import {StepTransition} from "./review/StepTransition";
 import {AnkiDeckPicker} from "./review/AnkiDeckPicker";
 import {WaniKaniConnect} from "./review/WaniKaniConnect";
+import {WaniKaniHome} from "./review/WaniKaniHome";
+import {WaniKaniLesson} from "./review/WaniKaniLesson";
 import {WaniKaniReview} from "./review/WaniKaniReview";
 import {
   ActionFooter,
@@ -112,15 +114,6 @@ const WANIKANI_FAILURE_LABELS: Record<WaniKaniFailure, string> = {
   MALFORMED: "WaniKani sent something Gaten could not read",
   STORAGE: "this device could not save the answer",
 };
-
-/** When WaniKani's next reviews come up: a clock time today, and a weekday when it is later. */
-function nextReviewLabel(at: number): string {
-  const when = new Date(at);
-  const sameDay = when.toDateString() === new Date().toDateString();
-  return sameDay
-    ? when.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})
-    : when.toLocaleString([], {weekday: "short", hour: "numeric", minute: "2-digit"});
-}
 
 /** Opens AnkiDroid itself, for the media or the session this screen cannot show. */
 function openAnkiDroid() {
@@ -262,6 +255,14 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onBack={leave}
             onConnect={(token) => reviewActions.connectWaniKani(token)}
           />
+        ) : step.kind === "wkHome" ? (
+          <WaniKaniHome
+            summary={step.summary}
+            busy={review.busy}
+            onBack={leave}
+            onStartReviews={() => reviewActions.startReviews()}
+            onStartLessons={() => reviewActions.startLessons()}
+          />
         ) : step.kind === "wkReview" ? (
           <WaniKaniReview
             session={step.session}
@@ -271,8 +272,16 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onCheck={() => reviewActions.wkCheck()}
             onRetrySubmit={() => reviewActions.wkRetrySubmit()}
           />
-        ) : step.kind === "wkDone" ? (
-          <WaniKaniDoneView theme={theme} step={step} onBack={leave} />
+        ) : step.kind === "wkLesson" ? (
+          <WaniKaniLesson
+            session={step.session}
+            busy={review.busy}
+            onBack={leave}
+            onNext={() => reviewActions.lessonNext()}
+            onEntry={(text) => reviewActions.lessonEntry(text)}
+            onCheck={() => reviewActions.lessonCheck()}
+            onRetrySubmit={() => reviewActions.lessonRetrySubmit()}
+          />
         ) : step.kind === "wkFailed" ? (
           <WaniKaniFailedView
             theme={theme}
@@ -1031,47 +1040,6 @@ function DoneView({
           body={`Nothing is due in ${deckName}.`}
         >
           <FilledAction label="Back to Review" disabled={busy} onPress={onFinish} />
-        </StateBlock>
-      </ScrollView>
-    </View>
-  );
-}
-
-/** WaniKani has nothing to review: the queue is empty, which is the good outcome. */
-function WaniKaniDoneView({
-  theme,
-  step,
-  onBack,
-}: {
-  theme: Theme;
-  step: Extract<ReviewStep, {kind: "wkDone"}>;
-  onBack: () => void;
-}) {
-  const {colors} = theme;
-  const insets = useSafeAreaInsets();
-  const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
-  return (
-    <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="WaniKani" onBack={onBack} />
-      </View>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-        style={styles.screen}
-        contentContainerStyle={stateBody(insets.bottom, contentInset)}
-      >
-        <StateBlock
-          mark={<Icon name="check_circle" size={34} color={colors.success} />}
-          title="Review complete"
-          body={
-            step.nextReviewAt == null
-              ? "Nothing is due right now."
-              : `Nothing is due right now. The next reviews come up at ${nextReviewLabel(step.nextReviewAt)}.`
-          }
-        >
-          <FilledAction label="Back to Review" onPress={onBack} />
         </StateBlock>
       </ScrollView>
     </View>

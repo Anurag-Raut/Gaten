@@ -188,12 +188,19 @@ internal class WaniKaniStats(
         // first bucket is the current hour's, which is "available now"; every timestamp is the top of
         // an hour, so nothing here invents a finer time than WaniKani reports.
         var dueNow = previous?.snapshot?.dueNow ?: 0
+        var lessonsNow = previous?.snapshot?.lessonsNow ?: 0
         var nextReviewAt = previous?.snapshot?.nextReviewAt
         var forecast = previous?.snapshot?.forecast ?: emptyList()
         when (val section = section(token, SUMMARY, emptyList(), previous?.etag(SUMMARY))) {
             is Section.Body -> {
                 val data = section.json.optJSONObject("data")
                     ?: return Run.Unreachable(WaniKaniFailure.MALFORMED, null)
+                // The lessons bucket is the same shape as the reviews one, and just as optional: an
+                // account up to date with its lessons answers with an empty array, which is a count
+                // of zero rather than a missing answer.
+                data.optJSONArray("lessons")?.let { lessons ->
+                    lessonsNow = lessons.optJSONObject(0)?.optJSONArray("subject_ids")?.length() ?: 0
+                }
                 val reviews = data.optJSONArray("reviews")
                     ?: return Run.Unreachable(WaniKaniFailure.MALFORMED, null)
                 val buckets = ArrayList<WaniKaniForecastBucket>(reviews.length())
@@ -255,6 +262,7 @@ internal class WaniKaniStats(
                 maxLevelGranted = maxLevelGranted,
                 subscriptionType = subscriptionType,
                 dueNow = dueNow,
+                lessonsNow = lessonsNow,
                 nextReviewAt = nextReviewAt,
                 forecast = forecast,
                 stages = stages,
@@ -314,6 +322,7 @@ internal class WaniKaniStats(
         put("maxLevelGranted", snapshot.maxLevelGranted)
         put("subscriptionType", snapshot.subscriptionType)
         put("dueNow", snapshot.dueNow)
+        put("lessonsNow", snapshot.lessonsNow)
         put("nextReviewAt", snapshot.nextReviewAt?.let { it } ?: JSONObject.NULL)
         put("forecast", JSONArray().apply {
             snapshot.forecast.forEach { bucket ->
@@ -379,6 +388,7 @@ internal class WaniKaniStats(
             maxLevelGranted = root.optInt("maxLevelGranted", 3),
             subscriptionType = root.optString("subscriptionType").takeIf { it.isNotEmpty() } ?: "unknown",
             dueNow = root.optInt("dueNow", 0),
+            lessonsNow = root.optInt("lessonsNow", 0),
             nextReviewAt = if (root.isNull("nextReviewAt")) null else root.optLong("nextReviewAt").takeIf { it > 0 },
             forecast = forecast,
             stages = stages,
@@ -506,6 +516,8 @@ internal data class WaniKaniStatsSnapshot(
     val subscriptionType: String,
     /** Reviews available in the current hour — the first bucket of the summary. */
     val dueNow: Int,
+    /** Subjects available for lessons now — the first lessons bucket of the summary. */
+    val lessonsNow: Int,
     /** When the next reviews come up, or null when the account has none scheduled. */
     val nextReviewAt: Long?,
     /** The next 24 hours by the hour: 25 buckets, the first being the current one. */

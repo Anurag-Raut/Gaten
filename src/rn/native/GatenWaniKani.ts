@@ -98,6 +98,8 @@ export interface WaniKaniStatsSnapshot {
   subscriptionType: string;
   /** Reviews available in the current hour — the first bucket of the summary. */
   dueNow: number;
+  /** Subjects available for lessons now — the first lessons bucket of the summary. */
+  lessonsNow: number;
   /** Epoch milliseconds of the next review, or null when the account has none scheduled. */
   nextReviewAt: number | null;
   /** The next 24 hours by the hour: 25 buckets, the first being the current one. */
@@ -166,6 +168,59 @@ export type WaniKaniReviewSubmissionResult =
   | { status: "authRejected" }
   | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
 
+/** One sentence a vocabulary lesson is taught with: the Japanese, and its English. */
+export interface WaniKaniContextSentence {
+  japanese: string;
+  english: string;
+}
+
+/**
+ * One subject waiting to be learned, as the teach screen draws it and the quiz judges it. The answers
+ * are built exactly as [WaniKaniReviewItem]'s are — accepted meanings (whitelist included), readings
+ * folded to hiragana — so the lesson quiz and the review quiz compare answers the same way.
+ *
+ * `assignmentId` is what finishing the subject sends (`PUT /assignments/<id>/start`); `subjectId` is
+ * the content's own id, which the teach screen uses to draw an image-only radical.
+ */
+export interface WaniKaniLessonItem {
+  assignmentId: number;
+  subjectId: number;
+  type: "radical" | "kanji" | "vocabulary" | "kana_vocabulary";
+  /** The characters to teach with; null for a radical that exists only as an image. */
+  characters: string | null;
+  level: number;
+  /** Every meaning the quiz accepts, the primary one first. Never empty. */
+  meanings: string[];
+  /** The meaning WaniKani marks primary: what the subject is taught as. */
+  primaryMeaning: string;
+  /** Every reading the quiz accepts, in hiragana. Empty when none is quizzed. */
+  readings: string[];
+  /** The primary reading, or null when the subject is not quizzed on one. */
+  primaryReading: string | null;
+  readingMnemonic: string;
+  meaningMnemonic: string;
+  /** The subjects this one is built from; only the ids are guaranteed. */
+  components: WaniKaniComponent[];
+  /** Example sentences for a vocabulary subject; empty for the kinds WaniKani gives none. */
+  contextSentences: WaniKaniContextSentence[];
+  documentUrl?: string;
+}
+
+/** What the lesson queue answered: the subjects waiting to be learned, or the one thing missing. */
+export type WaniKaniLessonQueueResult =
+  | { status: "available"; items: WaniKaniLessonItem[] }
+  | { status: "empty" }
+  | { status: "needsToken" }
+  | { status: "authRejected" }
+  | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
+
+/** What starting one lesson answered. */
+export type WaniKaniLessonStartResult =
+  | { status: "started" }
+  | { status: "needsToken" }
+  | { status: "authRejected" }
+  | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
+
 interface GatenWaniKaniNative {
   isConfigured(): Promise<boolean>;
   connect(token: string): Promise<WaniKaniConnectionResult>;
@@ -176,12 +231,14 @@ interface GatenWaniKaniNative {
   stats(): Promise<WaniKaniStatsResult>;
   refreshStats(): Promise<WaniKaniStatsResult>;
   reviewQueue(): Promise<WaniKaniReviewQueueResult>;
+  lessonsQueue(): Promise<WaniKaniLessonQueueResult>;
   readingAnswer(text: string): Promise<string>;
   submitReview(
     subjectId: number,
     incorrectMeaningAnswers: number,
     incorrectReadingAnswers: number
   ): Promise<WaniKaniReviewSubmissionResult>;
+  startLesson(assignmentId: number): Promise<WaniKaniLessonStartResult>;
 }
 
 const GatenWaniKani = NativeModules.GatenWaniKani as GatenWaniKaniNative;
@@ -268,4 +325,21 @@ export function submitReview(
     incorrectMeaningAnswers,
     incorrectReadingAnswers
   );
+}
+
+/**
+ * The subjects WaniKani has waiting to be learned right now, in WaniKani's own lesson order. Read
+ * fresh every time: a queue is live data, and the copy this answered with is not kept anywhere.
+ */
+export function lessonsQueue(): Promise<WaniKaniLessonQueueResult> {
+  return GatenWaniKani.lessonsQueue();
+}
+
+/**
+ * Starts one lesson with `PUT /assignments/<id>/start`, which moves it out of the lessons queue and
+ * into reviews. A lesson quiz is never sent as a review, so this is a different call from
+ * [submitReview] and takes the assignment id rather than the subject id.
+ */
+export function startLesson(assignmentId: number): Promise<WaniKaniLessonStartResult> {
+  return GatenWaniKani.startLesson(assignmentId);
 }
