@@ -12,19 +12,21 @@
 
     <!-- General -->
     <string name="btn_cancel">Cancel</string>
+    <string name="btn_close">Close</string>
+    <string name="toast_accessibility_settings_error">Could not open Accessibility Settings</string>
 
     <!-- Toast Messages -->
-    <string name="toast_overlay_needed">Allow Gaten to display over other apps, then turn lookup mode on again</string>
-    <string name="toast_capture_declined">Screen capture was not allowed. Lookup mode is off.</string>
-    <string name="toast_capture_failed">Could not start screen capture. Try again.</string>
-    <string name="toast_capture_stopped">Screen capture stopped. Turn lookup mode on again to keep looking up.</string>
-    <string name="toast_capture_settings_error">Could not ask for screen capture</string>
+    <string name="toast_enable_accessibility_tile">Please enable the Gaten Accessibility Service</string>
+    <string name="toast_tile_service_not_ready">Gaten accessibility service is not ready. Try again.</string>
+    <string name="toast_tile_collapse_failed">Could not close Quick Settings. Use another lookup trigger.</string>
 
-    <!-- Lookup mode notification -->
-    <string name="notification_channel_lookup_mode">Lookup mode</string>
-    <string name="notification_lookup_mode_title">Lookup mode is on</string>
-    <string name="notification_lookup_mode_text">Gaten can read Japanese off the screen. Tap to turn it off.</string>
-    <string name="notification_lookup_mode_stop">Turn off</string>
+    <!-- Accessibility Disclosure Dialog -->
+    <string name="title_accessibility_permission">Grant Accessibility Permission</string>
+    <string name="body_accessibility_permission_lead">Gaten uses the accessibility service to take a screenshot of the screen only when you start a lookup, and to close the lookup when something interrupts it. The screenshot never leaves your device.</string>
+    <string name="action_read_details">Read the details</string>
+    <string name="action_hide_details">Hide the details</string>
+    <string name="body_accessibility_permission">Gaten uses the accessibility service to capture a screenshot when you start a lookup and detect interruptions so the lookup closes automatically. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service does not read notification messages or type for you.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character\'s page. With a token connected, Gaten also reads your own study progress from wanikani.com - the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages - and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device.</string>
+    <string name="label_accessibility_agree">I understand how this permission will be used and agree to proceed</string>
 
     <!-- Quick Settings Tile -->
     <string name="tile_label">Gaten</string>

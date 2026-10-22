@@ -31,7 +31,7 @@ enum class ThemeMode {
  * The app's theme choices — dark or light and the accent — stored in the app's single settings file
  * shared with [com.gaten.app.trigger.TriggerPreferences].
  *
- * They are read by whoever composes a theme — the activity and the capture service's overlay —
+ * They are read by whoever composes a theme — the activity and the accessibility service's overlay —
  * rather than pushed to them, so a change reaches the next overlay without the service being told.
  */
 object ThemePreferences {

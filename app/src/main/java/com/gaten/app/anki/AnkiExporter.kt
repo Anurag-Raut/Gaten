@@ -71,7 +71,7 @@ data class AnkiCollection(
  * model download and the optional WaniKani reference pages (see the README). AnkiDroid must be
  * declared in the manifest's `<queries>` for that provider to be visible at all on Android 11+, and
  * a write needs its `READ_WRITE_DATABASE` permission. The
- * overlay is drawn from the capture service, which can check that permission but never ask for
+ * overlay is drawn from the accessibility service, which can check that permission but never ask for
  * it, so [shareFallback] is what covers the ungranted case.
  *
  * Where a note goes comes from [AnkiSettings]: the deck of the configured name, its tags, and either
@@ -295,7 +295,7 @@ object AnkiExporter {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             setPackage(ANKI_DROID_PACKAGE)
-            // Started from the capture service, never from an activity, so it needs a task.
+            // Started from the accessibility service, never from an activity, so it needs a task.
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(Intent.EXTRA_SUBJECT, card.expression)
             putExtra(Intent.EXTRA_TEXT, shareText(card))

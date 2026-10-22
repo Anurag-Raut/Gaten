@@ -45,7 +45,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.gaten.app.capture.GatenCaptureService
+import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
@@ -70,14 +70,12 @@ private const val FreezeTimeoutMs = 250L
 private const val FocusBounceMs = 200L
 
 /**
- * The lookup overlay, drawn in a window owned by the capture service.
+ * The lookup overlay, drawn in a window owned by the accessibility service.
  *
  * An activity used to do this, and an activity takes the foreground: the app the user was looking
  * at stopped, and Android answered a video player that stops while playing with picture-in-picture.
- * A [WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY] window never touches the activity stack,
- * so the app behind stays foreground and keeps playing fullscreen. It is added from the service
- * behind the "display over other apps" permission — the same window the accessibility service used
- * to own, without the accessibility service.
+ * A [WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY] window never touches the activity
+ * stack, so the app behind stays foreground and keeps playing fullscreen.
  *
  * The window holds a [ComposeView] and is not an activity: [OverlayHost] supplies the owners
  * the composition reads from the view tree, and [show]/[hide] drive that host's lifecycle. Every
@@ -136,7 +134,7 @@ class OverlayWindowController(
         val scan = scanScope.async {
             val startedAt = android.os.SystemClock.elapsedRealtime()
             Log.d(TAG, "Early screen scan submitted" +
-                " (+${GatenCaptureService.elapsedSinceTrigger()} ms since the trigger)")
+                " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
             val result = ScreenTextScanner.scan(bitmap)
             Log.d(TAG, "Early screen scan ${if (result == null) "unavailable" else "ready"}" +
                 " in ${android.os.SystemClock.elapsedRealtime() - startedAt} ms")
@@ -211,7 +209,7 @@ class OverlayWindowController(
         val current = Showing(root, host, token, scan)
         showing = current
         Log.d(TAG, "Overlay window added for a ${bitmap.width}x${bitmap.height} capture" +
-            " (+${GatenCaptureService.elapsedSinceTrigger()} ms since the trigger)")
+            " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
 
         // Where the capture is drawn: the window's size and its origin on the display are what the
         // frozen frame and every box have to be placed through. Derived in the layout pass - before
@@ -259,7 +257,7 @@ class OverlayWindowController(
             }
             frozen = true
             Log.d(TAG, "Frozen frame on screen" +
-                " (+${GatenCaptureService.elapsedSinceTrigger()} ms since the trigger)")
+                " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
             // Scheduled first: composing the lookup UI below blocks this thread for a while.
             mediaPauser.pause(PauseAfterFreezeMs)
             root.addView(
@@ -395,7 +393,7 @@ class OverlayWindowController(
     private fun windowParams() = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.MATCH_PARENT,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             // Windows added via addView do not inherit the manifest's hardware acceleration
             // (activities get it through PhoneWindow); without this flag the whole overlay
@@ -430,8 +428,8 @@ class OverlayWindowController(
  * The overlay is a focusable window, so it holds window focus until the user goes somewhere else:
  * home, recents, another app, the notification shade or a share sheet all take it. [onFocusLost]
  * reports that - and only after the window has had focus, so a window that never got it (the
- * system was busy with something else as it came up) is never closed for it. It needs no signal
- * beyond the focus it is given.
+ * system was busy with something else as it came up) is never closed for it. It needs no
+ * accessibility event, which the service is not set up to receive.
  *
  * [onBack] gets the back gesture. The manifest opts in to predictive back, which routes the gesture
  * past the key event to a registered callback, so both are listened for.

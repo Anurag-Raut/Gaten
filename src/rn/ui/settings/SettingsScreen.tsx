@@ -5,7 +5,7 @@
  */
 
 /**
- * The settings hub: what screen access is, then a row per page under the group it belongs to.
+ * The settings hub: what lookup mode is, then a row per page under the group it belongs to.
  *
  * Everything on it is a summary read from wherever the truth lives — the platform's
  * enabled-services setting, the model directory, AnkiDroid, the stored token — and read again on
@@ -66,10 +66,10 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const [versionName, setVersionName] = useState("");
   const [catalog, setCatalog] = useState<GatenRecognition.MangaOcrCatalogEntry[]>([]);
 
-  // Lookup mode ends outside Gaten as easily as it starts — the status-bar chip, the notification,
-  // the screen locking — and a model or a token changes inside a page, so the rows are read on
-  // every arrival — the return from one of the pages this hub opens included — and every time the
-  // app comes back to the foreground while the hub is the screen on show. `isFocused` is the
+  // Lookup mode is a system setting the reader grants outside Gaten, and a model or a token
+  // changes inside a page, so the rows are read on every arrival — the return from one of the
+  // pages this hub opens included — and every time the app comes back to the foreground while the
+  // hub is the screen on show. `isFocused` is the
   // stable thing an arrival changes that an effect can depend on: a callback rebuilt per render would
   // either read in a loop or read once and never again. Nothing is read while another screen is on
   // top, and a resume that happens somewhere else reads nothing here.

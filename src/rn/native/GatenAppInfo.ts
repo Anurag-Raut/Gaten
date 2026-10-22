@@ -38,9 +38,8 @@ export function getMangaOcrState(): Promise<MangaOcrState> {
 }
 
 /**
- * Whether lookup mode is on right now — a live media projection, not a setting. It can also end
- * outside the app (the status-bar chip, the screen locking, another app capturing), so re-check on
- * every resume rather than caching.
+ * Whether lookup mode is on: Gaten's accessibility service is enabled in the system's own
+ * settings. That grant is given outside the app, so re-check on every resume rather than caching.
  */
 export function isLookupModeActive(): Promise<boolean> {
   return GatenAppInfo.isLookupModeActive();

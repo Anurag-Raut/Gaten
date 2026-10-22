@@ -6,7 +6,7 @@ Current-state note (2026-10-14): the meiki detector, its model packaging, and it
 
 Video pause/resume integration has also been removed: lookup does not control media playback or request notification-listener access. Frozen-frame capture, dismissal cancellation, and bitmap ownership remain unchanged.
 
-Current-state note (2026-10-21): capture has moved off the accessibility service. Lookup mode takes its frames from a MediaProjection session (`capture/ScreenCaptureSession.kt` for the virtual display, the `ImageReader` and the frame copy; `capture/GatenCaptureService.kt` for the service, admission checks and the capture pipeline), and `GatenAccessibilityService.kt` no longer exists. The screenshot items below therefore point at those two files; the single full-screen ARGB_8888 software copy per capture and the bitmap/lifecycle ownership rules are unchanged.
+Current-state note (2026-10-22): capture is back on the accessibility service. Lookup mode takes its frames from `AccessibilityService.takeScreenshot()` in `GatenAccessibilityService.kt`, which also owns the overlay windows, the admission checks and the capture pipeline; the media-projection package (`capture/ScreenCaptureSession.kt`, `capture/GatenCaptureService.kt`) is gone. The screenshot items below therefore point at `GatenAccessibilityService.kt`; the single full-screen ARGB_8888 software copy per capture and the bitmap/lifecycle ownership rules are unchanged from both earlier states.
 
 | Priority | Evidence / location | Change or follow-up | Likely benefit | Risk | Measurement |
 |---|---|---|---|---|---|

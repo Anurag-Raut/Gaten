@@ -20,13 +20,12 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.gaten.app.capture.GatenCaptureService
 import com.gaten.app.media.hasNotificationAccess
 
 /**
- * The platform bits the settings pages reach for directly: the system screens the permissions live
- * behind, lookup mode's own two actions, the browser, the clipboard, toasts, and the
- * notification-access read the lookup page reports on.
+ * The platform bits the settings pages reach for directly: the system screens the two permissions
+ * live behind, the browser, the clipboard, toasts, and the notification-access read the lookup
+ * page reports on.
  *
  * Every opener answers `false` when nothing on the device can take the intent — the screens show a
  * toast instead of pretending the move landed. The activity-bound ones hop to the main thread,
@@ -43,40 +42,10 @@ class GatenPlatformModule(reactContext: ReactApplicationContext) :
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    /** True when Gaten may draw over other apps — the overlay half of lookup mode. */
+    /** Opens the system's Accessibility screen — only ever after the disclosure was agreed to. */
     @ReactMethod
-    fun canDrawOverlays(promise: Promise) {
-        promise.resolve(Settings.canDrawOverlays(reactApplicationContext))
-    }
-
-    /** Opens the "display over other apps" screen for Gaten; `false` when nothing can take it. */
-    @ReactMethod
-    fun openOverlaySettings(promise: Promise) {
-        startIntent(
-            Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${reactApplicationContext.packageName}")
-            ),
-            promise
-        )
-    }
-
-    /**
-     * Asks the user for the screen-capture consent — Android's own dialog, and the only way lookup
-     * mode starts. Nothing is captured until it is answered; the disclosure is the screen's job, and
-     * it is only ever raised after the reader agreed to it.
-     */
-    @ReactMethod
-    fun requestLookupMode(promise: Promise) {
-        GatenCaptureService.requestLookupMode(reactApplicationContext)
-        promise.resolve(true)
-    }
-
-    /** Ends lookup mode: the projection, the overlay and the notification all go together. */
-    @ReactMethod
-    fun stopLookupMode(promise: Promise) {
-        GatenCaptureService.stopLookupMode()
-        promise.resolve(true)
+    fun openAccessibilitySettings(promise: Promise) {
+        startIntent(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), promise)
     }
 
     /** Opens the system's Notification Access screen, where the media-pause permission lives. */
