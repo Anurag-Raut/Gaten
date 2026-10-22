@@ -8,10 +8,10 @@
  * Look up: whether lookup mode is on, the three ways a lookup can start, and the optional pause of
  * whatever is playing behind the overlay.
  *
- * Lookup mode is a live media projection, and it ends outside Gaten as easily as it starts — the
- * status-bar chip, the notification, the screen locking — so it is read again on every arrival and
- * every foregrounding, as is the notification-listener permission the media pause needs. Nothing
- * here asks for anything by itself: the disclosure comes first, and only then the system dialogs.
+ * Lookup mode is Gaten's accessibility service being enabled, and that is a system setting the
+ * reader grants outside the app, so it is read again on every arrival and every foregrounding — as
+ * is the notification-listener permission the media pause needs. Nothing here asks for anything by
+ * itself: the disclosure comes first, and only then the system screen.
  */
 import React, {useEffect, useState} from "react";
 import {AppState, Platform, Text, View} from "react-native";
@@ -47,9 +47,9 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   const [floatingEnabled, setFloatingEnabled] = useState(false);
   const [tileAdded, setTileAdded] = useState(false);
 
-  // Tile callbacks can arrive while this page sits under the Quick Settings shade, lookup mode can
-  // end without the app being asked, and the notification-listener permission is granted in system
-  // Settings: re-read on every arrival and foregrounding.
+  // Tile callbacks can arrive while this page sits under the Quick Settings shade, and both
+  // lookup mode and the notification-listener permission are granted in system Settings: re-read
+  // on every arrival and foregrounding.
   useEffect(() => {
     let cancelled = false;
     const readAll = () => {

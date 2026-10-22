@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeNotificationStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canTakeScreenshot="true"
+    android:description="@string/app_name"
+    android:notificationTimeout="100" />

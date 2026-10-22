@@ -9,7 +9,7 @@ package com.gaten.app.data
 
 import android.graphics.Bitmap
 
-/** Holds the single frame the capture service just took, for the overlay to read. */
+/** Holds the single screenshot the accessibility service just captured, for the overlay to read. */
 object BitmapRepository {
     private var screenshot: Bitmap? = null
 

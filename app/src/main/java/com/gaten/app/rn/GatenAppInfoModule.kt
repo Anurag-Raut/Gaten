@@ -6,14 +6,17 @@
 
 package com.gaten.app.rn
 
+import android.content.ComponentName
 import android.content.Context
+import android.provider.Settings
+import android.text.TextUtils
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
-import com.gaten.app.capture.GatenCaptureService
+import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.ocr.MangaOcrModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
@@ -26,8 +29,9 @@ import java.io.IOException
  * dictionary's schema version, whether the optional manga-ocr model is on the phone, and whether
  * lookup mode is on.
  *
- * Everything is a read of something that already exists: [MangaOcrModel]'s directory and
- * [GatenCaptureService]'s own session. The dictionary's schema
+ * Everything is a read of something that already exists: [MangaOcrModel]'s directory and the
+ * platform's own enabled-accessibility-services list, which is what lookup mode's "On" and "Off"
+ * report on. The dictionary's schema
  * version is read from the SQLite header the way `app/build.gradle.kts` verifies the packaged
  * asset — `PRAGMA user_version` at bytes 60-63 — read from the extracted copy when there is one
  * and from the asset otherwise, so the number the build checked is the number JS sees.
@@ -86,17 +90,37 @@ class GatenAppInfoModule(
     }
 
     /**
-     * Whether lookup mode is on right now — a live media projection, so this is the service's own
-     * state rather than a setting: it is off until the reader consents to a capture, and off again
-     * the moment the projection ends, whichever way it ends.
+     * Whether lookup mode is on: Gaten's accessibility service is enabled in the system's own
+     * settings. That grant is given outside the app, so this is re-read on every ask rather than
+     * cached.
      */
     @ReactMethod
     fun isLookupModeActive(promise: Promise) {
-        promise.resolve(GatenCaptureService.isLookupModeActive())
+        promise.resolve(isAccessibilityServiceEnabled(reactApplicationContext))
     }
 
     override fun invalidate() {
         scope.cancel()
+    }
+
+    /**
+     * True when [GatenAccessibilityService] is one of the platform's enabled accessibility services
+     * — the only honest answer to "can Gaten read the screen" that does not depend on the service
+     * being alive right now.
+     */
+    private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+        val expected = ComponentName(context, GatenAccessibilityService::class.java)
+        val enabled = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+
+        val services = TextUtils.SimpleStringSplitter(':')
+        services.setString(enabled)
+        while (services.hasNext()) {
+            if (ComponentName.unflattenFromString(services.next()) == expected) return true
+        }
+        return false
     }
 
     /** The three reads of the installed model, in one map. */

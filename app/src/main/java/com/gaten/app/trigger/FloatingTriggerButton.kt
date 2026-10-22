@@ -49,12 +49,12 @@ private const val BUBBLE_ALPHA = 0xE6
 private const val GONE_TIMEOUT_MS = 150L
 
 /**
- * The floating lookup trigger: a small bubble in its own overlay window.
+ * The floating lookup trigger: a small bubble in its own accessibility-overlay window.
  *
  * The window is sized to the bubble alone ([WindowManager.LayoutParams.WRAP_CONTENT]) and is
  * `FLAG_NOT_TOUCH_MODAL`, so a touch anywhere else falls through to the app behind instead of
  * being swallowed by an invisible full-screen window. The bubble is a plain [ImageView] because
- * this window is added from the capture service — there is no composition to host Compose.
+ * this window is added from the accessibility service — there is no composition to host Compose.
  *
  * The window does not fit the system bars ([WindowManager.LayoutParams.setFitInsetsTypes] cleared,
  * `FLAG_LAYOUT_IN_SCREEN` below API 30), so its `x`/`y` are display coordinates: the position asked
@@ -220,7 +220,7 @@ class FloatingTriggerButton(
     private fun buildParams(position: Pair<Int, Int>) = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             // Below API 30 this is what keeps the window out of the inset-fitted parent frame;

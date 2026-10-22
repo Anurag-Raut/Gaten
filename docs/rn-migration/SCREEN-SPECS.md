@@ -291,4 +291,4 @@ All in SharedPreferences file **"gaten_settings"**:
 - AnkiPreferences (AnkiSettings): deckName, tags, modelId, front, back, css, modelFields, fieldSources.
 - RecognitionSettings (RecognitionViewModel state, not prefs): installed/installedId/sizeBytes + download state.
 - WaniKani: isConfigured/token via WaniKaniRepository (token verified before stored; cache cleared on disconnect).
-- Platform reads (re-read every resume, never cached): lookup mode active (a live media projection, `GatenCaptureService.isLookupModeActive()`), notification listener access, AnkiDroid status/counts, app version.
+- Platform reads (re-read every resume, never cached): lookup mode on (the accessibility service enabled — `GatenAccessibilityService` named in `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`, through `GatenAppInfo.isLookupModeActive()`), notification listener access, AnkiDroid status/counts, app version.

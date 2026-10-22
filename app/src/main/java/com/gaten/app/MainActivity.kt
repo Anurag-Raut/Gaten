@@ -10,7 +10,6 @@ package com.gaten.app
 import android.content.Intent
 import android.os.Bundle
 import com.facebook.react.ReactActivity
-import com.gaten.app.capture.GatenCaptureService
 import com.gaten.app.rn.GatenBridgeEmitter
 import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
 
@@ -21,8 +20,7 @@ import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
  * The only thing it tells the service is when the user is done with the app: a task that is really
  * going away (not a rotation) takes any lookup and pending capture down with it, which is also what
  * covers the app being taken off recents when the platform does not deliver `onTaskRemoved` to a
- * service it itself binds. Lookup mode itself is not the app's task and stays on, with its
- * notification.
+ * service it itself binds. Later triggers are unaffected — the service stays connected.
  */
 class MainActivity : ReactActivity() {
 
@@ -71,7 +69,7 @@ class MainActivity : ReactActivity() {
         // Only when the app is really finished: a configuration change destroys this activity too,
         // and a lookup must survive that.
         if (isFinishing && !isChangingConfigurations) {
-            GatenCaptureService.dismissForAppExit()
+            GatenAccessibilityService.dismissForAppExit()
         }
         super.onDestroy()
     }

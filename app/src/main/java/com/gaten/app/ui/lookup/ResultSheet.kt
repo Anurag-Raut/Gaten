@@ -1107,7 +1107,7 @@ private fun AddToAnki(word: ScannedWord, type: SheetType, compact: Boolean) {
     Button(
         onClick = {
             if (status == AnkiStatus.NeedsPermission) {
-                // The overlay is the capture service's window and cannot show the system
+                // The overlay is the accessibility service's window and cannot show the system
                 // permission dialog, so an ungranted database permission takes the same route as a
                 // declined one: AnkiDroid's own add screen.
                 if (!AnkiExporter.shareFallback(context, card)) {
