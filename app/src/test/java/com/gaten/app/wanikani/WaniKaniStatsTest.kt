@@ -9,6 +9,7 @@ package com.gaten.app.wanikani
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -18,10 +19,11 @@ import java.io.File
 import java.time.Instant
 
 /**
- * The stats read's decisions, against WaniKani's documented payloads: one run of eight requests, the
- * counts taken from `total_count` of the filtered scope, a snapshot cached for five minutes, a run
- * that fails keeping the last complete snapshot, a rejected token dropping it, and a `304` leaving a
- * cached part in place.
+ * The stats read's decisions, against WaniKani's documented payloads: one run of the account's
+ * requests, the counts taken from `total_count` of the filtered scope, the recall section summed over
+ * the pages of `GET /review_statistics` it is allowed to follow, a snapshot cached for five minutes, a
+ * run that fails keeping the last complete snapshot, a rejected token dropping it, and a `304` leaving
+ * a cached part in place.
  *
  * The API is stood in for rather than aimed at a server, so these run on a plain JVM with no socket
  * and no token anywhere near a real account.
@@ -42,7 +44,7 @@ class WaniKaniStatsTest {
     ) = WaniKaniStats(dir, credentials, api, { now })
 
     @Test
-    fun `one run asks for the account, the summary and one count per SRS bucket`() = runBlocking {
+    fun `one run asks for the account, the summary, the SRS counts and the recall pages`() = runBlocking {
         val api = StatsApi()
         val result = stats(api).read()
 
@@ -55,7 +57,10 @@ class WaniKaniStatsTest {
                 "assignments?srs_stages=5,6&hidden=false",
                 "assignments?srs_stages=7&hidden=false",
                 "assignments?srs_stages=8&hidden=false",
-                "assignments?srs_stages=9&hidden=false"
+                "assignments?srs_stages=9&hidden=false",
+                "review_statistics?hidden=false",
+                // The worst three, in the order the ranking put them, in one request.
+                "subjects?ids=11,12,10"
             ),
             api.requests
         )
@@ -94,7 +99,7 @@ class WaniKaniStatsTest {
         now += WaniKaniStats.STATS_TTL_MS - 1
         val second = client.read() as WaniKaniStatsResult.Available
 
-        assertEquals(8, api.requests.size)
+        assertEquals(10, api.requests.size)
         assertTrue(second.cached)
         assertFalse(second.stale)
         assertEquals(first.snapshot.fetchedAt, second.snapshot.fetchedAt)
@@ -108,13 +113,13 @@ class WaniKaniStatsTest {
 
         now += WaniKaniStats.STATS_TTL_MS + 1
         val refreshed = client.refresh() as WaniKaniStatsResult.Available
-        assertEquals(16, api.requests.size)
+        assertEquals(20, api.requests.size)
         assertFalse(refreshed.cached)
         assertEquals(now, refreshed.snapshot.fetchedAt)
 
         // A second tap straight after the first run answers from it instead of spending another.
         val again = client.refresh() as WaniKaniStatsResult.Available
-        assertEquals(16, api.requests.size)
+        assertEquals(20, api.requests.size)
         assertTrue(again.cached)
         assertEquals(now, again.snapshot.fetchedAt)
     }
@@ -201,6 +206,109 @@ class WaniKaniStatsTest {
     }
 
     @Test
+    fun `the recall section sums the answers and names the three worst with a sample`() = runBlocking {
+        val api = StatsApi()
+        val snapshot = (stats(api).read() as WaniKaniStatsResult.Available).snapshot
+
+        // Summed over the subjects, never averaged over their percentages: 12 right out of 23
+        // readings, 19 out of 27 meanings.
+        val recall = snapshot.recall!!
+        assertEquals(WaniKaniRecallSide(correct = 12, total = 23), recall.reading)
+        assertEquals(WaniKaniRecallSide(correct = 19, total = 27), recall.meaning)
+
+        // The worst three of the subjects with five answers or more, weakest first: the subject
+        // with two answers is left out of the ranking, though its answers are in the totals above.
+        // The radical among them has no characters, so its row keeps the id and nothing else.
+        assertEquals(
+            listOf(
+                WaniKaniDifficultSubject(subjectId = 11, characters = "一", percentage = 50, attempts = 20),
+                WaniKaniDifficultSubject(subjectId = 12, characters = null, percentage = 83, attempts = 8),
+                WaniKaniDifficultSubject(subjectId = 10, characters = "二", percentage = 90, attempts = 20)
+            ),
+            recall.difficult
+        )
+    }
+
+    @Test
+    fun `a side the account has never been asked is null rather than zero`() = runBlocking {
+        val api = StatsApi()
+        // A kana vocabulary is quizzed on its meaning only, so its reading counts are all zeroes.
+        api.reviewRecords = listOf(
+            reviewStatistic(
+                subjectId = 20,
+                readingCorrect = 0,
+                readingIncorrect = 0,
+                meaningCorrect = 1,
+                meaningIncorrect = 4,
+                percentage = 20
+            )
+        )
+        val snapshot = (stats(api).read() as WaniKaniStatsResult.Available).snapshot
+
+        val recall = snapshot.recall!!
+        assertNull(recall.reading)
+        assertEquals(WaniKaniRecallSide(correct = 1, total = 5), recall.meaning)
+        // Five answers at 20% is a sample, so the subject is the ranking's only entry — and the
+        // subjects answer carries no characters for it, which is a null rather than a blank.
+        assertEquals(
+            listOf(WaniKaniDifficultSubject(subjectId = 20, characters = null, percentage = 20, attempts = 5)),
+            recall.difficult
+        )
+    }
+
+    @Test
+    fun `a recall read that fails leaves the section null and the rest of the snapshot alone`() = runBlocking {
+        val api = StatsApi()
+        api.failOn = "review_statistics?hidden=false"
+        val available = stats(api).read() as WaniKaniStatsResult.Available
+
+        // Everything the dashboard cannot do without is there: only the optional section is not.
+        assertNull(available.snapshot.recall)
+        assertEquals(12, available.snapshot.level)
+        assertEquals(25, available.snapshot.forecast.size)
+        assertEquals(listOf(0, 40, 20, 7, 5, 200), available.snapshot.stages.map { it.count })
+        // And no characters were asked for, because there was nothing to name.
+        assertFalse(api.requests.any { it.startsWith("subjects") })
+
+        // A failed section is not remembered as a failure: the next fresh read asks again.
+        api.failOn = null
+        now += WaniKaniStats.STATS_TTL_MS + 1
+        val next = stats(api).read() as WaniKaniStatsResult.Available
+        assertNotNull(next.snapshot.recall)
+    }
+
+    @Test
+    fun `a recall read that fails part-way through its pages is null rather than a partial sum`() = runBlocking {
+        val api = StatsApi()
+        api.reviewPages = 3
+        api.failOn = "review_statistics?page_after_id=2"
+        val snapshot = (stats(api).read() as WaniKaniStatsResult.Available).snapshot
+
+        // The first page arrived and the second did not: a total over one page would understate the
+        // account's accuracy, so the section is missing instead.
+        assertNull(snapshot.recall)
+        assertEquals(10, api.requests.size)
+    }
+
+    @Test
+    fun `the recall read stops at its page cap instead of following every page`() = runBlocking {
+        val api = StatsApi()
+        api.reviewPages = WaniKaniStats.RECALL_MAX_PAGES + 2
+        val snapshot = (stats(api).read() as WaniKaniStatsResult.Available).snapshot
+
+        // Ten pages, the last cursor inside the cap: the eleventh the API offers is not followed.
+        val pages = api.requests.filter { it.startsWith("review_statistics") }
+        assertEquals(WaniKaniStats.RECALL_MAX_PAGES, pages.size)
+        assertFalse(pages.any { it.endsWith("page_after_id=${WaniKaniStats.RECALL_MAX_PAGES + 1}") })
+
+        // What was read is still aggregated, page by page: the same four subjects, ten times over.
+        assertEquals(
+            WaniKaniRecallSide(correct = 12 * WaniKaniStats.RECALL_MAX_PAGES, total = 23 * WaniKaniStats.RECALL_MAX_PAGES),
+            snapshot.recall!!.reading
+        )
+    }
+
+    @Test
     fun `a different token reads a different snapshot`() = runBlocking {
         val first = stats(StatsApi(), StatsCredentials(TOKEN))
         first.read()
@@ -210,7 +318,7 @@ class WaniKaniStatsTest {
         val result = second.read() as WaniKaniStatsResult.Available
 
         assertFalse(result.cached)
-        assertEquals(8, other.requests.size)
+        assertEquals(10, other.requests.size)
     }
 
     @Test
@@ -230,7 +338,7 @@ class WaniKaniStatsTest {
         assertTrue(limited.cached)
         assertEquals(first.snapshot, limited.snapshot)
         val afterLimit = api.requests.size
-        assertEquals(9, afterLimit)
+        assertEquals(11, afterLimit)
 
         // Nothing is asked while the wait runs: not the automatic read, not the reader's own refresh.
         val blocked = client.refresh() as WaniKaniStatsResult.Available
@@ -266,6 +374,16 @@ class WaniKaniStatsTest {
         var unchangedOn: String? = null
         val conditional = mutableMapOf<String, String?>()
 
+        /** The review statistics rows every page answers with, for a test that wants its own. */
+        var reviewRecords: List<String> = defaultReviewRecords()
+
+        /**
+         * How many pages `GET /review_statistics` says it has. The next page is offered until the
+         * last one, so a test can ask for more than the read is allowed to follow — and its cursor is
+         * the page number itself, with no subject ids to keep straight.
+         */
+        var reviewPages = 1
+
         override suspend fun getWithMeta(
             path: String,
             query: List<Pair<String, String>>,
@@ -291,8 +409,15 @@ class WaniKaniStatsTest {
                 "user" -> WaniKaniFetchWithMeta.Body(USER_JSON, meta)
                 "summary" -> WaniKaniFetchWithMeta.Body(summaryJson(), meta)
                 "assignments" -> WaniKaniFetchWithMeta.Body(countJson(query), meta)
+                "review_statistics" -> WaniKaniFetchWithMeta.Body(reviewStatisticsJson(query), meta)
+                "subjects" -> WaniKaniFetchWithMeta.Body(difficultSubjectsJson(), meta)
                 else -> WaniKaniFetchWithMeta.Failed(WaniKaniFailure.SERVER)
             }
+        }
+
+        private fun reviewStatisticsJson(query: List<Pair<String, String>>): String {
+            val page = query.firstOrNull { it.first == "page_after_id" }?.second?.toIntOrNull() ?: 1
+            return reviewStatistics(reviewRecords, if (page < reviewPages) page + 1 else null)
         }
 
         private fun countJson(query: List<Pair<String, String>>): String {
@@ -349,5 +474,74 @@ class WaniKaniStatsTest {
                 "data_updated_at":"2018-04-11T21:00:00.000000Z",
                 "data":{"lessons":[],"next_reviews_at":"$NEXT_REVIEWS_AT","reviews":[$buckets]}}"""
         }
+
+        /**
+         * The four reviewed subjects the recall read is answered with by default: three with a sample
+         * worth ranking and one with only two answers, which is counted in the account's totals but
+         * left out of the worst three.
+         */
+        fun defaultReviewRecords(): List<String> = listOf(
+            reviewStatistic(10, readingCorrect = 8, readingIncorrect = 2, meaningCorrect = 9, meaningIncorrect = 1, percentage = 90),
+            reviewStatistic(11, readingCorrect = 2, readingIncorrect = 8, meaningCorrect = 5, meaningIncorrect = 5, percentage = 50),
+            reviewStatistic(12, readingCorrect = 1, readingIncorrect = 1, meaningCorrect = 4, meaningIncorrect = 2, percentage = 83),
+            reviewStatistic(13, readingCorrect = 1, readingIncorrect = 0, meaningCorrect = 1, meaningIncorrect = 0, percentage = 100)
+        )
+
+        /**
+         * One `GET /review_statistics` resource: the four counts and the rate WaniKani reports for the
+         * subject, in the reference's own shape. The streaks and the timestamps Gaten does not read
+         * are the reference's example values.
+         */
+        fun reviewStatistic(
+            subjectId: Int,
+            readingCorrect: Int,
+            readingIncorrect: Int,
+            meaningCorrect: Int,
+            meaningIncorrect: Int,
+            percentage: Int
+        ): String = """
+            {
+              "id": $subjectId,
+              "object": "review_statistic",
+              "url": "https://api.wanikani.com/v2/review_statistics/$subjectId",
+              "data_updated_at": "2018-04-03T11:50:31.558505Z",
+              "data": {
+                "created_at": "2017-09-05T23:38:10.964821Z",
+                "subject_id": $subjectId,
+                "subject_type": "kanji",
+                "meaning_correct": $meaningCorrect,
+                "meaning_incorrect": $meaningIncorrect,
+                "meaning_max_streak": 8,
+                "meaning_current_streak": 8,
+                "reading_correct": $readingCorrect,
+                "reading_incorrect": $readingIncorrect,
+                "reading_max_streak": 12,
+                "reading_current_streak": 4,
+                "percentage_correct": $percentage,
+                "hidden": false
+              }
+            }
+        """.trimIndent()
+
+        /** A `GET /review_statistics` collection around [records], offering page [nextPage] next. */
+        fun reviewStatistics(records: List<String>, nextPage: Int? = null): String {
+            val nextUrl = nextPage?.let {
+                "\"https://api.wanikani.com/v2/review_statistics?page_after_id=$it\""
+            } ?: "null"
+            return """{"object":"collection","url":"https://api.wanikani.com/v2/review_statistics",
+                "pages":{"per_page":500,"next_url":$nextUrl,"previous_url":null},
+                "total_count":${records.size},"data_updated_at":"2018-04-03T11:50:31.558505Z",
+                "data":[${records.joinToString(",")}]}"""
+        }
+
+        /**
+         * `GET /subjects?ids=…`: the characters of the three difficult subjects, one of which is a
+         * radical that has none at all — the case a row has to survive with its id and nothing else.
+         */
+        fun difficultSubjectsJson(): String = WaniKaniJson.collection(
+            WaniKaniJson.kanji(id = 11, character = "一"),
+            WaniKaniJson.radical(id = 12, character = null),
+            WaniKaniJson.kanji(id = 10, character = "二")
+        )
     }
 }

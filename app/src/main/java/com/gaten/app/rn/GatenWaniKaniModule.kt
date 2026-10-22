@@ -18,6 +18,8 @@ import com.gaten.app.wanikani.WaniKaniLessonQueue
 import com.gaten.app.wanikani.WaniKaniLessonStart
 import com.gaten.app.wanikani.WaniKaniLearningPreferences
 import com.gaten.app.wanikani.WaniKaniLookup
+import com.gaten.app.wanikani.WaniKaniRecall
+import com.gaten.app.wanikani.WaniKaniRecallSide
 import com.gaten.app.wanikani.WaniKaniRepository
 import com.gaten.app.wanikani.WaniKaniReviewItem
 import com.gaten.app.wanikani.WaniKaniReviewQueue
@@ -399,12 +401,14 @@ class GatenWaniKaniModule(
 
     /**
      * The account's own numbers for the dashboard: the level, what is due now, the next review time,
-     * the next 24 hours by the hour, and the SRS spread of everything the account has started.
+     * the next 24 hours by the hour, the SRS spread of everything the account has started, and the
+     * cumulative accuracy of its reviews. That last section is the one part that may be `null` while
+     * everything else is there: it is optional data, and its absence says nothing about the rest.
      *
      * Resolves the cached snapshot while it is younger than five minutes and a fresh read otherwise.
      * [refreshStats] is the same read with the cache ignored — the dashboard's refresh action — and a
      * refresh that lands moments after another run answers from that run instead of spending a second
-     * run of eight requests.
+     * run of requests.
      *
      * A read that fails *resolves* rather than rejecting (`status: "failed"` with the failure's name
      * and, for a rate limit, the seconds to wait), because a failure here is an answer the dashboard
@@ -484,7 +488,51 @@ class GatenWaniKaniModule(
                         }
                     }
                 )
+                val recall = snapshot.recall
+                if (recall == null) putNull("recall") else putMap("recall", recall.toJsMap())
                 putDouble("fetchedAt", snapshot.fetchedAt.toDouble())
+            }
+        )
+    }
+
+    /**
+     * The recall section: the account's cumulative reading and meaning accuracy, and the subjects it
+     * gets wrong most often. Every percentage here is over every answer the account has ever given —
+     * WaniKani keeps running totals rather than a log — and each row's `attempts` is the sample its
+     * percentage came from, so a subject answered five times is never read like one answered five
+     * hundred.
+     */
+    private fun WaniKaniRecall.toJsMap(): WritableMap = Arguments.createMap().apply {
+        putRecallSide("reading", reading)
+        putRecallSide("meaning", meaning)
+        putArray(
+            "difficult",
+            Arguments.createArray().apply {
+                difficult.forEach { subject ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putInt("subjectId", subject.subjectId)
+                            subject.characters?.let { putString("characters", it) } ?: putNull("characters")
+                            putInt("percentage", subject.percentage)
+                            putInt("attempts", subject.attempts)
+                        }
+                    )
+                }
+            }
+        )
+    }
+
+    /** One side of the recall section, or an explicit null when the account has never been asked it. */
+    private fun WritableMap.putRecallSide(name: String, side: WaniKaniRecallSide?) {
+        if (side == null) {
+            putNull(name)
+            return
+        }
+        putMap(
+            name,
+            Arguments.createMap().apply {
+                putInt("correct", side.correct)
+                putInt("total", side.total)
             }
         )
     }

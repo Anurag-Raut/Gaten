@@ -86,6 +86,32 @@ export type WaniKaniFailure =
   | "MALFORMED"
   | "STORAGE";
 
+/**
+ * How the account's answers have gone: the cumulative accuracy of its readings and its meanings, and
+ * the subjects it gets wrong most often.
+ *
+ * Cumulative means exactly that. WaniKani keeps a running total per subject rather than a log of
+ * answers, so neither accuracy is date-scoped — there is no week, no month and no trend to draw, and
+ * nothing here pretends there is. Each subject's `attempts` is the sample its percentage was taken
+ * over, so a subject answered five times is never read like one answered five hundred.
+ */
+export interface WaniKaniRecall {
+  /** The readings: how many were right, out of how many times a reading was asked at all. */
+  reading: {correct: number; total: number} | null;
+  /** The meanings, counted the same way and over the same reviews. */
+  meaning: {correct: number; total: number} | null;
+  /** The worst three subjects with a sample worth ranking, weakest first. */
+  difficult: {
+    subjectId: number;
+    /** The character WaniKani shows for it; null when it has none — a radical that is only an image. */
+    characters: string | null;
+    /** That subject's cumulative accuracy, 0 through 100. */
+    percentage: number;
+    /** Every answer to it so far, reading and meaning together: the sample behind `percentage`. */
+    attempts: number;
+  }[];
+}
+
 /** The account's own numbers, as the dashboard reads them: one snapshot, no history and no estimates. */
 export interface WaniKaniStatsSnapshot {
   /** The account's WaniKani username, which is what the dashboard calls the source of these numbers. */
@@ -106,6 +132,12 @@ export interface WaniKaniStatsSnapshot {
   forecast: {availableAt: number; count: number}[];
   /** The SRS spread, one entry per bucket, labelled as WaniKani's own guide names the stages. */
   stages: {key: string; label: string; count: number}[];
+  /**
+   * The cumulative accuracy behind the Recall section, or null when that read could not be made at
+   * all — the numbers above are the account's own either way, so a missing section invalidates none
+   * of them, and a section whose sides are null means the account has simply never been asked.
+   */
+  recall: WaniKaniRecall | null;
   /** Epoch milliseconds when this snapshot was read from WaniKani. */
   fetchedAt: number;
 }
