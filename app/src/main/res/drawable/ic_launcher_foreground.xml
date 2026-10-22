@@ -8,18 +8,17 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Abstract mark: an open ring (centreline r 24, stroke 9, 300-degree
-         arc with a 60-degree gap at the top right) around a solid dot
-         (r 10.5) — "circle something to look it up". Purely geometric, no
-         glyph outlines; the silhouette reads in one colour, so this vector
-         doubles as the monochrome layer. Max radial extent 28.5, inside
-         the 66dp adaptive safe zone, optically centred on (54, 54). -->
+    <!-- The Gaten G: the source mark's single squared stroke, scaled from its
+         128-unit square (stroke box x 21.5–103.5, y 26.5–104.5, centre
+         (62.5, 65.5)) onto the 108dp adaptive canvas at 0.5743 about (54, 54).
+         The stroke's far corner lands 32.5 from the centre, inside the 66dp
+         safe zone, so no launcher mask clips the letterform. The glyph is one
+         colour, so this vector also serves as the monochrome layer; the night
+         variant (drawable-night) is the same geometry in the inverted ink. -->
     <path
-        android:pathData="M77.18,47.79 A24,24 0 1 1 60.21,30.82"
+        android:pathData="M72.09,35.91 L51.99,35.91 C40.5,35.91 34.76,42.8 34.76,53.71 C34.76,65.77 41.65,72.09 53.14,72.09 L73.24,72.09 L73.24,57.16 L60.03,57.16"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="9"
-        android:strokeLineCap="round"/>
-    <path
-        android:pathData="M43.5,54 A10.5,10.5 0 1 1 64.5,54 A10.5,10.5 0 1 1 43.5,54 Z"
-        android:fillColor="#FFC107"/>
+        android:strokeWidth="8.62"
+        android:strokeLineCap="square"
+        android:strokeLineJoin="miter"/>
 </vector>

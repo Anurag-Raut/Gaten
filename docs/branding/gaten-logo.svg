@@ -1,9 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
-  <!-- Gaten candidate 1: open ring + solid dot (target / "circle to select") -->
-  <rect width="108" height="108" fill="#283593"/>
-  <!-- open ring, centreline r 24, stroke 9, 300 deg arc with 60 deg gap at top-right -->
-  <path d="M 77.18 47.79 A 24 24 0 1 1 60.21 30.82"
-        fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
-  <!-- solid dot at centre -->
-  <circle cx="54" cy="54" r="10.5" fill="#FFC107"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Gaten app icon: black square with a white G" color="#FFFFFF">
+  <title>Gaten app icon</title>
+  <!-- Gaten's mark: the letter G drawn as one squared stroke on a black
+       rounded square. The rect is the ground and the glyph takes the
+       surrounding ink, so the same art inverts for the dark theme (white
+       ground, black G).
+
+       The launcher icon takes this glyph onto the 108dp adaptive canvas
+       (app/src/main/res/drawable/ic_launcher_foreground.xml), scaled to 0.5743
+       about the centre so it stays inside the 66dp safe zone; the tile-sized
+       copy is app/src/main/res/drawable/ic_qs_lookup.xml. The ground is the
+       adaptive icon's own background layer (values/ic_launcher_background.xml
+       and its -night variant), so no rounded square is drawn there. -->
+  <rect width="128" height="128" rx="28" fill="#000000"/>
+  <path d="M94 34H59C39 34 29 46 29 65C29 86 41 97 61 97H96V71H73" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="square" stroke-linejoin="miter" />
 </svg>
