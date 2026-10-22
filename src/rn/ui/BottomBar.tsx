@@ -11,13 +11,13 @@
  * A rounded surface holds a filled selected pill with the selected glyph and label inline; every
  * other tab is a muted glyph on its own. Light and dark modes share the same geometry.
  *
- * The bar never moves (it is a sibling of the pager), and everything inside it is one continuous
- * function of the pager's own `position`: the capsule travels between item centres, the three glyphs
- * part to make room for it, and the capsule's own glyph-and-label pair cross-fades and drifts as it
- * goes. So a swipe drags all of it frame by frame, a tap on a non-adjacent tab walks it across the
- * tabs between, and a tap that lands mid-flight simply retargets the same values. The capsule takes
- * each tab's own measured label width, so a short label stays compact instead of inheriting the
- * width of the longest one.
+ * The bar never moves with the pager (it is a sibling of the pager), and everything inside it is one
+ * continuous function of the pager's own `position`: the capsule travels between item centres, the
+ * three glyphs part to make room for it, and the capsule's own glyph-and-label pair cross-fades and
+ * drifts as it goes. So a swipe drags all of it frame by frame, a tap on a non-adjacent tab walks it
+ * across the tabs between, and a tap that lands mid-flight simply retargets the same values. The
+ * capsule takes each tab's own measured label width, so a short label stays compact instead of
+ * inheriting the width of the longest one.
  *
  * Every one of those is a `transform`, `width` or an `opacity` interpolated from `position`, which the library
  * feeds through the native driver — so the bar stays in step with the pager rather than a frame
@@ -42,6 +42,8 @@ import {
 } from "react-native";
 import Reanimated, {
   cancelAnimation,
+  Extrapolation,
+  interpolate,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -56,7 +58,7 @@ import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
 import * as ThemeBridge from "../native/GatenTheme";
 import * as Haptics from "../native/GatenHaptics";
-import {EXIT_EASING_REANIMATED, FLOATING_BAR_ELEVATION, PAGE_EASING_REANIMATED, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
+import {FLOATING_BAR_ELEVATION, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
 import {Icon} from "./components";
 import type {IconName} from "./icons";
 
@@ -90,19 +92,70 @@ const TAB_ICONS: Record<string, IconName> = {
 };
 
 /**
- * The bar's own arrival and departure, in ms. The bar is chrome the pager and a pushed page share
- * the frame with, so it cannot pop: leaving takes a shorter, accelerating drop below the fold
- * (page push or the search opening), and arriving takes a slightly longer rise on the decelerating
- * page curve, timed to land with the page that uncovered it.
+ * The bar's own arrival and departure. The bar is chrome the pager and a pushed page share the frame
+ * with, so it cannot pop — but it also cannot be timed, because a push, a pop and the search can all
+ * interrupt it mid-flight. So both directions are springs, which are the one curve that keeps its own
+ * velocity through a retarget, and both are layered: on the way out the bar collapses toward the
+ * bottom edge of the display while it sinks through it, fading only once it is already leaving the
+ * screen, and on the way back in it grows up out of that same edge. The collapse is what does the
+ * work — a bar this size sliding at a constant size reads as a strip being pushed off the screen,
+ * where a collapsing one reads as the bar itself leaving. [BAR_EXIT_COLLAPSE_GONE] is how far it has
+ * collapsed by the time it is gone.
+ *
+ * The two are deliberately not the same spring. Arriving is the slower one and springs properly — a
+ * ~14% overshoot, so the bar rises past its resting place by about 14 dp and drops back onto it,
+ * which is the part of this that is actually read as "premium" — while leaving is quicker and all but
+ * critically damped, since a dismissal that visibly bounces reads as a mistake. The damping is what
+ * sets the bounce, so raising it makes a spring *less* bouncy, not stiffer.
  */
-const BAR_ENTER_MS = 260;
-const BAR_EXIT_MS = 180;
+const BAR_ENTER_SPRING = {mass: 1, stiffness: 320, damping: 19};
+const BAR_EXIT_SPRING = {mass: 1, stiffness: 360, damping: 30};
+
+/**
+ * How far the bar has collapsed at two points on the way out: half way — which is roughly where it
+ * runs out of screen, so it is the part of the collapse that is actually seen — and once it is fully
+ * gone. Front-loading it like this is what makes the departure read as the bar collapsing away
+ * rather than as a bar of a fixed size being pushed off the bottom edge.
+ */
+const BAR_EXIT_COLLAPSE_MID = 0.8;
+const BAR_EXIT_COLLAPSE_GONE = 0.7;
+
+/**
+ * Where the bar starts to go translucent, as a fraction of that same travel from rest to clear of the
+ * screen: late enough that the collapse and the slide are both done in plain sight, early enough that
+ * the bar is not still fully opaque as it crosses the screen edge.
+ */
+const BAR_FADE_FROM = 0.75;
 
 /** How long the glyph waits before its arrival gesture: the pager's own settle is ~250 ms, so
  * starting a little before that keeps the gesture clear of the capsule's travel without feeling
  * detached from the tap.
  */
 const ICON_MOTION_DELAY = 160;
+
+/**
+ * The Analytics glyph as three bars the bar moves on its own: each bar's left edge and resting height
+ * as a fraction of the icon box, read off the Material Symbols `bar_chart` path (a 960-unit viewBox),
+ * so the animated copy lands exactly on the plain glyph it replaces. The bars share the glyph's
+ * baseline, so one grows and shrinks from the chart's floor rather than floating.
+ */
+const CHART_BAR_WIDTH = 1 / 6;
+const CHART_BASELINE = 1 / 6;
+const CHART_BARS = [
+  {left: 1 / 6, height: 440 / 960},
+  {left: 5 / 12, height: 640 / 960},
+  {left: 2 / 3, height: 280 / 960},
+] as const;
+
+/**
+ * The wave itself: on selection every bar dips, rises past its resting height and settles, the next
+ * starting [CHART_STAGGER_MS] after the last, so the glyph moves rather than swells. The rise is kept
+ * small enough that the tallest bar stays inside the icon box instead of crowding the label beside it.
+ */
+const CHART_BEAT_MS = 140;
+const CHART_STAGGER_MS = 60;
+const CHART_DIP = 0.32;
+const CHART_RISE = 0.22;
 
 // A small horizontal overshoot layered over the pager's travel, only after a tab tap.
 const SLIDE_SPRING = {mass: 1, stiffness: 500, damping: 20};
@@ -115,14 +168,32 @@ function TabIcon({name, color}: {name: IconName; color: string}) {
 }
 
 /**
- * Each tab's own arrival gesture. The glyphs are filled Material Symbols paths, so the motion is
- * transform-only: Home bounces, Analytics grows from its baseline like a chart drawn upward, and
- * Settings spins once. The gesture starts [ICON_MOTION_DELAY] ms after selection — about when the
- * capsule has landed — so it is seen rather than smeared across the pager transition. Home and
- * Analytics return to rest; the gear finishes at 360°, which is visually identical to 0°, so
- * resetting it is invisible. Reduced motion leaves every glyph still.
+ * Each tab's own arrival gesture, which starts [ICON_MOTION_DELAY] ms after selection — about when
+ * the capsule has landed — so it is seen rather than smeared across the pager transition. Analytics
+ * is the one glyph the bar does not draw whole: [AnalyticsGlyph] redraws it as three bars so they can
+ * move on their own.
  */
 function MotionIcon({
+  name,
+  color,
+  active,
+}: {
+  name: IconName;
+  color: string;
+  active: boolean;
+}) {
+  if (name === "bar_chart") {
+    return <AnalyticsGlyph color={color} active={active} />;
+  }
+  return <TransformIcon name={name} color={color} active={active} />;
+}
+
+/**
+ * Home and Settings, drawn as whole Material Symbols paths, so their motion is transform-only: Home
+ * bounces and Settings spins once. Home returns to rest; the gear finishes at 360°, which is visually
+ * identical to 0°, so resetting it is invisible. Reduced motion leaves both glyphs still.
+ */
+function TransformIcon({
   name,
   color,
   active,
@@ -163,25 +234,104 @@ function MotionIcon({
 
   const motion = useAnimatedStyle(() => {
     const p = progress.value;
-    switch (name) {
-      case "home":
-        return {transform: [{translateY: -2.5 * p}, {scale: 1 + 0.16 * p}]};
-      case "bar_chart":
-        return {transform: [{scaleY: 1 + 0.25 * p}]};
-      default:
-        return {transform: [{rotate: `${360 * p}deg`}]};
+    if (name === "home") {
+      return {transform: [{translateY: -2.5 * p}, {scale: 1 + 0.16 * p}]};
     }
+    return {transform: [{rotate: `${360 * p}deg`}]};
   });
+
+  return (
+    <Reanimated.View style={[{transformOrigin: "center"}, motion]}>
+      <TabIcon name={name} color={color} />
+    </Reanimated.View>
+  );
+}
+
+/**
+ * The Analytics glyph, redrawn as its three bars rather than as one Material Symbols path, so each
+ * can move on its own: on selection the bars run a wave — dip, rise past their resting height, settle
+ * — each starting a beat after the one before it, which reads as an equalizer rather than one shape
+ * swelling. Reduced motion leaves the bars at rest.
+ */
+function AnalyticsGlyph({color, active}: {color: string; active: boolean}) {
+  const reducedMotion = useReducedMotion();
+  return (
+    <View style={styles.chartGlyph}>
+      {CHART_BARS.map((bar, index) => (
+        <ChartBar
+          key={index}
+          color={color}
+          left={bar.left}
+          height={bar.height}
+          delay={index * CHART_STAGGER_MS}
+          active={active}
+          reducedMotion={reducedMotion}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** One of the Analytics glyph's three bars, in the icon box's own coordinates. */
+function ChartBar({
+  color,
+  left,
+  height,
+  delay,
+  active,
+  reducedMotion,
+}: {
+  color: string;
+  left: number;
+  height: number;
+  delay: number;
+  active: boolean;
+  reducedMotion: boolean;
+}) {
+  const pulse = useSharedValue(0);
+  const firstRender = useRef(true);
+
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    if (!active || reducedMotion) {
+      pulse.value = 0;
+      return;
+    }
+    const beat = {duration: CHART_BEAT_MS, easing: PRESS_EASING_REANIMATED};
+    pulse.value = withDelay(
+      ICON_MOTION_DELAY + delay,
+      withSequence(
+        withTiming(-CHART_DIP, beat),
+        withTiming(CHART_RISE, beat),
+        withTiming(0, beat),
+      ),
+    );
+  }, [active, reducedMotion, delay, pulse]);
+
+  // Scale, not height: the bar rests on the glyph's baseline, so what moves is its top edge — and a
+  // transform is the one thing that stays on the native driver.
+  const motion = useAnimatedStyle(() => ({
+    transform: [{scaleY: 1 + pulse.value}],
+  }));
 
   return (
     <Reanimated.View
       style={[
-        {transformOrigin: name === "bar_chart" ? "bottom" : "center"},
+        styles.chartBar,
+        {
+          left: left * ICON_SIZE,
+          bottom: CHART_BASELINE * ICON_SIZE,
+          width: CHART_BAR_WIDTH * ICON_SIZE,
+          height: height * ICON_SIZE,
+          backgroundColor: color,
+          transformOrigin: "bottom",
+        },
         motion,
       ]}
-    >
-      <TabIcon name={name} color={color} />
-    </Reanimated.View>
+    />
   );
 }
 
@@ -372,10 +522,10 @@ export function BottomBar({
   }));
 
   // The bar's own arrival and departure. A pushed page and the search cover the frame the bar sits
-  // in, so the bar leaves with them — dropping below the fold and fading, over one shorter beat than
-  // it takes to come back — rather than blinking out of the push's first frame. `hidden` is 0 at rest
-  // and 1 once the bar is clear of the screen, and it is the only thing this motion reads, so an exit
-  // interrupted by a pop reverses from wherever the bar got to instead of restarting.
+  // in, so the bar leaves with them — dropping below the fold, shrinking and fading — rather than
+  // blinking out of the push's first frame. `hidden` is 0 at rest and 1 once the bar is clear of the
+  // screen, and it is the only thing this motion reads, so an exit interrupted by a pop reverses from
+  // wherever the bar got to, at the speed it was already carrying, instead of restarting.
   const hidden = useSharedValue(visible ? 0 : 1);
   // The bar's own box plus the gesture inset, so 1 sits just past the screen edge rather than resting
   // on it; the extra [spacing.m] keeps the last of the travel from being spent unseen.
@@ -386,16 +536,37 @@ export function BottomBar({
       hidden.value = visible ? 0 : 1;
       return;
     }
-    hidden.value = withTiming(visible ? 0 : 1, {
-      duration: visible ? BAR_ENTER_MS : BAR_EXIT_MS,
-      easing: visible ? PAGE_EASING_REANIMATED : EXIT_EASING_REANIMATED,
-    });
+    hidden.value = withSpring(
+      visible ? 0 : 1,
+      visible ? BAR_ENTER_SPRING : BAR_EXIT_SPRING,
+    );
   }, [visible, reducedMotion, hidden]);
 
-  const barMotion = useAnimatedStyle(() => ({
-    opacity: 1 - hidden.value,
-    transform: [{translateY: hidden.value * travel}],
-  }));
+  // Every layer of the bar's own motion is one function of `hidden` — how far out it is, 0 at rest
+  // and 1 clear of the screen — and every layer is clamped, because both springs overshoot the end
+  // they are travelling to.
+  const barMotion = useAnimatedStyle(() => {
+    const out = hidden.value;
+    return {
+      // Fading is left until the end of the travel: the bar stays solid while it is still legible —
+      // which is the whole of the collapse and most of the slide — and is only translucent once it is
+      // already leaving the screen. Fading from the first frame instead would hide both.
+      opacity: interpolate(out, [BAR_FADE_FROM, 1], [1, 0], Extrapolation.CLAMP),
+      transform: [
+        {translateY: out * travel},
+        // Clamped at 1 even though the arrival spring overshoots: a bar briefly wider than its own
+        // layout would widen past its margins and read as a glitch rather than as a bounce.
+        {
+          scale: interpolate(
+            out,
+            [0, 0.5, 1],
+            [1, BAR_EXIT_COLLAPSE_MID, BAR_EXIT_COLLAPSE_GONE],
+            Extrapolation.CLAMP,
+          ),
+        },
+      ],
+    };
+  });
 
   const measureRow = (
     <View
@@ -510,6 +681,10 @@ export function BottomBar({
           right: 0,
           bottom: 0,
           height: BAR_HEIGHT + insets.bottom,
+          // Scaling about the screen edge the bar drops into, so the shrink and the slide are one
+          // gesture: the surface collapses toward the bottom of the display rather than toward its
+          // own middle.
+          transformOrigin: "bottom",
         },
         barMotion,
       ]}
@@ -700,6 +875,8 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 0},
   },
   stage: {flex: 1},
+  chartGlyph: {width: ICON_SIZE, height: ICON_SIZE},
+  chartBar: {position: "absolute"},
   measureRow: {position: "absolute", flexDirection: "row", opacity: 0},
   slot: {position: "absolute", top: 0, bottom: 0},
   slotPress: {flex: 1, alignItems: "center", justifyContent: "center"},
