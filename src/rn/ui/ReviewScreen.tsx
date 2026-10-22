@@ -42,6 +42,12 @@ import {
 } from "react-native";
 import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
+import ReanimatedAnimated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import * as Anki from "../native/GatenAnki";
 import * as GatenDict from "../native/GatenDict";
 import * as GatenHaptics from "../native/GatenHaptics";
@@ -50,7 +56,7 @@ import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
 import {InkIcon} from "./InkIcon";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "./tokens";
+import {MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing, typeScale} from "./tokens";
 import {useTheme, type Theme} from "./theme";
 import {DialogShell, OutlinedButton} from "./settings/settings-components";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
@@ -79,6 +85,10 @@ const FLASH_MS = 250;
 
 /** How opaque that tint gets: enough to read as an answer, not enough to hide the word under it. */
 const FLASH_ALPHA = 0.18;
+
+/** The example disclosure opening or closing: one emphasized beat for the body's height and the
+ * chevron's quarter turn together. */
+const EXAMPLES_TOGGLE_MS = 220;
 
 /** The curve a press — and the flash's half-sweep — answers with. */
 const FLASH_EASING = Easing.bezier(0.4, 0, 0.2, 1);
@@ -907,12 +917,39 @@ function ExampleSentences({
   onToggle: () => void;
 }) {
   const {colors} = theme;
+  const reducedMotion = useReducedMotion();
+  // One driver for the whole disclosure: the body's height and fade, and the chevron's quarter turn.
+  const progress = useSharedValue(expanded ? 1 : 0);
+  // The body is measured while it is clipped shut, so opening animates to its true height even
+  // before the examples have arrived.
+  const contentHeight = useSharedValue(0);
   const corpus = examples ?? [];
   const loading = examples === null && storedSentence == null;
   // The note's own sentence is the fallback for a word the corpus does not carry.
   const noteLines = corpus.length === 0 && storedSentence != null
     ? displayAnkiField(storedSentence).split("\n").map((line) => line.trim()).filter((line) => line !== "")
     : [];
+
+  useEffect(() => {
+    if (reducedMotion) {
+      progress.value = expanded ? 1 : 0;
+      return;
+    }
+    progress.value = withTiming(expanded ? 1 : 0, {
+      duration: EXAMPLES_TOGGLE_MS,
+      easing: PAGE_EASING_REANIMATED,
+    });
+  }, [expanded, reducedMotion, progress]);
+
+  const bodyStyle = useAnimatedStyle(() => ({
+    height: contentHeight.value * progress.value,
+    opacity: progress.value,
+  }));
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{rotate: `${progress.value * 90}deg`}],
+  }));
+
   return (
     <View style={styles.examples}>
       <PressableScale
@@ -923,12 +960,22 @@ function ExampleSentences({
         style={[styles.examplesDisclosure, {borderColor: colors.outlineVariant}]}
       >
         <Text style={[typeScale.titleSmall, styles.examplesTitle, {color: colors.onSurface}]}>Example sentences</Text>
-        <View style={{transform: [{rotate: expanded ? "90deg" : "0deg"}]}}>
+        <ReanimatedAnimated.View style={chevronStyle}>
           <InkIcon name="chevron" size={16} color={colors.onSurfaceVariant} />
-        </View>
+        </ReanimatedAnimated.View>
       </PressableScale>
-      {expanded && (
-        <View>
+      <ReanimatedAnimated.View
+        style={[styles.examplesBody, bodyStyle]}
+        pointerEvents={expanded ? "auto" : "none"}
+        accessibilityElementsHidden={!expanded}
+        importantForAccessibility={expanded ? "auto" : "no-hide-descendants"}
+      >
+        <View
+          style={styles.examplesBodyInner}
+          onLayout={(e) => {
+            contentHeight.value = e.nativeEvent.layout.height;
+          }}
+        >
           {loading && (
             <Text style={[typeScale.bodySmall, styles.exampleState, {color: colors.onSurfaceVariant}]}>
               Finding examples…
@@ -953,7 +1000,7 @@ function ExampleSentences({
             </Text>
           )}
         </View>
-      )}
+      </ReanimatedAnimated.View>
     </View>
   );
 }
@@ -1201,6 +1248,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   examplesTitle: {flex: 1},
+  // The body is clipped and driven by the animated height; the inner view keeps its natural height
+  // so `onLayout` reports what to open to, even while the outer frame is shut.
+  examplesBody: {overflow: "hidden"},
+  examplesBodyInner: {position: "absolute", top: 0, left: 0, right: 0},
   exampleState: {marginTop: spacing.s},
   exampleRow: {paddingVertical: spacing.s, borderBottomWidth: 1},
   exampleEnglish: {marginTop: spacing.xs},
