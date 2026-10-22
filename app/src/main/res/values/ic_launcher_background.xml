@@ -8,5 +8,7 @@
  -->
 
 <resources>
-    <color name="ic_launcher_background">#283593</color>
+    <!-- The icon's ground, as the source mark draws it: black behind the white G.
+         The dark-theme ground is white (values-night/ic_launcher_background.xml). -->
+    <color name="ic_launcher_background">#000000</color>
 </resources>

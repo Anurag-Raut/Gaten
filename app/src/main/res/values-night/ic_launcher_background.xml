@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+    <!-- The dark-theme ground: tile and glyph swap so the icon keeps its
+         contrast on a dark home screen. Resolved by the launcher whenever the
+         system is in night mode, together with
+         drawable-night/ic_launcher_foreground.xml. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>
