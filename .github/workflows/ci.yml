@@ -20,6 +20,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      # React Native's Gradle plugin is built from node_modules (settings.gradle.kts includes it),
+      # and autolinking runs the bundled CLI, so the JS dependencies come first: without them Gradle
+      # cannot even configure. The engines field asks for 20.19.4+ / 22.13+ / 24.3+.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install the JS dependencies
+        run: npm ci
+
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Cache the generated JMdict database
@@ -32,6 +43,18 @@ jobs:
       - name: Build the JMdict database
         if: steps.jmdict-cache.outputs.cache-hit != 'true'
         run: python3 tools/build_jmdict_db.py
+
+      # Both databases are gitignored build inputs, and the debug build verifies both.
+      - name: Cache the generated example-sentence database
+        id: examples-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/db/examples.sqlite
+          key: examples-${{ hashFiles('tools/build_examples_db.py') }}
+
+      - name: Build the example-sentence database
+        if: steps.examples-cache.outputs.cache-hit != 'true'
+        run: python3 tools/build_examples_db.py
 
       - name: Assemble debug and run unit tests
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest
