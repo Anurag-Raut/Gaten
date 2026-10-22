@@ -2,9 +2,17 @@
 
 ## Design reference
 
-- [Gaten / Ink v1](Gaten_Ink_Design_Language_v1.md) — approved specification supplied by the user.
-- [Implementation map](design-language.md) — shared code sources, native accessibility choices,
-  and screen-specific hub precedence.
+- [Analytics plan and decisions](analytics/PLAN.md) — current: the single-page sections, the data
+  contract behind every figure, the accent-only colour roles for all seven accents in both modes, the
+  state model, the limits and the verification captures.
+- [Analytics screenshots](analytics/screenshots/) — the emulator captures behind that verification.
+- [Analytics content proposal](analytics/CONTENT_PLAN.md) — draft metric inventory, source-data
+  feasibility, and All / Anki / WaniKani content for discussion before implementation.
+- [Gaten / Ink — Design Language](Gaten_Ink_Design_Language_v1.md) — current consolidated guideline,
+  version 1.3; Home, Analytics, Settings, theme, typography, spacing and navigation audited against
+  source on 22 October 2026. The filename is retained for stable links.
+- [Implementation record](design-language.md) — other screen refinements, source-audit notes,
+  screen-specific hub precedence and historical implementation checks.
 - [Unified Ink hubs V4](unified-ink-hubs-v4/README.md) — the user-supplied package that is the
   current screen-specific authority for both provider hubs, with `DESIGN_SPEC.md`, `STATE_MATRIX.md`,
   the `index.html` prototype, and the spec-to-code map. Also available here:

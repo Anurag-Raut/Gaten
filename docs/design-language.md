@@ -1,9 +1,52 @@
 # Design language implementation
 
-The visual foundation is [Gaten / Ink v1](Gaten_Ink_Design_Language_v1.md), provided by the user
-on 21 October 2026. This implementation record and its dated updates clarify where the current
-product direction has moved beyond that original specification. The supplied v1 document remains
-available as design history.
+The current consolidated guideline is [Gaten / Ink — Design Language](Gaten_Ink_Design_Language_v1.md),
+version 1.3, updated on 22 October 2026 against Home, Analytics, Settings, shared theme/tokens and
+navigation source. Its filename is retained for stable links. Use that file for the self-contained
+current Home, Analytics and Settings rules; this companion records other screen refinements and
+historical checks.
+The original supplied v1 document remains inside the frozen unified-hubs reference package.
+
+## Home and Settings source audit (22 October 2026)
+
+- Consolidated the current palette, seven accents, selected-accent actions/counts/streak marks,
+  typography, spacing and responsive layouts into the main guideline.
+- Home has no separate Start studying button. It uses the search-mode transition, bounded Anki
+  streak, two flat service rows and the current history-tray empty artwork. The right-hand streak
+  label is **days**. The current number is bounded by seven Anki study-day searches and falls back
+  to 0 when unavailable; unknown weekday accessibility labels remain explicit.
+- Settings has six destinations in Lookup, Study and App. It uses bare glyphs and minimum-60 dp
+  destination/switch rows, not the earlier rounded row cards. Appearance includes Feedback as well
+  as Theme and Accent; the detail pages retain their actual Save/immediate-apply behavior.
+- Navigation is Home, Analytics and Settings. Review is a pushed flow. The selected pill uses the
+  chosen accent, and the floating capsule hides during search and on pushed pages.
+- This audit read source and updated documentation only. It did not launch the app, capture new
+  screenshots, run a build or execute tests. The checks at the end of this file remain historical.
+
+## Analytics single page (22 October 2026)
+
+- Rebuilt the Analytics tab from the final approved package: **one page, no source switcher**, with
+  `Anki → WaniKani → Study activity → Recall → Ahead` in that order and every card, panel, tile and
+  raised chart removed. Sections are hairlines, whitespace and type size. The geometry, the
+  per-element colour roles and the state model are in [analytics/PLAN.md](analytics/PLAN.md).
+- **Colour is accent-only.** No analytical element uses `success`, brand pink or brand blue: the
+  heatmap levels, the Anki distribution, the SRS distribution, the two rings and the recall tracks are
+  the reader's accent at one of a few strengths. A green accent chosen by the reader still flows
+  through as the accent.
+- Study activity reads twelve weeks of AnkiDroid study days (84 exact-day searches, batched twelve to
+  a bridge call, cached five minutes). A day the provider refuses is an outlined cell, a confirmed
+  zero is filled in the hairline tone, and the two figures above the grid count exactly the days the
+  grid draws.
+- Recall is new: `GET /review_statistics` is aggregated into cumulative reading and meaning accuracy
+  (counts summed, never percentages averaged) plus the three worst subjects with at least five
+  answers, with one `/subjects` read for their characters. The read degrades to an unavailable line
+  without disturbing the level, queue or SRS numbers beside it.
+- Verified on a debug build on an Android 14 emulator at 392 dp: every accent in light and dark,
+  320/340/430 dp, 130 % and 160 % text, the Anki-unavailable state and the refresh action. The
+  TypeScript check, the node test suite (70 tests) and the Kotlin unit suite (15 tests) pass. Captures
+  are in `docs/analytics/screenshots/`.
+- The TalkBack pass, the reduced-motion preference and the WaniKani rate-limited / offline-cached
+  states have not been exercised in this pass.
 
 ## Current Settings direction (22 October 2026)
 
@@ -42,7 +85,7 @@ cards and rounded section tiles.
 
 - Ink is the shipped Gaten palette and the only one. Theme and accent preferences remain user-selectable.
 - The accent ladder is pitched for contrast: every accent's primary carries its ink (white in light, near-black in dark) and reads as text on the paper at 4.5:1 or better, held by `PaletteTest.everyAccentCarriesItsInkAndReadsOnThePaper`. Black is the colourless accent, replacing the earlier Graphite; it is black ink on light paper and white ink on dark, and the Appearance picker names it for the tone it paints in the mode on show ("White" in dark).
-- Use readable secondary text (`#6C6C75` light, `#B0B0BA` dark). Fine details and status dots have separate roles.
+- Use readable secondary text (`#6C6C75` light, `#A7A7B0` dark), as resolved by the current color bridge. Fine details and status dots have separate roles.
 - Compact explanatory text starts at 12 sp; the selected bottom-navigation label follows the preview's 11 sp size and scales with Android font settings.
 - The reader's accent is the action colour as well as the selection colour: the selected bottom-navigation pill *and* every button are filled with `accent`/`primary` — filled buttons take the accent fill with its ink, tonal ones the accent's container tone, outlined and text ones the accent as their border and label ink. Changing the accent in Settings repaints all of them; the v1 document's neutral `--ink-active-bg` action fill is no longer used. `onPrimary`/`onPrimaryContainer` remain the inks, so the palette's own contrast guarantee still holds.
 - Layout uses dp, a 22 dp content inset (16 dp below 360 dp), and a maximum 560 dp content column.
@@ -50,7 +93,7 @@ cards and rounded section tiles.
 - Separators and visible row borders are 1 dp. Focus indicators are 2 dp. Content surfaces have no shadows.
 - Settings sections use transparent groups and flat rows separated by 1 dp `outlineVariant` hairlines. Inputs and choice controls keep their own visible outlines or selected states without a card around the section.
 - Preserve the application's real Home, Analytics and Settings destinations, and the review flow
-  Home's two service cards open. The mockup's Profile tab is not a new feature request.
+  Home's two service rows open. The mockup's Profile tab is not a new feature request.
 - Home has no filled primary action: the Ink source row *is* the action, and Anki's row opens the
   deck list. This deviates from the supplied Ink document's "one strong action per screen" ("Start
   studying"), which was removed on the user's call once the Anki row opened the decks itself.
@@ -128,7 +171,7 @@ cards and rounded section tiles.
   Cap each offered batch at the remaining daily allowance. Pausing keeps unfinished work for resume,
   and the review flow is unchanged.
 - Anki cards Settings stores study-deck selection by stable deck IDs. A null selection means all
-  decks; an explicit empty selection means none. The selection filters the WaniKani hub and Home due
+  decks; an explicit empty selection means none. The selection filters the Anki hub and Home Anki due
   counts. Opening Anki always shows the deck hub, including when one deck matches; starting a card
   queue requires choosing that deck. Parent decks include subdecks as in AnkiDroid. Study-deck
   selection is separate from the export destination.
@@ -137,7 +180,7 @@ cards and rounded section tiles.
 
 The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference for Home and the Settings hub. Its inline outline icons and Anki/WaniKani SVG marks replace the previous in-app glyphs for those elements; the service marks use the preview's light/dark tinted holders. Keep platform status/gesture bars native and retain live app data.
 
-- Home shows only the flame and `Daily streak` on the left; the current recorded-day value and `days recorded` stay on the right.
+- Home shows only the flame and `Daily streak` on the left; the bounded Anki streak value and `days` stay on the right. This is not a lifetime or combined-source streak.
 - Settings is the third tab, with the app's own gear glyph rather than the preview's person outline.
   The App settings row keeps its real About label and destination.
 - The 72 dp card rows in this preview are historical. Current Settings uses flat rows with flexible height, at least 48 dp touch targets, and scalable text.

@@ -1,358 +1,533 @@
 # Gaten / Ink — Design Language
 
-**Version 1.0 · 21 October 2026 · Mobile product design system**
+**Version 1.3 · 22 October 2026 · Current Home, Analytics and Settings baseline**
 
-**Status:** Original approved visual direction from 21 October 2026. Current Settings guidance is updated by the dated implementation note in [design-language.md](design-language.md); that newer direction supersedes the Settings row-card treatment below. The remaining tokens and screen guidance provide the shared visual foundation.
+## Summary
 
-**North star:** A quiet study instrument: Japanese lookup and review first; no decoration competing with the learning task.
-
-# 1. Design philosophy
-
-**Ink is a deliberate, minimal interface—not a card kit.** The visual system gives hierarchy to Japanese search, today’s study needs, and fast access to connected tools. It should feel closer to a focused reader or productivity workspace than to a playful learning game.
-
-- **Content over containers.** Use simple rows and 1 px rules as the default. Cards are reserved for groups that benefit from a bounded surface.
-- **Nearly monochrome.** White/graphite in light mode; deep charcoal/off-white in dark mode. Violet is a signal, not a background wash.
-- **Dense, never cramped.** Keep the scan path short, with predictable 8/12/16/22/24 px intervals and generous touch targets.
-- **Brand color belongs to the brands.** Keep Anki blue and WaniKani pink confined to their existing app marks; adjacent UI stays neutral.
-- **One strong action per screen.** “Start studying” is the only dominant filled action on Home.
-- **Quiet motion and language.** Avoid glow, glass effects, gradient fields, playful microcopy, arbitrary illustrations, animated counters.
-
-Signature element: the **Ink integration row**—real brand mark, bold name, quiet status, right-aligned outcome, hairline separator. The rest of the screen supports this structure.
-
-# 2. Source-of-truth and product rules
-
-**Canonical references**: (1) Home in “Ink rows” mode (not split cards by default); (2) Settings in Ink with short descriptions; (3) the original floating rounded bottom bar with dark selected pill. The later edge-to-edge black dock is **rejected** and must not be used.
-
-The standalone HTML was a static visual mockup: system status bar, gesture bar, Anki/WaniKani logo paths, and 380 × 770 preview shell are not production assets or platform APIs. The native app’s existing icons, routes, real data, and Android insets take priority.
-
-# 3. Color system
-
-## 3.1 Light mode — approved visual tokens
-
-| Role | CSS variable | Hex | Usage |
-| --- | --- | --- | --- |
-| canvas | --ink-bg | #FDFDFD | Main page/background |
-| primary text | --ink-fg | #17171A | Headlines and body copy |
-| secondary text¹ | --ink-muted | #83838C | Approved visual baseline; small text needs contrast correction |
-| fine detail | --ink-fine | #A1A1AB | Unselected markers / decorative icons |
-| separator | --ink-border | #E9E9ED | Hairline outlines / rules |
-| subtle surface | --ink-surface | #F6F6F8 | Search field, muted icon chips |
-| raised surface | --ink-surface-2 | #FFFFFF | Controls or bounded surfaces where needed; not Settings row fills |
-| violet accent | --ink-accent | #7564D9 | Selected day, flame, optional focus states |
-| active fill | --ink-active-bg | #18181B | Primary CTA, selected nav item |
-| active on-fill | --ink-active-fg | #FFFFFF | Selected navigation label / CTA |
-| success | --ink-success | #16A476 | Connected status dot |
-| warning | --ink-warning | #DC6673 | Limited use: failures or actions requiring attention |
-| bottom nav | --ink-bottom | #F5F5F6 | Original floating bottom navigation container |
-
-## 3.2 Dark mode — paired tokens
-
-| Role | CSS variable | Hex | Usage |
-| --- | --- | --- | --- |
-| canvas | --ink-bg | #101114 | Main page/background |
-| primary text | --ink-fg | #F5F5F6 | Headlines and body copy |
-| secondary text | --ink-muted | #909099 | Secondary information |
-| fine detail | --ink-fine | #777781 | Decorative details |
-| separator | --ink-border | #303136 | Hairlines/outlines |
-| subtle surface | --ink-surface | #1B1C21 | Search field and chips |
-| raised surface | --ink-surface-2 | #17181C | Controls or bounded surfaces where needed; not Settings row fills |
-| violet accent | --ink-accent | #B0A0FF | Selected / highlighted meaning |
-| active fill | --ink-active-bg | #F5F5F7 | Primary CTA, selected nav item |
-| active on-fill | --ink-active-fg | #17171A | Label / icon on selected fill |
-| success | --ink-success | #53C99B | Connected status dot |
-| warning | --ink-warning | #EF8A96 | Warnings/attention |
-| bottom nav | --ink-bottom | #1C1D21 | Original floating bottom navigation |
-
-## 3.3 Accessible text refinements
-
-The approved light `--ink-muted` (#83838C) on #FDFDFD measures approximately **3.69:1**, below the 4.5:1 WCAG AA threshold for normal-sized text. Keep it for noncritical/large decoration if desired; use **#6C6C75 (~5.11:1)** for small explanatory text, field hints and section labels. Recommended variable: `--ink-muted-readable`.
-
-For dark mode, #909099 on #101114 is approximately **5.97:1** and meets the normal-text threshold. Low-contrast fine-detail icons should not be the only way to communicate status. Colored success/warning dots must be accompanied by words.
-
-Never use brand pink to color an entire WaniKani card or brand blue for an entire Anki card; use those colors only in the marks. The violet accent is for active/selected state and may be omitted if it adds noise.
-
-# 4. Typography
-
-Preferred Latin: **Inter** with native fallback (`-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, `Arial`, sans-serif). Japanese: use platform-native Japanese glyph fallback (e.g. Noto Sans CJK JP / Noto Sans JP where installed). Avoid faux condensed, decorative, or serif headline styles. Weight 745 in HTML prototypes is a variable-font value; use 700–750 where supported, otherwise 700.
-
-| Role | Reference CSS size | Weight | Tracking | Line height / notes |
-| --- | --- | --- | --- | --- |
-| App/page title | 35 px | 745 | -1.85 px | 1.0–1.08; single line |
-| Section heading | 17 px | 710 | -0.57 px | 1.25 |
-| Row title | 15 px | 680 | -0.45 px | 1.2–1.35 |
-| Primary CTA | 15 px | 660 | -0.20 px | 1.2; centered |
-| General / input text | 14 px | 400–500 | 0 | 1.4 |
-| Page description | 13 px | 400 | 0 | 1.45–1.5 |
-| Row meta/status | 11 px | 400–550 | 0 | 1.3 |
-| Section label | 12 px | 650 | -0.10 px | 1.3 |
-| Weekday label | 10 px | 400–670 | 0 | 1.2 |
-| Primary numeric due | 25 px | 710 | -1.20 px | 1.0 |
-| Nav active label | 11 px | 650 | 0 | 1.2 |
-
-**Production accessibility adjustment:** the small 10/11/12 px labels match the snapshot but should be treated as visual starting points—not fixed text sizes on Android. Use scalable sp sizes, test system font scaling 100%, 130%, 160% and increase compact descriptions to 12–14 sp if needed. Truncate only genuinely nonessential copy.
-
-# 5. Layout & spacing
-
-A single-column mobile layout. Content aligns to a shared left edge. The original prototype uses **22 px** horizontal content insets within a **380 px** preview shell (20 px for narrow previews). Use platform dp units for the native layout; do not scale the entire mockup as an image.
-
-| Token / dimension | Value | Application |
-| --- | --- | --- |
-| space-1 | 4 | Icon / micro-gap only |
-| space-2 | 8 | Small internal gap |
-| space-3 | 12 | Between icon and text / settings |
-| space-4 | 16 | Default component padding |
-| space-5 | 20 | Compact section separation |
-| space-6 | 24 | Major section separation |
-| content inline inset | 22 | Home and Settings shared left/right grid |
-| hairline | 1 | Rule and understated border |
-| icon touch area | ≥48 dp | Regardless of icon painted size |
-| phone shell | 380 × 770 px | Reference mockup only; never hardcode viewport height |
-
-Default sequence on Home: system bar → 23 px gap → Gaten heading → 21 px gap → search → 25 px gap → streak → integration rows → 22 px gap → primary CTA → 34 px gap → recent lookups → anchored nav. When the viewport is short, body scrolls; the bottom navigation remains visible and must not overlap content.
-
-## 5.1 Shape and elevation
-
-| Element | Radius | Border / elevation |
-| --- | --- | --- |
-| Search field | 14 px | No visible border; muted neutral fill |
-| Ink integration rows | 0 | No card container; 1 px bottom separator |
-| Brand logo holder | 10 px | Neutral brand-adjacent surface; no drop shadow |
-| Primary CTA | 13 px | Flat dark/light fill; no gradient |
-| Historical Settings preview row | 17 px | Superseded; current Settings rows have no enclosing surface or radius |
-| Floating bottom bar | 20 px | Neutral background; soft all-round shadow, no directional drop |
-| Selected nav item | 15 px | Dark-on-light / light-on-dark filled pill |
-| Optional split integration tile | 15 px | 1 px border; only if the product needs equal destinations |
-
-Shadows are intentionally absent inside the app, except for the floating bottom navigation capsule, which carries a soft all-round shadow with no directional drop. A soft shadow around a marketing mockup device is presentation-only. Use separators, whitespace and filled active states for hierarchy.
-
-# 6. Home screen specification
-
-## 6.1 Search
-
-49 px tall; 14 px radius; surface fill; 15 px inline padding; 12 px gap; ~19 px search icon. Placeholder `猫, ねこ, neko...`. Use the real input keyboard action and focus semantics. The full field is tappable, not just the icon.
-
-## 6.2 Daily streak
-
-This is a **section**, not a tinted feature card. Top row: 23 × 27 px single-color flame, `Daily streak` (15 px bold), one short supporting line, `—` and `total days` right-aligned. Do not add inspirational copy. Below: seven evenly spaced weekday markers (29 px visual circles, 10 px weekday names), with 20 px top space and 8 px marker-to-label space. A 1 px line separates streak from integrations.
-
-State semantics: completed = small violet solid fill or check, current day = violet outline, missed = muted non-filled marker, future = subtle neutral outline. Never indicate state through color alone; expose `completed`, `today`, `missed`, or `upcoming` to accessibility. A missed day is not labeled complete.
-
-## 6.3 Ink integration rows — default
-
-Rows for **Anki** and **WaniKani**, full width; 14 px vertical padding; 13 px gap; 1 px bottom divider. Left: 37 × 37 px rounded brand-mark holder. Center: 15 px/680 brand name and 11 px status. Right: key action or count and 15 px chevron. The entire row is a minimum 48 dp touch target.
-
-| Feature | Connected example | Disconnected example |
-| --- | --- | --- |
-| Anki | Anki / Connected; `9` and `reviews due` on right | Anki / Not connected; `Connect` on right |
-| WaniKani | WaniKani / Connected; appropriate upcoming count | WaniKani / Not connected; `Connect` on right |
-
-Status is **not** an additional button or decorative pill; show a small success dot plus label. A disconnected state uses a neutral dot and the label `Not connected`. Do not duplicate a brand mark as an illustration or watermark in the row. Prefer real in-app logos; the sample SVGs were rough stand-ins.
-
-## 6.4 Optional split-card arrangement
-
-Alternative only. Two equal-width columns with 11 px gap; tiles about 152 px tall; 12 px padding; 15 px radius and 1 px outline. Useful if destination parity becomes a product requirement. **Do not switch to it by default**, because Ink rows are the preferred selection and use less vertical space.
-
-## 6.5 Main action
-
-`Start studying` is 52 px tall, 13 px radius, flat `active fill`, 15 px/660 centered label, and 18 px chevron near the trailing edge (16 px inset). Only one primary filled CTA per screen. Disabled, loading, focus and pressed states must be implemented; avoid glows, gradients, or bounce motion.
-
-## 6.6 Recently looked up
-
-17 px/710 heading; when empty, show a quiet 39 × 39 px search symbol plus **No recent lookups** and **Words you search will appear here.** Align icon/text in a compact horizontal row, rather than a large vertically centered blank-state illustration. With history, show recent words as simple linked rows, not large cards.
-
-# 7. Settings screen specification — current direction
-
-The Settings hub and all six pages—Screen lookup, Text recognition, Anki cards, WaniKani,
-Appearance, and About—follow the flat row language used by Home, the Anki deck picker, and the
-WaniKani hub. This dated direction supersedes the earlier Settings mockup's separate row cards and
-rounded section tiles. Keep the mockup's concise copy and shared Ink typography, colors, content grid,
-hairlines, and navigation.
-
-Use transparent groups on the page background. A quiet group label and whitespace establish each
-section; 1 dp `outlineVariant` hairlines separate its rows. Do not put rows or whole sections in cards,
-rounded containers, or tinted surfaces. Keep rows at least 48 dp tall, with flexible height for
-wrapping and Android font scaling. Use the shared 560 dp maximum content width, 22 dp horizontal
-insets (16 dp below 360 dp), and the existing 64 dp settings app bar with native insets.
-
-Keep each row's title clear and its value or control at the trailing edge when that helps scanning.
-Descriptions are optional: use a short label or an essential hint only. Place longer explanations in
-the existing help action or beside the setting that needs them, rather than repeating explanatory
-copy across the page. Appearance keeps Theme and Accent choices visible as direct controls;
-their selected states stay clear without enclosing each choice group in a card.
-
-The 21 October Settings preview below remains a record of the earlier hub copy and hierarchy. Its
-78 dp minimum, 17 dp radius, bordered card rows, 10 dp inter-row gaps, and row-card icon tiles are
-historical and are superseded by the flat-row rules above.
-
-| Group | Setting | Approved concise text | Right-side value |
-| --- | --- | --- | --- |
-| Lookup | Screen access | Allow screen reading | Off |
-| Lookup | Screen lookup | Button, tile & shortcut | Chevron |
-| Lookup | Text recognition | Stylized text model | None |
-| Study | Anki cards | Deck & card layout | Gaten |
-| Study | WaniKani | Kanji & vocabulary | Not connected |
-| App | Appearance | Theme preferences | System |
-| App | Account | Profile & sign-in | Chevron |
-
-**Editorial guidance:** Some second lines can be removed entirely when the title/value already explains the destination. Keep status and important limitations explicit; never hide an actual security permission behind vague copy. Use `Screen access` with `Off` in the closed state; full permission details belong to the drill-in screen, not this list.
-
-Scrollable settings list is separate from the anchored bottom navigation. On small screens do not crop the Study or App groups behind the nav. Use actual accessibility labels for each row: title + current value + action.
-
-# 8. Floating bottom navigation — approved / do not replace
-
-The **approved bottom bar** is the earlier neutral floating capsule. Not the later black full-width dock. Home, Analytics, Review and Settings use the same bar; only selected state changes. The capsule carries a soft all-round shadow with no directional drop, so it reads as hovering above the page.
-
-| Part | Reference value | Behavior |
-| --- | --- | --- |
-| Track | 63 px height, 20 px radius | Background = `--ink-bottom`; horizontal content width |
-| Track inner padding | 6 px | Balanced inset on every side |
-| Tabs | 46 px visual height | Unselected icon only; center aligned |
-| Selected pill | 15 px radius | `--ink-active-bg` fill, `--ink-active-fg` icon/text |
-| Selected width | ~1.55× regular tab flex | Enough room for icon + active label |
-| Icon | 20 px, Material Symbols (outlined) | One glyph per tab — home, bar_chart, school, settings — from the same `ui/icons.ts` set the rest of the app draws |
-| Selected label | 11 px, 650 | Home/Analytics/Review/Settings; no truncation |
-| Gesture indicator | System-provided | Preview drew a 94 × 4 px mock bar; do NOT duplicate natively |
-
-For Android, use actual **WindowInsets**. Keep touchable navigation above the gesture/system-nav area. On focus, font scaling or narrow devices, allow the active label to remain readable; increase tap targets to ≥48 dp even if icon/pill visuals are 46 px tall.
-
-# 9. States, feedback and motion
-
-| State | Treatment | Content behavior |
-| --- | --- | --- |
-| Rest | Ink text / neutral surfaces | No decorative animation |
-| Pressed | Subtle opacity or overlay change | Immediate response, 100–180 ms recommended |
-| Keyboard focus | 2 px accent outline with visible offset | Never remove focus indicator |
-| Selected | Filled pill or meaningful violet marker | Also accessible selected state |
-| Disabled | Reduced prominence and semantic disabled | Maintain enough contrast to communicate state |
-| Loading | Stable dimensions, one compact progress affordance | Prevent repeated submission |
-| Error | Plain-language issue + next action | Do not rely solely on red |
-| Empty | One reason + next useful action | No mascot/large illustration |
-
-Favor zero ambient animation. Animate transitions only to explain the result of an action. Respect `prefers-reduced-motion` for web and reduce motion settings in native implementations.
-
-# 10. Accessibility, density & native implementation
-
-- **Contrast:** WCAG AA minimum 4.5:1 for typical text; 3:1 for large text. Use `--ink-muted-readable` for small light-mode descriptions. Evaluate text contrast after every palette change.
-- **Touch:** ≥48 × 48 dp effective targets, optionally 8 dp spacing when adjacent. Tiny 20 px icons may sit inside larger accessible hit zones.
-- **Scaling:** layout in dp (React Native logical layout units), font sizes in sp / scalable text; do not assume 1 image pixel = 1 device pixel.
-- **Insets:** account for status bar, display cutout, bottom gestures, keyboard and landscape; fixed bottom tabs must never obscure content.
-- **Semantics:** label non-text icons, current tab, streak status, connection state and review due count for screen readers.
-- **Color:** differentiate completed/ missed/ current using shape, icon or label in addition to color.
-- **Text:** reserve two lines for optional setting descriptions at high font scale; no permanent fixed-height clipping.
-- **Translations:** Japanese text must wrap sensibly; test mixed script fonts and glyph fallback.
-
-Recommended breakpoint behavior: at narrow widths (<360 dp) use 16–20 dp content insets and shorter metadata; on wide devices cap content width at approximately 480–560 dp instead of stretching rows edge-to-edge. Reference mockup sizes are not hardcoded constraints.
-
-# 11. Implementation-ready tokens
-
-The following variables are extracted from the approved HTML prototypes. See the companion `gaten-ink-tokens.css` for a copy-paste version.
-
-```css
-/* Gaten Ink — design tokens v1.0 (2026-10-21)
-   Reference implementation: CSS px are MOCKUP specs, not native Android px.
-   In React Native use dp for layout and sp for text via platform conventions.
-*/
-:root, [data-gaten-theme="light"] {
-  --ink-bg: #fdfdfd;
-  --ink-fg: #17171a;
-  --ink-muted: #83838c;
-  --ink-fine: #a1a1ab;
-  --ink-border: #e9e9ed;
-  --ink-surface: #f6f6f8;
-  --ink-surface-2: #ffffff;
-  --ink-accent: #7564d9;
-  --ink-active-bg: #18181b;
-  --ink-active-fg: #ffffff;
-  --ink-success: #16a476;
-  --ink-warning: #dc6673;
-  --ink-bottom: #f5f5f6;
-  /* Recommended accessible body/secondary text — overrides only where needed */
-  --ink-muted-readable: #6c6c75;
-  --ink-content-inset: 22px;
-  --ink-hairline: 1px;
-  --ink-radius-search: 14px;
-  --ink-radius-button: 13px;
-  --ink-radius-settings: 17px;
-  --ink-radius-nav: 20px;
-  --ink-radius-nav-active: 15px;
-  --ink-focus-ring: 2px;
-}
-[data-gaten-theme="dark"] {
-  --ink-bg: #101114;
-  --ink-fg: #f5f5f6;
-  --ink-muted: #909099;
-  --ink-fine: #777781;
-  --ink-border: #303136;
-  --ink-surface: #1b1c21;
-  --ink-surface-2: #17181c;
-  --ink-accent: #b0a0ff;
-  --ink-active-bg: #f5f5f7;
-  --ink-active-fg: #17171a;
-  --ink-success: #53c99b;
-  --ink-warning: #ef8a96;
-  --ink-bottom: #1c1d21;
-  --ink-muted-readable: #b0b0ba;
-}
-/* Layout & type reference, not a ready-made app */
-.gaten-ink-root {
-  background: var(--ink-bg);
-  color: var(--ink-fg);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-}
-.gaten-ink-divider { border: 0; border-bottom: 1px solid var(--ink-border); }
-.gaten-ink-bottom-nav {
-  height: 63px; padding: 6px; border-radius: var(--ink-radius-nav);
-  background: var(--ink-bottom);
-}
-.gaten-ink-tab-active {
-  height: 46px; border-radius: var(--ink-radius-nav-active);
-  background: var(--ink-active-bg); color: var(--ink-active-fg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .gaten-ink-root *, .gaten-ink-root *::before, .gaten-ink-root *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-```
-
-**Note:** `--ink-muted-readable` is a **production accessibility refinement** and is deliberately distinct from the current visual token `--ink-muted`. Use it wherever tiny text requires WCAG AA.
-
-# 12. Copy rules and microcopy
-
-Use sentence case. Prefer titles of 1–3 words and descriptions of 2–6 words. Status/value sits at the trailing edge when available. Never repeat a setting title verbatim in its description or include technical platform details on a top-level settings list.
-
-| Avoid | Prefer |
+| Area | Current rule |
 | --- | --- |
-| Gaten cannot read the screen until you turn it on. | Screen access · Off |
-| Floating button, Quick Settings tile and hardware key | Button, tile & shortcut |
-| Optional stylized-text model | Stylized text model |
-| Deck, note type and card layout | Deck & card layout |
-| Click here to connect to WaniKani and get started! | Connect |
-| There are no recently searched terms at the moment. | No recent lookups |
+| Visual language | Quiet, mostly monochrome pages; flat rows, whitespace and 1 dp separators establish hierarchy. |
+| Home | Gaten heading → search → Daily streak → Anki and WaniKani rows → Recently looked up. The service rows are the study actions; there is no separate Start studying button. |
+| Analytics | One page, no source switcher: Anki → WaniKani → Study activity → Recall → Ahead, with no cards at all — hairline-separated sections, paired figures split by a single vertical rule, unboxed charts. |
+| Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
+| Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
+| Navigation | Three bottom tabs: Home, Analytics and Settings. Review is a pushed flow, not a fourth tab. |
+| Exceptions | Neutral input fills, brand-mark holders, dialogs and approved sparse empty-state artwork have specific treatments below. |
+| Source of truth | This document consolidates the current Home/Analytics/Settings implementation and shared tokens. Historical previews do not override it. |
+| Audit scope | Checked against source code on 22 October 2026, and against a debug build on an Android 14 emulator at 392 dp in all seven accents, light and dark, plus 320/340/430 dp and 130/160 % text. |
 
-# 13. QA checklist for implementation
+The filename retains `v1` to preserve existing links. Version 1.1 replaces the conflicting v1.0
+Home, Settings, palette, navigation and motion guidance in this file. The supplied original
+[Ink document inside the V4 package](unified-ink-hubs-v4/docs/Gaten_Ink_Design_Language_v1.md)
+remains a historical reference; it is not a second current specification.
 
-- Light and dark use exactly the paired semantic tokens; dark is not a re-imagined layout.
-- Home integration list uses hairline **rows** unless explicitly overridden.
-- Anki and WaniKani use existing app logo assets; never show a second watermarked duplicate.
-- There are no gradients, glow, thick shadows, pastel full-card fills or decorative badges.
-- One clear primary CTA: Start studying.
-- Streak circles, counters and connection states are all data-driven.
-- All settings text is short; every row has a discoverable destination and meaningful value.
-- Floating neutral bottom bar with selected filled tab; no black edge-to-edge dock.
-- Every tappable component has effective ≥48 dp target; keyboard/screen reader paths work.
-- All content scrolls correctly at 320/360/393/440 dp, 130% and 160% text scale.
-- System status bar, nav gesture bar and keyboard insets are native, not HTML art.
-- No “Settings” ellipsis/truncation in the active bottom pill.
-- Review contrast in both themes, especially secondary labels and brand colored text.
+**North star:** a quiet study instrument. Japanese lookup and study remain the focus.
+This is a reusable design guideline, with current screen behavior stated explicitly rather than
+sample counts or mockup-only controls.
 
-# 14. Sources & decisions
+## 1. Principles and scope
 
-**Internal visual baseline:** Gaten Home Ink rows HTML and Gaten Settings Ink preview from the 21 October 2026 design iterations. This document records their tokens; it does not treat speculative/generated imagery as the specification.
+- **Content before containers.** Default to rows and rules. Home service rows and Settings
+  sections have no enclosing card, rounded section background or drop shadow.
+- **One clear hierarchy.** Use confident page headings, compact row titles, readable secondary
+  text and a trailing value or action. Do not repeat an explanation the title/value already provides.
+- **Neutral foundation, selected accent.** The paper and ink stay neutral. Use the reader's accent
+  for meaningful action and state; do not hardcode violet as the universal highlight.
+- **Direct actions.** The whole Home service row opens its destination. Anki opens the deck hub
+  even when only one deck is selected; WaniKani opens its study/connection flow.
+- **Honest state.** Loading, disconnected, permission-needed, failed, offline and fetched-zero
+  states have different meanings. Never invent a due count or completion receipt.
+- **Purposeful artwork.** Keep approved service marks and sparse empty/search artwork. Do not
+  add ambient animation, mascot decoration, gradients, glow or brand-colored page washes.
+- **Native behavior.** Use real insets, keyboard behavior, scalable text and current routes.
+  A prototype device frame, status bar, gesture indicator or sample data is never production UI.
 
-**Aesthetic guidance:** Anthropic, *Frontend Design Skill* — https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md. Applied principles: intentional product-specific direction, purposeful typography, no generic “card kit,” restraint and concise UI copy.
+The current [unified Ink hubs V4](unified-ink-hubs-v4/README.md) remains the screen-specific
+reference for the Anki deck hub and WaniKani study hub. Its exceptions do not change Home or
+Settings geometry. The [analytics content proposal](analytics/CONTENT_PLAN.md) is a planning
+document, not an implemented Analytics redesign.
 
-**Accessibility / platform:** W3C WCAG 2.2 Understanding 1.4.3 Contrast — https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html ; Android Accessibility Help (touch target size) — https://support.google.com/accessibility/android/answer/7101858?hl=en ; Android Developer insets — https://developer.android.com/develop/ui/views/layout/insets .
+## 2. Color system
 
-**Change control:** approved values are defaults, not unchangeable law. Any divergence should be intentional: record the changed component, user-visible reason, affected light/dark tokens, accessibility impact and before/after snapshot.
+Use semantic theme roles from the shared theme. Hex values below record the current code;
+they are not permission to create separate palettes in individual screens.
+
+### 2.1 Neutral and status roles
+
+| Role | Light | Dark | Use |
+| --- | --- | --- | --- |
+| `background` | #FDFDFD | #101114 | Page canvas |
+| `surface` | #FFFFFF | #17181C | Input/dialog/artwork surface where specified |
+| `surfaceVariant` | #F6F6F8 | #1B1C21 | Search fill and quiet control surfaces |
+| `onSurface` | #17171A | #F5F5F6 | Primary text |
+| `onSurfaceVariant` | #6C6C75 | #A7A7B0 | Secondary and explanatory text |
+| `outline / outlineVariant` | #E9E9ED | #303136 | 1 dp row rules and understated borders |
+| `bottom` | #F5F5F6 | #1C1D21 | Floating navigation track |
+| `fine` | #A1A1AB | #777781 | Decorative details and inactive bottom-tab glyphs |
+| `iconPrimary` | #000000 | #F5F5F6 | Strong icons |
+| `iconSecondary` | #83838C | #909099 | Secondary glyphs, not small body text |
+| `success` | #16A476 | #53C99B | Connected status |
+| `warning` | #DC6673 | #EF8A96 | Attention/status markers |
+| `error` | #B42335 | #EF9A9A | Error text and feedback |
+| `errorContainer / onErrorContainer` | #FFEBEE / #B71C1C | #B71C1C / #FFEBEE | Bounded error feedback when needed |
+
+Container ladder: in light mode `surfaceContainer`, `surfaceContainerHigh` and
+`surfaceContainerHighest` are #F6F6F8. In dark mode they are #1B1C21, #1C1D21 and #303136.
+These roles do not imply that Settings groups should acquire background fills.
+
+The older #83838C body-text baseline, #909099 dark body-text baseline and the implementation
+record's former #B0B0BA dark secondary text are superseded for these screens. Use
+`onSurfaceVariant` for copy; keep `fine` and secondary-icon tones in their own roles.
+Contrast targets remain at least 4.5:1 for normal text and 3:1 for large text; this source audit
+does not claim a new contrast test run.
+
+### 2.2 Selectable accents
+
+The stored default is **Indigo**. Theme choices are **System**, **Light**, and **Dark**.
+Appearance offers the following seven accents in this order:
+
+| Accent | Light primary | Dark primary | Light container | Dark container |
+| --- | --- | --- | --- | --- |
+| Indigo | #4338CA | #A5B4FC | #EEF2FF | #312E81 |
+| Blue | #0B4FB8 | #93C5FD | #EFF6FF | #1E3A8A |
+| Violet | #6D28D9 | #C4B5FD | #F5F3FF | #4C1D95 |
+| Teal | #115E59 | #5EEAD4 | #F0FDFA | #134E4A |
+| Green | #166534 | #6EE7B7 | #F0FDF4 | #14532D |
+| Rose | #9F1239 | #FDA4AF | #FFF1F2 | #881337 |
+| Black | #000000 | #FFFFFF | #EAEAEA | #404040 |
+
+`onPrimary` is #FFFFFF in light mode and #111111 in dark mode. Always pair container fills
+with the resolved `onPrimaryContainer`, not an assumed white label. The colorless stored
+choice remains `Black`; Appearance calls it **White** when showing dark mode.
+
+Action aliases share the accent: `accent / actionPrimary = primary`,
+`onActionPrimary = onPrimary`, `accentSubtle / actionSecondary = primaryContainer`,
+and `onActionSecondary = onPrimaryContainer`. Filled, tonal, outlined and text buttons use
+these roles. The selected navigation pill also uses `primary / onPrimary`. Neutral black
+action fills from v1.0 are no longer the default.
+
+### 2.3 Brand and task exceptions
+
+- Home Anki holder: #EAF4FF light / #182D40 dark.
+- Home WaniKani holder: #FFF0F2 light / #38212A dark.
+- Brand color stays inside those holders and supplied marks; adjacent row text/surfaces remain neutral.
+- Home due numbers, streak flame, completed-day fills, today's accent marker and See all action
+  follow the selected accent.
+- Review task colors remain independent: Meaning #2B7178 light / #8FC5CA dark;
+  Reading #6D28D9 light / #B0A0FF dark. These are task semantics, not the user's accent.
+
+## 3. Typography
+
+Inter is bundled and named explicitly by the shared Latin text roles. Japanese uses platform
+glyph fallback. A display role without an explicit font family retains native fallback.
+Do not infer current UI typography from a historical preview or an attribution-row title.
+
+| Shared role | Size / line height | Weight | Letter spacing |
+| --- | --- | --- | --- |
+| Brand heading | 35 / 38 | 700 | -1.85 |
+| Page heading | 35 / 44 | 700 | -1.85 |
+| Section heading / settings app-bar title | 17 / 22 | 700 | -0.57 |
+| Row title | 15 / 20 | 700 | -0.45 |
+| Button label | 15 / 20 | 600 | -0.20 |
+| Body and input text | 14 / 20 | 400 | 0 |
+| Description | 13 / 19 | 400 | 0 |
+| Small body | 12 / 17 | 400 | 0 |
+| Field/value label | 12 / 18 | 600 | 0 |
+| Small label | 12 / 16 | 500 | 0 |
+| Selected navigation label | 11 / 14 | 600 | 0 |
+| Shared metric | 25 / 28 | 700 | -1.20 |
+| Japanese display medium | 40 / 48 | 500 | 0 |
+| Display small | 34 / 44 | 500 | 0 |
+
+Home-specific overrides are intentional: the due count is 24 / 24, weight 700, tracking -0.9;
+the streak count is 20 / 22, weight 500; the empty-history caption is 13 / 18, weight 700.
+Weekday labels use the 12 / 18 field/value role, not the original 10 px mockup labels.
+
+Numbers are React Native font sizes that scale with the system. Use readable line heights
+and flexible row height; do not port arbitrary variable-font weights such as 745 from HTML.
+
+## 4. Layout, spacing, shapes and elevation
+
+A centered single column is capped at **560 dp including its horizontal padding**.
+Home and Settings use **22 dp** horizontal insets, reduced to **16 dp below 360 dp**.
+Native safe-area/status/gesture insets are additional responsibilities of each screen shell.
+
+| Spacing token | Value |
+| --- | --- |
+| Micro gap | 4 dp |
+| Small | 8 dp |
+| Medium | 12 dp |
+| Large | 16 dp |
+| Compact section | 20 dp |
+| Content inset | 22 dp |
+| Section | 24 dp |
+| Large section | 32 dp |
+
+Screen-specific rhythm may use 11, 20, 22, 23 or 34 dp where recorded below; do not replace
+the current composition with uniform card padding.
+
+| Element | Geometry / treatment |
+| --- | --- |
+| Home search | Minimum 52 dp, radius 14 dp, neutral fill |
+| Home service row | Minimum 69 dp, square outer shape, bottom rule |
+| Home service-mark holder | 37 × 37 dp, radius 10 dp; mark 28 dp |
+| Settings destination/switch row | Minimum 60 dp, 12 dp vertical padding, 12 dp content gaps |
+| Settings text field | Minimum 49 dp, radius 14 dp, 1 dp outline; 16 dp horizontal / 12 dp vertical padding |
+| Filled/tonal/outlined button | Minimum 52 dp, radius 13 dp |
+| Text/icon action | Minimum 48 dp effective target |
+| Dialog | Radius 20 dp, padding 24 dp, width capped at 360 dp |
+| Floating bottom bar | Height 63 dp before native bottom inset, radius 20 dp |
+| Selected bottom pill | Visual height 46 dp, radius 15 dp; touch region at least 48 dp |
+| Rule / focus | 1 dp separator; 2 dp accent focus outline |
+
+Existing `shape.settings = 17` and `shape.settingsIcon = 11` tokens do not authorize
+rounded Settings row cards or icon tiles; the current hub uses bare glyphs.
+
+Content surfaces stay flat. The bottom capsule is the sole raised in-page surface:
+elevation 8, black shadow with opacity 0.18, radius 16 and offset (0, 0), as declared in code.
+The centered shadow is part of the navigation treatment, not a reusable card shadow.
+
+## 5. Home
+
+### 5.1 Composition and search
+
+Resting order: **Gaten → search → Daily streak → Anki → WaniKani → Recently looked up**.
+There is no separate filled study CTA and no optional split-card variant in the current baseline.
+
+The header has 12 dp top/bottom padding; the brand adds 11 dp above and 20 dp below.
+Search uses a minimum 52 dp neutral shell, 14 dp radius, 15 dp horizontal padding,
+13 dp icon/input gap, and placeholder **猫, ねこ, neko...**. Its 2 dp border is transparent
+at rest and accent-colored on focus. Focus starts through the reader's action.
+
+Focusing search switches Home into search mode: hide the brand/dashboard and bottom bar,
+retain the search field, and show a 48 dp circular outlined Cancel control.
+When the query is empty, show recent search terms or the supplied example chips and sparse
+search artwork. Typed results replace the prompt. Loading, unsupported input, failure and
+no matches have their own explanatory states.
+
+Cancel or Android Back exits search mode, clears the query and restores the dashboard.
+Word detail is pushed onto the existing stack. Keep one result/body scroller below the
+header; do not nest a scrolling dashboard inside a scrolling results list.
+
+### 5.2 Daily streak
+
+Use an unfilled section with a 1 dp bottom rule, 24 dp top margin and 22 dp bottom padding.
+A 24 × 28 dp accent flame and **Daily streak** sit left; the number and **days** sit right.
+There is no supporting slogan or tinted streak card.
+
+Seven evenly spaced Monday–Sunday markers sit 20 dp below the header.
+Markers are 29 dp with an 8 dp gap to weekday labels:
+
+| State | Current treatment |
+| --- | --- |
+| Studied | Accent-filled circle and contrasting check |
+| Today, not yet studied | Accent outline and center dot |
+| Missed after earlier recorded activity | Muted outline and short dash |
+| Empty / upcoming | Quiet outline and center dot |
+| Unknown | Quiet empty visual; accessibility explicitly says activity is unknown |
+
+This is based on **Anki's last seven study-day searches**, not a combined Anki/WaniKani or
+lifetime streak. The streak can continue from yesterday before today's first study.
+It is bounded by the available seven days; do not claim the displayed number is a lifetime maximum.
+The current numeric fallback is 0 when data is unavailable; this is an existing presentation
+limitation, not evidence of zero study. The weekday accessibility labels retain unknown status.
+Any future lifetime or combined streak needs its own data decision.
+
+### 5.3 Service rows
+
+Each row is one action: leading tinted service-mark holder, title and connection status,
+then a trailing due count/caption or recovery action, plus chevron when actionable.
+No row fill, outer radius, duplicate watermark, status pill or separate Start button.
+
+Use the existing SVG marks from `HomeArtwork.tsx`. Connection text has a 6 dp dot:
+success for connected, neutral for disconnected/loading, attention color for failure.
+Error text uses the error role. The count uses the selected accent.
+
+| Situation | What the row communicates |
+| --- | --- |
+| Connected | Due count when known; Anki can say remaining after activity today |
+| Loading | Checking/loading copy; no fabricated count |
+| Missing setup / permission | Open Anki, Grant access, Connect or Reconnect, according to the source |
+| Read failure | Explicit failure and retry action; any retained count carries retry/failure context |
+| WaniKani offline | Internet required and offline glyph; suppress the cached due count |
+| Confirmed zero | Show the genuine zero; do not invent a completed-session receipt |
+
+Home Anki due counts respect selected study decks and avoid adding a selected parent and
+its children twice. The streak still uses collection-wide Anki activity; it is not scoped
+by that deck selection. WaniKani does not supply a completed-today count here.
+
+The trailing lane is capped at 132 dp normally. When `width / fontScale < 270`, move
+the outcome below the title area, still aligned to the trailing edge with its chevron.
+This is a responsive row, not a two-column tile layout.
+
+### 5.4 Recently looked up
+
+Start this section 34 dp after the services. Use the 17 / 22 heading and show the first
+three recent entries. More entries expose **See all**, then **Show less**, with an accessible
+expanded state. Recent lookups are opened entries; search-mode recent terms are a separate list.
+
+Rows have a 58 dp minimum height, 12 dp horizontal padding, a headword/reading block and
+a trailing gloss, with 1 dp separators between entries. At normal scale the gloss occupies
+at most 34% of the row and up to two lines. Above 1.2 font scale it moves under the word,
+aligns left and wraps without a fixed line limit.
+
+The current empty state is a centered, theme-aware **history tray and clock** SVG,
+up to 340 × 148 dp, followed by **No recent searches found**. This replaces the older
+39 dp icon and two-line horizontal empty-state copy. Keep this approved exception sparse;
+do not substitute a mascot or colored feature panel.
+
+Loading and failure use compact icon/copy rows; failure provides Try again.
+Existing entries remain visible if only their refresh fails.
+
+## 6. Analytics
+
+Analytics is the design's most literal screen: one page, no source switcher, and **every analytical
+card removed**. There is no card, panel, tinted tile, raised chart or drop shadow anywhere in its
+content. Whitespace, 1 dp hairlines and type size are the whole hierarchy, and the section-by-section
+geometry, colour roles and states are recorded in
+[analytics/PLAN.md](analytics/PLAN.md#layout).
+
+### 6.1 Composition
+
+- **Header** matches Home: `Analytics` at 35 sp/700, the freshness line 13 sp 10 dp beneath
+  (`Updated now`, `Updated 4m ago`, `Updated on 21 Oct`), and one 43 dp refresh square (radius 14 dp,
+  `surfaceVariant` fill, accent glyph, ≥48 dp target) — the only chip on the page.
+- **Five sections, in this order:** `Anki` (the collection's shape), `WaniKani` (the curriculum's
+  shape), `Study activity` (a twelve-week Anki heatmap), `Recall` (cumulative accuracy and what needs
+  work), `Ahead` (the next 24 hours). The two source summaries lead — they are what the page is
+  opened for — and the long-history chart follows them. Each names its source and scope in its own
+  meta line; there is no `All / Anki / WaniKani` switcher.
+- **Sections** are separated by a 1 dp `outlineVariant` rule with 24 dp above and 22 dp of padding
+  below it; the first section has no rule and starts 22 dp under the header. Section titles are
+  15 sp/700 with an 11–12 sp right-aligned meta line capped at 44 % of the width.
+- **Paired figures** sit side by side split by exactly one vertical 1 dp rule, 18 dp of inset on the
+  right figure and 12 dp on the left. There is no outer boundary of any kind.
+- **Charts** are unboxed: a 12 × 7 heatmap of 17 dp cells with only `M`/`W`/`F` row labels, 84 dp
+  rings with a 9 dp stroke, 9 dp distribution bars, two labelled recall tracks, and eight 56 dp
+  columns for the day ahead. Nothing on this screen animates.
+- **Copy is a label, not an explanation.** The meta line carries the scope (`12 weeks · Anki`,
+  `Collection`, `Next 24h · WaniKani`); a note under the numbers is one short line and exists only to
+  stop a misreading — a unit (`Distinct cards, not button presses.`), a definition (`Young: under 21
+  days.`) or a gap (`Some days unknown.`). Reasoning longer than that belongs in
+  [analytics/PLAN.md](analytics/PLAN.md), not on the page.
+
+### 6.2 Colour
+
+Analytics is near-monochrome: the shared neutral roles, plus the reader's selected accent at a few
+strengths. **No `success` green, no brand pink and no brand blue appears in an analytical element** —
+a green accent chosen by the reader flows through like any other, but the page never invents an
+independent colour language of its own. The rings, the recall tracks, the bars, the text actions and
+the heatmap's levels are all the one accent; the heatmap and the two distribution bars are that accent
+at 20/42/67/100 %, and the five SRS stages at 20/40/60/80/100 %.
+
+The ladders are what keep the charts legible for the colourless accent, where hue roles would have
+collapsed into one another. The per-accent `primary` values and the full element-to-role table for
+both modes are in [analytics/PLAN.md](analytics/PLAN.md#colour-by-element-and-mode).
+
+### 6.3 Honesty rules
+
+- A figure the source did not answer is an em dash with a sentence, never a zero.
+- A heatmap day the source would not answer is an outlined cell, not a filled one; a confirmed zero is
+  filled in the hairline tone, so "nothing studied" and "not read" never look the same.
+- A chart bucket the source would not answer draws no bar at all; a counted zero draws a 2 dp stub.
+- A source that is not set up is a rule-fenced line of prose with the one action that fixes it, in its
+  own place — it never covers the other source's numbers, and the action appears once per source, not
+  once per section.
+- Cumulative accuracy carries no date range, because the source has no answer history to scope it to.
+- A cached figure is marked once at the foot of the page; a genuine zero is drawn as a zero.
+
+## 7. Settings
+
+### 7.1 Hub
+
+Use the same page canvas and 560 dp column as Home, with native top inset and a
+**Settings** page heading. The heading begins 23 dp below the inset; each group starts
+22 dp after the preceding element.
+
+| Group | Destination | Trailing live value |
+| --- | --- | --- |
+| Lookup | Screen lookup | On / Off |
+| Lookup | Text recognition | Installed model label / None |
+| Study | Anki cards | Export deck, Choose deck, Not installed or Permission needed |
+| Study | WaniKani | Connected / Not connected |
+| App | Appearance | System / Light / Dark |
+| App | About | Actual app version |
+
+There is no separate Screen access row, Account/Profile destination, or fixed sample Gaten
+deck value. The Anki hub summary names the export deck; it does not summarize selected study decks.
+
+Each destination is a flat minimum-60 dp row with a bare 22 dp Ink outline icon, 15 / 20
+title, optional 12 / 17 explanation, trailing 12 / 18 value and 15 dp chevron.
+The value is right-aligned, capped at 40% width, and allowed to wrap. Whole rows are tappable.
+Groups use sentence-case 12 / 18 labels, an 8 dp heading gap and 1 dp row-bottom rules.
+
+Do not place hub rows or groups in cards, tinted sections, icon tiles or separate rounded surfaces.
+The hub normally needs no description below each title. Values refresh on arrival and on
+foreground return while the hub is focused.
+
+### 7.2 Shared detail-page grammar
+
+All six pages keep the flat section language. Use a **64 dp app bar below the top safe inset**,
+Back control, 17 / 22 page title and Help action where provided.
+The body scrolls in the shared column, with bottom safe-area padding. The bottom tab bar is
+hidden because these are pushed pages.
+
+Settings opened from an in-app destination stay on that destination's stack; Back returns
+there. Only an external settings launch selects the Settings tab.
+
+Short labels and essential hints belong beside their control. Longer explanations belong
+in the existing Help dialog or the permission disclosure that needs them.
+Inputs, selected swatches and radio indicators can have their own fill/outline; their
+surrounding section remains transparent.
+
+Use the shared button variants. Keep disabled, saving, invalid and retry states visible.
+Do not add a new save pattern to pages that apply immediately or remove an existing Save
+from pages with a draft.
+
+### 7.3 Page-specific content and controls
+
+| Page | Current structure and interaction |
+| --- | --- |
+| Screen lookup | Lookup mode, Floating button, Quick Settings tile and shortcut/key mapping; During lookup includes the media-pause permission/control. Preserve the explicit permission disclosure before native permission prompts. |
+| Text recognition | Current model and available model, download/import/remove actions, progress and cancel, installation/error states, and Help. Download confirmation is a dialog; progress stays in the flat form. |
+| Anki cards | AnkiDroid access/refresh, Study decks, Export deck/tags, and Card layout with note type, field mappings and HTML/CSS controls. Toolbar Save commits the draft; leaving dirty state offers Discard / Keep editing. Study-deck selection is independent of export destination. |
+| WaniKani | Connection status, Lessons → New per day, and token controls. Blank means Unlimited; accepted daily limits are 1–1000. Learned today explicitly says This device. Lesson preferences use their own Save; Connect/Recheck/Disconnect reflect connection state. |
+| Appearance | Theme radio rows, visible Accent swatches, and Feedback. Theme/accent apply immediately. Feedback shows Haptics → System and a Sounds switch with the short Anki and review cues description. |
+| About | App/version, Privacy, Attributions and Licence. Use the same flat rows for links, with essential legal explanations allowed to wrap. |
+
+Anki study decks are stored by stable IDs: all decks and an explicit empty selection differ.
+Parent decks include subdecks. Do not confuse these choices with the export-deck field.
+Opening Anki still leads to the deck hub before starting a queue.
+
+Appearance Theme rows have a 56 dp minimum and a trailing 22 dp radio ring with a 10 dp
+selected center. The accent grid wraps in four columns, then three, with 8 dp gaps.
+Each swatch has a 48 dp high touch region, a 40 dp circular visual and a 2 dp selection
+ring; its label uses 12 / 18 centered text. Swatches resolve in the chosen display mode.
+Selection must be conveyed semantically as well as visually.
+
+### 7.4 Dialogs and fields
+
+- Shared fields use 14 / 20 text, a surface fill, 1 dp neutral outline and radius 14 dp.
+  Focus adds a 2 dp accent outline with 2 dp offset.
+- Switch rows use the same 60 dp minimum and flexible copy block. On-state tracks use the
+  accent with paired foreground; disabled state uses the theme's disabled roles.
+- Shared dialogs center a surface with 20 dp corners and 24 dp padding over a 50% black
+  backdrop. Cap width at 360 dp; long help content scrolls, with actions remaining reachable.
+- Keep permission disclosure explicit, including its acknowledgement where required.
+  Concise hub copy must not conceal permission consequences.
+- Anki selectors and editors remain their real controls, not decorative sample menus.
+
+## 8. Floating bottom navigation
+
+The app has **Home · Analytics · Settings**. Review is pushed from Home.
+Settings uses the app's gear glyph; do not copy a preview's person/Profile icon.
+
+The floating neutral track stays centered and adapts to measured label widths.
+It is not a full-width black dock and not necessarily as wide as the content column.
+Use the 63 dp track, 6 dp inner padding, 20 dp track radius, 46 dp selected visual and
+15 dp selected radius. The selected pill contains its 20 dp glyph plus the 11 / 14 label;
+inactive tabs show only their glyph. The selected fill/ink follows the chosen accent.
+
+The bar accounts for the native bottom inset and has at least 48 dp touch regions.
+Keep body padding sufficient to scroll the last content above it.
+Hide it on pushed detail/review/settings pages and during Home search.
+
+Its motion follows the horizontal pager rather than a separately timed tab animation.
+The existing short tap-settle and icon-arrival gestures, and the spring-based bar
+departure/return, are intentional. Preserve reduced-motion behavior and measured labels;
+do not truncate Settings to make a fixed capsule fit.
+
+## 9. Feedback, motion and microcopy
+
+| Concern | Current convention |
+| --- | --- |
+| Press | Shared PressableScale changes opacity to 0.72 over 100 ms; it does not scale the row |
+| Focus | 2 dp accent outline with 2 dp offset |
+| Search mode transition | 220 ms emphasized curve; reduced-motion duration is zero |
+| Hand-timed review step transition | 260 ms emphasized curve |
+| Bottom navigation | Pager-driven pill; existing selection and arrival/departure springs |
+| Haptics / sounds | Retain existing feedback settings; no feedback for reselecting an unchanged accent |
+| Loading | Name what is loading, prevent duplicate submission and retain stable control placement |
+| Error | Plain-language cause/context with a useful next action |
+| Empty | State the absence honestly; use the screen-specific empty treatment |
+| Disabled | Semantic disabled state with the theme's disabled colors |
+
+Avoid ambient animations and animated counters. The old blanket prohibition on all spring
+or icon motion does not describe the current navigation. Respect the system reduced-motion
+preference for custom transitions; do not add motion solely to fill empty space.
+
+Use sentence case, short destination names and concise values. Prefer Connect, Reconnect,
+Try again, Save, See all and Show less over enthusiastic or repetitive instructions.
+Use the actual **days**, **No recent searches found**, **Screen lookup** and **About** labels
+where specified above, rather than obsolete mockup copy. Legal, error and permission detail
+may be longer when the reader needs it.
+
+## 10. Accessibility and responsive requirements
+
+- Keep effective touch targets at least 48 × 48 dp; smaller painted icons are fine inside them.
+- Keep system-scalable fonts and flexible row height. Do not fix a Settings row at the
+  minimum height when text needs more room.
+- Preserve source/status and day-state accessibility labels, selected radio/tab semantics,
+  disabled states and expanded/collapsed state.
+- Pair colored dots with words and completed-day fill with a check. Color alone is insufficient.
+- Use readable secondary text for descriptions. Decorative icon/fine roles are not body colors.
+- Preserve Home's outcome stacking and large-text gloss layout, Settings value wrapping and
+  measured bottom-nav labels.
+- Use native status/gesture insets and keyboard avoidance. Never draw mock system chrome.
+- When a visual pass is requested, check light/dark, each affected accent, narrow widths and
+  100%/130%/160% text scale, including keyboard and TalkBack behavior. These are future checks,
+  not claims that they were run in this documentation audit.
+
+## 11. Source map and maintenance
+
+| Concern | Current source |
+| --- | --- |
+| Neutral/status palette and accent ramps | [Color.kt](../app/src/main/java/com/gaten/app/ui/theme/Color.kt) |
+| Native role mapping and color bridge | [Theme.kt](../app/src/main/java/com/gaten/app/ui/theme/Theme.kt), [GatenThemeModule.kt](../app/src/main/java/com/gaten/app/rn/GatenThemeModule.kt) |
+| RN aliases and theme preferences | [theme.tsx](../src/rn/ui/theme.tsx), [GatenTheme.ts](../src/rn/native/GatenTheme.ts) |
+| Shared type, spacing, shape and motion | [tokens.ts](../src/rn/ui/tokens.ts), [Type.kt](../app/src/main/java/com/gaten/app/ui/theme/Type.kt) |
+| Home layout and search-mode behavior | [HomeScreen.tsx](../src/rn/ui/HomeScreen.tsx), [searchParts.tsx](../src/rn/ui/search/searchParts.tsx) |
+| Home rows, streak, history and artwork | [HomeDashboard.tsx](../src/rn/ui/home/HomeDashboard.tsx), [HomeArtwork.tsx](../src/rn/ui/home/HomeArtwork.tsx) |
+| Home data/observation scope | [useHomeDashboard.ts](../src/rn/ui/home/useHomeDashboard.ts) |
+| Analytics composition and sections | [AnalyticsScreen.tsx](../src/rn/ui/analytics/AnalyticsScreen.tsx) |
+| Analytics borderless blocks (section, rule, metric pair, heatmap, rings, bars, unavailable, skeleton) | [ink.tsx](../src/rn/ui/analytics/ink.tsx) |
+| Analytics copy, sums, heatmap bands and chart labels | [model.ts](../src/rn/ui/analytics/model.ts), [tests/analytics.test.cjs](../tests/analytics.test.cjs) |
+| Analytics reads (twelve-week Anki activity, WaniKani recall) | [useAnkiStats.ts](../src/rn/ui/analytics/useAnkiStats.ts), [WaniKaniStats.kt](../app/src/main/java/com/gaten/app/wanikani/WaniKaniStats.kt) |
+| Analytics data contract, colour mapping and states | [analytics/PLAN.md](analytics/PLAN.md) |
+| Settings hub | [SettingsScreen.tsx](../src/rn/ui/settings/SettingsScreen.tsx) |
+| Settings groups, rows, fields and dialogs | [settings-components.tsx](../src/rn/ui/settings/settings-components.tsx) |
+| Settings detail pages | [settings/](../src/rn/ui/settings/) |
+| Buttons and press/focus feedback | [components.tsx](../src/rn/ui/components.tsx), [PressableScale.tsx](../src/rn/ui/PressableScale.tsx) |
+| Bottom navigation and route behavior | [BottomBar.tsx](../src/rn/ui/BottomBar.tsx), [AppShell.tsx](../src/rn/ui/AppShell.tsx) |
+| Other screen refinements and historical checks | [Implementation record](design-language.md) |
+
+For a future UI change, update the affected section here and the shared token source where
+applicable. Record the reason, light/dark impact, accessibility implications and what was
+actually checked. Keep supplied historical packages intact and distinguish proposals from
+shipped behavior.
+
+### Version 1.1 audit changes
+
+Consolidated the selected-accent system and actual typography; removed the separate Home
+CTA and optional split-card baseline; documented current search mode, bounded Anki streak,
+service states and history artwork; replaced obsolete Settings entries/card geometry;
+added all six Settings pages and their controls; corrected three-tab navigation, current
+motion and dark secondary text. This was a documentation-only source audit.
+
+### Version 1.2 changes
+
+Added §6 Analytics: the three-view borderless layout, the switcher and section grammar, the
+per-element colour roles with the three-step accent ladder and the one `success` segment, and the
+honesty rules for missing, unavailable and cached figures. Renumbered the following sections; added
+the analytics sources to §11. Checked on a debug build at 392 dp across all seven accents in light
+and dark, and at 160 % text scale.
+
+### Version 1.3 changes
+
+§6 Analytics rewritten for the final single-page design: the source switcher is gone, the sections are
+`Anki → WaniKani → Study activity → Recall → Ahead` (the two source summaries lead; the twelve-week
+heatmap follows them), and the colour rule is now accent-only — the
+`success` segment on the collection bar is removed, so no analytical element carries a hue the reader
+did not choose. Added the heatmap's unknown-versus-zero treatment, the cumulative-accuracy rule, and
+the once-per-source action rule. Checked on a debug build at 392 dp across all seven accents in light
+and dark, at 320/340/430 dp, and at 130 % and 160 % text.
