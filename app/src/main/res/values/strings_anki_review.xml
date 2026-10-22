@@ -8,9 +8,6 @@
 
 <resources>
 
-    <!-- Entry point on the home screen -->
-    <string name="ankireview_open">Review cards</string>
-
     <!-- Review screen -->
     <string name="ankireview_title">Review cards</string>
     <string name="ankireview_back">Back</string>
@@ -20,7 +17,6 @@
     <string name="ankireview_choose_deck">Choose a deck</string>
     <string name="ankireview_start">Start reviewing</string>
     <string name="ankireview_no_decks">AnkiDroid has no decks yet.</string>
-    <string name="ankireview_deck_counts">%1$d new &#183; %2$d learning &#183; %3$d to review</string>
     <string name="ankireview_deck_filtered">filtered</string>
     <string name="ankireview_show_answer">Show answer</string>
     <string name="ankireview_saving">Saving to AnkiDroid…</string>
@@ -53,7 +49,6 @@
 
     <!-- Leaving a screen with something unsaved -->
     <string name="ankireview_leave_title">Leave the review session?</string>
-    <string name="ankireview_leave_body">Nothing is graded by leaving. The card you are on stays unanswered, and the session view closes.</string>
     <string name="ankireview_leave_leave">Leave</string>
     <string name="ankireview_leave_stay">Stay</string>
     <string name="anki_settings_discard_title">Discard changes?</string>

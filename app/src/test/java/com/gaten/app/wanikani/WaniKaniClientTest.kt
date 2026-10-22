@@ -468,6 +468,29 @@ class WaniKaniClientTest {
     }
 
     @Test
+    fun `a disconnect that cannot forget the token still clears the cache, and says so`() = runBlocking {
+        val api = fakeApi(user = paidUser(), kanji = WaniKaniJson.collection(WaniKaniJson.kanji()))
+        val credentials = FakeCredentials()
+        val client = client(api, credentials)
+        client.connect(TOKEN)
+        client.lookup(WaniKaniTarget.Kanji("一"), false)
+        assertTrue(WaniKaniStore(dir).subject(440) != null)
+        assertTrue(WaniKaniStore(dir).entitlement() != null)
+
+        // The token will not go: a keystore that refuses to drop its key. The cache must still go on
+        // its own - the two are cleared independently, one after the other, and the half that
+        // failed is reported rather than smoothed over.
+        credentials.clearFails = true
+        assertEquals(false, client.disconnect())
+
+        assertNull(WaniKaniStore(dir).subject(440))
+        assertNull(WaniKaniStore(dir).entitlement())
+        // The token that could not be forgotten is still the one stored, not silently dropped from
+        // the answer while the device keeps it.
+        assertEquals(TOKEN, credentials.read())
+    }
+
+    @Test
     fun `a subject that could not be cached is shown, and says so`() = runBlocking {
         // The cache root is a file, so no entry can be written under it.
         File(folder.root, "wanikani").writeText("not a directory")
@@ -542,6 +565,9 @@ private class FakeCredentials(private var stored: String? = null) : WaniKaniCred
 
     var saveFails = false
 
+    /** A clear that could not forget the token, as a keystore refusing to drop its key would not. */
+    var clearFails = false
+
     override fun hasToken(): Boolean = stored != null
 
     override fun read(): String? = stored
@@ -553,6 +579,7 @@ private class FakeCredentials(private var stored: String? = null) : WaniKaniCred
     }
 
     override fun clear(): Boolean {
+        if (clearFails) return false
         stored = null
         return true
     }

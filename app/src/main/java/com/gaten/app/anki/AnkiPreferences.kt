@@ -257,6 +257,7 @@ object AnkiPreferences {
     private const val KEY_FRONT = "anki_front"
     private const val KEY_BACK = "anki_back"
     private const val KEY_CSS = "anki_css"
+    private const val KEY_STUDY_DECK_IDS = "anki_study_deck_ids"
 
     /** Sentinel for "no note type chosen": AnkiDroid's model ids are positive. */
     private const val NO_MODEL = -1L
@@ -294,7 +295,33 @@ object AnkiPreferences {
             }
         }.apply()
     }
+
+    /** Null keeps the legacy all-decks behavior; an empty set means the reader chose no decks. */
+    fun loadStudyDeckIds(context: Context): Set<Long>? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.contains(KEY_STUDY_DECK_IDS)) return null
+        return prefs.getStringSet(KEY_STUDY_DECK_IDS, emptySet()).orEmpty()
+            .mapNotNull(String::toLongOrNull)
+            .let(::normalizeStudyDeckIds)
+    }
+
+    /** Saves selected Anki deck ids independently of the configured export deck. */
+    fun saveStudyDeckIds(context: Context, ids: Collection<Long>?) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            if (ids == null) {
+                remove(KEY_STUDY_DECK_IDS)
+            } else {
+                putStringSet(KEY_STUDY_DECK_IDS, normalizeStudyDeckIds(ids).mapTo(LinkedHashSet()) { it.toString() })
+            }
+        }.apply()
+    }
 }
+
+/** Keeps only valid Anki deck ids and removes duplicates while preserving selection order. */
+internal fun normalizeStudyDeckIds(ids: Collection<Long>): Set<Long> =
+    ids.filterTo(LinkedHashSet()) { it in 1..MAX_SAFE_JS_DECK_ID }
+
+private const val MAX_SAFE_JS_DECK_ID = 9_007_199_254_740_991L
 
 /** Field names as persisted, with the separator AnkiDroid uses and a field name cannot contain. */
 private fun splitFieldNames(names: String): List<String> =

@@ -1,0 +1,111 @@
+{
+  "anki": [
+    {
+      "id": "ready",
+      "label": "Decks with due cards (initial example)",
+      "expected": "5 cards ready; selectable due deck rows. Zero-due rows are quiet."
+    },
+    {
+      "id": "oneComplete",
+      "label": "One deck has zero due while others remain",
+      "expected": "Show check in completed row, preserve available deck rows; do not show global success."
+    },
+    {
+      "id": "allClear",
+      "label": "Every listed deck has zero due",
+      "expected": "Small top positive banner and all decks marked clear; no universal Start button."
+    },
+    {
+      "id": "loading",
+      "label": "Loading initial deck data",
+      "expected": "Neutral stable skeletons; do not show zero due."
+    },
+    {
+      "id": "refreshing",
+      "label": "Background resync with cache",
+      "expected": "Show cached rows and small sync indicator; disable only risky actions."
+    },
+    {
+      "id": "offlineCached",
+      "label": "Offline with previously synced deck data",
+      "expected": "Explain data may be stale; deck action only if native integration permits it."
+    },
+    {
+      "id": "offlineEmpty",
+      "label": "Offline with no data",
+      "expected": "Reason and Retry; do not falsely mark complete."
+    },
+    {
+      "id": "error",
+      "label": "AnkiDroid permission, integration or read failure",
+      "expected": "Action to grant permission/retry; preserve known data if possible."
+    },
+    {
+      "id": "emptyDecks",
+      "label": "Anki reachable but no decks",
+      "expected": "Simple no-decks state; separate from queue completion."
+    },
+    {
+      "id": "sessionFinished",
+      "label": "Just finished a deck, then returned",
+      "expected": "Momentarily acknowledge finished deck (if supported), then persist zero-due row."
+    }
+  ],
+  "wanikani": [
+    {
+      "id": "ready",
+      "label": "Both queues have items",
+      "expected": "Two vertically stacked borderless sections with black CTAs."
+    },
+    {
+      "id": "reviewClear",
+      "label": "No reviews due, lessons available",
+      "expected": "Reviews: clear state, next review if known; Lessons: still actionable."
+    },
+    {
+      "id": "lessonsClear",
+      "label": "Reviews available, no lessons due",
+      "expected": "Reviews: actionable; Lessons: check + no batch, no CTA."
+    },
+    {
+      "id": "allClear",
+      "label": "Reviews and lessons both zero",
+      "expected": "Both sections persist; subtle global acknowledgment, no Start CTAs."
+    },
+    {
+      "id": "loading",
+      "label": "First network load",
+      "expected": "Structure-preserving skeleton, counts unknown."
+    },
+    {
+      "id": "refreshing",
+      "label": "Refresh with cached counts",
+      "expected": "Cached content with sync affordance, no double requests."
+    },
+    {
+      "id": "offlineCached",
+      "label": "Network offline, cached queues known",
+      "expected": "State as last synced; action policy based on actual offline capability."
+    },
+    {
+      "id": "offlineEmpty",
+      "label": "Offline, no cached queues",
+      "expected": "Show offline and Retry; no zeros."
+    },
+    {
+      "id": "error",
+      "label": "Unauthorized, rate-limit, server error",
+      "expected": "Appropriate retry or reconnect instructions; no fake completion."
+    },
+    {
+      "id": "locked",
+      "label": "Lesson entitlement restricts new lessons",
+      "expected": "Reviews may continue; lessons show locked or unavailable as returned by API."
+    },
+    {
+      "id": "sessionFinished",
+      "label": "Returning after queue completion",
+      "expected": "Refresh queue first; show acknowledgment only when proven, not automatically from session count."
+    }
+  ]
+}

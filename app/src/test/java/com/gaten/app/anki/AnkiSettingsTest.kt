@@ -51,6 +51,15 @@ class AnkiSettingsTest {
     }
 
     @Test
+    fun studyDeckSelectionKeepsOnlyDistinctPositiveIds() {
+        assertEquals(
+            linkedSetOf(12L, 5L),
+            normalizeStudyDeckIds(listOf(12L, 0L, -4L, 12L, 5L, Long.MAX_VALUE))
+        )
+        assertTrue(normalizeStudyDeckIds(emptyList()).isEmpty())
+    }
+
+    @Test
     fun builtInFieldsFollowTheCardsOwnOrder() {
         assertArrayEquals(
             arrayOf("食べる", "たべる", "to eat"),

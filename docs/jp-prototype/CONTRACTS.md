@@ -46,10 +46,11 @@ Sources, both from `jmdict-simplified` release `3.6.2+20261005200550`, both SHA-
 - `jmdict-eng-3.6.2+20261005200550.json.tgz` (11.5 MB) — words
 - `jmnedict-all-3.6.2+20261005200550.json.tgz` (13.5 MB) — proper nouns, which JMdict almost
   entirely lacks (池袋, 新宿, 秋葉原 are all absent there)
-`PRAGMA user_version` is stamped with the schema version (3 = the tables below; 1 was the same
-`entries`/`terms`/`names` set and 2 added an `examples` table while the Anki export carried an example
-sentence). The app compares it (and the rest of the SQLite header) to decide whether its extracted copy
-is still current, and `app/build.gradle.kts` refuses to build against an asset of another version.
+`PRAGMA user_version` is stamped with the schema version (4 = the tables below; 3 was the same set
+without `loose`, 2 added an `examples` table while the Anki export carried an example sentence, and 1
+was `entries`/`terms`/`names` as they are). The app compares it (and the rest of the SQLite header) to
+decide whether its extracted copy is still current, and `app/build.gradle.kts` refuses to build against
+an asset of another version.
 Frozen schema (S3 queries exactly this):
 ```sql
 CREATE TABLE entries(
@@ -74,10 +75,21 @@ CREATE TABLE names(          -- JMnedict proper nouns: one row per (kanji form, 
   gloss TEXT NOT NULL        -- romanised name, <= 40 chars
 );
 CREATE INDEX idx_names_term ON names(term);
+CREATE TABLE loose(          -- the romaji fallback: one row per reading, already collapsed
+  reading  TEXT NOT NULL,    -- DictionarySearch.looseForm of the reading: とうきょう -> ときょ
+  entry_id INTEGER NOT NULL,
+  common   INTEGER NOT NULL  -- the kana form's commonness, so this ranks like `terms` does
+);
+CREATE INDEX idx_loose_reading ON loose(reading);
 ```
+`loose` is what makes romaji work: the reader types "tokyo" or "ramen" (no long vowel), the query is
+transliterated to kana (`Wanakana.toHiragana`: tokyo -> ときょ) and its long vowels are collapsed by
+the same function the build used, and the equality on `reading` uses the index. Both sides must use
+one implementation of that fold — `loose()` here, `DictionarySearch.looseForm` in the app — and the
+script's `LOOSE_PROBES`/`ROMAJI_PROBES` pin it on the built database.
 Also write `docs/jp-prototype/dictionary/DATA.md`: exact source URLs, release tag, SHA-256 of both
-downloaded archives and of the produced asset, row counts, uncompressed size, license
-(JMdict + JMnedict = CC BY-SA 4.0, EDRDG).
+downloaded archives and of the produced asset, row counts, uncompressed size, the kanji, name and
+romaji probe lookups, license (JMdict + JMnedict = CC BY-SA 4.0, EDRDG).
 
 ## F3 — lookup + word identification  (owner: slice S3)
 `app/src/main/java/com/akslabs/circletosearch/dict/`, package `...circletosearch.dict`:

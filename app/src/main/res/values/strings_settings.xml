@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<!--
+ * Copy for the Settings tab: the hub, and the pages that open inside it. Kept in its own file so the
+ * settings screens can gain words without touching the resources they share with the rest of the app.
+ -->
+
+<resources>
+
+    <!-- Settings hub: the screen itself, and the group each row sits in -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">What Gaten reads, where it sends it, and how it looks.</string>
+    <string name="settings_group_lookup">Look up</string>
+    <string name="settings_group_study">Study</string>
+    <string name="settings_group_app">App</string>
+
+    <!-- Settings hub: one row per page, with what that page is for -->
+    <string name="settings_row_lookup_title">Screen lookup</string>
+    <string name="settings_row_lookup_support">Floating button, Quick Settings tile and hardware key</string>
+    <string name="settings_row_recognition_title">Text recognition</string>
+    <string name="settings_row_recognition_support">Optional stylized-text model</string>
+    <string name="settings_row_anki_support">Deck, note type and card layout</string>
+    <string name="settings_row_wanikani_support">Kanji and vocabulary reference</string>
+    <string name="settings_row_appearance_support">Theme and accent</string>
+    <string name="settings_row_appearance_value">%1$s &#183; %2$s</string>
+    <string name="settings_row_recognition_installed">Installed: %1$s (%2$s)</string>
+    <string name="settings_row_recognition_unknown">Installed model (%1$s)</string>
+    <string name="settings_row_recognition_none">Built-in reader, no extra model</string>
+    <string name="settings_row_anki_title">Anki cards</string>
+    <string name="settings_row_anki_missing">AnkiDroid is not installed</string>
+    <string name="settings_row_anki_permission">Allow Gaten to add cards to AnkiDroid</string>
+    <string name="settings_row_anki_deck">Cards go to the &#8220;%1$s&#8221; deck</string>
+    <string name="settings_row_wanikani_title">WaniKani</string>
+    <string name="settings_row_wanikani_on">Connected</string>
+    <string name="settings_row_wanikani_off">Not connected</string>
+    <string name="settings_row_appearance_title">Appearance</string>
+    <string name="settings_row_about_title">About</string>
+    <string name="settings_row_about_support">Offline, privacy, licences</string>
+
+    <!-- Screen access: the one thing the app cannot work without, on the hub and in Look up -->
+    <string name="settings_status_on">Screen access is on</string>
+    <string name="settings_status_on_support">Circle any Japanese text on screen to look it up.</string>
+    <string name="settings_status_off">Screen access is off</string>
+    <string name="settings_status_off_support">Gaten cannot read the screen until you turn it on.</string>
+    <string name="settings_action_turn_on">Turn on</string>
+
+    <!-- The way out of every settings page -->
+    <string name="settings_cd_back">Back</string>
+
+    <!-- A detail page's long explanations, behind one toolbar action -->
+    <string name="settings_help_title">Help</string>
+    <string name="settings_cd_help">Open help</string>
+
+    <!-- The one-word state a row carries on the right: on, off, or nothing in place -->
+    <string name="settings_value_on">On</string>
+    <string name="settings_value_off">Off</string>
+    <string name="settings_value_none">None</string>
+
+    <!-- Look up: screen access, the triggers, and the media pause -->
+    <string name="settings_lookup_title">Screen lookup</string>
+    <string name="settings_lookup_group_start">Start a lookup</string>
+    <string name="settings_lookup_floating_title">Floating button</string>
+    <string name="settings_lookup_floating_support">Tap the bubble on screen to look up.</string>
+    <string name="settings_lookup_floating_needs_access">Appears once screen access is on.</string>
+    <string name="settings_lookup_tile_title">Quick Settings tile</string>
+    <string name="settings_lookup_tile_support">Add Gaten to Quick Settings to look up from the notification shade.</string>
+    <string name="settings_lookup_tile_added">Added to Quick Settings</string>
+    <string name="settings_lookup_tile_remove_help">To remove it, open the Quick Settings editor and drag Gaten out.</string>
+    <string name="settings_lookup_tile_add">Add tile</string>
+    <string name="settings_lookup_tile_manual">Open the Quick Settings editor and drag Gaten into your tiles.</string>
+    <string name="settings_lookup_tile_add_failed">Could not add the tile. Try the Quick Settings editor.</string>
+    <string name="settings_lookup_key_title">Hardware key (Key Mapper)</string>
+    <string name="settings_lookup_key_setup">Set up</string>
+    <string name="settings_lookup_key_hide">Hide</string>
+    <string name="settings_lookup_key_support">Send a broadcast with this action:</string>
+    <string name="settings_lookup_cd_copy">Copy the trigger action</string>
+    <string name="settings_lookup_group_media">While a lookup is open</string>
+    <string name="settings_lookup_media_title">Pause video while looking up</string>
+    <string name="settings_lookup_media_support_on">Gaten pauses what is playing when a lookup opens, and plays it again when it closes.</string>
+    <string name="settings_lookup_media_support_off">Without notification access Gaten sends a media pause key instead, which stops some players and not others.</string>
+    <string name="settings_lookup_media_granted">Allowed</string>
+    <string name="settings_lookup_media_denied">Not allowed</string>
+
+    <!-- Text recognition: the optional manga-ocr model -->
+    <string name="settings_recognition_title">Text recognition</string>
+    <string name="settings_recognition_status_installed">%1$s installed (%2$s)</string>
+    <string name="settings_recognition_status_none">No model installed</string>
+    <string name="settings_recognition_status_none_help">The built-in reader (ML Kit) is reading your screen. A model below makes the stylized lettering it misreads readable.</string>
+    <string name="settings_recognition_chip_installed">Installed</string>
+    <string name="settings_recognition_group_models">Models</string>
+    <string name="settings_recognition_size">~%1$d MB</string>
+    <string name="settings_recognition_download">Download</string>
+    <string name="settings_recognition_import">Import model files</string>
+    <string name="settings_recognition_remove">Remove</string>
+    <string name="settings_recognition_downloading">Downloading %1$s&#8230;</string>
+    <string name="settings_recognition_progress_starting">Starting&#8230;</string>
+    <string name="settings_recognition_progress">%1$d%% &#183; %2$s</string>
+    <string name="settings_recognition_cancel">Cancel</string>
+    <string name="settings_recognition_confirm_title">Download %1$s?</string>
+    <string name="settings_recognition_confirm_body">About %1$d MB will be downloaded from huggingface.co. Use Wi-Fi if you can.</string>
+    <string name="settings_recognition_confirm_metered">You are on mobile data. About %1$d MB will be downloaded from huggingface.co &#8212; use Wi-Fi if you can.</string>
+    <string name="settings_recognition_help">ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads &#8212; outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read keeps ML Kit&#8217;s text. Everything runs on the device, and a model already on your phone can be imported instead of downloaded.</string>
+    <string name="settings_recognition_network_note">The download is one of the two network uses Gaten has, and it only ever starts from this page.</string>
+    <string name="settings_recognition_toast_installed">%1$s installed</string>
+    <string name="settings_recognition_toast_cancelled">Download cancelled</string>
+    <string name="settings_recognition_toast_failed">Download failed: %1$s</string>
+    <string name="settings_recognition_toast_imported">manga-ocr model installed</string>
+    <string name="settings_recognition_toast_import_failed">Import failed: encoder, decoder and vocab files are all needed</string>
+    <string name="settings_recognition_toast_removed">Model removed</string>
+    <string name="settings_recognition_toast_remove_failed">Could not remove the model files</string>
+
+    <!-- Appearance: theme and accent -->
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_appearance_theme_title">Theme</string>
+    <string name="settings_appearance_theme_support">Follow your device, or keep Gaten light or dark on its own.</string>
+    <string name="settings_appearance_theme_system">System</string>
+    <string name="settings_appearance_theme_light">Light</string>
+    <string name="settings_appearance_theme_dark">Dark</string>
+    <string name="settings_appearance_accent_title">Accent</string>
+    <string name="settings_appearance_accent_support">The one colour in Gaten: buttons, the edge outline and the lasso.</string>
+    <string name="settings_appearance_accent_indigo">Indigo</string>
+    <string name="settings_appearance_accent_blue">Blue</string>
+    <string name="settings_appearance_accent_violet">Violet</string>
+    <string name="settings_appearance_accent_teal">Teal</string>
+    <string name="settings_appearance_accent_green">Green</string>
+    <string name="settings_appearance_accent_rose">Rose</string>
+    <string name="settings_appearance_accent_black">Black</string>
+
+    <!-- About: version, what stays on the device, and who made what -->
+    <string name="settings_about_title">About</string>
+    <string name="settings_about_tagline">Circle Japanese on screen. Read it offline.</string>
+    <string name="settings_about_version">Gaten %1$s</string>
+    <string name="settings_about_offline_title">Offline by default</string>
+    <string name="settings_about_offline_body">The dictionary, the recognition and the lookup all run on this device, and the screenshot never leaves it.</string>
+    <string name="settings_about_network_title">Two network uses, both optional</string>
+    <string name="settings_about_network_body">Downloading a text-recognition model from huggingface.co, and WaniKani if you connect a personal access token. Nothing else is ever sent.</string>
+    <string name="settings_about_attribution_title">Attributions</string>
+    <string name="settings_about_attr_dict">EDRDG dictionary</string>
+    <string name="settings_about_attr_ocr">manga-ocr</string>
+    <string name="settings_about_attr_mlkit">ML Kit</string>
+    <string name="settings_about_attr_wanikani">WaniKani</string>
+    <string name="settings_about_attr_manrope">Manrope typeface</string>
+    <string name="settings_about_attr_wanakana">wanakana</string>
+    <string name="settings_about_manrope">SIL Open Font License 1.1 &#8212; Mikhail Sharanda and the Manrope Project Authors. Bundled to draw Gaten&#8217;s Latin text.</string>
+    <string name="settings_about_wanakana">MIT licence &#8212; the Kotlin port of WanaKana. Turns typed romaji into kana for dictionary search.</string>
+    <string name="settings_about_dict">JMdict and JMnedict, the dictionary Gaten reads: © EDRDG, CC BY-SA 4.0</string>
+    <string name="settings_about_ocr">Optional stylized-text model (kha-white, Apache-2.0) run on ONNX Runtime</string>
+    <string name="settings_about_mlkit">Google&#8217;s on-device text recognition, which reads the screen when no model is installed</string>
+    <string name="settings_about_wanikani">Reference content © Tofugu LLC. Gaten is not affiliated with WaniKani, and nothing from it is bundled with the app.</string>
+    <string name="settings_about_licence_title">Licence</string>
+    <string name="settings_about_licence_body">Gaten is free software under GPL-3.0-or-later, derived from CircleToSearch by AKS-Labs.</string>
+    <string name="settings_about_link_licence">Read the licence</string>
+    <string name="settings_about_link_source">CircleToSearch on GitHub</string>
+</resources>

@@ -10,13 +10,20 @@ import android.content.Context
 import java.io.File
 
 /**
- * What the UI calls: the connection to WaniKani, and the reference content behind a tapped character.
+ * What the UI calls: the connection to WaniKani, the reference content behind a tapped character,
+ * the account's numbers, and the review screen's queue.
  *
  * The app is an unofficial, third-party WaniKani reference. WaniKani is used for content only - the
  * meanings, readings, mnemonics and radical relationships of the subject the reader just tapped - and
- * the one account-scoped request, `GET /user`, exists solely because WaniKani's terms require a
- * client to respect what the subscription grants. Nothing WaniKani owns is bundled in the APK, no
- * dictionary or Anki path here reads it, and nothing is ever sent back to WaniKani.
+ * the one account-scoped read, `GET /user`, exists solely because WaniKani's terms require a client
+ * to respect what the subscription grants. Nothing WaniKani owns is bundled in the APK, and no
+ * dictionary or Anki path here reads it.
+ *
+ * The review screen is the one thing that goes the other way: [reviewQueue] and [lessonsQueue] read
+ * what is due now (through the same allow-listed client, and keeping none of it), [submitReview]
+ * sends a finished review back with `POST /reviews`, and [startLesson] starts a lesson with
+ * `PUT /assignments/<id>/start`. Those two writes are the only ones Gaten ever makes to WaniKani, and
+ * they carry nothing but the subject's (or assignment's) id and the two counts of wrong answers.
  *
  * Everything is synchronous-or-suspend over the app's own directories: the credential in
  * `noBackupFilesDir/wanikani/token` and the cache in `noBackupFilesDir/wanikani/cache`, so neither
@@ -55,6 +62,38 @@ object WaniKaniRepository {
         target: WaniKaniTarget,
         refresh: Boolean = false
     ): WaniKaniLookup = client(context).lookup(target, refresh)
+
+    /**
+     * The subjects due for review right now, freshly asked of WaniKani and kept nowhere: a queue is a
+     * fact about this minute, not something to answer from the disk.
+     */
+    suspend fun reviewQueue(context: Context): WaniKaniReviewQueue = client(context).reviewQueue()
+
+    /**
+     * Sends one finished review back to WaniKani - the subject, and how many times its meaning and
+     * its reading were answered incorrectly. The answers themselves never leave the device.
+     */
+    suspend fun submitReview(
+        context: Context,
+        subjectId: Int,
+        incorrectMeaningAnswers: Int,
+        incorrectReadingAnswers: Int
+    ): WaniKaniReviewSubmission = client(context)
+        .submitReview(subjectId, incorrectMeaningAnswers, incorrectReadingAnswers)
+
+    /**
+     * The subjects waiting to be learned right now, freshly asked of WaniKani and kept nowhere. The
+     * lesson half of the queue read: the same two requests, against the lessons filter.
+     */
+    suspend fun lessonsQueue(context: Context): WaniKaniLessonQueue = client(context).lessonsQueue()
+
+    /**
+     * Starts one lesson with `PUT /assignments/<id>/start` - the only documented way to finish one,
+     * which moves the assignment out of the lessons queue and into reviews. A lesson quiz is never
+     * sent as a review.
+     */
+    suspend fun startLesson(context: Context, assignmentId: Int): WaniKaniLessonStart =
+        client(context).startLesson(assignmentId)
 
     /** A client over the app's own directories, cheap enough to build per call. */
     private fun client(context: Context): WaniKaniClient {

@@ -14,6 +14,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    id("com.facebook.react")
 }
 
 android {
@@ -96,11 +98,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        // 17 to match what the React Native Gradle plugin pins for Java; Kotlin must agree.
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
     dependenciesInfo {
         @Suppress("UnstableApiUsage")
@@ -111,6 +114,21 @@ android {
     buildFeatures {
         compose = true
     }
+}
+
+// React Native bundling. `root` points at the repo root, one level above this module, because
+// package.json, index.js and the Metro/babel configs live there. Debug builds stay unbundled
+// (they load JS from Metro) and release variants bundle index.js into index.android.bundle —
+// the plugin's defaults, applied by debuggableVariants.
+react {
+    root = file("..")
+    entryFile = file("../index.js")
+    // Adds an implementation dependency on every npm module autolinking found (settings-side
+    // autolinkLibrariesFromCommand has already included those projects).
+    autolinkLibrariesWithApp()
+    // Bundle debug too: the host loads assets://index.android.bundle unconditionally, and a
+    // Metro dev server is optional, not a launch requirement.
+    debuggableVariants.set(emptyList())
 }
 
 // ABI-specific version codes for F-Droid and multi-APK support
@@ -136,7 +154,7 @@ androidComponents {
 // before the current schema — the lookup LEFT JOINs tables an older file never wrote. The builder
 // stamps `PRAGMA user_version` with the schema version (tools/build_jmdict_db.py, SCHEMA_VERSION)
 // and SQLite keeps it at bytes 60-63 of the file header, so reading those 64 bytes is enough.
-val dictionarySchemaVersion = 3
+val dictionarySchemaVersion = 4
 val verifyDictionaryAsset by tasks.registering {
     val asset = layout.projectDirectory.file("src/main/assets/db/jmdict.sqlite")
     description = "Fails the build when the generated JMdict asset is missing or of another schema version."
@@ -164,8 +182,39 @@ val verifyDictionaryAsset by tasks.registering {
     }
 }
 
+// The Tanaka Corpus example asset is generated the same way (tools/build_examples_db.py), so the
+// same two mistakes are caught: a missing file, and one from another schema version.
+val examplesSchemaVersion = 1
+val verifyExamplesAsset by tasks.registering {
+    val asset = layout.projectDirectory.file("src/main/assets/db/examples.sqlite")
+    description = "Fails the build when the generated example-sentence asset is missing or of another schema version."
+    doLast {
+        val file = asset.asFile
+        if (!file.isFile) {
+            error("Missing app/src/main/assets/db/examples.sqlite — generate it with: python3 tools/build_examples_db.py")
+        }
+        val header = ByteArray(64)
+        val read = file.inputStream().use { input -> input.read(header) }
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        val version = if (read == header.size && header.copyOfRange(0, magic.size).contentEquals(magic)) {
+            ((header[60].toLong() and 0xFF) shl 24) or ((header[61].toLong() and 0xFF) shl 16) or
+                ((header[62].toLong() and 0xFF) shl 8) or (header[63].toLong() and 0xFF)
+        } else {
+            -1L
+        }
+        if (version != examplesSchemaVersion.toLong()) {
+            error(
+                "app/src/main/assets/db/examples.sqlite is of schema version $version, " +
+                    "this build needs $examplesSchemaVersion — regenerate it with: " +
+                    "python3 tools/build_examples_db.py"
+            )
+        }
+    }
+}
+
 tasks.named("preBuild") {
     dependsOn(verifyDictionaryAsset)
+    dependsOn(verifyExamplesAsset)
 }
 
 // The optional manga-ocr model (~117 MB) is never shipped in a release APK: the user imports it
@@ -249,6 +298,9 @@ if (bundleMangaOcr) {
 }
 
 dependencies {
+    // ReactActivity (via ReactActivityDelegate) requires an AppCompat theme; the RN bridge
+    // brings androidx.appcompat transitively, but the theme reference here needs the artifact.
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -258,6 +310,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    // Navigation 3: the back stack is app-owned state, NavDisplay renders it.
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    // Scopes a ViewModel to a NavEntry instead of the Activity.
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    // @Serializable NavKeys; kotlinx-serialization-core is what Navigation3's rememberNavBackStack
+    // saves through, so it is a first-class dependency rather than a transitive accident.
+    implementation(libs.kotlinx.serialization.core)
+    // Romaji in the search box (tokyo -> ときょ): the dictionary itself is Japanese, so an ASCII
+    // query is transliterated before it is looked up. Pure Kotlin, MIT, no transitive deps.
+    implementation(libs.wanakana.core)
     testImplementation(libs.junit)
     // android.jar ships org.json as a stub whose every method throws, so a local unit test cannot
     // decode anything with the platform's copy. This gives the JVM tests a real implementation to
@@ -274,6 +337,11 @@ dependencies {
 
     // On-device Japanese OCR (bundled models, offline, free, no API key)
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+
+    // React Native runtime and Hermes. The RN Gradle plugin forces their versions from the
+    // react-native entry in package.json, so no versions are pinned here.
+    implementation("com.facebook.react:react-android")
+    implementation("com.facebook.react:hermes-android")
 
     // AnkiDroid's instant-add API: a ContentProvider, so an export reads and writes on-device and
     // needs no network — nor does anything a card carries: glosses and parts of speech both come from

@@ -1,0 +1,2 @@
+  mCurFocusedWindow=android.os.BinderProxy@2bfc808 softInputMode=STATE_UNSPECIFIED|ADJUST_RESIZE client=ClientState{9b4b36f mUid=10214 mPid=31962 mSelfReportedDisplayId=0}
+  mIsInputViewShown=true mStatusIcon=0

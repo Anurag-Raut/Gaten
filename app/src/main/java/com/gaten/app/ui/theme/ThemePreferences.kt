@@ -8,7 +8,7 @@ package com.gaten.app.ui.theme
 
 import android.content.Context
 
-/** Which palette the app draws with. [System] follows the device until the user picks otherwise. */
+/** Which light or dark mode the app draws with. [System] follows the device until the user picks otherwise. */
 enum class ThemeMode {
     System,
     Light,
@@ -28,8 +28,8 @@ enum class ThemeMode {
 }
 
 /**
- * The app's theme choices — dark or light, the palette and the accent — stored in the app's single
- * settings file shared with [com.gaten.app.trigger.TriggerPreferences].
+ * The app's theme choices — dark or light and the accent — stored in the app's single settings file
+ * shared with [com.gaten.app.trigger.TriggerPreferences].
  *
  * They are read by whoever composes a theme — the activity and the capture service's overlay —
  * rather than pushed to them, so a change reaches the next overlay without the service being told.
@@ -37,7 +37,6 @@ enum class ThemeMode {
 object ThemePreferences {
     private const val PREFS_NAME = "gaten_settings"
     private const val KEY_THEME_MODE = "theme_mode"
-    private const val KEY_PALETTE = "palette"
     private const val KEY_ACCENT = "accent"
 
     fun themeMode(context: Context): ThemeMode =
@@ -50,16 +49,6 @@ object ThemePreferences {
 
     fun setThemeMode(context: Context, mode: ThemeMode) {
         prefs(context).edit().putString(KEY_THEME_MODE, mode.name).apply()
-    }
-
-    /** The palette, defaulting to the shipped one for an unset or unrecognised value. */
-    fun palette(context: Context): Palette {
-        val stored = prefs(context).getString(KEY_PALETTE, null) ?: return Palette.Gaten
-        return Palette.entries.firstOrNull { it.name == stored } ?: Palette.Gaten
-    }
-
-    fun setPalette(context: Context, palette: Palette) {
-        prefs(context).edit().putString(KEY_PALETTE, palette.name).apply()
     }
 
     /** The accent, defaulting to the app's own indigo for an unset or unrecognised value. */

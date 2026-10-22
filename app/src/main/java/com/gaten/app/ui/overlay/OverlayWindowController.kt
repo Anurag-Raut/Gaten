@@ -285,7 +285,6 @@ class OverlayWindowController(
         setContent {
             GatenTheme(
                 ThemePreferences.themeMode(context),
-                ThemePreferences.palette(context),
                 ThemePreferences.accent(context)
             ) {
                 Surface(

@@ -7,14 +7,18 @@
 package com.gaten.app.wanikani
 
 /**
- * WaniKani as a read-only content reference: radicals and kanji with their meanings, readings,
- * mnemonics and component relationships, for the character the reader tapped.
+ * WaniKani as a content reference and, on the review screen, as the account's own practice queue:
+ * radicals and kanji with their meanings, readings, mnemonics and component relationships for the
+ * character the reader tapped, plus the states a connection and a lookup can be in.
  *
- * Nothing the user owns is involved. No assignments, review statistics, reviews, level progressions
- * or study materials are requested, stored or shown, and nothing is ever written back to WaniKani;
- * the only user-scoped request is `GET /user`, and all that is kept from it is the subscription's
- * content entitlement (see [WaniKaniEntitlement]) because WaniKani's terms require a third-party
- * client to respect it.
+ * Almost nothing the user owns is involved. Review statistics, level progressions and study
+ * materials are still never requested, stored or shown, and the reference lookup asks nothing of the
+ * account at all. The two exceptions are the review screen's own calls, whose shapes live in
+ * `WaniKaniReview.kt`: `GET /assignments`, with the subjects behind it, reads what is due right now
+ * and keeps none of it, and `POST /reviews` sends a finished review back - the one write Gaten ever
+ * makes to WaniKani. The only other user-scoped request is `GET /user`, and all that is kept from it
+ * is the subscription's content entitlement (see [WaniKaniEntitlement]) because WaniKani's terms
+ * require a third-party client to respect it.
  */
 
 /**

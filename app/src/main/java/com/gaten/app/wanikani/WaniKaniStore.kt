@@ -164,7 +164,8 @@ internal class WaniKaniStore(
         return write(missingFile, text)
     }
 
-    /** Reads an entry, and marks it as the most recently used one. */
+    // This mtime is only this cache's LRU clock; AnkiDroid's collection time does not apply.
+    @Suppress("DirectSystemCurrentTimeMillisUsage")
     private fun readTouched(file: File): String? {
         val text = read(file) ?: return null
         file.setLastModified(System.currentTimeMillis())
@@ -231,8 +232,29 @@ internal class WaniKaniStore(
     private fun digest(url: String): String =
         MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
 
+    /**
+     * The cached account-stats snapshot for [key], or null when there is none. [key] names the
+     * account the snapshot belongs to, so a different token cannot read another account's numbers
+     * out of it. Stats entries are never evicted: they are a few hundred bytes each, and the
+     * dashboard is meant to be readable offline.
+     */
+    fun stats(key: String): String? = read(File(statsDir, "$key.json"))
+
+    /** Caches the account-stats snapshot for [key]; false when it is not on disk afterwards. */
+    fun saveStats(key: String, json: String): Boolean = written(File(statsDir, "$key.json"), json)
+
+    /**
+     * Forgets the account-stats snapshot for [key]. A rejected token can never refresh it again, so
+     * the numbers it left behind are dropped rather than shown as if they were current.
+     */
+    fun clearStats(key: String): Boolean {
+        val file = File(statsDir, "$key.json")
+        return !file.exists() || file.delete()
+    }
+
     private val subjectsDir get() = File(dir, SUBJECTS)
     private val imagesDir get() = File(dir, IMAGES)
+    private val statsDir get() = File(dir, STATS)
     private val indexFile get() = File(dir, INDEX)
     private val missingFile get() = File(dir, MISSING)
     private val entitlementFile get() = File(dir, ENTITLEMENT)
@@ -240,6 +262,7 @@ internal class WaniKaniStore(
     private companion object {
         const val SUBJECTS = "subjects"
         const val IMAGES = "images"
+        const val STATS = "stats"
         const val INDEX = "index.tsv"
         const val MISSING = "missing.tsv"
         const val ENTITLEMENT = "entitlement.json"

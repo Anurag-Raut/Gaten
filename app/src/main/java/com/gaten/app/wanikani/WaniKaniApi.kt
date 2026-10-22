@@ -18,6 +18,7 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import kotlin.coroutines.coroutineContext
 
 /** What one request to WaniKani answered. */
@@ -32,12 +33,59 @@ internal sealed interface WaniKaniFetch {
     /** 404: there is no such resource. */
     data object NotFound : WaniKaniFetch
 
-    /** Nothing was answered; [failure] says why. */
-    data class Failed(val failure: WaniKaniFailure) : WaniKaniFetch
+    /**
+     * Nothing was answered; [failure] says why, and [retryAfterSeconds] when the server said how long
+     * to wait - a 429's `Retry-After` or `RateLimit-Reset`. Null when it said nothing, or when the
+     * failure happened before an answer could come.
+     */
+    data class Failed(
+        val failure: WaniKaniFailure,
+        val retryAfterSeconds: Long? = null
+    ) : WaniKaniFetch
 }
 
 /**
- * The only code in Gaten that talks to WaniKani, as read-only GETs over HTTPS.
+ * The response headers the account-scoped reads cache against.
+ *
+ * WaniKani sends an `ETag` and a `Last-Modified` with every response and accepts both back as
+ * `If-None-Match` / `If-Modified-Since`, answering `304 Not Modified` when nothing changed - which is
+ * how a cached copy is revalidated without transferring it again (the request itself still counts
+ * against the rate limit; only the body is saved).
+ */
+internal data class WaniKaniMeta(
+    /** The body's `ETag`, to send back as `If-None-Match`. Null when the response carried none. */
+    val etag: String?,
+    /** The body's `Last-Modified`. Null when the response carried none. */
+    val lastModified: String?,
+    /** Seconds to wait before asking again, from `Retry-After` or `RateLimit-Reset`. */
+    val retryAfterSeconds: Long? = null
+)
+
+/** What one request answered, with the headers that came with it. */
+internal sealed interface WaniKaniFetchWithMeta {
+
+    /** A 2xx response body, decoded as UTF-8, with the headers to cache beside it. */
+    data class Body(val text: String, val meta: WaniKaniMeta) : WaniKaniFetchWithMeta
+
+    /** 304: the copy the request's `If-None-Match` described is still current, so no body came. */
+    data class NotModified(val meta: WaniKaniMeta) : WaniKaniFetchWithMeta
+
+    /** 401 or 403: the token is wrong, revoked, or not allowed to read this resource. */
+    data object Unauthorized : WaniKaniFetchWithMeta
+
+    /** 404: there is no such resource. */
+    data object NotFound : WaniKaniFetchWithMeta
+
+    /** Nothing was answered; [failure] says why, and [retryAfterSeconds] when the server said so. */
+    data class Failed(
+        val failure: WaniKaniFailure,
+        val retryAfterSeconds: Long? = null
+    ) : WaniKaniFetchWithMeta
+}
+
+/**
+ * The only code in Gaten that talks to WaniKani: GETs over HTTPS, plus the two writes - the POST that
+ * finishes a review and the PUT that starts a lesson.
  *
  * What it refuses, and why:
  *  - Any URL [WaniKaniPolicy] does not allow, before a socket is touched - the API and its image
@@ -45,8 +93,10 @@ internal sealed interface WaniKaniFetch {
  *  - Redirects: they are not followed at all (`instanceFollowRedirects = false`), so a 3xx is just
  *    an unhandled status. That is what keeps a `Authorization` header from ever being replayed to
  *    whoever a redirect points at.
- *  - An `Authorization` header on an image request, by construction: only [get] takes a token, and
- *    only the API's own URL is ever passed to it.
+ *  - An `Authorization` header on an image request, by construction: only [get], [getWithMeta] and
+ *    [post] take a token, and only the API's own URL is ever passed to one.
+ *  - A request body anywhere but on [post] and [put]: a GET is written as a GET with no output
+ *    stream, so no body can be sent by accident.
  *  - Bodies over a fixed size, by declared length and while reading, so a wrong URL or a hostile
  *    answer cannot make the app allocate an unbounded amount.
  *  - An image body that is not SVG, because that text goes to a WebView in the UI.
@@ -92,41 +142,204 @@ internal open class WaniKaniApi {
         }
     }
 
-    private suspend fun fetch(
+    /**
+     * `GET <base>/<path>?<query>` with the token and the response headers kept, for the account reads
+     * that cache: [ifNoneMatch] makes the request conditional, so a body that has not changed since
+     * that `ETag` answers `304` instead of arriving again. The request itself is still made and still
+     * counts against the rate limit - what is saved is the transfer, not the request.
+     *
+     * The policy is the same as [get]'s: the url is checked against [WaniKaniPolicy] before a socket
+     * is touched, redirects are not followed, and the body is bounded.
+     */
+    open suspend fun getWithMeta(
+        path: String,
+        query: List<Pair<String, String>>,
+        token: String,
+        ifNoneMatch: String?
+    ): WaniKaniFetchWithMeta {
+        if (!looksLikeToken(token)) return WaniKaniFetchWithMeta.Failed(WaniKaniFailure.MALFORMED)
+        val url = try {
+            resolve(path, query)
+        } catch (e: URISyntaxException) {
+            return WaniKaniFetchWithMeta.Failed(WaniKaniFailure.MALFORMED)
+        }
+        if (!WaniKaniPolicy.isAllowed(url)) return WaniKaniFetchWithMeta.Failed(WaniKaniFailure.MALFORMED)
+        return withContext(Dispatchers.IO) {
+            when (val exchange = exchange(url, token, MAX_JSON_BYTES, ifNoneMatch)) {
+                is WaniKaniExchange.Failed -> WaniKaniFetchWithMeta.Failed(exchange.failure)
+                is WaniKaniExchange.Answered -> when (exchange.code) {
+                    in 200..299 -> exchange.text?.let { WaniKaniFetchWithMeta.Body(it, exchange.meta()) }
+                        ?: WaniKaniFetchWithMeta.Failed(WaniKaniFailure.TOO_LARGE, exchange.retryAfterSeconds)
+                    HTTP_NOT_MODIFIED -> WaniKaniFetchWithMeta.NotModified(exchange.meta())
+                    HttpURLConnection.HTTP_UNAUTHORIZED, HttpURLConnection.HTTP_FORBIDDEN -> WaniKaniFetchWithMeta.Unauthorized
+                    HttpURLConnection.HTTP_NOT_FOUND -> WaniKaniFetchWithMeta.NotFound
+                    HTTP_TOO_MANY_REQUESTS -> WaniKaniFetchWithMeta.Failed(
+                        WaniKaniFailure.RATE_LIMITED,
+                        exchange.retryAfterSeconds
+                    )
+                    else -> WaniKaniFetchWithMeta.Failed(WaniKaniFailure.SERVER)
+                }
+            }
+        }
+    }
+
+    /**
+     * `POST <base>/<path>` with the token and [body] as the request.
+     *
+     * One of the two writes Gaten makes to WaniKani, used to finish a review. The policy is the same as
+     * [get]'s - the url is checked against [WaniKaniPolicy] before a socket is touched, redirects are
+     * never followed, and the answer is bounded - and the body is written as UTF-8 JSON.
+     *
+     * 409 and 422 read as [WaniKaniFailure.MALFORMED]: WaniKani refuses a review it cannot accept -
+     * a subject that is not due, counts that make no sense - and that is the request being wrong
+     * rather than the network, so the caller has to fix it rather than try it again.
+     */
+    open suspend fun post(path: String, body: String, token: String): WaniKaniFetch =
+        write("POST", path, body, token)
+
+    /**
+     * `PUT <base>/<path>` with the token and [body] as the request.
+     *
+     * The other write Gaten makes to WaniKani, used to start a lesson
+     * (`PUT /assignments/<id>/start`), which is the only documented way to finish one. Same policy
+     * as [post] - the url is checked against [WaniKaniPolicy] before a socket is touched, redirects
+     * are never followed, and the answer is bounded - and the body is written as UTF-8 JSON.
+     */
+    open suspend fun put(path: String, body: String, token: String): WaniKaniFetch =
+        write("PUT", path, body, token)
+
+    private suspend fun write(method: String, path: String, body: String, token: String): WaniKaniFetch {
+        if (!looksLikeToken(token)) return WaniKaniFetch.Failed(WaniKaniFailure.MALFORMED)
+        val url = try {
+            resolve(path, emptyList())
+        } catch (e: URISyntaxException) {
+            return WaniKaniFetch.Failed(WaniKaniFailure.MALFORMED)
+        }
+        if (!WaniKaniPolicy.isAllowed(url)) return WaniKaniFetch.Failed(WaniKaniFailure.MALFORMED)
+        return withContext(Dispatchers.IO) {
+            when (val exchange = exchange(url, token, MAX_JSON_BYTES, null, body, method)) {
+                is WaniKaniExchange.Failed -> WaniKaniFetch.Failed(exchange.failure)
+                is WaniKaniExchange.Answered -> when (exchange.code) {
+                    in 200..299 -> exchange.text?.let { WaniKaniFetch.Body(it) }
+                        ?: WaniKaniFetch.Failed(WaniKaniFailure.TOO_LARGE)
+                    HttpURLConnection.HTTP_UNAUTHORIZED, HttpURLConnection.HTTP_FORBIDDEN -> WaniKaniFetch.Unauthorized
+                    HttpURLConnection.HTTP_NOT_FOUND -> WaniKaniFetch.NotFound
+                    HTTP_TOO_MANY_REQUESTS -> WaniKaniFetch.Failed(
+                        WaniKaniFailure.RATE_LIMITED,
+                        exchange.retryAfterSeconds
+                    )
+                    HTTP_CONFLICT, HTTP_UNPROCESSABLE -> WaniKaniFetch.Failed(WaniKaniFailure.MALFORMED)
+                    else -> WaniKaniFetch.Failed(WaniKaniFailure.SERVER)
+                }
+            }
+        }
+    }
+
+    /** One answered request, or a failure that happened before an answer could come. */
+    private sealed interface WaniKaniExchange {
+
+        /**
+         * The request was answered. [text] is the bounded body of a 2xx - null for any other status,
+         * and null for a 2xx whose body was larger than the caller's cap.
+         */
+        class Answered(
+            val code: Int,
+            val etag: String?,
+            val lastModified: String?,
+            val retryAfterSeconds: Long?,
+            val text: String?
+        ) : WaniKaniExchange {
+            fun meta(): WaniKaniMeta = WaniKaniMeta(etag, lastModified, retryAfterSeconds)
+        }
+
+        /** Nothing answered: offline, timed out, or the connection failed some other way. */
+        data class Failed(val failure: WaniKaniFailure) : WaniKaniExchange
+    }
+
+    /**
+     * The request itself: the method, headers and limits for every caller, with the status, the cache
+     * headers and the bounded body handed back for whoever asked to interpret.
+     *
+     * A [body] makes this a POST, and only then: the connection is asked for an output stream when,
+     * and only when, there is something to write, so no GET can carry a body by accident.
+     */
+    private suspend fun exchange(
         url: URI,
         token: String?,
         maxBytes: Int,
-        accept: (String) -> WaniKaniFetch
-    ): WaniKaniFetch {
+        ifNoneMatch: String?,
+        body: String? = null,
+        method: String? = null
+    ): WaniKaniExchange {
         val connection = try {
             url.toURL().openConnection() as HttpURLConnection
         } catch (e: IOException) {
-            return WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE)
+            return WaniKaniExchange.Failed(WaniKaniFailure.OFFLINE)
         }
-        connection.requestMethod = "GET"
+        connection.requestMethod = method ?: if (body == null) "GET" else "POST"
         connection.instanceFollowRedirects = false
         connection.connectTimeout = CONNECT_TIMEOUT_MS
         connection.readTimeout = READ_TIMEOUT_MS
         connection.setRequestProperty("Wanikani-Revision", REVISION)
         connection.setRequestProperty("Accept", "application/json, image/svg+xml")
+        if (ifNoneMatch != null) connection.setRequestProperty("If-None-Match", ifNoneMatch)
         if (token != null) connection.setRequestProperty("Authorization", "Bearer $token")
+        if (body != null) {
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", JSON_CONTENT_TYPE)
+        }
         return try {
-            when (val code = connection.responseCode) {
-                in 200..299 -> readBody(connection, maxBytes)?.let(accept)
-                    ?: WaniKaniFetch.Failed(WaniKaniFailure.TOO_LARGE)
-                HttpURLConnection.HTTP_UNAUTHORIZED, HttpURLConnection.HTTP_FORBIDDEN -> WaniKaniFetch.Unauthorized
-                HttpURLConnection.HTTP_NOT_FOUND -> WaniKaniFetch.NotFound
-                HTTP_TOO_MANY_REQUESTS -> WaniKaniFetch.Failed(WaniKaniFailure.RATE_LIMITED)
-                else -> WaniKaniFetch.Failed(WaniKaniFailure.SERVER)
+            if (body != null) {
+                val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                connection.outputStream.use { it.write(bytes) }
             }
+            val code = connection.responseCode
+            WaniKaniExchange.Answered(
+                code = code,
+                etag = connection.getHeaderField(HEADER_ETAG),
+                lastModified = connection.getHeaderField(HEADER_LAST_MODIFIED),
+                retryAfterSeconds = waitFor(connection),
+                text = if (code in 200..299) readBody(connection, maxBytes) else null
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: SocketTimeoutException) {
-            WaniKaniFetch.Failed(WaniKaniFailure.TIMEOUT)
+            WaniKaniExchange.Failed(WaniKaniFailure.TIMEOUT)
         } catch (e: IOException) {
-            WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE)
+            WaniKaniExchange.Failed(WaniKaniFailure.OFFLINE)
         } finally {
             connection.disconnect()
+        }
+    }
+
+    /**
+     * How long the server asked us to wait, from `Retry-After` (seconds; its HTTP-date form is not
+     * used by this API, so a date is ignored) or from `RateLimit-Reset` (epoch seconds).
+     */
+    private fun waitFor(connection: HttpURLConnection): Long? {
+        connection.getHeaderField(HEADER_RETRY_AFTER)?.trim()?.toLongOrNull()?.let { return it.coerceAtLeast(0) }
+        val reset = connection.getHeaderField(HEADER_RATE_LIMIT_RESET)?.trim()?.toLongOrNull() ?: return null
+        return (reset - Instant.now().epochSecond).coerceAtLeast(0)
+    }
+
+    /** The shape the reads that do not cache headers use: one body, or a failure. */
+    private suspend fun fetch(
+        url: URI,
+        token: String?,
+        maxBytes: Int,
+        accept: (String) -> WaniKaniFetch
+    ): WaniKaniFetch = when (val exchange = exchange(url, token, maxBytes, null)) {
+        is WaniKaniExchange.Failed -> WaniKaniFetch.Failed(exchange.failure)
+        is WaniKaniExchange.Answered -> when {
+            exchange.code in 200..299 -> exchange.text?.let(accept)
+                ?: WaniKaniFetch.Failed(WaniKaniFailure.TOO_LARGE)
+            exchange.code == HttpURLConnection.HTTP_UNAUTHORIZED || exchange.code == HttpURLConnection.HTTP_FORBIDDEN -> WaniKaniFetch.Unauthorized
+            exchange.code == HttpURLConnection.HTTP_NOT_FOUND -> WaniKaniFetch.NotFound
+            exchange.code == HTTP_TOO_MANY_REQUESTS -> WaniKaniFetch.Failed(
+                WaniKaniFailure.RATE_LIMITED,
+                exchange.retryAfterSeconds
+            )
+            else -> WaniKaniFetch.Failed(WaniKaniFailure.SERVER)
         }
     }
 
@@ -170,7 +383,15 @@ internal open class WaniKaniApi {
 
     private companion object {
         const val REVISION = "20170710"
+        const val HTTP_NOT_MODIFIED = 304
+        const val HTTP_CONFLICT = 409
+        const val HTTP_UNPROCESSABLE = 422
         const val HTTP_TOO_MANY_REQUESTS = 429
+        const val JSON_CONTENT_TYPE = "application/json; charset=utf-8"
+        const val HEADER_ETAG = "ETag"
+        const val HEADER_LAST_MODIFIED = "Last-Modified"
+        const val HEADER_RETRY_AFTER = "Retry-After"
+        const val HEADER_RATE_LIMIT_RESET = "RateLimit-Reset"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 20_000
         const val CHUNK_BYTES = 16 * 1024

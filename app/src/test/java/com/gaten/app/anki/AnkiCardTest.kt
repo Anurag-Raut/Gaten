@@ -79,6 +79,38 @@ class AnkiCardTest {
         assertEquals("", card.meaning)
     }
 
+    /**
+     * A screen with a chosen entry exports that entry: こう reaches 甲 and 乙, and the note has to
+     * carry the readings and meanings of the one the reader opened, not of the first row.
+     */
+    @Test
+    fun theSelectedEntryIsWhatTheCardCarries() {
+        val selected = entry(primary = "乙", kana = listOf("おつ"), glosses = listOf("second"))
+
+        val card = AnkiCard.from(selected)
+
+        assertEquals("乙", card.expression)
+        assertEquals("おつ", card.reading)
+        assertEquals("second<br><small>n</small>", card.meaning)
+    }
+
+    @Test
+    fun anEntryWithoutAKanaFormHasNoReading() {
+        val card = AnkiCard.from(entry(primary = "𠮷", kana = emptyList()))
+
+        assertEquals("𠮷", card.expression)
+        assertEquals("", card.reading)
+        assertEquals("cat<br><small>n</small>", card.meaning)
+    }
+
+    /** The word path and the entry path build the same note for the same entry. */
+    @Test
+    fun theEntryPathMatchesTheWordPathForTheSameEntry() {
+        val entry = entry(primary = "猫", kana = listOf("ねこ"), glosses = listOf("cat", "feline"))
+
+        assertEquals(AnkiCard.from(entry), AnkiCard.from(word(listOf(entry))))
+    }
+
     private fun word(
         entries: List<DictEntry> = listOf(entry()),
         surface: String = "猫",

@@ -15,7 +15,7 @@
 
     <!-- Settings screen -->
     <string name="wk_settings_back">Back</string>
-    <string name="wk_settings_explain">WaniKani is reference content: its meanings, readings, radicals and mnemonics for the kanji you tap in a lookup. Connecting checks your token with WaniKani, and every page you open is kept on this device so it stays readable offline. Gaten reads no lessons, reviews or statistics, and never changes anything in your account.</string>
+    <string name="wk_settings_explain">WaniKani is reference content: its meanings, readings, radicals and mnemonics for the kanji you tap in a lookup. Connecting checks your token with WaniKani, and every page you open is kept on this device so it stays readable offline. Connected, Gaten also reads your own study progress &#8212; the level you are on, the reviews due now and over the next 24 hours, and how your items are spread across WaniKani&#8217;s review stages &#8212; for the analytics screen, and keeps it on this device. It never touches lessons, never answers a review, and never changes anything in your account.</string>
     <string name="wk_settings_coverage">WaniKani&#8217;s pages cover the kanji and radicals of its own curriculum, so a kanji outside it has no page here: Gaten says so instead of inventing content. Radical names are WaniKani&#8217;s own, not linguistic definitions.</string>
     <string name="wk_settings_attribution">WaniKani and its content belong to Tofugu LLC. These pages are an unofficial third-party reference, not affiliated with or endorsed by WaniKani, and nothing from WaniKani is bundled with Gaten or exported to Anki.</string>
     <string name="wk_settings_token_label">Personal access token</string>

@@ -3,11 +3,13 @@
 Gaten is an Android app for reading Japanese on screen. When you hit a word you cannot read —
 in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the text, and Gaten
 shows the words it recognises, their kana readings and English meanings from an offline
-dictionary. Reading runs entirely on the device: there is no account and no server, and it works
+dictionary. You can also search by kanji, kana, or romaji directly in Gaten, explore an
+entry, and add it to Anki without capturing a screen. Reading runs entirely on the device: there is no account and no server, and it works
 in airplane mode. Gaten uses the network for exactly two things, and only after the reader asks for
 them: downloading the optional stylized-text model (see *Optional stylized-text model*), and WaniKani
-— connecting a personal access token, and fetching the reference page for a kanji the reader taps
-(see *Optional WaniKani reference pages*).
+— connecting a personal access token, reading the reference page for a kanji the reader taps, and
+reviewing what the account has due (see *Optional WaniKani reference pages* and *Reviewing in
+Gaten*).
 
 Gaten asks for **no accessibility service**. The screen is read from a capture session the reader
 turns on themselves (*lookup mode*), and the overlay is drawn with the ordinary "display over other
@@ -51,20 +53,46 @@ screen capture, and no figure here claims otherwise.
    those radicals opens that radical's own page. Each page is cached, so it stays readable offline,
    and a button opens the real page on wanikani.com (see *Optional WaniKani reference pages*).
 9. **Add to Anki** — when AnkiDroid is installed, a button on the result adds the word to your
-   configured deck and note type through AnkiDroid's instant-add API. Open **Anki → Customize cards**
-   on the home screen to choose the deck, tags, field mapping and card layout. Export stays on-device.
+   configured deck and note type through AnkiDroid's instant-add API. Open **Settings → Anki cards**
+   to choose the deck, tags, field mapping and card layout. Export stays on-device.
 
 Steps 2–7 are fully offline. Gaten makes no network request of any kind until — and unless — the
 reader downloads the optional stylized-text model, or connects WaniKani (which checks the token) and
-opens a kanji.
+then opens a kanji, looks at the Analytics tab, or reviews what is due.
 
-Appearance settings near the bottom of the setup screen let you choose the light/dark theme,
-paper palette and accent independently. Changing the palette keeps your selected accent.
-Palette previews show each palette's paper and text colours with its name, without an accent dot.
+**Settings → Appearance** lets you choose the light/dark theme and accent
+independently. Gaten ships a single neutral ladder, so the accent picker changes the one
+colour in the app while the paper and text stay as designed.
 
-The home screen groups lookup triggers first, then Anki customization, the optional OCR model,
-Appearance and About. Hardware-key instructions and OCR model options are collapsed until needed.
-The floating-button switch has a visible off-state thumb and border in both themes.
+## Inside the app
+
+The bottom navigation separates four tasks:
+
+- **Home** — a dictionary-search entry point, the configured Anki deck's review counts when access
+  is already granted, and screen-lookup status and controls. Opening Home never requests Anki access
+  just to populate counts.
+- **Search** — type a Japanese word, kana reading, or romaji. Exact matches and dictionary forms of inflected
+  words come before related prefix matches. Open an entry to read its definitions, inspect its kanji,
+  or add that specific entry to Anki using your saved deck and card settings. Search works without
+  screen-access permission or either optional integration.
+- **Review** — the landing page offers the two places you can study: AnkiDroid's decks, and WaniKani
+  when a token is connected. Choosing a deck starts its session immediately; WaniKani connects first
+  if it has to, then opens a page showing what is due for review and which lessons are waiting to be
+  learned. An active session keeps the reveal, the rating controls or the answer field in focus, with
+  bottom navigation hidden until you leave it (see *Reviewing in Gaten*).
+- **Settings** — focused pages for Screen lookup, Text recognition, Anki cards, WaniKani, Appearance,
+  and About. Hardware-key setup and model management live here rather than on Home.
+
+Search is Japanese-to-English dictionary lookup: enter kanji, hiragana, katakana, or romaji,
+including inflected Japanese forms. Common shortened spellings such as `tokyo` and `ramen`
+use a loose reading index after exact matches. English definition search is not supported.
+No search query is sent to a server. Kanji reference pages still require the optional WaniKani
+connection described below.
+
+In-app navigation uses AndroidX Navigation 3, with a saved back stack for each tab. Word details,
+kanji and radical reference pages, and settings use the same destination transitions and Back
+behavior. Settings opened from a word return to that word. Review reveals and ratings stay inside
+the current session, and leaving an edited Anki configuration still asks before discarding it.
 
 ### Closing the lookup
 
@@ -112,18 +140,22 @@ part most likely to need a real device to confirm.
 ## Setup on a phone
 
 1. **Install the APK** for your ABI (`arm64-v8a` on modern phones).
-2. **Turn on lookup mode**: tap **Turn on** on the main screen, read the disclosure and accept.
-   Android then asks for two things, in this order — **Display over other apps**, which the frozen
-   frame, the lasso and the bubble are drawn with, and then its own **screen-capture** consent. A
-   privacy chip stays in the status bar while lookup mode is on; tapping that chip, locking the
-   screen or tapping **Turn off** on Gaten's notification ends the session, and the next **Turn on**
-   asks for the consent again. (Android requires a fresh consent for every session, so this is once
-   per switch-on, not once per lookup.)
-3. **Add the Quick Settings tile**: on Android 13+, tap **Add tile** on the home screen and confirm
+2. **Turn on lookup mode**: open **Settings → Lookup mode** and tap **Turn on** (the same button sits
+   on **Settings → Screen lookup**), read the disclosure and accept.
+   Android then asks for the permissions lookup mode needs, in this order — **Display over other
+   apps** (`SYSTEM_ALERT_WINDOW`), which the frozen frame, the lasso and the bubble are drawn with;
+   the **notification permission** (`POST_NOTIFICATIONS` on Android 13+), so Gaten's ongoing
+   **Lookup mode is on** notification can be shown; and then its own **screen-capture** consent,
+   which starts the media projection. A privacy chip stays in the status bar while lookup mode is
+   on; tapping that chip, locking the screen or tapping **Turn off** on Gaten's notification ends the
+   session, and the next **Turn on** asks for the consent again. (Android requires a fresh consent
+   for every session, so this is once per switch-on, not once per lookup.)
+3. **Add the Quick Settings tile**: on Android 13+, tap **Add tile** under **Settings → Screen lookup** and confirm
    Android's dialog. On older versions, add Gaten through the Quick Settings editor. The home row
    reflects **Added** and returns to **Add tile** when Android reports removal. Removal itself
    belongs to the Quick Settings editor; Android provides no app-side remove-tile API.
-   Tapping the tile starts a lookup; with lookup mode off it asks for the capture consent instead.
+   The tile's own state mirrors whether the projection is alive: it is active while lookup mode is
+   on. Tapping it starts a lookup; with lookup mode off it asks for the capture consent instead.
 4. **Optional — bind the Plus Key.** The OnePlus Plus Key is intercepted by OxygenOS before apps
    see it, so it needs Key Mapper running in Expert Mode on Shizuku:
    1. Developer options → **Disable permission monitoring** → ON (Shizuku's documented
@@ -141,7 +173,7 @@ part most likely to need a real device to confirm.
    accessibility service, and having any accessibility service enabled is what lookup mode exists to
    avoid — running it on Shizuku keeps the permission off the phone entirely.
 
-5. **Optional — customize Anki cards.** Open **Anki → Customize cards**. The default is the
+5. **Optional — customize Anki cards.** Open **Settings → Anki cards**. The default is the
    existing Gaten deck and three-field note type. Enter a deck name (including nested names such
    as `Japanese::Reading`) or allow AnkiDroid access to choose an existing deck. Add space-separated
    tags if wanted. New decks and Gaten note types are created only when you export a word.
@@ -161,7 +193,7 @@ part most likely to need a real device to confirm.
      all decks. A new layout creates a different note type, so its duplicate history is separate.
    - Tap **Save** to apply your settings. Without database access, the lookup uses AnkiDroid's
      share screen; choose the deck and note type there. Gaten settings apply to direct export.
-   - **Anki → Review cards** on the home screen then reviews these decks inside Gaten, with
+   - **Review** in the bottom navigation or **Review cards** on Home reviews these decks inside Gaten, with
      AnkiDroid doing the scheduling (see *Reviewing Anki cards in Gaten*).
 
    The deck/note-type/field-mapping workflow follows established patterns in
@@ -169,26 +201,59 @@ part most likely to need a real device to confirm.
    [asbplayer](https://docs.asbplayer.dev/docs/reference/settings/). Gaten uses AnkiDroid's local
    provider instead of their AnkiConnect transport; no code was copied from these projects.
 
-6. **Optional — connect WaniKani.** Open **WaniKani → WaniKani settings** on the main screen, create
-   a personal access token on WaniKani (read-only is enough), and paste it in. Gaten checks the token
-   against WaniKani before storing it, and keeps it outside the backup set. **Disconnect** removes the
-   token and every cached page. See *Optional WaniKani reference pages*.
+6. **Optional — connect WaniKani.** Open **Settings → WaniKani**, create
+   a personal access token on WaniKani (read access alone is enough for the reference pages; reviewing
+   what is due also needs the permission WaniKani lists for creating reviews), and paste it in. Gaten
+   checks the token against WaniKani before storing it, and keeps it outside the backup set.
+   **Disconnect** removes the token and every cached page. See *Optional WaniKani reference pages*.
+
+## UI stack
+
+The in-app UI is React Native (0.86.3, Fabric / new architecture, Hermes). `MainActivity` is a
+`ReactActivity` and renders the JS app from `index.js` → `App.js` → `src/rn/ui/`: three tabs
+(Home / Analytics / Settings) with per-tab stacks via React Navigation, a custom bottom bar
+(hidden under pushed pages, which is what the review flow is), and a theme resolved on the Kotlin
+side.
+JS talks to the Kotlin logic through bridge modules in `app/src/main/java/com/gaten/app/rn/`
+(dictionary search, Anki review/export, WaniKani, theme, haptics, recognition downloads, platform
+utilities) — no business logic is duplicated in JavaScript.
+
+The lookup overlay retains its independent service window and navigation, still drawn in Compose
+inside `OverlayWindowController` — now a `TYPE_APPLICATION_OVERLAY` window owned by the capture
+service, behind the "display over other apps" permission — and it never touches the activity UI.
+
+Dependencies: Kotlin `2.2.21`, AGP `8.11.0`, RN `0.86.3` (New Architecture) with
+`react-native-reanimated` `4.7` + `react-native-worklets` `0.13`, React Navigation `7`.
+Motion: a 380 ms emphasized horizontal page slide for tabs (bottom-tabs `transitionSpec` + a
+custom scene interpolator) and for pushed pages (native-stack, platform animator), the review's
+step swaps on a Reanimated shared value with parallax, staggered list entrances and a Material
+tab indicator in the bottom bar — see `docs/rn-migration/PLAN.md` § Motion. The overlay keeps its
+own sheet slide. Appearance settings include optional feedback sounds, off by default; haptics
+respect the phone's settings.
 
 ## Building from source
 
 Requirements: JDK 17 or newer and an Android SDK with `compileSdk 36` (set `ANDROID_HOME` or
-`local.properties`), plus Python 3 for the dictionary builder.
+`local.properties`), plus Python 3 for the dictionary builder and Node.js 22+ for the React
+Native toolchain.
 
 ```sh
 # 1. Generate the dictionary asset (stdlib only; downloads JMdict/JMnedict and verifies SHA-256).
 python3 tools/build_jmdict_db.py
 
-# 2. Build the debug APK.
+# 2. Generate the example-sentence asset (stdlib only; downloads the Tanaka Corpus, SHA-256 pinned).
+python3 tools/build_examples_db.py
+
+# 3. Install the JavaScript dependencies.
+npm install
+
+# 4. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
 ./gradlew :app:assembleDebug
 ```
 
-The dictionary asset (`app/src/main/assets/db/jmdict.sqlite`) is generated and gitignored, so the
-build fails early with a clear message if step 1 was skipped.
+Both database assets (`app/src/main/assets/db/jmdict.sqlite` and
+`app/src/main/assets/db/examples.sqlite`) are generated and gitignored, so the build fails early with
+a clear message if either builder was skipped.
 
 ## Optional stylized-text model (manga-ocr)
 
@@ -219,12 +284,13 @@ The memory reduction has not been measured on the current version.
 The model is ~117 MB, so it is never part of a release APK. There are three ways to get it onto a
 phone, and the app only reaches the network for the first one:
 
-- **Download it in the app** — Gaten → *Stylized-text model (manga-ocr, optional)* → **Download**.
+- **Download it in the app** — Gaten → **Settings → Text recognition → Download**.
   The size is shown first and has to be confirmed (with a warning when the phone is on mobile data),
   the download runs with a progress bar and a Cancel button, and the only hosts it talks to are
   `huggingface.co` and the CDN it redirects to, over HTTPS. Nothing is fetched until that button is
-  tapped; the optional WaniKani pages are the app's only other network use, and only once a token is
-  connected and a kanji is tapped. The files come from
+  tapped. WaniKani is the app's only other network use, and only with a token connected: a kanji page
+  when one is tapped, and the account's own study progress when the Analytics tab is open. The files
+  come from
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
   (`encoder_model_int8.onnx`, `decoder_model_int8.onnx`) and
   [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base) (`vocab.txt`).
@@ -262,14 +328,23 @@ dictionary entry one Back away. Tapping a radical in that composition opens the 
 drawing included: the radicals no font has are rendered from the SVG WaniKani serves for them. A
 button on either page opens the real page on `wanikani.com` in the browser.
 
-**What it does not do.** No learning progress is involved. Gaten never reads or shows a level,
-lessons, reviews, assignments or statistics, and never writes anything to a WaniKani account. The
-only account call is `GET /v2/user`, read for the subscription's own entitlement, so content above
-the account's levels is marked as such rather than shown (a free account covers levels 1–3). The Anki
+**What it reads, and what it writes.** Three things here are the account's own. `GET /user` is read
+for the subscription's entitlement, so content above the account's levels is marked as such rather
+than shown (a free account covers levels 1–3). And with a token connected, the **Analytics** tab reads
+the account's study progress: the level, the reviews available now and over the next 24 hours
+(`GET /summary`), and how many items sit in each of WaniKani's review stages — six count-only
+`GET /assignments` requests that ask for the count of a filtered scope and throw the page away. The
+**Review** page reads the review queue itself — `GET /assignments?immediately_available_for_review=true`
+and the `GET /subjects` behind its ids — and sends each finished subject back with one `POST /reviews`.
+It also reads the lesson queue (`GET /assignments?immediately_available_for_lessons=true`) and starts
+a finished lesson with `PUT /assignments/<id>/start` — the only documented way to complete one, since
+a lesson quiz is never sent as a review (see *Reviewing WaniKani subjects in Gaten*). No other account
+data is read, and the only writes are the review or lesson the reader has just finished. The Anki
 export is untouched: nothing from WaniKani goes into a note, and no Anki card gains a WaniKani view.
 
-**Connecting.** Create a token on WaniKani's *Personal access tokens* page — read-only is enough — and
-paste it into **WaniKani → WaniKani settings** on the main screen. Gaten checks it against `/v2/user`
+**Connecting.** Create a token on WaniKani's *Personal access tokens* page — read access alone is
+enough for these pages, and reviewing what is due also needs the permission WaniKani lists for
+creating reviews — and paste it into **Settings → WaniKani**. Gaten checks it against `/v2/user`
 before storing it, so a token on the device is always one WaniKani accepted, and the field is cleared
 the moment it is saved: the token is never shown or logged again, and it is sent only to
 `api.wanikani.com` — the image requests to `cdn.wanikani.com` carry no token at all. It is stored in
@@ -298,30 +373,45 @@ in an `Authorization` header; opening a kanji or one of its radicals sends that 
 subject id, with a kanji's composition adding its own radicals' ids. All of it goes to
 `api.wanikani.com` over HTTPS, plus `cdn.wanikani.com` for the SVG of a radical that has no
 character. Redirects are refused outright and the token is never logged. The scanned sentence, the
-other words of the lookup and the screenshot are never sent, and no study progress is requested, kept
-or shown.
+other words of the lookup and the screenshot are never sent. The account's own study progress — the
+level, the review availability and the per-stage counts the Analytics tab shows — is requested only
+for that tab, from `api.wanikani.com` alone, and kept on this device; the queues the **Review** page
+opens are requested only for that page and kept nowhere. Nothing else about the account is read, and
+the only writes are the review or lesson the reader has just finished — see *Reviewing WaniKani
+subjects in Gaten*.
 
 **Attribution.** WaniKani and its content belong to [Tofugu LLC](https://www.wanikani.com/). Gaten's
 WaniKani pages are an unofficial third-party reference: Gaten is not affiliated with or endorsed by
 WaniKani, and no WaniKani content is bundled in the APK or exported to Anki — each page is fetched
 through the public API when the reader asks, and cached on that device.
 
-## Reviewing Anki cards in Gaten
+## Reviewing in Gaten
 
-**Anki → Review cards** on the home screen reviews AnkiDroid's own decks without leaving Gaten.
+There is no Review tab: the bottom navigation is **Home / Analytics / Settings**, and studying is a
+page Home opens. Home's **Anki** and **WaniKani** cards are the two ways in — the Anki card opens the
+deck list directly (or the state that stops it: no AnkiDroid, no permission, no collection), and the
+WaniKani card opens the connection state, or the WaniKani page once a token works. There is no
+landing page and no separate start step: choosing a deck opens its session, and WaniKani opens a page
+showing what is due for review and which lessons are waiting; each row opens what it holds. The page
+is full-screen, so the floating bottom navigation is away for all
+of it and Back is one step out.
+
+### Reviewing Anki cards
+
 AnkiDroid still does everything that decides when a card comes back: Gaten asks it for the next due
 card, shows the question, reveals the answer, and sends the rating you pick back to it through the
 same content provider AnkiDroid shares with other apps. Nothing is scheduled, counted or remembered
 on Gaten's side, and no network is involved — this is on-device provider access, like the export.
 
-- **Decks.** Every deck AnkiDroid reports is listed with AnkiDroid's own counts, and the deck Gaten
-  is configured to export to is preselected. The deck's queue, its limits and its scheduler are
-  AnkiDroid's; Gaten never invents a card order.
+- **Decks.** Every deck AnkiDroid reports is listed with its own counts, and tapping one starts it —
+  there is no separate start step and no selection to set first. The deck's queue, its limits and its
+  scheduler are AnkiDroid's; Gaten never invents a card order.
 - **Cards.** The question and answer are rendered by AnkiDroid, styling included, in a WebView that
-  runs no JavaScript and has no file, content or network access. Gaten's own chrome is the reveal
-  button, the rating buttons (each labelled with the interval AnkiDroid reports for it), and, on the
-  answer side, the WaniKani kanji of the note's own fields — the question side never shows them, so
-  the answer cannot leak through a kanji page.
+  runs no JavaScript and has no file, content or network access. Gaten's own chrome is the compact
+  header — the deck's name and the reader's place in it, *x* of *y* — the progress line under it, the
+  reveal button, the rating buttons (each labelled with the interval AnkiDroid reports for it), and,
+  on the answer side, the WaniKani kanji of the note's own fields — the question side never shows
+  them, so the answer cannot leak through a kanji page.
 - **Ratings.** One tap sends one rating: Again, Hard, Good or Easy, in the order AnkiDroid's intervals
   arrive. The buttons are disabled while a rating is in flight, and a rating whose outcome AnkiDroid
   did not confirm is never sent a second time (the provider applies every update it receives and
@@ -334,9 +424,45 @@ on Gaten's side, and no network is involved — this is on-device provider acces
   which is how Anki grades anyway. MathJax and any other script-driven rendering do not run either,
   for the same reason: no JavaScript.
 
+### Reviewing WaniKani subjects
+
+With a token connected, Home's WaniKani row opens one page with two rows: what is due for review, and
+the lessons that are waiting. Without a token it opens the connection screen first.
+Each row is the whole action — the count it holds with its caption on the right, and a green check with
+`All caught up` when that queue is verified empty; a locked account says so honestly instead. Both rows
+stay visible whatever their state, and the next review time is shown when WaniKani gives one.
+
+- **The queue** is WaniKani's: `GET /assignments?immediately_available_for_review=true&hidden=false`,
+  then one `GET /subjects?ids=…` for the subjects behind those assignments, ordered by when each came
+  up. It is read fresh every time and kept nowhere — an item answered a minute ago is a stale
+  question.
+- **The prompts** are the subject's own. A kanji or a vocabulary asks for its meaning and then its
+  reading; a radical and a kana vocabulary ask for their meaning alone, because that is all WaniKani
+  records for them. A radical WaniKani has no character for is drawn from the same cached image the
+  reference pages use — its name is the answer, so its name cannot be the prompt.
+- **Answering** compares against the answers WaniKani itself accepts: the meanings it marks
+  `accepted_answer` plus its whitelisted auxiliary meanings, and its accepted readings folded to
+  hiragana. A reading typed in romaji is converted by the same WaniKana port the dictionary search
+  uses, so `yama` and `やま` are the same answer. A wrong answer is counted, shows the right one, and
+  has to be typed before the subject moves on — WaniKani's own rule.
+- **Submitting.** The review is sent once, when every part of that subject has been answered, with the
+  number of wrong meaning and reading answers: `POST /reviews` with the subject id. A submission that
+  fails keeps the finished answer and offers **Send again**; a token WaniKani refuses asks for a
+  reconnect instead, because retrying a refused token would only fail again. Nothing is ever sent
+  because an animation finished, and a review whose answer is still in the field is not sent at all.
+- **Lessons.** The page's second row reads the lesson queue
+  (`GET /assignments?immediately_available_for_lessons=true&hidden=false`) and teaches a batch of five
+  one card at a time — the character or its image, the meanings and readings with their mnemonics, and
+  example sentences for vocabulary — then quizzes each one exactly like a review. A subject is finished
+  with `PUT /assignments/<id>/start`, which moves it into the review queue; WaniKani's own reference is
+  explicit that a lesson quiz is not submitted as a review. Each subject is started the moment its quiz
+  is passed, so leaving mid-batch keeps what was finished, and a failed start keeps the answer and
+  offers **Send again** — starting an assignment twice is the same as starting it once.
+
 ## Project layout
 
-- `.` (root package) — app entry points: main screen, trigger receiver and Quick Settings tile.
+- `.` (root package) — app entry points: the React host activity, the trigger receiver and the Quick
+  Settings tile.
 - `capture/` — lookup mode: `ScreenCaptureSession` (the projection, the virtual display that mirrors
   the screen into an `ImageReader`, and the frame copying), `GatenCaptureService` (the foreground
   service that owns the projection, the overlay windows and the capture pipeline),
@@ -354,15 +480,23 @@ on Gaten's side, and no network is involved — this is on-device provider acces
 - `wanikani/` — the optional WaniKani client: the token (Keystore-encrypted, stored off the backup
   set), the API calls to `api.wanikani.com` under the account's level entitlement, and the on-device
   cache of subjects and radical images.
-- `dict/` — offline dictionary: SQLite access (`JmdictRepository`), word scanning (`WordScanner`)
-  and deinflection (`Deinflector`).
+- `dict/` — offline dictionary: SQLite access (`JmdictRepository`), typed-word search
+  (`DictionarySearch`), OCR word scanning (`WordScanner`) and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
-- `ui/` — Jetpack Compose UI: `home/` (setup screen), `lookup/` (lasso layer, result sheet and the
-  OCR + dictionary pipeline), `wanikani/` (the WaniKani settings screen, the kanji tiles under a
-  result, and the kanji and radical pages drawn inside the sheet), `anki/` (the review screen that
-  drives AnkiDroid's decks), `components/` (the lookup-mode disclosure) and `theme/` (the palette,
-  the type scale and `ThemePreferences`, the stored dark/light, palette and accent choices the
-  overlay and the floating bubble read too).
+- `rn/` — the React Native bridge: native modules exposing the dictionary, Anki, WaniKani, theme,
+  feedback, recognition downloads and platform utilities to JS, plus the `GatenCardWebView`
+  view manager used by the review card and the radical image.
+- `src/rn/` — the React Native app: `native/` (typed bridge wrappers) and `ui/` (shell, tabs,
+  screens). See `docs/rn-migration/`.
+- `ui/lookup/` — the service-owned overlay: lasso layer, result sheet and the
+  OCR + dictionary pipeline (still Compose, hosted in its own window).
+- `ui/wanikani/` — the kanji and radical detail panel drawn inside the overlay sheet
+  (`WaniKaniDetail.kt`).
+- `ui/overlay/` — `OverlayWindowController`, the `TYPE_APPLICATION_OVERLAY` window host the capture
+  service draws the lookup in.
+- `ui/components/` — `KanjiStrip` and `pressScale` used by the overlay result sheet.
+- `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light and accent
+  choices the overlay, the floating bubble and the RN theme bridge read).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
   which downloads the optional manga-ocr model for pushing to a device.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
@@ -380,26 +514,41 @@ them started by the reader and neither of them in the background:
   entitlement), and opening a kanji sends that character — a radical, its id, a kanji's composition
   the ids of its own radicals — in the request for that one page. `cdn.wanikani.com` is asked only
   for the SVG of a radical that has no character. All over HTTPS, with redirects refused. The scanned
-  sentence, the other words, the screenshot and everything else looked up stay on the device, and
-  nothing about lessons, reviews, assignments or progress is requested or kept. Nothing is
+  sentence, the other words, the screenshot and everything else looked up stay on the device. The other
+  account data read is the study progress the Analytics tab shows — the level, the reviews available
+  now and over the next 24 hours, and the counts per review stage — and, when the reader reviews,
+  what is due now: `GET /assignments?immediately_available_for_review=true` and the `GET /subjects`
+  behind its ids. All of it is from `api.wanikani.com` and all of it is kept on this device. The one
+  thing ever written back is a review the reader has just finished, sent as `POST /reviews` with the
+  subject's id and the number of wrong meaning and reading answers; no lesson is submitted and nothing
+  else about the account is read. Nothing is
   prefetched: with the network gone the saved pages still answer, and nothing else happens.
 
 The WaniKani personal access token lives in app-private storage outside the backup set
 (`noBackupFilesDir`), encrypted with an Android Keystore key: it is not in a cloud backup and not in
 a device-to-device transfer. It is never logged, never shown again after it is saved, and Disconnect
-deletes it along with every cached page — reporting it if any of that could not be removed. Of the
-account itself Gaten reads the subscription's level entitlement — plan, level and expiry — and
-nothing else: no lessons, no reviews, no assignments, no statistics, and no write of any kind. That
-entitlement is all the cache holds about the account, and it is used only to refuse a subject above
-the account's levels.
+deletes it along with every cached page — reporting it if any of that could not be removed.
+
+Of the account itself Gaten reads three things. One is the subscription's level entitlement — plan,
+level and expiry — used only to refuse a subject above the account's levels. Another is the study
+progress the **Analytics** tab shows: the level, the review availability over the next 24 hours and
+the counts per review stage, as described above. The third is the review queue, read only when the
+reader opens it. The cache holds the first two: the entitlement, and one small snapshot per connected
+account (keyed by a digest of that account's token, never the token). The queue is never cached at
+all. What the Analytics tab reads of them is only the aggregate — the count of a filtered scope, from
+six `GET /assignments` requests whose rows are read past and discarded, plus the review availability
+above. The only write is a review the reader has just answered: one `POST /reviews` carrying the
+subject's id and how many times its meaning and reading were answered wrongly. No lesson is
+submitted, and no assignment is changed in any other way.
 
 Nothing else is fetched, and the screenshot never leaves the device: it stays in memory, is never
 uploaded, never shared and never written to disk. Reviewing Anki cards changes nothing here either:
 it reads and answers cards through AnkiDroid's own local content provider, on the device, and asks
-AnkiDroid for every scheduling decision. There is no analytics, no account of Gaten's own and no
-server.
+AnkiDroid for every scheduling decision. There is no telemetry and no server of Gaten's own: nothing
+about the reader is collected, profiled or sent anywhere, and the Analytics tab draws only the
+numbers described above, from WaniKani and from AnkiDroid on this device.
 
-The notification-listener access the home screen offers is used for two things, and only two: it is
+The optional notification-listener access Gaten offers is used for two things, and only two: it is
 what lets `MediaSessionManager` hand Gaten the active media sessions, so the video behind the overlay
 can be paused and resumed, and it is where an incoming call or a firing alarm is noticed. Both are
 **metadata only**: a `CallStyle` with an incoming call type (or a legacy full-screen CALL), an
@@ -410,6 +559,7 @@ alarms simply close nothing.
 
 Lookup mode is visible in the system's own way: Android shows its capture consent dialog when it is
 switched on and keeps a privacy chip in the status bar while it is, and Gaten's ongoing notification
+— which the notification permission (`POST_NOTIFICATIONS` on Android 13+) is what allows to appear —
 carries the button that ends it. A frame is only taken when a lookup is triggered: the request gets
 its own reader, the display is given a surface only while that request runs, and both are given up
 again the moment the frame is in hand — so between lookups no frame reaches the app, no image buffer
@@ -434,10 +584,17 @@ documented here rather than left implicit.
 - **Gaten** is licensed under the **GNU GPL v3.0 or later** (see `LICENSE`), and is derived from
   [CircleToSearch](https://github.com/AKS-Labs/CircleToSearch) by AKS-Labs. See `NOTICE` for the
   full third-party attribution list.
+- **Latin typeface** — [Manrope](https://github.com/googlefonts/manrope), SIL Open Font License 1.1;
+  the font and licence are bundled with the app.
+- **Romaji conversion** — [wanakana-kt](https://github.com/esnaultdev/wanakana-kt) 1.1.1, MIT.
 - **Dictionary data** — JMdict and JMnedict © Electronic Dictionary Research and Development Group
   (EDRDG), used under
   [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see
   <https://www.edrdg.org/>.
+- **Example sentences** — the Tanaka Corpus, © Electronic Dictionary Research and Development Group
+  (EDRDG), used under
+  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); bundled with the app as an
+  offline SQLite asset and read with no network.
 - **WaniKani reference content** — [WaniKani](https://www.wanikani.com/) (Tofugu LLC), read through
   its [public API](https://docs.api.wanikani.com/20170710) under WaniKani's own terms when the reader
   connects a token. Nothing from WaniKani is bundled with the app: each kanji or radical page is
