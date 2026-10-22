@@ -5,8 +5,8 @@
  */
 
 /**
- * The theme provider: the reader's three choices (mode, palette, accent) and the colours they
- * resolve to, held in one place and re-resolved whenever the bridge announces a change.
+ * The theme provider: the reader's two choices (mode, accent) and the colours they resolve to, held
+ * in one place and re-resolved whenever the bridge announces a change.
  *
  * The Compose shell owned this state; the RN shell does the same through this provider. Settings
  * screens call the setters — each one stores through the bridge, and the resolved map is re-read
@@ -23,13 +23,7 @@ import React, {
 } from "react";
 import {useColorScheme} from "react-native";
 import * as ThemeBridge from "../native/GatenTheme";
-import type {
-  Accent,
-  Palette,
-  ThemeChoices,
-  ThemeColorMap,
-  ThemeMode,
-} from "../native/GatenTheme";
+import type {Accent, ThemeChoices, ThemeColorMap, ThemeMode} from "../native/GatenTheme";
 
 /**
  * Gaten's own roles over the Material map. The action roles point at the accent — a button and the
@@ -60,10 +54,8 @@ export interface Theme {
   /** The resolved scheme for the current choices; opaque `#RRGGBB` per Material role. */
   colors: ThemeColors;
   mode: ThemeMode;
-  palette: Palette;
   accent: Accent;
   setMode(mode: ThemeMode): void;
-  setPalette(palette: Palette): void;
   setAccent(accent: Accent): void;
 }
 
@@ -72,7 +64,6 @@ const ThemeContext = createContext<Theme | null>(null);
 /** The stored defaults, until the bridge's own answer arrives. */
 const DEFAULT_CHOICES: ThemeChoices = {
   mode: "System",
-  palette: "Gaten",
   accent: "Indigo",
 };
 
@@ -83,7 +74,7 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
 
   const apply = useCallback(async (next: ThemeChoices) => {
     setChoices(next);
-    setColorMap(await ThemeBridge.colors(next.mode, next.palette, next.accent));
+    setColorMap(await ThemeBridge.colors(next.mode, next.accent));
   }, []);
 
   useEffect(() => {
@@ -96,7 +87,7 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
       try {
         const stored = await ThemeBridge.getTheme();
         if (!live || currentRequest !== request) return;
-        const resolved = await ThemeBridge.colors(stored.mode, stored.palette, stored.accent);
+        const resolved = await ThemeBridge.colors(stored.mode, stored.accent);
         if (!live || currentRequest !== request) return;
         setChoices(stored);
         setColorMap(resolved);
@@ -115,15 +106,6 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
   const setMode = useCallback(
     (mode: ThemeMode) => {
       ThemeBridge.setThemeMode(mode)
-        .then((stored) => apply(stored))
-        .catch(() => {});
-    },
-    [apply],
-  );
-
-  const setPalette = useCallback(
-    (palette: Palette) => {
-      ThemeBridge.setPalette(palette)
         .then((stored) => apply(stored))
         .catch(() => {});
     },
@@ -151,8 +133,8 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         fine: dark ? "#777781" : "#A1A1AB",
         // Every button wears the reader's accent: the action roles are the accent's own tones, so a
         // filled action and the selected navigation pill are the same colour by construction, and
-        // changing the accent in Settings repaints both. `accent`/`onPrimary` are the pairing
-        // PaletteTest already holds to contrast in either mode.
+        // changing the accent in Settings repaints both. `accent`/`onPrimary` are the pairing the
+        // theme's own tests already hold to contrast in either mode.
         actionPrimary: colorMap.primary,
         onActionPrimary: colorMap.onPrimary,
         actionSecondary: colorMap.primaryContainer,
@@ -161,7 +143,7 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         iconSecondary: dark ? "#909099" : "#83838C",
         accent: colorMap.primary,
         accentSubtle: colorMap.primaryContainer,
-        // Review task colors stay distinct regardless of the reader's chosen accent or palette.
+        // Review task colors stay distinct regardless of the reader's chosen accent.
         reviewMeaning: dark ? "#8FC5CA" : "#2B7178",
         reviewReading: dark ? "#B0A0FF" : "#6D28D9",
         success: dark ? "#53C99B" : "#16A476",
@@ -170,13 +152,11 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         onDisabled: dark ? colorMap.onSurfaceVariant : "#83838C",
       },
       mode: choices.mode,
-      palette: choices.palette,
       accent: choices.accent,
       setMode,
-      setPalette,
       setAccent,
     };
-  }, [choices, colorMap, systemScheme, setMode, setPalette, setAccent]);
+  }, [choices, colorMap, systemScheme, setMode, setAccent]);
 
   if (!theme) {
     // The first resolve has not landed yet; nothing is drawn until the colours exist.

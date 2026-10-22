@@ -5,7 +5,7 @@
  */
 
 /**
- * Appearance: dark or light, the paper the app is written on, and the one accent in it.
+ * Appearance: dark or light, and the one accent in it.
  *
  * Every choice applies the moment it is tapped — the theme lives above the shell, so a tap here
  * recolours this very page — and is stored through the theme bridge, which the overlay and the
@@ -13,17 +13,14 @@
  * not the device's.
  */
 import React, {useEffect, useState} from "react";
-import {Text, useColorScheme, View} from "react-native";
+import {Text, useColorScheme, useWindowDimensions, View} from "react-native";
 import * as GatenHaptics from "../../native/GatenHaptics";
 import * as GatenTheme from "../../native/GatenTheme";
-import type {Accent, Palette, ThemeColorMap, ThemeMode} from "../../native/GatenTheme";
+import type {Accent, ThemeMode} from "../../native/GatenTheme";
 import {PressableScale} from "../PressableScale";
-import {SwitchRow, SettingsGroup, SettingsPageScaffold, RowIcon, SettingsTile} from "./settings-components";
-import {useTheme, type Theme} from "../theme";
-import {spacing, typeScale} from "../tokens";
-
-/** The palettes, in the order the Compose screen laid them out. */
-const PALETTES: Palette[] = ["Gaten", "Mono", "Cool", "Warm"];
+import {SwitchRow, SettingsGroup, SettingsPageScaffold, RowIcon} from "./settings-components";
+import {useTheme} from "../theme";
+import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 
 /** The accents, in the order the Compose screen laid them out: a 4 + 3 block. */
 const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", "Black"];
@@ -31,29 +28,25 @@ const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", 
 export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   const theme = useTheme();
   const scheme = useColorScheme();
+  const {width} = useWindowDimensions();
+  const horizontalPadding = width < 360 ? 16 : 22;
+  const accentGridWidth = Math.min(width - horizontalPadding * 2, MAX_CONTENT_WIDTH - 44);
+  const accentCellWidth = Math.floor(
+    (accentGridWidth - spacing.s * 3) / 4
+  );
   // What the swatches below sit on: the reader's choice, not their device's.
   const dark = theme.mode === "Dark" || (theme.mode === "System" && scheme === "dark");
 
-  // Each palette's neutral colours, resolved once per mode through the bridge; the accent is
-  // held at the reader's current one, so no preview looks like another accent picker.
-  const [paletteTones, setPaletteTones] = useState<Record<string, ThemeColorMap>>({});
+  // Each accent's primary, resolved once per mode through the bridge, so every swatch shows the
+  // accent's own tone rather than the selected one's.
   const [accentPrimaries, setAccentPrimaries] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
     const modeCandidate: ThemeMode = dark ? "Dark" : "Light";
     void Promise.all(
-      PALETTES.map(async (palette) => ({
-        palette,
-        tones: await GatenTheme.colors(modeCandidate, palette, theme.accent),
-      }))
-    ).then((resolved) => {
-      if (cancelled) return;
-      setPaletteTones(Object.fromEntries(resolved.map(({palette, tones}) => [palette, tones])));
-    });
-    void Promise.all(
       ACCENTS.map(async (accent) => ({
         accent,
-        primary: (await GatenTheme.colors(modeCandidate, theme.palette, accent)).primary,
+        primary: (await GatenTheme.colors(modeCandidate, accent)).primary,
       }))
     ).then((resolved) => {
       if (cancelled) return;
@@ -62,7 +55,7 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
     return () => {
       cancelled = true;
     };
-  }, [dark, theme.accent, theme.palette]);
+  }, [dark]);
 
   const selectAccent = (accent: Accent) => {
     // A tap that lands on the accent already chosen changes nothing and gets no tick for it.
@@ -91,138 +84,67 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
 
   return (
     <SettingsPageScaffold title="Appearance" onClose={onClose}>
-      <View style={{marginTop: spacing.s}}>
-        <ChoiceCard theme={theme} title="Theme" support="Follow your device, or keep Gaten light or dark on its own.">
-          {/* One pill group: the three modes share a quiet track, and the chosen one is the raised
-              capsule on it. */}
-          <View
-            style={{
-              flexDirection: "row",
-              borderRadius: 14,
-              padding: spacing.xs,
-                backgroundColor: theme.colors.surfaceVariant,
-            }}
-          >
-            {(["System", "Light", "Dark"] as ThemeMode[]).map((mode) => {
-              const selected = mode === theme.mode;
-              return (
-                <PressableScale
-                  key={mode}
-                  accessibilityRole="radio"
-                  accessibilityState={{selected}}
-                  onPress={() => theme.setMode(mode)}
+      <SettingsGroup title="Theme" style={{marginTop: spacing.s}}>
+        {(["System", "Light", "Dark"] as ThemeMode[]).map((mode) => {
+          const selected = mode === theme.mode;
+          return (
+            <PressableScale
+              key={mode}
+              accessibilityRole="radio"
+              accessibilityLabel={`Theme ${mode}`}
+              accessibilityState={{selected}}
+              onPress={() => theme.setMode(mode)}
+              style={{minHeight: 56, justifyContent: "center"}}
+            >
+              <View style={{paddingVertical: spacing.s, flexDirection: "row", alignItems: "center"}}>
+                <Text style={[typeScale.titleMedium, {color: theme.colors.onSurface, flex: 1}]}>{mode}</Text>
+                <View
                   style={{
-                    flex: 1,
-                    minHeight: 48,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    borderWidth: 2,
+                    borderColor: selected ? theme.colors.accent : theme.colors.iconSecondary,
                     alignItems: "center",
                     justifyContent: "center",
-                    borderRadius: 14,
-                    backgroundColor: selected ? theme.colors.surface : "transparent",
-                    elevation: 0,
                   }}
                 >
-                  <Text
-                    style={[
-                      typeScale.labelLarge,
-                      {
-                        color: selected
-                          ? theme.colors.onSurface
-                          : theme.colors.onSurfaceVariant,
-                      },
-                    ]}
-                  >
-                    {mode}
-                  </Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-        </ChoiceCard>
-      </View>
+                  {selected && <View style={{width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.accent}} />}
+                </View>
+              </View>
+            </PressableScale>
+          );
+        })}
+      </SettingsGroup>
 
-      <View style={{marginTop: spacing.l}}>
-        <ChoiceCard
-          theme={theme}
-          title="Palette"
-          support="The colour of Gaten's paper. Your selected accent stays unchanged."
-        >
-          <View style={{flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
-            {PALETTES.map((palette) => {
-              const selected = palette === theme.palette;
-              const tones = paletteTones[palette];
-              return (
-                <PressableScale
-                  key={palette}
-                  accessibilityRole="radio"
-                  accessibilityLabel={palette}
-                  accessibilityState={{selected}}
-                  onPress={() => theme.setPalette(palette)}
-                  style={{alignItems: "center", width: 64}}
-                >
-                  <View
-                    style={{
-                      width: 64,
-                      height: 48,
-                      borderRadius: 10,
-                      borderWidth: selected ? 2 : 1,
-                      borderColor: selected ? theme.colors.onSurface : theme.colors.outlineVariant,
-                      padding: 4,
-                    }}
-                  >
-                    <View
-                      style={{
-                        flex: 1,
-                        borderRadius: 8,
-                        backgroundColor: tones?.surfaceVariant ?? "transparent",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {tones != null && (
-                        <Text style={[typeScale.titleSmall, {color: tones.onSurface}]}>Aa</Text>
-                      )}
-                    </View>
-                  </View>
-                  <Text style={[typeScale.labelMedium, {color: theme.colors.onSurface, marginTop: spacing.xs}]}>
-                    {palette}
-                  </Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-        </ChoiceCard>
-      </View>
-
-      <View style={{marginTop: spacing.l}}>
-        <ChoiceCard
-          theme={theme}
-          title="Accent"
-          support="The one colour in Gaten: buttons, the edge outline and the lasso."
-        >
+      <SettingsGroup title="Accent" style={{marginTop: spacing.xl}}>
+        <View style={{paddingVertical: spacing.l}}>
           <View
             style={{
               flexDirection: "row",
               flexWrap: "wrap",
-              gap: spacing.m,
-              rowGap: spacing.m,
-              maxWidth: 4 * 48 + 3 * (spacing.s + spacing.m),
+              gap: spacing.s,
+              maxWidth: accentGridWidth,
             }}
           >
             {ACCENTS.map((accent) => {
               const selected = accent === theme.accent;
               const primary = accentPrimaries[accent] ?? theme.colors.accent;
+              // The colourless accent is black ink on light paper and white ink on dark: it is named
+              // for the tone it actually paints in the mode on show.
+              const label = accent === "Black" && dark ? "White" : accent;
               return (
                 <PressableScale
                   key={accent}
                   accessibilityRole="radio"
-                  accessibilityLabel={accent}
+                  accessibilityLabel={label}
                   accessibilityState={{selected}}
                   onPress={() => selectAccent(accent)}
-                  style={{alignItems: "center", width: 48}}
+                  style={{alignItems: "center", width: accentCellWidth}}
                 >
                   <View
                     style={{
-                      width: 48,
+                      width: accentCellWidth,
                       height: 48,
                       alignItems: "center",
                       justifyContent: "center",
@@ -242,50 +164,41 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
                     </View>
                   </View>
                   <Text
-                    numberOfLines={1}
                     style={[
                       typeScale.labelMedium,
                       {
                         color: theme.colors.onSurface,
                         marginTop: spacing.xs,
-                        // The swatch column is 48dp and stays 48dp so four accents keep fitting a
-                        // row; the name gets its own width and centres under the swatch, so a long
-                        // name is not broken mid-word the way a 48dp-wide label would break it.
-                        width: 72,
+                        width: accentCellWidth,
                         textAlign: "center",
                       },
                     ]}
                   >
-                    {accent}
+                    {label}
                   </Text>
                 </PressableScale>
               );
             })}
           </View>
-        </ChoiceCard>
-      </View>
+        </View>
+      </SettingsGroup>
 
       <SettingsGroup title="Feedback" style={{marginTop: spacing.l}}>
         <View
           style={{
-            paddingHorizontal: spacing.l,
             paddingVertical: spacing.m,
             flexDirection: "row",
             alignItems: "center",
           }}
         >
           <RowIcon name="vibration" />
-          <View style={{flex: 1, marginStart: spacing.m}}>
-            <Text style={[typeScale.bodyLarge, {color: theme.colors.onSurface}]}>Haptics</Text>
-            <Text style={[typeScale.bodySmall, {color: theme.colors.onSurfaceVariant}]}>
-              Follows your phone's settings.
-            </Text>
-          </View>
+          <Text style={[typeScale.titleMedium, {color: theme.colors.onSurface, flex: 1, marginStart: spacing.m}]}>Haptics</Text>
+          <Text style={[typeScale.labelMedium, {color: theme.colors.onSurfaceVariant}]}>System</Text>
         </View>
         <SwitchRow
           icon="volume_up"
           title="Sounds"
-          summary="A short cue when a word is added to Anki, and when a review session ends."
+          summary="Anki and review cues"
           value={soundsEnabled}
           onValueChange={toggleSounds}
         />
@@ -293,28 +206,5 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
 
       <View style={{height: spacing.xl}} />
     </SettingsPageScaffold>
-  );
-}
-
-/** One appearance choice: what it is, what it does, and the controls under it. */
-function ChoiceCard({
-  theme,
-  title,
-  support,
-  children,
-}: {
-  theme: Theme;
-  title: string;
-  support: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <SettingsTile style={{padding: spacing.xl}}>
-      <Text style={[typeScale.titleLarge, {color: theme.colors.onSurface}]}>{title}</Text>
-      <Text style={[typeScale.bodySmall, {color: theme.colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-        {support}
-      </Text>
-      <View style={{marginTop: spacing.l}}>{children}</View>
-    </SettingsTile>
   );
 }

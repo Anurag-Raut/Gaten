@@ -2,7 +2,7 @@
 
 **Version 1.0 · 21 October 2026 · Mobile product design system**
 
-**Status:** Approved visual direction, implementation specification and accessibility refinements. Reference screens: Home (Ink rows) and Settings (short-copy).
+**Status:** Original approved visual direction from 21 October 2026. Current Settings guidance is updated by the dated implementation note in [design-language.md](design-language.md); that newer direction supersedes the Settings row-card treatment below. The remaining tokens and screen guidance provide the shared visual foundation.
 
 **North star:** A quiet study instrument: Japanese lookup and review first; no decoration competing with the learning task.
 
@@ -37,7 +37,7 @@ The standalone HTML was a static visual mockup: system status bar, gesture bar, 
 | fine detail | --ink-fine | #A1A1AB | Unselected markers / decorative icons |
 | separator | --ink-border | #E9E9ED | Hairline outlines / rules |
 | subtle surface | --ink-surface | #F6F6F8 | Search field, muted icon chips |
-| raised surface | --ink-surface-2 | #FFFFFF | Settings rows / optional split cards |
+| raised surface | --ink-surface-2 | #FFFFFF | Controls or bounded surfaces where needed; not Settings row fills |
 | violet accent | --ink-accent | #7564D9 | Selected day, flame, optional focus states |
 | active fill | --ink-active-bg | #18181B | Primary CTA, selected nav item |
 | active on-fill | --ink-active-fg | #FFFFFF | Selected navigation label / CTA |
@@ -55,7 +55,7 @@ The standalone HTML was a static visual mockup: system status bar, gesture bar, 
 | fine detail | --ink-fine | #777781 | Decorative details |
 | separator | --ink-border | #303136 | Hairlines/outlines |
 | subtle surface | --ink-surface | #1B1C21 | Search field and chips |
-| raised surface | --ink-surface-2 | #17181C | Settings rows / optional cards |
+| raised surface | --ink-surface-2 | #17181C | Controls or bounded surfaces where needed; not Settings row fills |
 | violet accent | --ink-accent | #B0A0FF | Selected / highlighted meaning |
 | active fill | --ink-active-bg | #F5F5F7 | Primary CTA, selected nav item |
 | active on-fill | --ink-active-fg | #17171A | Label / icon on selected fill |
@@ -118,12 +118,12 @@ Default sequence on Home: system bar → 23 px gap → Gaten heading → 21 px g
 | Ink integration rows | 0 | No card container; 1 px bottom separator |
 | Brand logo holder | 10 px | Neutral brand-adjacent surface; no drop shadow |
 | Primary CTA | 13 px | Flat dark/light fill; no gradient |
-| Settings row | 17 px | 1 px hairline, white/dark surface; no regular shadow |
-| Floating bottom bar | 20 px | Neutral background |
+| Historical Settings preview row | 17 px | Superseded; current Settings rows have no enclosing surface or radius |
+| Floating bottom bar | 20 px | Neutral background; soft all-round shadow, no directional drop |
 | Selected nav item | 15 px | Dark-on-light / light-on-dark filled pill |
 | Optional split integration tile | 15 px | 1 px border; only if the product needs equal destinations |
 
-Shadows are intentionally absent inside the app. A soft shadow around a marketing mockup device is presentation-only. Use separators, whitespace and filled active states for hierarchy.
+Shadows are intentionally absent inside the app, except for the floating bottom navigation capsule, which carries a soft all-round shadow with no directional drop. A soft shadow around a marketing mockup device is presentation-only. Use separators, whitespace and filled active states for hierarchy.
 
 # 6. Home screen specification
 
@@ -160,11 +160,29 @@ Alternative only. Two equal-width columns with 11 px gap; tiles about 152 px tal
 
 17 px/710 heading; when empty, show a quiet 39 × 39 px search symbol plus **No recent lookups** and **Words you search will appear here.** Align icon/text in a compact horizontal row, rather than a large vertically centered blank-state illustration. With history, show recent words as simple linked rows, not large cards.
 
-# 7. Settings screen specification
+# 7. Settings screen specification — current direction
 
-Use the **same font, ink colors, content inset, hairlines and nav** as Home. Header: `Settings` at 35 px/745, standing alone — no sentence under the heading (the user removed the `Manage your Gaten preferences.` subtitle). Avoid paragraphs before every control.
+The Settings hub and all six pages—Screen lookup, Text recognition, Anki cards, WaniKani,
+Appearance, and About—follow the flat row language used by Home, the Anki deck picker, and the
+WaniKani hub. This dated direction supersedes the earlier Settings mockup's separate row cards and
+rounded section tiles. Keep the mockup's concise copy and shared Ink typography, colors, content grid,
+hairlines, and navigation.
 
-Groups: **Lookup / Study / App**. Group label 12 px/650, about 10 px above group. Settings items are 78 px minimum visual height, 17 px radius, 1 px border, approximately 12–13 px vertical/horizontal padding, 38 px neutral icon tile, 14 px title, optional 11 px micro-description, right-aligned value, chevron. Item separation 10 px; group separation 23 px.
+Use transparent groups on the page background. A quiet group label and whitespace establish each
+section; 1 dp `outlineVariant` hairlines separate its rows. Do not put rows or whole sections in cards,
+rounded containers, or tinted surfaces. Keep rows at least 48 dp tall, with flexible height for
+wrapping and Android font scaling. Use the shared 560 dp maximum content width, 22 dp horizontal
+insets (16 dp below 360 dp), and the existing 64 dp settings app bar with native insets.
+
+Keep each row's title clear and its value or control at the trailing edge when that helps scanning.
+Descriptions are optional: use a short label or an essential hint only. Place longer explanations in
+the existing help action or beside the setting that needs them, rather than repeating explanatory
+copy across the page. Appearance keeps Theme and Accent choices visible as direct controls;
+their selected states stay clear without enclosing each choice group in a card.
+
+The 21 October Settings preview below remains a record of the earlier hub copy and hierarchy. Its
+78 dp minimum, 17 dp radius, bordered card rows, 10 dp inter-row gaps, and row-card icon tiles are
+historical and are superseded by the flat-row rules above.
 
 | Group | Setting | Approved concise text | Right-side value |
 | --- | --- | --- | --- |
@@ -182,7 +200,7 @@ Scrollable settings list is separate from the anchored bottom navigation. On sma
 
 # 8. Floating bottom navigation — approved / do not replace
 
-The **approved bottom bar** is the earlier neutral floating capsule. Not the later black full-width dock. Home, Analytics, Review and Settings use the same bar; only selected state changes.
+The **approved bottom bar** is the earlier neutral floating capsule. Not the later black full-width dock. Home, Analytics, Review and Settings use the same bar; only selected state changes. The capsule carries a soft all-round shadow with no directional drop, so it reads as hovering above the page.
 
 | Part | Reference value | Behavior |
 | --- | --- | --- |

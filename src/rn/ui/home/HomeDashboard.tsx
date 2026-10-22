@@ -418,7 +418,8 @@ function ServiceCard({
           <Icon name="cloud_off" size={18} color={statusColor} />
         ) : count != null ? (
           <View style={[styles.serviceCountLine, stackOutcome && styles.serviceCountLineScaled]}>
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.serviceCount, {color: ink}]}>{count}</Text>
+            {/* The count wears the accent, the same tone the study hubs' rows give their due count. */}
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.serviceCount, {color: colors.accent}]}>{count}</Text>
             <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceCountLabel, {color: muted}]}>{countLabel}</Text>
           </View>
         ) : actionLabel ? (

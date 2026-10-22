@@ -23,7 +23,7 @@ import React, {useEffect, useState} from "react";
 import {AppState, Text, View} from "react-native";
 import * as GatenRecognition from "../../native/GatenRecognition";
 import type {MangaOcrCatalogEntry} from "../../native/GatenRecognition";
-import {Button, Card, Icon} from "../components";
+import {Button} from "../components";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {useRecognition} from "./useRecognition";
@@ -38,9 +38,8 @@ import {
 } from "./settings-components";
 
 const HELP_PARAGRAPHS = [
-  "The built-in reader (ML Kit) is reading your screen. A model below makes the stylized lettering it misreads readable.",
-  "ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads — outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read keeps ML Kit's text. Everything runs on the device, and a model already on your phone can be imported instead of downloaded.",
-  "The download is one of the two network uses Gaten has, and it only ever starts from this page.",
+  "Without a model, ML Kit reads the screen. manga-ocr helps with stylized lettering; unreadable lines keep ML Kit's text.",
+  "Recognition runs on this device. Import model files offline, or download after confirming the size.",
 ];
 
 /** "manga-ocr (int8) installed (117 MB)", or just what is there when the entry is not known. */
@@ -114,7 +113,6 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
     };
   }, [confirmDownload]);
 
-  const container = state.installed ? colors.accentSubtle : colors.surfaceVariant;
   const content = colors.onSurface;
   const valueColor = state.installed ? colors.success : colors.onSurfaceVariant;
 
@@ -124,27 +122,17 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
       onClose={onClose}
       help={HELP_PARAGRAPHS}
     >
-      <View style={{marginTop: spacing.s}}>
-        <Card style={{backgroundColor: container}}>
-          <View style={{padding: spacing.xl, flexDirection: "row", alignItems: "center"}}>
-            <Icon name="memory" size={20} color={content} />
-            <Text style={[typeScale.bodyLarge, {color: content, marginStart: spacing.s}]}>
-              Text recognition
-            </Text>
-            <Text
-              style={[
-                typeScale.labelMedium,
-                {color: valueColor, flex: 1, textAlign: "right", marginStart: spacing.m},
-              ]}
-            >
-              {statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)}
-            </Text>
-          </View>
-        </Card>
-      </View>
+      <SettingsGroup title="Model" style={{marginTop: spacing.s}}>
+        <View style={{paddingVertical: spacing.m, flexDirection: "row", alignItems: "center"}}>
+          <Text style={[typeScale.titleMedium, {color: content, flex: 1}]}>Text recognition</Text>
+          <Text style={[typeScale.labelMedium, {color: valueColor, marginStart: spacing.m, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
+            {statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)}
+          </Text>
+        </View>
+      </SettingsGroup>
 
-      <SettingsGroup title="Models" style={{marginTop: spacing.xl}}>
-        {state.catalog.map((entry, index) => (
+      <SettingsGroup title="Available model" style={{marginTop: spacing.xl}}>
+        {state.catalog.map((entry) => (
           <React.Fragment key={entry.id}>
             <ModelRow
               entry={entry}
@@ -159,8 +147,8 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
       {state.downloading != null && (
         <View style={{marginTop: spacing.l}}>
           <SettingsTile>
-            <View style={{padding: spacing.xl}}>
-              <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>
+            <View style={{paddingVertical: spacing.m}}>
+              <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
                 {`Downloading ${state.downloading.label}…`}
               </Text>
               <View
@@ -198,7 +186,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
         </View>
       )}
 
-      <View style={{marginTop: spacing.xl, flexDirection: "row", gap: spacing.s}}>
+      <View style={{marginTop: spacing.xl, flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
         <OutlinedButton
           label="Import model files"
           disabled={busy}
@@ -247,18 +235,15 @@ function ModelRow({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={{paddingHorizontal: spacing.l, paddingVertical: spacing.m, flexDirection: "row"}}>
+    <View style={{paddingVertical: spacing.m, flexDirection: "row"}}>
       <RowIcon name="download" />
       <View style={{flex: 1, marginStart: spacing.m}}>
         <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]}>{entry.label}</Text>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>{entry.label}</Text>
           <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s}]}>
             {`~${entry.approxSizeMb} MB`}
           </Text>
         </View>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-          {entry.description}
-        </Text>
         <View style={{marginTop: spacing.s, alignSelf: "flex-start"}}>
           {installed ? (
             <Chip label="Installed" />

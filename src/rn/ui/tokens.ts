@@ -34,6 +34,10 @@ export const TWO_COLUMN_WIDTH = 640;
 /** Content surfaces stay flat; dividers and spacing establish grouping. */
 export const CARD_ELEVATION = 0;
 
+/** The floating bottom bar is the one surface that lifts off the page, so it reads as hovering
+ * over the content it covers. */
+export const FLOATING_BAR_ELEVATION = 8;
+
 /** The shared corner vocabulary: brand artwork, controls and contained surfaces. */
 export const shape = {
   small: 14,

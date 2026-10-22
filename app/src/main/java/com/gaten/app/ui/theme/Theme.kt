@@ -22,25 +22,25 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 
 /**
- * The palette for one palette, accent and mode: the accent's own tones, the palette's neutral
- * ladder, and the Material roles Gaten never draws aliased onto the accent's — a component reaching
+ * The scheme for one accent and mode: the accent's own tones, Gaten's neutral ladder, and the
+ * Material roles Gaten never draws aliased onto the accent's — a component reaching
  * for `tertiaryContainer` lands on the accent rather than on the library's
- * baseline purple, which is the one hue this palette never shows.
+ * baseline purple, which is the one hue this theme never shows.
  *
  * The ladder is filled in all the way down for the same reason. The roles left unset are not
  * unset for free: the library's own defaults are a purple-tinted grey, so a divider, a sheet or a
- * snackbar drawn by a component would be the one thing on screen that is not the reader's palette.
+ * snackbar drawn by a component would be the one thing on screen that is not Gaten's ladder.
  * Every role added here is one of the ladder's own tones or the accent's, or the *other* mode's
  * ladder for the inverse roles — nothing new is invented, and no tone's job is duplicated.
  */
-private fun gatenColorScheme(palette: Palette, accent: AccentColor, dark: Boolean): ColorScheme {
+private fun gatenColorScheme(accent: AccentColor, dark: Boolean): ColorScheme {
     val tone = accentRoles(accent, dark)
-    val neutral = paletteNeutrals(palette, dark)
-    // The reader's own palette and accent in the *other* mode: the one thing an inverse role can be
-    // without inventing a colour, and the pairing the library's inverse surfaces (a snackbar, a
-    // tooltip) are built on — the other mode's paper, the ink that reads on it, and an accent tone
-    // light enough for that paper.
-    val inverseNeutral = paletteNeutrals(palette, !dark)
+    val neutral = gatenNeutrals(dark)
+    // The accent in the *other* mode: the one thing an inverse role can be without inventing a
+    // colour, and the pairing the library's inverse surfaces (a snackbar, a tooltip) are built on —
+    // the other mode's paper, the ink that reads on it, and an accent tone light enough for that
+    // paper.
+    val inverseNeutral = gatenNeutrals(!dark)
     val inverseTone = accentRoles(accent, !dark)
     return if (dark) {
         darkColorScheme(
@@ -66,7 +66,7 @@ private fun gatenColorScheme(palette: Palette, accent: AccentColor, dark: Boolea
             surfaceContainerHighest = neutral.surfaceContainerHighest,
             // The library's finer steps of the same ladder. Gaten has one step between paper and its
             // hairline, so the two finer ones land on the two it has rather than on the library's
-            // own purple-grey — a sheet or a menu drawn on it is still the reader's palette.
+            // own purple-grey — a sheet or a menu drawn on it is still Gaten's ladder.
             surfaceContainerLow = neutral.surfaceContainer,
             surfaceContainerLowest = neutral.surface,
             surfaceTint = tone.primary,
@@ -135,22 +135,21 @@ private val GatenShapes = Shapes(
 val SheetShape = 20.dp
 
 /**
- * The app's only theme: the Gaten palette and type scale. Dark or light comes from [mode], the
- * neutral ladder from [palette] and the accent from [accent] — all three the reader's choice in
- * Settings, defaulting to the system setting and to the shipped palette. Dynamic colour is
- * deliberately not used: the colours are chosen here, not taken from a wallpaper.
+ * The app's only theme: Gaten's neutral ladder, accent and type scale. Dark or light comes from
+ * [mode] and the accent from [accent] — both the reader's choice in Settings, defaulting to the
+ * system setting and to the app's own indigo. Dynamic colour is deliberately not used: the colours
+ * are chosen here, not taken from a wallpaper.
  */
 @Composable
 fun GatenTheme(
     mode: ThemeMode = ThemeMode.System,
-    palette: Palette = Palette.Gaten,
     accent: AccentColor = AccentColor.Indigo,
     content: @Composable () -> Unit
 ) {
     val darkTheme = mode.isDark(isSystemInDarkTheme())
     // Built once per choice rather than once per screen recomposition.
-    val colorScheme = remember(palette, accent, darkTheme) {
-        gatenColorScheme(palette, accent, darkTheme)
+    val colorScheme = remember(accent, darkTheme) {
+        gatenColorScheme(accent, darkTheme)
     }
 
     // System bars stay transparent (edge-to-edge); only the icon contrast is decided here.

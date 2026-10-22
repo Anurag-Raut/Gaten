@@ -25,12 +25,7 @@ import type {AnkiStatus} from "../../native/GatenAnki";
 import type {SettingsPageName} from "../navigation";
 import {useTheme} from "../theme";
 import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "../tokens";
-import {
-  CONTENT_COLUMN,
-  SettingsGroup,
-  SettingsRow,
-  useLookupModeRequest,
-} from "./settings-components";
+import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
 
 /** The name of the model in place, shown on the right of the recognition row. */
 function recognitionValue(
@@ -61,7 +56,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const colors = theme.colors;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const {request: requestLookupMode, dialog: disclosureDialog} = useLookupModeRequest();
 
   const [lookupMode, setLookupMode] = useState(false);
   const [modelInstalled, setModelInstalled] = useState(false);
@@ -140,77 +134,56 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               Settings
             </Text>
           </View>
-          <SettingsGroup bare title="Lookup" style={{marginTop: 22}}>
+          <SettingsGroup title="Lookup" style={{marginTop: 22}}>
             <SettingsRow
-              surface
-              icon={lookupMode ? "check_circle" : "shield"}
-              inkIcon={!lookupMode ? "shield" : undefined}
-              title="Lookup mode"
-              summary="Read Japanese off any screen"
-              value={lookupMode ? "On" : "Off"}
-              onPress={lookupMode ? () => onOpenPage("lookup") : requestLookupMode}
-            />
-            <SettingsRow
-              surface
               icon="search"
               inkIcon="search"
               title="Screen lookup"
-              summary="Button, tile & shortcut"
+              value={lookupMode ? "On" : "Off"}
               onPress={() => onOpenPage("lookup")}
             />
             <SettingsRow
-              surface
               icon="text_snippet"
               inkIcon="text"
               title="Text recognition"
-              summary="Stylized text model"
               value={recognitionValue(modelInstalled, modelId, catalog)}
               onPress={() => onOpenPage("recognition")}
             />
           </SettingsGroup>
-          <SettingsGroup bare title="Study" style={{marginTop: 22}}>
+          <SettingsGroup title="Study" style={{marginTop: 22}}>
             <SettingsRow
-              surface
               icon="library_books"
               inkIcon="cards"
               title="Anki cards"
-              summary="Deck & card layout"
               value={ankiStatus === "ready" ? ankiDeck ?? "Choose deck" : ankiSummary(ankiStatus)}
               onPress={() => onOpenPage("anki")}
             />
             <SettingsRow
-              surface
               icon="translate"
               inkIcon="torii"
               title="WaniKani"
-              summary="Kanji & vocabulary"
               value={wanikaniConnected ? "Connected" : "Not connected"}
               onPress={() => onOpenPage("wanikani")}
             />
           </SettingsGroup>
-          <SettingsGroup bare title="App" style={{marginTop: 22}}>
+          <SettingsGroup title="App" style={{marginTop: 22}}>
             <SettingsRow
-              surface
               icon="palette"
               inkIcon="sun"
               title="Appearance"
-              summary="Theme preferences"
               value={theme.mode}
               onPress={() => onOpenPage("appearance")}
             />
             <SettingsRow
-              surface
               icon="info"
               inkIcon="user"
               title="About"
-              summary="Offline, privacy & licences"
               value={versionName}
               onPress={() => onOpenPage("about")}
             />
           </SettingsGroup>
         </View>
       </ScrollView>
-      {disclosureDialog}
     </View>
   );
 }

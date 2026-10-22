@@ -1,9 +1,30 @@
 # Design language implementation
 
-The approved source of truth is [Gaten / Ink v1](Gaten_Ink_Design_Language_v1.md),
-provided by the user on 21 October 2026. It supersedes the earlier design-language draft,
-including its pure-white canvas and generic 14/20 radius scale. The supplied document is
-kept verbatim in this directory.
+The visual foundation is [Gaten / Ink v1](Gaten_Ink_Design_Language_v1.md), provided by the user
+on 21 October 2026. This implementation record and its dated updates clarify where the current
+product direction has moved beyond that original specification. The supplied v1 document remains
+available as design history.
+
+## Current Settings direction (22 October 2026)
+
+The Settings hub and all six pages it opens—Screen lookup, Text recognition, Anki cards, WaniKani,
+Appearance, and About—use the same flat row language as Home, the Anki deck picker, and the WaniKani
+hub. The later direction in this section supersedes the earlier Settings mockup's individual row
+cards and rounded section tiles.
+
+- Use the page background for groups and rows, with 1 dp `outlineVariant` hairline separators and
+  whitespace to show grouping. Do not wrap rows or whole settings sections in cards or tinted
+  surfaces. Content surfaces stay flat; the floating bottom navigation capsule is the single surface
+  that carries an all-round medium shadow, so it reads as hovering above the page.
+- Keep rows compact and scannable. Use a 15–17 sp title, muted secondary text only for a short label
+  or essential hint, and a trailing value or control when one helps. Descriptions are optional; put
+  longer explanations behind the existing help action or beside the setting that needs them.
+- Keep Theme and Accent choices visible on the Appearance page as direct controls in the
+  same flat layout. Their selected states remain clear without enclosing each choice group in a card.
+- Keep rows and controls at least 48 dp tall, let rows grow with font scale and wrapping, and keep the
+  shared 560 dp maximum content width with 22 dp horizontal insets (16 dp below 360 dp).
+- Keep the existing 64 dp settings app bar and native insets. Flat presentation changes do not alter
+  route behavior, setting values, or accessibility labels.
 
 ## Shared implementation
 
@@ -19,15 +40,15 @@ kept verbatim in this directory.
 
 ## Production choices
 
-- Ink is the default Gaten palette. Existing user-selected palette and accent preferences remain available.
-- The accent ladder is pitched for contrast: every accent's primary carries its ink (white in light, near-black in dark) and reads as text on the paper at 4.5:1 or better, held by `PaletteTest.everyAccentCarriesItsInkAndReadsOnThePaper`. Black is the colourless accent, replacing the earlier Graphite.
+- Ink is the shipped Gaten palette and the only one. Theme and accent preferences remain user-selectable.
+- The accent ladder is pitched for contrast: every accent's primary carries its ink (white in light, near-black in dark) and reads as text on the paper at 4.5:1 or better, held by `PaletteTest.everyAccentCarriesItsInkAndReadsOnThePaper`. Black is the colourless accent, replacing the earlier Graphite; it is black ink on light paper and white ink on dark, and the Appearance picker names it for the tone it paints in the mode on show ("White" in dark).
 - Use readable secondary text (`#6C6C75` light, `#B0B0BA` dark). Fine details and status dots have separate roles.
 - Compact explanatory text starts at 12 sp; the selected bottom-navigation label follows the preview's 11 sp size and scales with Android font settings.
 - The reader's accent is the action colour as well as the selection colour: the selected bottom-navigation pill *and* every button are filled with `accent`/`primary` — filled buttons take the accent fill with its ink, tonal ones the accent's container tone, outlined and text ones the accent as their border and label ink. Changing the accent in Settings repaints all of them; the v1 document's neutral `--ink-active-bg` action fill is no longer used. `onPrimary`/`onPrimaryContainer` remain the inks, so the palette's own contrast guarantee still holds.
 - Layout uses dp, a 22 dp content inset (16 dp below 360 dp), and a maximum 560 dp content column.
-- Named corner radii: brand marks 10, setting icon tiles 11, empty-state icons 12, buttons 13, inputs 14, selected navigation 15, settings rows 17, floating navigation/contained groups 20.
+- Named corner radii: brand marks 10, setting icon tiles 11, empty-state icons 12, buttons 13, inputs 14, selected navigation 15, floating navigation/contained groups 20. The v1 Settings row radius of 17 dp belongs to the historical card preview; current Settings rows have no enclosing radius.
 - Separators and visible row borders are 1 dp. Focus indicators are 2 dp. Content surfaces have no shadows.
-- Settings subpage sections use rounded tiles filled with the neutral secondary surface (`surfaceVariant`); form fields use the main surface with a quiet outline so they remain distinct inside a tile.
+- Settings sections use transparent groups and flat rows separated by 1 dp `outlineVariant` hairlines. Inputs and choice controls keep their own visible outlines or selected states without a card around the section.
 - Preserve the application's real Home, Analytics and Settings destinations, and the review flow
   Home's two service cards open. The mockup's Profile tab is not a new feature request.
 - Home has no filled primary action: the Ink source row *is* the action, and Anki's row opens the
@@ -119,7 +140,7 @@ The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference fo
 - Home shows only the flame and `Daily streak` on the left; the current recorded-day value and `days recorded` stay on the right.
 - Settings is the third tab, with the app's own gear glyph rather than the preview's person outline.
   The App settings row keeps its real About label and destination.
-- Settings rows follow the preview's 72 dp minimum height and grow with font scale; small copy remains readable and scalable.
+- The 72 dp card rows in this preview are historical. Current Settings uses flat rows with flexible height, at least 48 dp touch targets, and scalable text.
 - Preview geometry never changes route behavior or replaces actual values with sample content.
 
 ## Earlier implementation checks (21 October 2026; before V3 settings and Anki study-deck changes)

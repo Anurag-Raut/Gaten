@@ -23,19 +23,18 @@ import com.gaten.app.ui.theme.DarkOnErrorContainer
 import com.gaten.app.ui.theme.LightError
 import com.gaten.app.ui.theme.LightErrorContainer
 import com.gaten.app.ui.theme.LightOnErrorContainer
-import com.gaten.app.ui.theme.Palette
 import com.gaten.app.ui.theme.ThemeMode
 import com.gaten.app.ui.theme.ThemePreferences
 import com.gaten.app.ui.theme.accentRoles
-import com.gaten.app.ui.theme.paletteNeutrals
+import com.gaten.app.ui.theme.gatenNeutrals
 
 /**
  * The app's theme choices and their resolved colours, for the RN screens.
  *
  * The choices live where they always have — [ThemePreferences]'s `gaten_settings` — so the
- * capture service's overlay and the RN screens read the same three values. The colours are
- * resolved here, on the Kotlin side, from [accentRoles] and [paletteNeutrals]: the same palette
- * and accent functions [com.gaten.app.ui.theme.Theme] builds its Material scheme from, so JS does
+ * capture service's overlay and the RN screens read the same two values. The colours are
+ * resolved here, on the Kotlin side, from [accentRoles] and [gatenNeutrals]: the same accent and
+ * neutral functions [com.gaten.app.ui.theme.Theme] builds its Material scheme from, so JS does
  * no colour maths and renders exactly the tones Compose rendered. The role-to-key mapping mirrors
  * `gatenColorScheme`'s (a private function of that file): secondary and tertiary use accent tones,
  * the secondary action container is neutral, the finer container steps land on the ladder's own
@@ -53,7 +52,7 @@ class GatenThemeModule(
 
     override fun getName(): String = NAME
 
-    /** The three choices as stored: `{ mode, palette, accent }`, the names JS sends back. */
+    /** The choices as stored: `{ mode, accent }`, the names JS sends back. */
     @ReactMethod
     fun getTheme(promise: Promise) {
         promise.resolve(prefsToJsMap())
@@ -72,19 +71,6 @@ class GatenThemeModule(
         GatenBridgeEmitter.emitThemeChanged()
     }
 
-    /** Stores the palette (`Gaten`, `Paper`, … — [Palette]'s names) and announces it. */
-    @ReactMethod
-    fun setPalette(palette: String, promise: Promise) {
-        val value = Palette.entries.firstOrNull { it.name == palette }
-        if (value == null) {
-            promise.reject(CODE_UNKNOWN, "Unknown palette '$palette'")
-            return
-        }
-        ThemePreferences.setPalette(reactApplicationContext, value)
-        promise.resolve(prefsToJsMap())
-        GatenBridgeEmitter.emitThemeChanged()
-    }
-
     /** Stores the accent ([AccentColor]'s names) and announces it. */
     @ReactMethod
     fun setAccent(accent: String, promise: Promise) {
@@ -99,25 +85,21 @@ class GatenThemeModule(
     }
 
     /**
-     * The resolved colours for [modeName], [paletteName] and [accentName] — each an omitted or null
-     * value falling back to the stored choice, so a screen that changed one of the three can ask
-     * for the scheme it is about to show.
+     * The resolved colours for [modeName] and [accentName] — each an omitted or null value falling
+     * back to the stored choice, so a screen that changed one of the two can ask for the scheme it
+     * is about to show.
      *
      * `System` is resolved against the device's own dark setting at the moment of the call, the
      * same resolution [ThemeMode.isDark] gives every consumer of the choice. Every colour answers
      * as `#RRGGBB`, the keys named after the Material roles the Compose scheme fills.
      */
     @ReactMethod
-    fun colors(modeName: String?, paletteName: String?, accentName: String?, promise: Promise) {
+    fun colors(modeName: String?, accentName: String?, promise: Promise) {
         val context = reactApplicationContext
         val mode = modeName?.let { name ->
             ThemeMode.entries.firstOrNull { it.name == name }
                 ?: return rejectUnknown(promise, "theme mode", name)
         } ?: ThemePreferences.themeMode(context)
-        val palette = paletteName?.let { name ->
-            Palette.entries.firstOrNull { it.name == name }
-                ?: return rejectUnknown(promise, "palette", name)
-        } ?: ThemePreferences.palette(context)
         val accent = accentName?.let { name ->
             AccentColor.entries.firstOrNull { it.name == name }
                 ?: return rejectUnknown(promise, "accent", name)
@@ -125,20 +107,18 @@ class GatenThemeModule(
 
         val systemDark = (context.resources.configuration.uiMode and
             Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        promise.resolve(colorMap(palette, accent, mode.isDark(systemDark)))
+        promise.resolve(colorMap(accent, mode.isDark(systemDark)))
     }
 
     /**
-     * Applies the RN shell's background and icon contrast to the Android gesture area. This changes
-     * only window bar appearance; React Native's safe-area layout remains responsible for insets.
+     * Clears the gesture area so the app's own content shows through it, and sets the icon contrast
+     * to [dark]. The bar itself stays transparent on purpose: an opaque navigation bar is painted
+     * over the window's bottom strip, which is exactly where the floating bottom bar's all-round
+     * shadow falls, so colouring it would cut that shadow off. React Native's safe-area layout
+     * remains responsible for insets.
      */
     @ReactMethod
-    fun setNavigationBarAppearance(background: String, dark: Boolean, promise: Promise) {
-        if (!background.matches(Regex("^#[0-9A-Fa-f]{6}$"))) {
-            promise.reject(CODE_INVALID_BAR_COLOR, "Expected an opaque #RRGGBB navigation bar color.")
-            return
-        }
-        val backgroundColor = Color.parseColor(background)
+    fun setNavigationBarAppearance(dark: Boolean, promise: Promise) {
         val activity = reactApplicationContext.currentActivity
         if (activity == null) {
             promise.resolve(null)
@@ -148,7 +128,7 @@ class GatenThemeModule(
         activity.runOnUiThread {
             try {
                 val window = activity.window
-                window.navigationBarColor = backgroundColor
+                window.navigationBarColor = Color.TRANSPARENT
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     window.isNavigationBarContrastEnforced = false
                 }
@@ -164,22 +144,21 @@ class GatenThemeModule(
     private fun prefsToJsMap(): WritableMap = Arguments.createMap().apply {
         val context = reactApplicationContext
         putString("mode", ThemePreferences.themeMode(context).name)
-        putString("palette", ThemePreferences.palette(context).name)
         putString("accent", ThemePreferences.accent(context).name)
     }
 
     /**
      * The scheme's roles as a flat map of hex strings, [dark] deciding the mode.
      *
-     * The tones come from [accentRoles] and [paletteNeutrals] and the errors from the constants the
+     * The tones come from [accentRoles] and [gatenNeutrals] and the errors from the constants the
      * Compose scheme reads; the mapping below mirrors [com.gaten.app.ui.theme.Theme]: accent tones
      * carry secondary and tertiary, the secondary action container is neutral, the ladder's two
      * steps stand in for finer container steps, and inverse roles come from the other mode's ladder.
      */
-    private fun colorMap(palette: Palette, accent: AccentColor, dark: Boolean): WritableMap {
+    private fun colorMap(accent: AccentColor, dark: Boolean): WritableMap {
         val tone = accentRoles(accent, dark)
-        val neutral = paletteNeutrals(palette, dark)
-        val inverseNeutral = paletteNeutrals(palette, !dark)
+        val neutral = gatenNeutrals(dark)
+        val inverseNeutral = gatenNeutrals(!dark)
         val inverseTone = accentRoles(accent, !dark)
 
         return Arguments.createMap().apply {
@@ -230,7 +209,6 @@ class GatenThemeModule(
         const val NAME = "GatenTheme"
 
         private const val CODE_UNKNOWN = "E_THEME_UNKNOWN"
-        private const val CODE_INVALID_BAR_COLOR = "E_THEME_INVALID_BAR_COLOR"
         private const val CODE_SYSTEM_BAR = "E_THEME_SYSTEM_BAR"
     }
 }

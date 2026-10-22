@@ -8,10 +8,9 @@
 package com.gaten.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 
 /*
- * The palette is near-monochrome neutrals plus exactly one accent. The accent is the reader's
+ * Gaten's colours: one shipped neutral ladder plus exactly one accent. The accent is the reader's
  * choice in Settings ([AccentColor]); indigo (藍) is the one the app shipped with and the default.
  *
  * The neutrals and the status colours do not follow the accent: a red error stays red and the greys
@@ -85,10 +84,10 @@ private fun tones(
 )
 
 /*
- * Accent tones by role and mode. The ladder is pitched for contrast rather than for tinting: in
- * light mode a primary is deep enough to carry white ink and to be read as text on the paper, and in
- * dark mode it is light enough to carry the near-black ink `tones` gives that mode. Every accent is
- * a three-step ramp of one hue — primary, a mid tertiary for charts, a soft container.
+ * Accent tones by role and mode. The ramp is pitched for contrast: in light mode a primary is deep
+ * enough to carry white ink and to be read as text on the paper, and in dark mode it is light enough
+ * to carry the near-black ink `tones` gives that mode. Every accent is a three-step ramp of one hue —
+ * primary, a mid tertiary for charts, a soft container.
  */
 
 /** Default indigo accent tones. */
@@ -125,33 +124,6 @@ fun accentRoles(accent: AccentColor, dark: Boolean): AccentRoles = when (accent)
     AccentColor.Black -> if (dark) BlackDark else BlackLight
 }
 
-// --- Palettes ---
-
-/**
- * The palettes the reader can pick between. A palette recolours the neutral ladder — paper, its
- * hairline and the ink written on it — without changing the reader's selected accent.
- *
- * [Gaten] carries no tone: it is the Ink neutral ladder. Every other palette is that ladder
- * retinted while the reader's selected accent stays independent.
- */
-enum class Palette(
-    private val lightTone: PaletteTone?,
-    private val darkTone: PaletteTone?
-) {
-    Gaten(null, null),
-    Mono(PaletteTone(0f, 0f, 0f), PaletteTone(0f, 0f, 0f)),
-    Cool(PaletteTone(215f, 0.30f, 0.10f), PaletteTone(215f, 0.25f, 0.12f)),
-    Warm(PaletteTone(45f, 0.45f, 0.10f), PaletteTone(45f, 0.30f, 0.12f));
-
-    internal fun tone(dark: Boolean): PaletteTone? = if (dark) darkTone else lightTone
-}
-
-/**
- * The tint one palette puts on a mode. Paper and ink use separate saturation values so text remains
- * visually neutral while the surface carries the selected palette hue.
- */
-data class PaletteTone(val hue: Float, val paper: Float, val ink: Float)
-
 /** The neutral ladder for one mode: paper, its hairline, and the ink written on it. */
 data class NeutralRoles(
     val background: Color,
@@ -165,8 +137,11 @@ data class NeutralRoles(
     val outline: Color
 )
 
-/** The ladder the app shipped with: [Palette.Gaten] itself, and the basis of every other palette. */
-private fun shippedNeutrals(dark: Boolean): NeutralRoles = if (dark) {
+/**
+ * The one neutral ladder Gaten draws with, for [dark]: the paper, its hairline, and the ink written
+ * on it.
+ */
+fun gatenNeutrals(dark: Boolean): NeutralRoles = if (dark) {
     NeutralRoles(
         background = DarkBackground,
         surface = DarkSurface,
@@ -190,44 +165,4 @@ private fun shippedNeutrals(dark: Boolean): NeutralRoles = if (dark) {
         onSurfaceVariant = LightOnSurfaceVariant,
         outline = LightOutline
     )
-}
-
-/**
- * [palette]'s neutral ladder for [dark].
- *
- * Every tone is retinted at its own relative luminance — [retinted] solves for the lightness that
- * holds it — so a palette changes hue while preserving the contrast ladder.
- */
-fun paletteNeutrals(palette: Palette, dark: Boolean): NeutralRoles {
-    val shipped = shippedNeutrals(dark)
-    val tone = palette.tone(dark) ?: return shipped
-    return NeutralRoles(
-        background = shipped.background.retinted(tone.hue, tone.paper),
-        surface = shipped.surface.retinted(tone.hue, tone.paper),
-        surfaceVariant = shipped.surfaceVariant.retinted(tone.hue, tone.paper),
-        surfaceContainer = shipped.surfaceContainer.retinted(tone.hue, tone.paper),
-        surfaceContainerHigh = shipped.surfaceContainerHigh.retinted(tone.hue, tone.paper),
-        surfaceContainerHighest = shipped.surfaceContainerHighest.retinted(tone.hue, tone.paper),
-        onSurface = shipped.onSurface.retinted(tone.hue, tone.ink),
-        onSurfaceVariant = shipped.onSurfaceVariant.retinted(tone.hue, tone.ink),
-        outline = shipped.outline.retinted(tone.hue, tone.paper)
-    )
-}
-
-/**
- * [this] in the given hue and saturation, at the first lightness whose tone reaches this colour's
- * relative luminance.
- *
- * `Color.hsl` lands in 8-bit channels, so the ladder is a staircase and the exact lightness is
- * usually between two steps. Choose the first step at or above the source luminance.
- */
-private fun Color.retinted(hue: Float, saturation: Float): Color {
-    val target = luminance()
-    var low = 0f
-    var high = 1f
-    repeat(24) {
-        val mid = (low + high) / 2f
-        if (Color.hsl(hue, saturation, mid).luminance() < target) low = mid else high = mid
-    }
-    return Color.hsl(hue, saturation, high)
 }

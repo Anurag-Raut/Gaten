@@ -27,7 +27,7 @@
     <string name="settings_row_recognition_support">Optional stylized-text model</string>
     <string name="settings_row_anki_support">Deck, note type and card layout</string>
     <string name="settings_row_wanikani_support">Kanji and vocabulary reference</string>
-    <string name="settings_row_appearance_support">Theme, palette and accent</string>
+    <string name="settings_row_appearance_support">Theme and accent</string>
     <string name="settings_row_appearance_value">%1$s &#183; %2$s</string>
     <string name="settings_row_recognition_installed">Installed: %1$s (%2$s)</string>
     <string name="settings_row_recognition_unknown">Installed model (%1$s)</string>
@@ -115,20 +115,13 @@
     <string name="settings_recognition_toast_removed">Model removed</string>
     <string name="settings_recognition_toast_remove_failed">Could not remove the model files</string>
 
-    <!-- Appearance: theme, palette and accent -->
+    <!-- Appearance: theme and accent -->
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_appearance_theme_title">Theme</string>
     <string name="settings_appearance_theme_support">Follow your device, or keep Gaten light or dark on its own.</string>
     <string name="settings_appearance_theme_system">System</string>
     <string name="settings_appearance_theme_light">Light</string>
     <string name="settings_appearance_theme_dark">Dark</string>
-    <string name="settings_appearance_palette_title">Palette</string>
-    <string name="settings_appearance_palette_support">The colour of Gaten&#8217;s paper. Your selected accent stays unchanged.</string>
-    <string name="settings_appearance_palette_sample" translatable="false">Aa</string>
-    <string name="settings_appearance_palette_gaten">Gaten</string>
-    <string name="settings_appearance_palette_mono">Mono</string>
-    <string name="settings_appearance_palette_cool">Cool</string>
-    <string name="settings_appearance_palette_warm">Warm</string>
     <string name="settings_appearance_accent_title">Accent</string>
     <string name="settings_appearance_accent_support">The one colour in Gaten: buttons, the edge outline and the lasso.</string>
     <string name="settings_appearance_accent_indigo">Indigo</string>

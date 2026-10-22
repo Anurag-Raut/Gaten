@@ -14,16 +14,17 @@
  * here asks for anything by itself: the disclosure comes first, and only then the system dialogs.
  */
 import React, {useEffect, useState} from "react";
-import {AppState, Platform, Pressable, Text, View} from "react-native";
+import {AppState, Platform, Text, View} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenTrigger from "../../native/GatenTrigger";
 import * as GatenHaptics from "../../native/GatenHaptics";
 import {IconButton} from "../components";
+import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {
-  LookupModeCard,
+  LookupModeRow,
   OutlinedButton,
   RowIcon,
   SettingsGroup,
@@ -39,7 +40,6 @@ const TRIGGER_LOOKUP_ACTION = "com.gaten.app.action.TRIGGER_LOOKUP";
 const ADD_TILE_API = 33;
 
 export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
-  const theme = useTheme();
   const {request: requestLookupMode, dialog: disclosureDialog} = useLookupModeRequest();
 
   const [lookupMode, setLookupMode] = useState(false);
@@ -98,17 +98,15 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
 
   return (
     <SettingsPageScaffold title="Screen lookup" onClose={onClose}>
-      <View style={{marginTop: spacing.s}}>
-        <LookupModeCard enabled={lookupMode} onTurnOn={requestLookupMode} />
-      </View>
-      <SettingsGroup title="Start a lookup" style={{marginTop: spacing.xl}}>
+      <SettingsGroup title="Lookup" style={{marginTop: spacing.s}}>
+        <LookupModeRow enabled={lookupMode} onTurnOn={requestLookupMode} />
         <SwitchRow
           icon="touch_app"
           title="Floating button"
           summary={
             lookupMode
-              ? "Tap the bubble on screen to look up."
-              : "Appears once lookup mode is on."
+              ? "Tap to look up"
+              : "Needs lookup mode"
           }
           value={floatingEnabled}
           onValueChange={toggleFloating}
@@ -116,7 +114,7 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
         <TileRow added={tileAdded} onAddTile={requestAddTile} />
         <KeyMapperRow />
       </SettingsGroup>
-      <SettingsGroup title="While a lookup is open" style={{marginTop: spacing.xl}}>
+      <SettingsGroup title="During lookup" style={{marginTop: spacing.xl}}>
         <MediaPauseRow
           granted={notificationAccess}
           onGrant={() => {
@@ -144,7 +142,6 @@ function TileRow({added, onAddTile}: {added: boolean; onAddTile: () => void}) {
   return (
     <View
       style={{
-        paddingHorizontal: spacing.l,
         paddingVertical: spacing.m,
         flexDirection: "row",
       }}
@@ -152,23 +149,23 @@ function TileRow({added, onAddTile}: {added: boolean; onAddTile: () => void}) {
       <RowIcon name="widgets" />
       <View style={{flex: 1, marginStart: spacing.m}}>
         <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]}>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>
             Quick Settings tile
           </Text>
           {added && (
-            <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s}]}>
-              Added to Quick Settings
+            <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
+              Added
             </Text>
           )}
         </View>
         <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
           {added
-            ? "To remove it, open the Quick Settings editor and drag Gaten out."
-            : "Add Gaten to Quick Settings to look up from the notification shade."}
+            ? "Remove in the Quick Settings editor."
+            : "Open lookup from Quick Settings."}
         </Text>
         {!added && !addTileAvailable && (
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-            Open the Quick Settings editor and drag Gaten into your tiles.
+            Add Gaten in the Quick Settings editor.
           </Text>
         )}
         {!added && addTileAvailable && (
@@ -191,7 +188,6 @@ function KeyMapperRow() {
   return (
     <View
       style={{
-        paddingHorizontal: spacing.l,
         paddingVertical: spacing.m,
         flexDirection: "row",
       }}
@@ -199,19 +195,26 @@ function KeyMapperRow() {
       <RowIcon name="key" />
       <View style={{flex: 1, marginStart: spacing.m}}>
         <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]}>
-            Hardware key (Key Mapper)
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>
+            Key Mapper
           </Text>
-          <Pressable onPress={() => setExpanded(!expanded)}>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Key Mapper setup"
+            accessibilityState={{expanded}}
+            accessibilityHint={expanded ? "Hides the broadcast action" : "Shows the broadcast action"}
+            onPress={() => setExpanded(!expanded)}
+            style={{minHeight: 48, paddingHorizontal: spacing.m, alignItems: "flex-end", justifyContent: "center"}}
+          >
             <Text style={[typeScale.labelLarge, {color: colors.accent}]}>
               {expanded ? "Hide" : "Set up"}
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
         {expanded && (
           <>
             <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-              Send a broadcast with this action:
+              Broadcast action
             </Text>
             <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
               <Text
@@ -244,7 +247,6 @@ function MediaPauseRow({granted, onGrant}: {granted: boolean; onGrant: () => voi
   return (
     <View
       style={{
-        paddingHorizontal: spacing.l,
         paddingVertical: spacing.m,
         flexDirection: "row",
       }}
@@ -252,17 +254,17 @@ function MediaPauseRow({granted, onGrant}: {granted: boolean; onGrant: () => voi
       <RowIcon name="pause_circle" />
       <View style={{flex: 1, marginStart: spacing.m}}>
         <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]}>
-            Pause video while looking up
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>
+            Pause media
           </Text>
-          <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s}]}>
+          <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
             {granted ? "Allowed" : "Not allowed"}
           </Text>
         </View>
         <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
           {granted
-            ? "Gaten pauses what is playing when a lookup opens, and plays it again when it closes."
-            : "Without notification access Gaten sends a media pause key instead, which stops some players and not others."}
+            ? "Pauses and resumes media."
+            : "Without access, sends a media key some players ignore."}
         </Text>
         {!granted && (
           <View style={{marginTop: spacing.s, alignSelf: "flex-start"}}>

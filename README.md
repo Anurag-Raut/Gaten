@@ -60,9 +60,9 @@ Steps 2–7 are fully offline. Gaten makes no network request of any kind until 
 reader downloads the optional stylized-text model, or connects WaniKani (which checks the token) and
 then opens a kanji, looks at the Analytics tab, or reviews what is due.
 
-**Settings → Appearance** lets you choose the light/dark theme,
-paper palette and accent independently. Changing the palette keeps your selected accent.
-Palette previews show each palette's paper and text colours with its name, without an accent dot.
+**Settings → Appearance** lets you choose the light/dark theme and accent
+independently. Gaten ships a single neutral ladder, so the accent picker changes the one
+colour in the app while the paper and text stay as designed.
 
 ## Inside the app
 
@@ -495,7 +495,7 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 - `ui/overlay/` — `OverlayWindowController`, the `TYPE_APPLICATION_OVERLAY` window host the capture
   service draws the lookup in.
 - `ui/components/` — `KanjiStrip` and `pressScale` used by the overlay result sheet.
-- `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light, palette and accent
+- `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light and accent
   choices the overlay, the floating bubble and the RN theme bridge read).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
   which downloads the optional manga-ocr model for pushing to a device.

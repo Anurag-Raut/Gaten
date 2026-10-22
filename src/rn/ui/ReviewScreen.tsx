@@ -846,8 +846,8 @@ function CardHtml({
  * background it should have overridden.
  *
  * This is the move AnkiDroid's own night mode makes (`body.night_mode { color: white;
- * background-color: black }`), with the reader's palette instead of black and applied to the whole
- * card rather than to its body element.
+ * background-color: black }`), with the app's own ink and paper instead of black and applied to the
+ * whole card rather than to its body element.
  */
 function cardDocument(
   css: string,

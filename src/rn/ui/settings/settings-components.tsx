@@ -6,11 +6,11 @@
 
 /**
  * The pieces every settings page is built from: the scaffold with its top bar, the row of a
- * group, the group itself, the dialogs a page raises, and the lookup-mode card with the
+ * group, the group itself, the dialogs a page raises, and the lookup-mode row with the
  * disclosure flow behind its "Turn on".
  *
  * These are the RN ports of the shared composables in `SettingsScreen.kt`; the pages in
- * `ui/settings/` assemble them, and the copy stays in each page. Cards, buttons, icons and the
+ * `ui/settings/` assemble them, and the copy stays in each page. Buttons, icons and the
  * press-scale come from `ui/components` / `ui/PressableScale`, so every tab draws them alike.
  */
 import React, {useEffect, useState} from "react";
@@ -35,10 +35,8 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {canDrawOverlays, openOverlaySettings, requestLookupMode, toast} from "../../native/GatenPlatform";
 import {
   Button,
-  Card,
   Icon,
   IconButton,
-  PressableCard,
   SectionLabel,
 } from "../components";
 import {PressableScale} from "../PressableScale";
@@ -59,37 +57,15 @@ export const CONTENT_COLUMN: ViewStyle = {
   paddingHorizontal: 22,
 };
 
-/**
- * A settings glyph in the preview's neutral icon tile, with an app-native fallback for destinations
- * that are not present in the preview.
- */
-export function RowIcon({name, tile = false, inkName}: {name: IconName; tile?: boolean; inkName?: InkIconName}) {
+/** A neutral settings glyph using the hub's existing icon set. */
+export function RowIcon({name, inkName}: {name: IconName; inkName?: InkIconName}) {
   const {colors} = useTheme();
-  if (!tile) {
-    return <Icon name={name} size={24} color={colors.iconSecondary} />;
-  }
-  return (
-    <View
-      style={{
-        width: 37,
-        height: 37,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: shape.settingsIcon,
-        backgroundColor: colors.surfaceVariant,
-      }}
-    >
-      {inkName
-        ? <InkIcon name={inkName} size={20} color={colors.iconPrimary} />
-        : <Icon name={name} size={21} color={colors.iconPrimary} />}
-    </View>
-  );
+  return inkName
+    ? <InkIcon name={inkName} size={22} color={colors.iconSecondary} />
+    : <Icon name={name} size={24} color={colors.iconSecondary} />;
 }
 
-/** A contained group uses the shared 20dp container radius. */
-const SURFACE_RADIUS: ViewStyle = {borderRadius: shape.medium};
-
-/** A settings tile uses the design language's neutral secondary surface in both themes. */
+/** A flat form section; its closing rule separates it from the next section. */
 export function SettingsTile({
   children,
   style,
@@ -99,30 +75,21 @@ export function SettingsTile({
 }) {
   const {colors} = useTheme();
   return (
-    <Card style={[SURFACE_RADIUS, {backgroundColor: colors.surfaceVariant}, style]}>
+    <View style={[{borderBottomWidth: 1, borderBottomColor: colors.outlineVariant}, style]}>
       {children}
-    </Card>
+    </View>
   );
 }
 
-/** A group of rows inside no surface of its own, for callers that give each row its own card. */
-const FLUSH_ROW: ViewStyle = {backgroundColor: "transparent", borderRadius: 0, elevation: 0};
-
-/**
- * A named group of rows, under the quiet name of what they are: a sentence-case label, then either
- * one rounded surface holding the rows or — when the caller passes `bare` — the rows themselves,
- * each of which then brings its own card.
- */
+/** A quiet section heading and flat rows separated by the same rules as the study hubs. */
 export function SettingsGroup({
   title,
   children,
   style,
-  bare = false,
 }: {
   title: string;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-  bare?: boolean;
 }) {
   const {colors} = useTheme();
   return (
@@ -130,31 +97,23 @@ export function SettingsGroup({
       <SectionLabel
         style={[
           typeScale.labelMedium,
-          {
-            color: colors.onSurfaceVariant,
-            textTransform: "none",
-            marginBottom: 9,
-          },
+          {color: colors.onSurfaceVariant, textTransform: "none", marginBottom: spacing.s},
         ]}
       >
         {title}
       </SectionLabel>
-      {bare ? (
-        <View style={{gap: 9}}>{children}</View>
-      ) : (
-        <SettingsTile>{children}</SettingsTile>
-      )}
+      {React.Children.toArray(children).map((child, index) => (
+        <View key={index} style={{borderBottomWidth: 1, borderBottomColor: colors.outlineVariant}}>
+          {child}
+        </View>
+      ))}
     </View>
   );
 }
 
 /**
- * One row of a group: the glyph, what the page is, what it currently amounts to on the right, and a
- * chevron when it goes somewhere. The value sits on the right in one quiet line, and a row that only
- * states something is not made to look tappable.
- *
- * `surface` gives the row its own rounded card rather than letting it sit flush in its group's
- * surface — how the Settings hub lists its pages, one calm card per row.
+ * A destination or informational row. Important values wrap instead of disappearing at large text
+ * sizes; the optional description is reserved for information the title and value cannot convey.
  */
 export function SettingsRow({
   icon,
@@ -163,107 +122,58 @@ export function SettingsRow({
   summary,
   value,
   onPress,
-  surface = false,
 }: {
   icon: IconName;
   inkIcon?: InkIconName;
   title: string;
-  summary: string;
+  summary?: string;
   value?: string | null;
   onPress?: () => void;
-  surface?: boolean;
 }) {
   const {colors} = useTheme();
-  const padding = {
-    paddingHorizontal: 11,
-    paddingVertical: 12,
-  };
-  const contentStyle: ViewStyle = surface
-    ? {flex: 1, minHeight: 70, justifyContent: "center"}
-    : {};
-  const rowSurface: ViewStyle = {
-    minHeight: 72,
-    borderRadius: shape.settings,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    elevation: 0,
-    shadowOpacity: 0,
+  const rowStyle: ViewStyle = {
+    minHeight: 60,
+    paddingVertical: spacing.m,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.m,
   };
   const body = (
-    <View style={{flexDirection: "row", alignItems: "center"}}>
-      <RowIcon name={icon} tile={surface} inkName={inkIcon} />
-      <View
-        style={{
-          flex: 1,
-          minWidth: 0,
-          marginStart: 12,
-        }}
-      >
-        <Text
-          style={[
-            typeScale.bodyLarge,
-          {color: colors.onSurface, fontWeight: "700", letterSpacing: -0.3},
-          ]}
-        >
-          {title}
-        </Text>
-        <Text
-          style={[
-            typeScale.bodySmall,
-            {color: colors.onSurfaceVariant, marginTop: 5},
-          ]}
-        >
-          {summary}
-        </Text>
-      </View>
-      <View style={{flexDirection: "row", alignItems: "center", maxWidth: "36%", flexShrink: 1}}>
-        {value != null && (
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={[
-              typeScale.labelMedium,
-              {color: colors.onSurfaceVariant, maxWidth: 132, flexShrink: 1},
-            ]}
-          >
-            {value}
+    <>
+      <RowIcon name={icon} inkName={inkIcon} />
+      <View style={{flex: 1, minWidth: 0}}>
+        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        {summary != null && (
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+            {summary}
           </Text>
         )}
-        {onPress != null && (
-          <View style={{marginStart: value != null ? 7 : 0}}>
-            <InkIcon name="chevron" size={15} color={colors.fine} />
-          </View>
-        )}
       </View>
-    </View>
+      {value != null && (
+        <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
+          {value}
+        </Text>
+      )}
+      {onPress != null && <InkIcon name="chevron" size={15} color={colors.fine} />}
+    </>
   );
   if (onPress == null) {
-    return surface ? (
-      <Card style={rowSurface}>
-        <View style={[padding, contentStyle]}>{body}</View>
-      </Card>
-    ) : (
-      <View style={padding}>{body}</View>
-    );
+    return <View style={rowStyle}>{body}</View>;
   }
   return (
-    <PressableCard
-      accessibilityLabel={`${title}${value != null ? `. ${value}` : onPress != null ? ". Open settings" : ""}. ${summary}`}
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={[title, value, summary].filter(Boolean).join(". ")}
       onPress={onPress}
-      style={surface ? rowSurface : FLUSH_ROW}
+      style={rowStyle}
     >
-      <View style={[padding, contentStyle]}>{body}</View>
-    </PressableCard>
+      {body}
+    </PressableScale>
   );
 }
 
-/**
- * The state of lookup mode, for the page that owns it: a calm rounded surface either way, a quiet
- * glyph, what it means, and — while it is off — the one action that changes it. Being off is a setup
- * state, not an error, so nothing here is painted with the error roles.
- */
-export function LookupModeCard({
+/** Lookup status and its existing permission action, without a separate card or explanation. */
+export function LookupModeRow({
   enabled,
   onTurnOn,
 }: {
@@ -272,32 +182,14 @@ export function LookupModeCard({
 }) {
   const {colors} = useTheme();
   return (
-    <SettingsTile>
-      <View style={{padding: spacing.xl}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Icon
-            name={enabled ? "check_circle" : "shield"}
-            size={24}
-              color={enabled ? colors.success : colors.iconSecondary}
-          />
-          <Text
-            style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1, marginStart: spacing.m}]}
-          >
-            {enabled ? "Lookup mode is on" : "Lookup mode is off"}
-          </Text>
-        </View>
-        <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
-          {enabled
-            ? "Circle any Japanese text on screen to look it up."
-            : "Gaten cannot read the screen until you turn lookup mode on."}
-        </Text>
-        {!enabled && (
-          <View style={{marginTop: spacing.l, alignSelf: "flex-start"}}>
-            <Button label="Turn on" onPress={onTurnOn} />
-          </View>
-        )}
+    <View style={{minHeight: 60, paddingVertical: spacing.m, flexDirection: "row", alignItems: "center", gap: spacing.m}}>
+      <Icon name={enabled ? "check_circle" : "shield"} size={24} color={enabled ? colors.success : colors.iconSecondary} />
+      <View style={{flex: 1}}>
+        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Lookup mode</Text>
+        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>{enabled ? "On" : "Off"}</Text>
       </View>
-    </SettingsTile>
+      {!enabled && <Button label="Turn on" onPress={onTurnOn} />}
+    </View>
   );
 }
 
@@ -351,7 +243,7 @@ export function FieldLabel({
 }
 
 /**
- * The box a settings page types into: a white/dark surface inside the tinted settings tile, with a
+ * The box a settings page types into: a white/dark surface with a
  * quiet outline and the app's own corner and control height. Everything a caller passes to a
  * `TextInput` goes through, and its own `style` still wins over the box.
  */
@@ -410,7 +302,7 @@ export function SwitchRow({
 }: {
   icon: IconName;
   title: string;
-  summary: string;
+  summary?: string;
   value: boolean;
   onValueChange: (next: boolean) => void;
   disabled?: boolean;
@@ -421,20 +313,23 @@ export function SwitchRow({
       style={{
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: spacing.l + spacing.xs,
-        paddingVertical: spacing.l,
+        minHeight: 60,
+        paddingVertical: spacing.m,
+        gap: spacing.m,
       }}
     >
       <RowIcon name={icon} />
-      <View style={{flex: 1, marginStart: spacing.m}}>
-        <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>{title}</Text>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>{summary}</Text>
+      <View style={{flex: 1, minWidth: 0}}>
+        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        {summary != null && <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>{summary}</Text>}
       </View>
       <RNSwitch
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}
         accessibilityLabel={title}
+        accessibilityHint={summary}
+        style={{minHeight: 48}}
         trackColor={{
           false: disabled ? colors.disabled : colors.surfaceVariant,
           true: disabled ? colors.disabled : colors.accent,

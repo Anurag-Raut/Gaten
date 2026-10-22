@@ -14,14 +14,14 @@
  * Disconnect is the reverse and takes the cache with it.
  */
 import React, {useEffect, useState} from "react";
-import {KeyboardAvoidingView, ScrollView, Text, View} from "react-native";
+import {KeyboardAvoidingView, ScrollView, Text, View, useWindowDimensions} from "react-native";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {Button, IconButton} from "../components";
 import {reviewStore} from "../review/review-store";
 import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
-import {FieldLabel, SettingsTile, TextField} from "./settings-components";
+import {FieldLabel, SettingsGroup, TextField} from "./settings-components";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -43,15 +43,6 @@ export const FAILURE_LABELS: Record<WaniKaniFailure, string> = {
   STORAGE: "this device could not save the answer",
 };
 
-/** One section of the page, on its own card, with the page's ground between the cards. */
-function WaniKaniCard({children}: {children: React.ReactNode}) {
-  return (
-    <SettingsTile>
-      <View style={{padding: spacing.xl}}>{children}</View>
-    </SettingsTile>
-  );
-}
-
 /** The bridge rejects a failed request as `WK_<FAILURE>`; recover the failure it named. */
 function failureFromError(error: unknown): WaniKaniFailure | null {
   if (typeof error !== "object" || error == null || !("code" in error)) return null;
@@ -66,6 +57,8 @@ function failureFromError(error: unknown): WaniKaniFailure | null {
 export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const horizontalInset = width < 360 ? 16 : 22;
   const [token, setToken] = useState("");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [changingToken, setChangingToken] = useState(false);
@@ -271,29 +264,32 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         // With the keyboard up, a tap on Connect, Disconnect or a row is the row's own.
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          maxWidth: 840,
+          maxWidth: 560,
           width: "100%",
           alignSelf: "center",
-          paddingHorizontal: spacing.l,
-          paddingTop: spacing.xl,
+          paddingLeft: insets.left + horizontalInset,
+          paddingRight: insets.right + horizontalInset,
+          paddingTop: spacing.s,
           paddingBottom: spacing.l + insets.bottom,
         }}
       >
-        <WaniKaniCard>
-          <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>
-            {connected == null
-              ? "Checking connection…"
-              : isKnownConnected
-                ? answer?.status === "connected" && answer.maxLevelGranted < WANIKANI_LEVELS
-                  ? `Connected · Levels 1–${answer.maxLevelGranted}`
-                  : "Connected"
-                : "Not connected"}
-          </Text>
-        </WaniKaniCard>
+        <SettingsGroup title="Connection" style={{marginTop: spacing.s}}>
+          <View style={{paddingVertical: spacing.m}}>
+            <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+              {connected == null
+                ? "Checking connection…"
+                : isKnownConnected
+                  ? answer?.status === "connected" && answer.maxLevelGranted < WANIKANI_LEVELS
+                    ? `Connected · Levels 1–${answer.maxLevelGranted}`
+                    : "Connected"
+                  : "Not connected"}
+            </Text>
+          </View>
+        </SettingsGroup>
 
-        <View style={{marginTop: spacing.l}}>
-          <WaniKaniCard>
-            <FieldLabel label="New cards per day" />
+        <SettingsGroup title="Lessons" style={{marginTop: spacing.l}}>
+          <View style={{paddingVertical: spacing.m}}>
+            <FieldLabel label="New per day" />
             <TextField
               value={dailyLimitInput}
               onChangeText={(value) => {
@@ -307,7 +303,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
               accessibilityLabel="New cards per day. Leave blank for unlimited."
             />
             <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-              Leave blank for unlimited.
+              Blank = unlimited.
             </Text>
             {learnedToday != null && (
               <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
@@ -340,55 +336,55 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
                 {preferenceError ?? preferenceMessage}
               </Text>
             )}
-          </WaniKaniCard>
-        </View>
+          </View>
+        </SettingsGroup>
 
         {isKnownConnected && !changingToken && (
-          <View style={{marginTop: spacing.s}}>
+          <View style={{alignSelf: "flex-start", marginTop: spacing.s}}>
             <Button variant="text" label="Change token" disabled={busy} onPress={() => setChangingToken(true)} />
           </View>
         )}
 
-        {showTokenField && <View style={{marginTop: spacing.l}}>
-          <WaniKaniCard>
-            <FieldLabel label="Personal access token" />
-            <TextField
-              value={token}
-              onChangeText={setToken}
-              placeholder="Paste your token"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!busy}
-            />
-            <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
-              <Button variant="text" label="Get a token" onPress={openTokenPage} />
+        {showTokenField && (
+          <SettingsGroup title="Token" style={{marginTop: spacing.l}}>
+            <View style={{paddingVertical: spacing.m}}>
+              <FieldLabel label="Personal access token" />
+              <TextField
+                value={token}
+                onChangeText={setToken}
+                placeholder="Paste your token"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+              />
+              <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
+                <Button variant="text" label="Get a token" onPress={openTokenPage} />
+              </View>
             </View>
-          </WaniKaniCard>
-        </View>}
+          </SettingsGroup>
+        )}
 
-        {showTokenField && <View style={{marginTop: spacing.l}}>
-          <Button
-            label={busy ? "Checking…" : "Connect"}
-            disabled={busy || token.trim().length === 0}
-            fullWidth
-            onPress={connect}
-          />
-        </View>}
+        {showTokenField && (
+          <View style={{marginTop: spacing.l}}>
+            <Button
+              label={busy ? "Checking…" : "Connect"}
+              disabled={busy || token.trim().length === 0}
+              fullWidth
+              onPress={connect}
+            />
+          </View>
+        )}
 
         {(isKnownConnected || cleared === false) && (
-          <View style={{marginTop: spacing.s, flexDirection: "row", gap: spacing.s}}>
-            <View style={{flex: 1}}>
-              <Button
-                variant="text"
-                label="Recheck connection"
-                disabled={busy || !isKnownConnected}
-                onPress={recheck}
-              />
-            </View>
-            <View style={{flex: 1}}>
-              <Button variant="text" label="Disconnect" disabled={busy} onPress={disconnect} />
-            </View>
+          <View style={{marginTop: spacing.s, flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
+            <Button
+              variant="text"
+              label="Recheck"
+              disabled={busy || !isKnownConnected}
+              onPress={recheck}
+            />
+            <Button variant="text" label="Disconnect" disabled={busy} onPress={disconnect} />
           </View>
         )}
 

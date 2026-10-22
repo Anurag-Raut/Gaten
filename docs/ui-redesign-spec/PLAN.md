@@ -216,7 +216,8 @@ mapping invalid, and the accent picker wraps 6+1 with unlabelled circles.
    `busy`-serialization and refresh-on-resume behavior unchanged.
 8. Appearance page: accent circles relabelled (7 in a 4+3 grid with names or content-desc,
    ring + filled selected state); adds the Feedback sounds toggle; previews keep live
-   theme preview. Palette tiles already labelled — keep.
+   theme preview. Palette tiles are gone — the shipped neutral ladder is the only one, so
+   only the accent stays selectable.
 9. Accessibility disclosure dialog: same required content, restructured — short lead
    sentence, checkbox, and the full explanation behind "Read the details" expansion, so
    it stops being a 20-line wall before the checkbox.

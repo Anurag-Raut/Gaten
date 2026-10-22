@@ -23,6 +23,7 @@ import {
   ScrollView,
   Text,
   View,
+  useWindowDimensions,
   type GestureResponderEvent,
   type Permission,
 } from "react-native";
@@ -42,8 +43,10 @@ import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {
   DialogShell,
+  CONTENT_COLUMN,
   FieldLabel,
   HelpAction,
+  SettingsGroup,
   SettingsTile,
   SwitchRow,
   TextField,
@@ -57,11 +60,12 @@ import {
 } from "./anki-validation";
 
 const HELP_PARAGRAPHS = [
-  "Enter a deck name, or choose an existing deck. A new deck is created on your next export.",
-  "Separate tags with spaces. Leave empty for no tags.",
-  "Choose what fills each Anki field. Map Expression to at least one field. Duplicates are checked using the first field across this note type, in all decks. Choose the note type again to reload changed fields.",
-  "This note type keeps its own templates and styling from AnkiDroid. Cloze note types require cloze text and are not supported.",
-  "Use {{Expression}}, {{Reading}}, and {{Meaning}} in HTML. {{FrontSide}} repeats the front on the back. Conditional sections such as {{#Reading}}…{{/Reading}} are supported. {{Meaning}} carries the word's glosses and part of speech. New layouts apply to future exports; existing cards keep their note type. Duplicates are checked within the active note type.",
+  "Without AnkiDroid access, Add to Anki opens AnkiDroid's add screen, where you choose the deck and card layout.",
+  "Choose a deck or enter a new name. New decks are created on export.",
+  "Separate tags with spaces. Leave blank for none.",
+  "Map Expression to at least one field. Duplicates check the first mapped field across all decks for this note type. Select a note type again to reload its fields.",
+  "AnkiDroid note types keep their own templates and styling. Cloze note types are not supported.",
+  "Use {{Expression}}, {{Reading}}, and {{Meaning}} in HTML. {{FrontSide}} repeats the front on the back; conditional sections such as {{#Reading}}…{{/Reading}} are supported. {{Meaning}} includes glosses and part of speech. Layout edits affect future exports only; existing cards keep their note type.",
 ];
 
 /** The AnkiDroid permission the database reads and writes live behind. */
@@ -76,6 +80,8 @@ export function AnkiSettingsScreen({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const {width} = useWindowDimensions();
+  const horizontalInset = width < 360 ? 16 : 22;
   const [draft, setDraft] = useState<AnkiPreferencesResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<AnkiStatus>("notInstalled");
@@ -344,25 +350,25 @@ export function AnkiSettingsScreen({
         // dismissed by a tap that hits nothing, not by the first tap on a control.
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          maxWidth: 840,
-          width: "100%",
-          alignSelf: "center",
-          paddingHorizontal: spacing.l,
+          ...CONTENT_COLUMN,
+          maxWidth: 560,
+          paddingLeft: insets.left + horizontalInset,
+          paddingRight: insets.right + horizontalInset,
           paddingTop: spacing.xl,
           paddingBottom: spacing.l + insets.bottom,
         }}
       >
-        <SettingsTile>
-          <View style={{padding: spacing.xl, gap: spacing.s}}>
+        <SettingsGroup title="AnkiDroid" style={{marginTop: spacing.s}}>
+          <View style={{paddingVertical: spacing.s}}>
             {status === "notInstalled" && (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Install AnkiDroid to add cards. You can configure Gaten cards here first.
+                Install AnkiDroid to add cards.
               </Text>
             )}
             {status === "needsPermission" && (
               <>
                 <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                  Allow AnkiDroid access to choose existing decks and note types and add cards directly. Without access, Add to Anki opens AnkiDroid's add screen, where you choose the destination and card layout.
+                  Allow access to choose decks and note types and add cards directly.
                 </Text>
                 <View style={{alignSelf: "flex-start"}}>
                   <Button label="Allow AnkiDroid access" onPress={() => void requestPermission()} />
@@ -393,194 +399,183 @@ export function AnkiSettingsScreen({
               </Text>
             )}
           </View>
-        </SettingsTile>
+        </SettingsGroup>
 
-        <View style={{marginTop: spacing.l}}>
-          <SettingsTile>
-            <View style={{padding: spacing.xl, gap: spacing.s}}>
-              <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Study decks</Text>
+        <SettingsGroup title="Study decks" style={{marginTop: spacing.l}}>
+          <View style={{paddingVertical: spacing.xs}}>
+            {status !== "ready" ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Choose which AnkiDroid decks appear in Gaten review. The export destination is separate.
+                Allow AnkiDroid access to choose study decks.
               </Text>
-              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-                Including a parent deck also includes its subdecks, as in AnkiDroid.
+            ) : loading ? (
+              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+                Reading AnkiDroid decks…
               </Text>
-              {status !== "ready" ? (
-                <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                  Allow AnkiDroid access to choose study decks.
-                </Text>
-              ) : loading ? (
-                <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                  Reading AnkiDroid decks…
-                </Text>
-              ) : studyDecks.length === 0 ? (
-                <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                  No decks are available.
-                </Text>
-              ) : (
-                <>
-                  {studyDecks.map((deck) => (
+            ) : studyDecks.length === 0 ? (
+              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+                No decks are available.
+              </Text>
+            ) : (
+              <>
+                {studyDecks.map((deck, index) => (
+                  <SettingsTile
+                    key={deck.id}
+                    style={index === studyDecks.length - 1 ? {borderBottomWidth: 0} : undefined}
+                  >
                     <SwitchRow
-                      key={deck.id}
                       icon="library_books"
                       title={deck.name}
                       value={studyDeckIds == null || studyDeckIds.includes(deck.id)}
-                      summary={
-                        studyDeckIds == null || studyDeckIds.includes(deck.id)
-                          ? "Included in Gaten review"
-                          : "Hidden from Gaten review"
-                      }
                       onValueChange={(selected) => toggleStudyDeck(deck.id, selected)}
                       disabled={saving}
                     />
-                  ))}
-                  <View style={{alignSelf: "flex-start"}}>
-                    <Button
-                      variant="text"
-                      label="Include all decks"
-                      disabled={saving}
-                      onPress={() => setStudyDeckIds(null)}
-                    />
-                  </View>
-                </>
-              )}
-            </View>
-          </SettingsTile>
-        </View>
-
-        <View style={{marginTop: spacing.l}}>
-          <SettingsTile>
-            <View style={{padding: spacing.xl}}>
-              <FieldLabel label="Deck" />
-              <TextField
-                value={draft.deckName}
-                onChangeText={(deckName) => setDraft({...draft, deckName})}
-              />
-              {(collection?.decks.length ?? 0) > 0 && (
-                <View style={{marginTop: spacing.m}}>
-                  <ChoiceRow
-                    label="Choose existing deck"
-                    value={draft.deckName}
-                    options={(collection?.decks ?? []).map((name) => ({id: name, name}))}
-                    onSelect={(name) => setDraft({...draft, deckName: String(name)})}
+                  </SettingsTile>
+                ))}
+                <View style={{alignSelf: "flex-start"}}>
+                  <Button
+                    variant="text"
+                    label="Include all decks"
+                    disabled={saving}
+                    onPress={() => setStudyDeckIds(null)}
                   />
                 </View>
-              )}
-            </View>
-          </SettingsTile>
-        </View>
+              </>
+            )}
+            {status === "ready" && studyDecks.length > 0 && (
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+                For review; export deck is separate. Parent decks include subdecks.
+              </Text>
+            )}
+          </View>
+        </SettingsGroup>
 
-        <View style={{marginTop: spacing.l}}>
-          <SettingsTile>
-            <View style={{padding: spacing.xl}}>
-              <FieldLabel label="Tags" />
-              <TextField
-                value={draft.tags}
-                onChangeText={(tags) => setDraft({...draft, tags})}
-              />
-            </View>
-          </SettingsTile>
-        </View>
-
-        <View style={{marginTop: spacing.l}}>
-          <SettingsTile>
-            <View style={{padding: spacing.xl}}>
-              <PressableScale
-                accessibilityRole="button"
-                onPress={() => setShowAdvanced(!showAdvanced)}
-                style={{flexDirection: "row", alignItems: "center", paddingVertical: spacing.xs}}
-              >
-                <Text style={[typeScale.labelLarge, {color: colors.onSurface, flex: 1}]}>
-                  Edit front, back, and styling
-                </Text>
-                <Icon
-                  name={showAdvanced ? "keyboard_arrow_up" : "keyboard_arrow_down"}
-                  color={colors.onSurfaceVariant}
+        <SettingsGroup title="Export" style={{marginTop: spacing.l}}>
+          <View style={{paddingVertical: spacing.xs}}>
+            <FieldLabel label="Deck" />
+            <TextField
+              value={draft.deckName}
+              onChangeText={(deckName) => setDraft({...draft, deckName})}
+            />
+            {(collection?.decks.length ?? 0) > 0 && (
+              <View style={{marginTop: spacing.m}}>
+                <ChoiceRow
+                  label="Choose existing deck"
+                  value={draft.deckName}
+                  options={(collection?.decks ?? []).map((name) => ({id: name, name}))}
+                  onSelect={(name) => setDraft({...draft, deckName: String(name)})}
                 />
-              </PressableScale>
-              {showAdvanced && (
-                <View style={{marginTop: spacing.m}}>
-                  <ChoiceRow
-                    label="Note type"
-                    value={
-                      draft.modelId == null
-                        ? "Gaten cards (customizable)"
-                        : collection?.models[String(draft.modelId)] ??
-                          "Saved note type (unavailable)"
-                    }
-                    options={[
-                      {id: null, name: "Gaten cards (customizable)"},
-                      ...Object.entries(collection?.models ?? {}).map(([id, name]) => ({
-                        id: Number(id),
-                        name,
-                      })),
-                    ]}
-                    enabled={!loadingFields}
-                    onSelect={(modelId) => selectModel(modelId)}
-                  />
-                  {draft.modelId != null
-                    ? draft.modelFields.map((name, index) => (
-                        <View key={`${name}:${index}`} style={{marginTop: spacing.m}}>
-                          <ChoiceRow
-                            label={name}
-                            value={
-                              ANKI_FIELD_LABELS[
-                                (draft.fieldSources[index] ?? "EMPTY") as AnkiField
-                              ]
-                            }
-                            options={(Object.keys(ANKI_FIELD_LABELS) as AnkiField[]).map((field) => ({
-                              id: field,
-                              name: ANKI_FIELD_LABELS[field],
-                            }))}
-                            enabled={!loadingFields}
-                            onSelect={(selected) => {
-                              const mapping = draft.modelFields.map((_, position) =>
-                                position === index
-                                  ? String(selected)
-                                  : draft.fieldSources[position] ?? "EMPTY"
-                              );
-                              setDraft({...draft, fieldSources: mapping});
-                            }}
-                          />
-                        </View>
-                      ))
-                    : (
-                      <>
-                        <TemplateEditor
-                          label="Front (HTML)"
-                          value={draft.front}
-                          onChange={(front) => setDraft({...draft, front})}
-                        />
-                        <TemplateEditor
-                          label="Back (HTML)"
-                          value={draft.back}
-                          onChange={(back) => setDraft({...draft, back})}
-                        />
-                        <TemplateEditor
-                          label="Styling (CSS)"
-                          value={draft.css}
-                          onChange={(css) => setDraft({...draft, css})}
-                        />
-                        <Button
-                          variant="text"
-                          label="Restore default layout"
-                          onPress={() =>
-                            setDraft({
-                              ...draft,
-                              front: "{{Expression}}",
-                              back: "{{FrontSide}}<hr id=answer>{{Reading}}<br>{{Meaning}}",
-                              css:
-                                ".card { font-family: sans-serif; font-size: 24px; text-align: center; }\nsmall { font-size: 16px; }",
-                            })
+              </View>
+            )}
+          </View>
+          <View style={{paddingVertical: spacing.xs}}>
+            <FieldLabel label="Tags" />
+            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginBottom: spacing.xs}]}>Separate with spaces.</Text>
+            <TextField
+              value={draft.tags}
+              onChangeText={(tags) => setDraft({...draft, tags})}
+            />
+          </View>
+        </SettingsGroup>
+
+        <SettingsGroup title="Card layout" style={{marginTop: spacing.l}}>
+          <View style={{paddingVertical: spacing.xs}}>
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityState={{expanded: showAdvanced}}
+              onPress={() => setShowAdvanced(!showAdvanced)}
+              style={{flexDirection: "row", alignItems: "center", minHeight: 48, paddingVertical: spacing.xs}}
+            >
+              <Text style={[typeScale.labelLarge, {color: colors.onSurface, flex: 1}]}>
+                Edit front, back, and styling
+              </Text>
+              <Icon
+                name={showAdvanced ? "keyboard_arrow_up" : "keyboard_arrow_down"}
+                color={colors.onSurfaceVariant}
+              />
+            </PressableScale>
+            {showAdvanced && (
+              <View style={{marginTop: spacing.m}}>
+                <ChoiceRow
+                  label="Note type"
+                  value={
+                    draft.modelId == null
+                      ? "Gaten cards (customizable)"
+                      : collection?.models[String(draft.modelId)] ??
+                        "Saved note type (unavailable)"
+                  }
+                  options={[
+                    {id: null, name: "Gaten cards (customizable)"},
+                    ...Object.entries(collection?.models ?? {}).map(([id, name]) => ({
+                      id: Number(id),
+                      name,
+                    })),
+                  ]}
+                  enabled={!loadingFields}
+                  onSelect={(modelId) => selectModel(modelId)}
+                />
+                {draft.modelId != null
+                  ? draft.modelFields.map((name, index) => (
+                      <View key={`${name}:${index}`} style={{marginTop: spacing.m}}>
+                        <ChoiceRow
+                          label={name}
+                          value={
+                            ANKI_FIELD_LABELS[
+                              (draft.fieldSources[index] ?? "EMPTY") as AnkiField
+                            ]
                           }
+                          options={(Object.keys(ANKI_FIELD_LABELS) as AnkiField[]).map((field) => ({
+                            id: field,
+                            name: ANKI_FIELD_LABELS[field],
+                          }))}
+                          enabled={!loadingFields}
+                          onSelect={(selected) => {
+                            const mapping = draft.modelFields.map((_, position) =>
+                              position === index
+                                ? String(selected)
+                                : draft.fieldSources[position] ?? "EMPTY"
+                            );
+                            setDraft({...draft, fieldSources: mapping});
+                          }}
                         />
-                      </>
-                    )}
-                </View>
-              )}
-            </View>
-          </SettingsTile>
-        </View>
+                      </View>
+                    ))
+                  : (
+                    <>
+                      <TemplateEditor
+                        label="Front (HTML)"
+                        value={draft.front}
+                        onChange={(front) => setDraft({...draft, front})}
+                      />
+                      <TemplateEditor
+                        label="Back (HTML)"
+                        value={draft.back}
+                        onChange={(back) => setDraft({...draft, back})}
+                      />
+                      <TemplateEditor
+                        label="Styling (CSS)"
+                        value={draft.css}
+                        onChange={(css) => setDraft({...draft, css})}
+                      />
+                      <Button
+                        variant="text"
+                        label="Restore default layout"
+                        style={{alignSelf: "flex-start"}}
+                        onPress={() =>
+                          setDraft({
+                            ...draft,
+                            front: "{{Expression}}",
+                            back: "{{FrontSide}}<hr id=answer>{{Reading}}<br>{{Meaning}}",
+                            css:
+                              ".card { font-family: sans-serif; font-size: 24px; text-align: center; }\nsmall { font-size: 16px; }",
+                          })
+                        }
+                      />
+                    </>
+                  )}
+              </View>
+            )}
+          </View>
+        </SettingsGroup>
 
         {error != null && (
           <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.l}]}>
@@ -630,18 +625,18 @@ function ChoiceRow<T extends string | number | null>({
   const [open, setOpen] = useState(false);
   return (
     <View>
-      <Text style={[typeScale.labelLarge, {color: colors.onSurface, marginBottom: spacing.xs}]}>
-        {label}
-      </Text>
+      <FieldLabel label={label} />
       <PressableScale
         accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}`}
+        accessibilityState={{expanded: open}}
         onPress={() => setOpen(true)}
         disabled={!enabled}
         style={{
           borderWidth: 1,
           borderColor: colors.outlineVariant,
           borderRadius: 14,
-          minHeight: 49,
+          minHeight: 48,
           paddingVertical: spacing.s,
           paddingHorizontal: spacing.l,
           flexDirection: "row",
@@ -649,7 +644,7 @@ function ChoiceRow<T extends string | number | null>({
           justifyContent: "space-between",
         }}
       >
-        <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]} numberOfLines={1}>
+        <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1, flexShrink: 1}]}>
           {value}
         </Text>
         <Icon name="arrow_drop_down" color={colors.onSurfaceVariant} />
@@ -708,9 +703,17 @@ function ChoiceDialog<T extends string | number | null>({
                 key={`${option.name}:${index}`}
                 accessibilityRole="button"
                 onPress={() => onSelect(option.id)}
-                style={{paddingHorizontal: spacing.xl, paddingVertical: spacing.m}}
+                style={{
+                  minHeight: 48,
+                  paddingHorizontal: spacing.xl,
+                  paddingVertical: spacing.s,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  borderBottomWidth: index < options.length - 1 ? 1 : 0,
+                  borderBottomColor: colors.outlineVariant,
+                }}
               >
-                <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>{option.name}</Text>
+                <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{option.name}</Text>
               </PressableScale>
             ))}
           </ScrollView>

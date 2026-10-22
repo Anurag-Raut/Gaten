@@ -56,7 +56,7 @@ import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
 import * as ThemeBridge from "../native/GatenTheme";
 import * as Haptics from "../native/GatenHaptics";
-import {EXIT_EASING_REANIMATED, PAGE_EASING_REANIMATED, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
+import {EXIT_EASING_REANIMATED, FLOATING_BAR_ELEVATION, PAGE_EASING_REANIMATED, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
 import {Icon} from "./components";
 import type {IconName} from "./icons";
 
@@ -314,7 +314,6 @@ export function BottomBar({
   const capsuleInk = colors.onPrimary;
   const barColor = colors.bottom;
   const iconColor = colors.fine;
-  const background = colors.background;
   const insets = useSafeAreaInsets();
   // The one measured thing in the bar: how wide each label is, at the reader's own font scale.
   const [labelWidths, setLabelWidths] = useState<number[] | null>(null);
@@ -323,13 +322,15 @@ export function BottomBar({
   const visible = depth === 0 && !searchActive;
   const atNonHomeRoot = visible && state.index !== 0;
 
+  // The gesture area is left transparent so the bar's own shadow falls into it; only the icon
+  // contrast is decided here.
   useEffect(() => {
-    ThemeBridge.setNavigationBarAppearance(background, dark).catch(
+    ThemeBridge.setNavigationBarAppearance(dark).catch(
       (error: unknown) => {
         console.warn("Could not update Android navigation bar appearance.", error);
       },
     );
-  }, [background, dark]);
+  }, [dark]);
 
   // Back from a tab root leaves for Home; a pushed page is handled by its own stack, and at
   // Home's root Back belongs to the system. (The tab navigator's own `backBehavior` is
@@ -690,6 +691,13 @@ const styles = StyleSheet.create({
   surface: {
     alignSelf: "center",
     borderRadius: BAR_RADIUS,
+    // The app's one non-flat surface: the bar floats over the content it covers, so the offset is
+    // zero on purpose and the shadow falls on all four sides, with no directional drop.
+    elevation: FLOATING_BAR_ELEVATION,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: {width: 0, height: 0},
   },
   stage: {flex: 1},
   measureRow: {position: "absolute", flexDirection: "row", opacity: 0},

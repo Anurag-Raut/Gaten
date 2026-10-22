@@ -18,10 +18,9 @@ import React, {useEffect, useState} from "react";
 import {Text, View} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {Icon} from "../components";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
-import {SettingsGroup, SettingsPageScaffold, SettingsRow, SettingsTile} from "./settings-components";
+import {SettingsGroup, SettingsPageScaffold, SettingsRow} from "./settings-components";
 
 /** Where each attribution and licence lives. Opened in the browser, which may be nowhere. */
 const EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html";
@@ -32,34 +31,6 @@ const GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html";
 const CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch";
 const MANROPE_URL = "https://github.com/googlefonts/manrope";
 const WANAKANA_URL = "https://github.com/esnaultdev/wanakana-kt";
-
-/** One paragraph card: a policy, the icon that stands for it, and the sentence that says it. */
-function AboutCard({
-  icon,
-  title,
-  body,
-}: {
-  icon: "shield" | "cloud_off";
-  title: string;
-  body: string;
-}) {
-  const {colors} = useTheme();
-  return (
-    <SettingsTile>
-      <View style={{padding: spacing.xl}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Icon name={icon} size={20} color={colors.accent} />
-          <Text style={[typeScale.titleLarge, {color: colors.onSurface, marginStart: spacing.s}]}>
-            {title}
-          </Text>
-        </View>
-        <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
-          {body}
-        </Text>
-      </View>
-    </SettingsTile>
-  );
-}
 
 export function AboutScreen({onClose}: {onClose: () => void}) {
   const {colors} = useTheme();
@@ -81,74 +52,54 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
 
   return (
     <SettingsPageScaffold title="About" onClose={onClose}>
-      <View style={{marginTop: spacing.s}}>
-        <SettingsTile style={{padding: spacing.xl}}>
-          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>Gaten</Text>
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-            Circle Japanese on screen. Read it offline.
-          </Text>
-          <Text style={[typeScale.labelMedium, {color: colors.accent, marginTop: spacing.xs}]}>
-            {`Gaten ${versionName}`}
-          </Text>
-        </SettingsTile>
+      <View style={{paddingVertical: spacing.m}}>
+        <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>Gaten</Text>
+        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+          {versionName ? `Version ${versionName} · ` : ""}Japanese lookup, offline by default.
+        </Text>
       </View>
 
-      <View style={{marginTop: spacing.xl}}>
-        <AboutCard
-          icon="shield"
-          title="Offline by default"
-          body="The dictionary, the recognition and the lookup all run on this device, and the screenshot never leaves it."
-        />
-        <View style={{marginTop: spacing.l}}>
-          <AboutCard
-            icon="cloud_off"
-            title="Two network uses, both optional"
-            body="Downloading a text-recognition model from huggingface.co, and WaniKani if you connect a personal access token. Nothing else is ever sent."
-          />
-        </View>
-      </View>
+      <SettingsGroup title="Privacy" style={{marginTop: spacing.l}}>
+        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, paddingVertical: spacing.m}]}>
+          Lookup and recognition run on this device; screenshots stay here. Optional network use: model downloads and WaniKani when connected. Nothing else is sent.
+        </Text>
+      </SettingsGroup>
 
       <SettingsGroup title="Attributions" style={{marginTop: spacing.xl}}>
         <SettingsRow
           icon="public"
           title="EDRDG dictionary"
-          summary="JMdict and JMnedict, the dictionary Gaten reads: © EDRDG, CC BY-SA 4.0"
-          value="edrdg.org"
+          summary="JMdict and JMnedict · © EDRDG · CC BY-SA 4.0"
           onPress={() => open(EDRDG_LICENCE_URL)}
         />
         <SettingsRow
           icon="public"
           title="manga-ocr"
-          summary="Optional stylized-text model (kha-white, Apache-2.0) run on ONNX Runtime"
-          value="github.com/kha-white/manga-ocr"
+          summary="Optional model by kha-white · Apache-2.0 · ONNX Runtime"
           onPress={() => open(MANGA_OCR_URL)}
         />
         <SettingsRow
           icon="public"
           title="ML Kit"
-          summary="Google's on-device text recognition, which reads the screen when no model is installed"
-          value="developers.google.com/ml-kit"
+          summary="Google on-device text recognition"
           onPress={() => open(MLKIT_TERMS_URL)}
         />
         <SettingsRow
           icon="public"
           title="WaniKani"
-          summary="Reference content © Tofugu LLC. Gaten is not affiliated with WaniKani, and nothing from it is bundled with the app."
-          value="wanikani.com"
+          summary="Content © Tofugu LLC · Gaten is not affiliated; no content bundled"
           onPress={() => open(WANIKANI_URL)}
         />
         <SettingsRow
           icon="public"
           title="Manrope typeface"
-          summary="SIL Open Font License 1.1 — Mikhail Sharanda and the Manrope Project Authors. Bundled to draw Gaten's Latin text."
-          value="github.com/googlefonts/manrope"
+          summary="Bundled typeface · SIL OFL 1.1 · Mikhail Sharanda and Manrope Project Authors"
           onPress={() => open(MANROPE_URL)}
         />
         <SettingsRow
           icon="public"
           title="wanakana"
-          summary="MIT licence — the Kotlin port of WanaKana. Turns typed romaji into kana for dictionary search."
-          value="github.com/esnaultdev/wanakana-kt"
+          summary="MIT · Kotlin port of WanaKana for romaji-to-kana search"
           onPress={() => open(WANAKANA_URL)}
         />
       </SettingsGroup>
@@ -157,21 +108,21 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <Text
           style={[
             typeScale.bodySmall,
-            {color: colors.onSurfaceVariant, paddingHorizontal: spacing.l, paddingVertical: spacing.m},
+            {color: colors.onSurfaceVariant, paddingVertical: spacing.m},
           ]}
         >
           Gaten is free software under GPL-3.0-or-later, derived from CircleToSearch by AKS-Labs.
         </Text>
         <SettingsRow
           icon="gavel"
-          title="Read the licence"
-          summary="gnu.org/licenses/gpl-3.0"
+          title="GPL-3.0-or-later"
+          summary="Read the licence"
           onPress={() => open(GPL_URL)}
         />
         <SettingsRow
           icon="gavel"
-          title="CircleToSearch on GitHub"
-          summary="github.com/AKS-Labs/CircleToSearch"
+          title="CircleToSearch"
+          summary="Original project by AKS-Labs"
           onPress={() => open(CIRCLETOSEARCH_URL)}
         />
       </SettingsGroup>

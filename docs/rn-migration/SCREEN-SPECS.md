@@ -8,7 +8,7 @@ Haptics (Feedback.kt): Tick = CONTEXT_CLICK, Lookup = CLOCK_TICK, Confirm = LONG
 
 ## 1. App shell (GatenApp.kt + GatenNavigation.kt + GatenRootScene.kt + GatenKeys.kt)
 
-**Inputs/props:** themeMode, palette, accent + their change callbacks; `settingsPageRequest: String?` + `onSettingsPageRequestHandled()`. Three VMs owned here (outlive destinations): SearchViewModel, AnkiReviewViewModel, RecognitionViewModel.
+**Inputs/props:** themeMode, accent + their change callbacks; `settingsPageRequest: String?` + `onSettingsPageRequestHandled()`. Three VMs owned here (outlive destinations): SearchViewModel, AnkiReviewViewModel, RecognitionViewModel.
 
 **Structure:** four tabs `Home | Search | Review | Settings` (bar labels verbatim: "Home", "Search", "Review", "Settings"; icons outlined Home/Search/Style/Settings, no icon descriptions). Each tab owns an independent back stack seeded with its root key. Displayed entries = Home's stack plus the selected tab's stack (Home only when Home selected) — so Back from any tab's root exits to Home, and at Home's root Back belongs to the system.
 
@@ -66,7 +66,7 @@ Compose app only: `searchFocus.ts` is deleted and the pager's own keyboard dismi
 2. **ScreenAccessCard**: on → surface colors, dot primary, "Screen access is on" / "Circle any Japanese text on screen to look it up."; off → errorContainer colors, dot error, "Screen access is off" / "Gaten cannot read the screen until you turn it on." + filled Button "Turn on".
 3. Group **"Look up"**: row "Screen lookup" (support "Floating button, Quick Settings tile and hardware key", value "On"/"Off") → page `lookup`; row "Text recognition" (support "Optional stylized-text model", value = installed model label or "None") → `recognition`.
 4. Group **"Study"**: row "Anki cards" (summary = "Deck, note type and card layout" when Ready, "AnkiDroid is not installed" when NotInstalled, "Allow Gaten to add cards to AnkiDroid" when NeedsPermission; value = deck name only when Ready) → `anki`; row "WaniKani" (support "Kanji and vocabulary reference", value "Connected"/"Not connected") → `wanikani`.
-5. Group **"App"**: row "Appearance" (support "Theme, palette and accent", value "%mode · %accent") → `appearance`; row "About" (support "Offline, privacy, licences", value = version) → `about`.
+5. Group **"App"**: row "Appearance" (support "Theme and accent", value "%mode · %accent") → `appearance`; row "About" (support "Offline, privacy, licences", value = version) → `about`.
 
 **Row anatomy (SettingsRow):** ListItem: 40dp rounded-square icon badge filled with `primary`, icon tinted onPrimary (22dp); headline = row title; supporting = summary; trailing = one-line value (labelMedium, max width 160dp, ellipsized) + chevron *only when the row navigates*. Rows merge descendants semantically. Dividers inset 72dp from start.
 
@@ -144,11 +144,11 @@ Compose app only: `searchFocus.ts` is deleted and the pager's own keyboard dismi
 
 ## 8. Appearance settings (AppearanceSettingsScreen.kt)
 
-**Inputs:** themeMode/palette/accent + change callbacks (state owned by the shell — a tap recolours this very page immediately; stored by ThemePreferences in `gaten_settings`: keys theme_mode/palette/accent, defaults System/Gaten/Indigo). `dark = themeMode.isDark(isSystemInDarkTheme())` — previews use the reader's choice, not the device's.
+**Inputs:** themeMode/accent + change callbacks (state owned by the shell — a tap recolours this very page immediately; stored by ThemePreferences in `gaten_settings`: keys theme_mode/accent, defaults System/Indigo). `dark = themeMode.isDark(isSystemInDarkTheme())` — previews use the reader's choice, not the device's.
 
 **Layout (SettingsPageScaffold "Appearance"):**
 1. **Theme** card (support "Follow your device, or keep Gaten light or dark on its own."): single-choice segmented row System / Light / Dark.
-2. **Palette** card (support "The colour of Gaten's paper. Your selected accent stays unchanged."): FlowRow of 4 palettes Gaten/Mono/Cool/Warm; each item = 64×48dp preview box (border 2dp onSurface when selected else 1dp outline, inner 4dp padding filled with the palette's neutral background for the current mode) containing "Aa" (titleMedium) + name label below. Role RadioButton. No accent in palette previews.
+2. **Palette** card (support "The colour of Gaten's paper. Your selected accent stays unchanged."): FlowRow of 4 palettes Gaten/Mono/Cool/Warm; each item = 64×48dp preview box (border 2dp onSurface when selected else 1dp outline, inner 4dp padding filled with the palette's neutral background for the current mode) containing "Aa" (titleMedium) + name label below. Role RadioButton. No accent in palette previews. *Not in the RN port: the palette choice was removed, so there is no Palette card and the shipped Gaten ladder is the only one.*
 3. **Accent** card (support "The one colour in Gaten: buttons, the edge outline and the lasso."): FlowRow max 4 per row of 7 accents Indigo/Blue/Violet/Teal/Green/Rose/Black; each = 48dp tap target containing a 40dp circle: 2dp onSurface ring when selected, 5dp inset, inner circle filled with the accent's primary for the current mode; name below. Role RadioButton + pressScale. Tick haptic ONLY when selecting a different accent (tapping the selected one changes nothing, gets nothing).
 4. Group "Feedback": row "Haptics" (summary "Follows your phone's settings.") — informational, no control; divider; **SoundsRow**: VolumeUp icon + "Sounds" + "A short cue when a word is added to Anki, and when a review session ends." + Switch (a11y "Sounds") reading/writing `feedback_sounds` (default false). Tick only when the value actually moved.
 
@@ -285,7 +285,7 @@ Shared panel drawn by the search reference screen, the review screen (inline) an
 ## 15. Preference/settings keys each screen reads (for the RN bridge slices)
 
 All in SharedPreferences file **"gaten_settings"**:
-- ThemePreferences: `theme_mode` (System|Light|Dark, default System), `palette` (Gaten|Mono|Cool|Warm, default Gaten), `accent` (Indigo|Blue|Violet|Teal|Green|Rose|Black, default Indigo). Read by the activity theme + overlay + bubble.
+- ThemePreferences: `theme_mode` (System|Light|Dark, default System), `palette` (Gaten|Mono|Cool|Warm, default Gaten), `accent` (Indigo|Blue|Violet|Teal|Green|Rose|Black, default Indigo). Read by the activity theme + overlay + bubble. *In the RN port the palette choice was removed: only `theme_mode` and `accent` are written or read, and a `palette` value stored by an older install is ignored.*
 - FeedbackPreferences: `feedback_sounds` (Bool, default false).
 - TriggerPreferences: floating-button enabled flag, `tileAdded`, broadcast action `ACTION_FLOATING_BUTTON_CHANGED` (explicit-package broadcast required).
 - AnkiPreferences (AnkiSettings): deckName, tags, modelId, front, back, css, modelFields, fieldSources.
