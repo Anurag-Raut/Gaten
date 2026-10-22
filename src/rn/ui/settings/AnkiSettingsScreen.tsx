@@ -27,10 +27,16 @@ import {
   type Permission,
 } from "react-native";
 import * as GatenAnki from "../../native/GatenAnki";
-import type {AnkiPreferencesResult, AnkiStatus} from "../../native/GatenAnki";
+import type {
+  AnkiDeckResult,
+  AnkiPreferencesResult,
+  AnkiSettingsError,
+  AnkiStatus,
+} from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import {Button, Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
+import {reviewStore} from "../review/review-store";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -39,6 +45,7 @@ import {
   FieldLabel,
   HelpAction,
   SettingsTile,
+  SwitchRow,
   TextField,
 } from "./settings-components";
 import {
@@ -73,23 +80,54 @@ export function AnkiSettingsScreen({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<AnkiStatus>("notInstalled");
   const [collection, setCollection] = useState<GatenAnki.AnkiCollectionResult | null>(null);
+  const [studyDecks, setStudyDecks] = useState<AnkiDeckResult[]>([]);
+  const [studyDeckIds, setStudyDeckIds] = useState<number[] | null>(null);
+  const [preferencesRefresh, setPreferencesRefresh] = useState(0);
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesLoadFailed, setPreferencesLoadFailed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingFields, setLoadingFields] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [saveValidationError, setSaveValidationError] = useState<AnkiSettingsError | null>(null);
   const [readFailed, setReadFailed] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // What is on disk, to tell an edited draft from an untouched one.
   const savedRef = useRef<AnkiPreferencesResult | null>(null);
+  const savedStudyDeckIdsRef = useRef<number[] | null>(null);
 
   // The saved configuration arrives once, and the draft is seeded from it: the page never argues
   // with a form it has not read.
   useEffect(() => {
     let cancelled = false;
-    void GatenAnki.getPreferences().then((saved) => {
-      if (cancelled) return;
-      savedRef.current = saved;
-      setDraft(saved);
+    setPreferencesLoading(true);
+    setPreferencesLoadFailed(false);
+    savedRef.current = null;
+    savedStudyDeckIdsRef.current = null;
+    setDraft(null);
+    setStudyDeckIds(null);
+    void Promise.all([GatenAnki.getPreferences(), GatenAnki.getStudyDeckIds()]).then(
+      ([saved, savedDeckIds]) => {
+        if (cancelled) return;
+        savedRef.current = saved;
+        savedStudyDeckIdsRef.current = normalizeDeckIds(savedDeckIds);
+        setStudyDeckIds(normalizeDeckIds(savedDeckIds));
+        setDraft(saved);
+      },
+      () => {
+        if (!cancelled) setPreferencesLoadFailed(true);
+      }
+    ).finally(() => {
+      if (!cancelled) setPreferencesLoading(false);
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [preferencesRefresh]);
+
+  useEffect(() => {
+    let cancelled = false;
     void GatenAnki.status().then((v) => {
       if (!cancelled) setStatus(v);
     });
@@ -117,10 +155,11 @@ export function AnkiSettingsScreen({
     setLoading(false);
     if (status === "ready") {
       setLoading(true);
-      void GatenAnki.collection().then(
-        (result) => {
+      void Promise.all([GatenAnki.collection(), GatenAnki.decks()]).then(
+        ([result, decks]) => {
           if (cancelled) return;
           setCollection(result);
+          setStudyDecks(decks);
           setLoading(false);
         },
         () => {
@@ -131,6 +170,7 @@ export function AnkiSettingsScreen({
       );
     } else {
       setCollection(null);
+      setStudyDecks([]);
     }
     return () => {
       cancelled = true;
@@ -138,10 +178,16 @@ export function AnkiSettingsScreen({
   }, [status, refresh]);
 
   const saved = savedRef.current;
-  const dirty = draft != null && saved != null && !draftsEqual(draft, saved);
+  const draftDirty = draft != null && saved != null && !draftsEqual(draft, saved);
+  const studyDecksDirty =
+    studyDeckIds != null &&
+    savedStudyDeckIdsRef.current != null
+      ? !sameDeckIds(studyDeckIds, savedStudyDeckIdsRef.current)
+      : studyDeckIds !== savedStudyDeckIdsRef.current;
+  const dirty = draftDirty || studyDecksDirty;
   // Shown beside the disabled Save, and only for a draft the reader has actually changed: an
   // untouched configuration is never argued with.
-  const error = dirty && draft != null ? validationError(draft) : null;
+  const error = draftDirty && draft != null ? validationError(draft) : null;
 
   /** Leaves, asking first only when the draft differs from what is saved. */
   const leave = () => {
@@ -150,14 +196,61 @@ export function AnkiSettingsScreen({
   };
 
   if (draft == null || saved == null) {
-    // The stored configuration is still arriving; an empty page instead of a half-read form.
-    return <View style={{flex: 1, backgroundColor: colors.background}} />;
+    return (
+      <View style={{flex: 1, backgroundColor: colors.background, padding: spacing.xl, justifyContent: "center"}}>
+        <View style={{alignSelf: "flex-start", position: "absolute", top: insets.top + spacing.s, left: spacing.l}}>
+          <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onClose} color={colors.onSurface} />
+        </View>
+        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+          {preferencesLoadFailed ? "Could not read Anki settings" : "Reading Anki settings…"}
+        </Text>
+        {preferencesLoadFailed && (
+          <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
+            <Button
+              label="Retry"
+              onPress={() => setPreferencesRefresh((value) => value + 1)}
+              disabled={preferencesLoading}
+            />
+          </View>
+        )}
+      </View>
+    );
   }
 
   const save = () => {
-    void GatenAnki.savePreferences({...draft, validationError: error}).then(() => {
-      void GatenPlatform.toast("Anki settings saved");
-      onClose();
+    setSaving(true);
+    setSaveFailed(false);
+    setSaveValidationError(null);
+    void (async () => {
+      try {
+        if (draftDirty) {
+          const nativeError = await GatenAnki.savePreferences({...draft, validationError: error});
+          if (nativeError != null) {
+            setSaveValidationError(nativeError);
+            return;
+          }
+          savedRef.current = draft;
+        }
+        if (studyDecksDirty) {
+          await GatenAnki.saveStudyDeckIds(studyDeckIds);
+          savedStudyDeckIdsRef.current = normalizeDeckIds(studyDeckIds);
+          reviewStore.studyDeckSelectionChanged(savedStudyDeckIdsRef.current);
+        }
+        void GatenPlatform.toast("Anki settings saved");
+        onClose();
+      } catch {
+        setSaveFailed(true);
+      } finally {
+        setSaving(false);
+      }
+    })();
+  };
+
+  const toggleStudyDeck = (deckId: number, selected: boolean) => {
+    setStudyDeckIds((currentIds) => {
+      const current = currentIds ?? studyDecks.map((deck) => deck.id);
+      const next = selected ? [...current, deckId] : current.filter((id) => id !== deckId);
+      return [...new Set(next)].sort((left, right) => left - right);
     });
   };
 
@@ -234,13 +327,13 @@ export function AnkiSettingsScreen({
       >
         <IconButton name="arrow_back" accessibilityLabel="Back" onPress={leave} color={colors.onSurface} />
         <Text style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]} numberOfLines={1}>
-          Customize cards
+          Anki cards
         </Text>
         <HelpAction paragraphs={HELP_PARAGRAPHS} />
         <Button
           variant="text"
           label="Save"
-          disabled={!dirty || error != null || loading || loadingFields}
+          disabled={!dirty || (draftDirty && error != null) || preferencesLoading || loading || loadingFields || saving}
           onPress={save}
         />
       </View>
@@ -281,8 +374,11 @@ export function AnkiSettingsScreen({
                 <Button
                   variant="text"
                   label="Refresh from AnkiDroid"
-                  disabled={loading || loadingFields}
-                  onPress={() => setRefresh((n) => n + 1)}
+                  disabled={loading || loadingFields || saving || dirty || preferencesLoading}
+                  onPress={() => {
+                    setRefresh((n) => n + 1);
+                    setPreferencesRefresh((value) => value + 1);
+                  }}
                 />
               </View>
             )}
@@ -298,6 +394,59 @@ export function AnkiSettingsScreen({
             )}
           </View>
         </SettingsTile>
+
+        <View style={{marginTop: spacing.l}}>
+          <SettingsTile>
+            <View style={{padding: spacing.xl, gap: spacing.s}}>
+              <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Study decks</Text>
+              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+                Choose which AnkiDroid decks appear in Gaten review. The export destination is separate.
+              </Text>
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+                Including a parent deck also includes its subdecks, as in AnkiDroid.
+              </Text>
+              {status !== "ready" ? (
+                <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+                  Allow AnkiDroid access to choose study decks.
+                </Text>
+              ) : loading ? (
+                <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+                  Reading AnkiDroid decks…
+                </Text>
+              ) : studyDecks.length === 0 ? (
+                <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+                  No decks are available.
+                </Text>
+              ) : (
+                <>
+                  {studyDecks.map((deck) => (
+                    <SwitchRow
+                      key={deck.id}
+                      icon="library_books"
+                      title={deck.name}
+                      value={studyDeckIds == null || studyDeckIds.includes(deck.id)}
+                      summary={
+                        studyDeckIds == null || studyDeckIds.includes(deck.id)
+                          ? "Included in Gaten review"
+                          : "Hidden from Gaten review"
+                      }
+                      onValueChange={(selected) => toggleStudyDeck(deck.id, selected)}
+                      disabled={saving}
+                    />
+                  ))}
+                  <View style={{alignSelf: "flex-start"}}>
+                    <Button
+                      variant="text"
+                      label="Include all decks"
+                      disabled={saving}
+                      onPress={() => setStudyDeckIds(null)}
+                    />
+                  </View>
+                </>
+              )}
+            </View>
+          </SettingsTile>
+        </View>
 
         <View style={{marginTop: spacing.l}}>
           <SettingsTile>
@@ -438,6 +587,16 @@ export function AnkiSettingsScreen({
             {VALIDATION_MESSAGES[error]}
           </Text>
         )}
+        {saveValidationError != null && (
+          <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.l}]}>
+            {VALIDATION_MESSAGES[saveValidationError]}
+          </Text>
+        )}
+        {saveFailed && (
+          <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.l}]}>
+            Could not save Anki settings. Your changes are still here; try Save again.
+          </Text>
+        )}
       </ScrollView>
 
       {confirmDiscard && (
@@ -561,6 +720,15 @@ function ChoiceDialog<T extends string | number | null>({
   );
 }
 
+function normalizeDeckIds(ids: number[] | null): number[] | null {
+  return ids == null ? null : [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))]
+    .sort((left, right) => left - right);
+}
+
+function sameDeckIds(left: number[], right: number[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
 /** One monospace template editor, three lines tall and eight at most. */
 function TemplateEditor({
   label,
@@ -610,7 +778,7 @@ function DiscardDialog({
       }
     >
       <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-        Your deck, tags, field mapping and template edits are not saved yet.
+        Your deck visibility, export destination, tags, field mapping and template edits are not saved yet.
       </Text>
     </DialogShell>
   );

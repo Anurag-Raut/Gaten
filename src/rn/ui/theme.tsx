@@ -31,7 +31,11 @@ import type {
   ThemeMode,
 } from "../native/GatenTheme";
 
-/** Action roles are separate from accent roles so focus and charts keep the selected accent. */
+/**
+ * Gaten's own roles over the Material map. The action roles point at the accent — a button and the
+ * selected navigation pill are the same tone — while the named `accent`/`accentSubtle` aliases let a
+ * screen say "accent" where the meaning is the accent itself rather than an action.
+ */
 export interface ThemeColors extends ThemeColorMap {
   bottom: string;
   fine: string;
@@ -145,10 +149,14 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         ...colorMap,
         bottom: dark ? "#1C1D21" : "#F5F5F6",
         fine: dark ? "#777781" : "#A1A1AB",
-        actionPrimary: dark ? "#F5F5F7" : "#18181B",
-        onActionPrimary: dark ? "#17171A" : "#FFFFFF",
-        actionSecondary: colorMap.surfaceVariant,
-        onActionSecondary: colorMap.onSurface,
+        // Every button wears the reader's accent: the action roles are the accent's own tones, so a
+        // filled action and the selected navigation pill are the same colour by construction, and
+        // changing the accent in Settings repaints both. `accent`/`onPrimary` are the pairing
+        // PaletteTest already holds to contrast in either mode.
+        actionPrimary: colorMap.primary,
+        onActionPrimary: colorMap.onPrimary,
+        actionSecondary: colorMap.primaryContainer,
+        onActionSecondary: colorMap.onPrimaryContainer,
         iconPrimary: dark ? colorMap.onSurface : "#000000",
         iconSecondary: dark ? "#909099" : "#83838C",
         accent: colorMap.primary,

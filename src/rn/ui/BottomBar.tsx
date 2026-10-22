@@ -56,7 +56,7 @@ import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
 import * as ThemeBridge from "../native/GatenTheme";
 import * as Haptics from "../native/GatenHaptics";
-import {PRESS_EASING_REANIMATED, shape, typeScale} from "./tokens";
+import {EXIT_EASING_REANIMATED, PAGE_EASING_REANIMATED, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
 import {Icon} from "./components";
 import type {IconName} from "./icons";
 
@@ -90,7 +90,15 @@ const TAB_ICONS: Record<string, IconName> = {
 };
 
 /**
- * How long the glyph waits before its arrival gesture: the pager's own settle is ~250 ms, so
+ * The bar's own arrival and departure, in ms. The bar is chrome the pager and a pushed page share
+ * the frame with, so it cannot pop: leaving takes a shorter, accelerating drop below the fold
+ * (page push or the search opening), and arriving takes a slightly longer rise on the decelerating
+ * page curve, timed to land with the page that uncovered it.
+ */
+const BAR_ENTER_MS = 260;
+const BAR_EXIT_MS = 180;
+
+/** How long the glyph waits before its arrival gesture: the pager's own settle is ~250 ms, so
  * starting a little before that keeps the gesture clear of the capsule's travel without feeling
  * detached from the tap.
  */
@@ -362,9 +370,31 @@ export function BottomBar({
     transform: [{translateX: capsule.value}],
   }));
 
-  if (!visible) {
-    return null;
-  }
+  // The bar's own arrival and departure. A pushed page and the search cover the frame the bar sits
+  // in, so the bar leaves with them — dropping below the fold and fading, over one shorter beat than
+  // it takes to come back — rather than blinking out of the push's first frame. `hidden` is 0 at rest
+  // and 1 once the bar is clear of the screen, and it is the only thing this motion reads, so an exit
+  // interrupted by a pop reverses from wherever the bar got to instead of restarting.
+  const hidden = useSharedValue(visible ? 0 : 1);
+  // The bar's own box plus the gesture inset, so 1 sits just past the screen edge rather than resting
+  // on it; the extra [spacing.m] keeps the last of the travel from being spent unseen.
+  const travel = BAR_HEIGHT + insets.bottom + spacing.m;
+  useEffect(() => {
+    if (reducedMotion) {
+      cancelAnimation(hidden);
+      hidden.value = visible ? 0 : 1;
+      return;
+    }
+    hidden.value = withTiming(visible ? 0 : 1, {
+      duration: visible ? BAR_ENTER_MS : BAR_EXIT_MS,
+      easing: visible ? PAGE_EASING_REANIMATED : EXIT_EASING_REANIMATED,
+    });
+  }, [visible, reducedMotion, hidden]);
+
+  const barMotion = useAnimatedStyle(() => ({
+    opacity: 1 - hidden.value,
+    transform: [{translateY: hidden.value * travel}],
+  }));
 
   const measureRow = (
     <View
@@ -465,15 +495,23 @@ export function BottomBar({
   });
 
   // Only the floating track paints a surface; the pager continues beneath its margins and gesture inset.
+  // While the bar is out (or on its way out) it is pointer-transparent and out of the accessibility
+  // tree, so an invisible control is never what a tap or the reader's focus lands on.
   return (
-    <View
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: BAR_HEIGHT + insets.bottom,
-      }}
+    <Reanimated.View
+      pointerEvents={visible ? "auto" : "none"}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+      style={[
+        {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: BAR_HEIGHT + insets.bottom,
+        },
+        barMotion,
+      ]}
     >
       <View
         style={[
@@ -644,7 +682,7 @@ export function BottomBar({
         </View>
       </View>
       </View>
-    </View>
+    </Reanimated.View>
   );
 }
 

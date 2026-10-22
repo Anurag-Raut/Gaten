@@ -39,15 +39,29 @@ internal fun normaliseTimeTaken(ms: Long): Long = ms.coerceAtLeast(0)
 
 /**
  * The `deck_count` column — a JSON array AnkiDroid orders as `[learn, review, new]` — as a
- * [DeckCounts]. A missing or malformed array counts as zero rather than failing the whole list.
+ * [DeckCounts]. Missing or malformed counts fail the deck-list read instead of looking like zero.
  */
 internal fun deckCountsFrom(raw: String?): DeckCounts {
-    val counts = jsonInts(raw)
-    return DeckCounts(
-        learn = counts.getOrElse(0) { 0 },
-        review = counts.getOrElse(1) { 0 },
-        new = counts.getOrElse(2) { 0 }
-    )
+    require(!raw.isNullOrBlank()) { "Missing deck_count" }
+    val array = try {
+        JSONArray(raw)
+    } catch (e: JSONException) {
+        throw IllegalArgumentException("Malformed deck_count", e)
+    }
+    require(array.length() == 3) { "deck_count must contain exactly three counts" }
+
+    fun countAt(index: Int): Int {
+        val value = array.get(index)
+        val number = when (value) {
+            is Int -> value.toLong()
+            is Long -> value
+            else -> null
+        }
+        return number?.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt()
+            ?: throw IllegalArgumentException("Invalid deck_count value at index $index")
+    }
+
+    return DeckCounts(learn = countAt(0), review = countAt(1), new = countAt(2))
 }
 
 /** Whether the `deck_dyn` column marks the deck as a filtered deck. AnkiDroid writes a boolean. */

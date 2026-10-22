@@ -227,9 +227,10 @@ async function readAnki(): Promise<AnkiRead> {
   }
 
   try {
-    const decks = await Anki.decks();
+    const [allDecks, includedIds] = await Promise.all([Anki.decks(), Anki.getStudyDeckIds()]);
+    const decks = includedIds == null ? allDecks : allDecks.filter((deck) => includedIds.includes(deck.id));
     // Parent deck counts include their children; adding nested rows would count cards twice.
-    const totals = decks.filter((deck) => !deck.name.includes("::")).reduce(
+    const totals = decks.filter((deck) => !decks.some((parent) => deck.name.startsWith(`${parent.name}::`))).reduce(
       (sum, deck) => ({
         newCount: sum.newCount + deck.newCount,
         learnCount: sum.learnCount + deck.learnCount,
@@ -270,11 +271,12 @@ async function readAnki(): Promise<AnkiRead> {
 }
 
 /**
- * Loads home data only while Home is focused, then refreshes again when the app returns to the
+ * Loads home data once when the screen mounts — every tab is mounted up front, so the numbers are
+ * already there when the reader swipes to Home — and refreshes again when the app returns to the
  * foreground. Independent reads keep a history failure from masking either study service.
  */
-export function useHomeDashboard(active: boolean): HomeDashboardData {
-  const waniKaniStats = useWaniKaniStats(active);
+export function useHomeDashboard(): HomeDashboardData {
+  const waniKaniStats = useWaniKaniStats();
   const [anki, setAnki] = useState(EMPTY_ANKI);
   const [streak, setStreak] = useState(EMPTY_STREAK);
   const [recentLookups, setRecentLookups] = useState<SearchResult[]>([]);
@@ -351,16 +353,15 @@ export function useHomeDashboard(active: boolean): HomeDashboardData {
   }, [loadAnki, loadRecentLookups]);
 
   useEffect(() => {
-    if (active) load();
-  }, [active, load]);
+    load();
+  }, [load]);
 
   useEffect(() => {
-    if (!active) return;
     const subscription = AppState.addEventListener("change", (status) => {
       if (status === "active") load();
     });
     return () => subscription.remove();
-  }, [active, load]);
+  }, [load]);
 
   let waniKani: HomeWaniKaniState;
   switch (waniKaniStats.status) {

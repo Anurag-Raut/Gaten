@@ -366,8 +366,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   compactFieldShell: {
-    height: 49,
-    minHeight: 49,
+    minHeight: 52,
     borderRadius: shape.small,
     marginHorizontal: 0,
     marginVertical: 0,
@@ -375,7 +374,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     gap: 13,
   },
-  field: {flex: 1, padding: 0, ...typeScale.bodyMedium},
+  field: {flex: 1, minWidth: 0, paddingHorizontal: 0, paddingVertical: spacing.m, ...typeScale.bodyMedium},
   limitNote: {marginHorizontal: spacing.xl, marginTop: spacing.xs},
   header: {marginTop: spacing.s},
   resultCount: {marginBottom: spacing.xs},

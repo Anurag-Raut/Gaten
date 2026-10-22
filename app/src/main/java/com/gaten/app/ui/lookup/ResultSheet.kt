@@ -94,7 +94,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -110,7 +109,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.luminance
 import com.gaten.app.R
 import com.gaten.app.anki.AddResult
 import com.gaten.app.anki.AnkiCard
@@ -154,15 +152,14 @@ private val RightSheetShape = RoundedCornerShape(topStart = SheetShape, bottomSt
  */
 private val CompactButtonHeight = 52.dp
 
-/** Primary actions use the neutral ink role; the selected accent remains available for indicators. */
+/** Primary actions wear the reader's accent — the same tone as the selected navigation pill. */
 @Composable
 private fun resultActionButtonColors() = run {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     ButtonDefaults.buttonColors(
-        containerColor = if (dark) Color(0xFFF5F5F7) else Color(0xFF18181B),
-        contentColor = if (dark) Color(0xFF17171A) else Color.White,
-        disabledContainerColor = if (dark) Color(0xFF303136) else Color(0xFFE9E9ED),
-        disabledContentColor = if (dark) Color(0xFFB0B0BA) else Color(0xFF6C6C75)
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 

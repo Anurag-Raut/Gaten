@@ -100,6 +100,9 @@ interface GatenAnkiNative {
   >;
   getPreferences(): Promise<AnkiPreferencesResult>;
   savePreferences(settings: AnkiPreferencesResult): Promise<AnkiSettingsError | null>;
+  /** Null means all decks (the default); an empty list means no decks selected. */
+  getStudyDeckIds(): Promise<number[] | null>;
+  saveStudyDeckIds(ids: number[] | null): Promise<void>;
   shareToAnkiDroid(entry: {
     primary: string;
     kana: string[];
@@ -233,4 +236,14 @@ export function savePreferences(
   settings: AnkiPreferencesResult
 ): Promise<AnkiSettingsError | null> {
   return GatenAnki.savePreferences(settings);
+}
+
+/** The selected review decks; null means all decks for existing installs. */
+export function getStudyDeckIds(): Promise<number[] | null> {
+  return GatenAnki.getStudyDeckIds();
+}
+
+/** Saves selected review deck ids independently of the export destination. */
+export function saveStudyDeckIds(ids: number[] | null): Promise<void> {
+  return GatenAnki.saveStudyDeckIds(ids);
 }

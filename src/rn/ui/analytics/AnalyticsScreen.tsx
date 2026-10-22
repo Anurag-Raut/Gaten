@@ -39,7 +39,6 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import Svg, {Circle} from "react-native-svg";
 import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
@@ -633,9 +632,8 @@ export function AnalyticsScreen({
   const {colors} = theme;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const active = useIsFocused();
-  const anki = useAnkiStats(active);
-  const wanikani = useWaniKaniStats(active);
+  const anki = useAnkiStats();
+  const wanikani = useWaniKaniStats();
 
   const ankiData = anki.data;
   const wkData = wanikani.snapshot;

@@ -16,6 +16,7 @@ import com.gaten.app.wanikani.WaniKaniFailure
 import com.gaten.app.wanikani.WaniKaniLessonItem
 import com.gaten.app.wanikani.WaniKaniLessonQueue
 import com.gaten.app.wanikani.WaniKaniLessonStart
+import com.gaten.app.wanikani.WaniKaniLearningPreferences
 import com.gaten.app.wanikani.WaniKaniLookup
 import com.gaten.app.wanikani.WaniKaniRepository
 import com.gaten.app.wanikani.WaniKaniReviewItem
@@ -29,6 +30,8 @@ import com.gaten.app.wanikani.waniKaniStats
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The WaniKani reference, for the RN screens.
@@ -57,6 +60,8 @@ class GatenWaniKaniModule(
     reactContext: com.facebook.react.bridge.ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext) {
     private val scope = bridgeScope()
+    private val learningPreferences = WaniKaniLearningPreferences(reactContext)
+    private val lessonStartMutex = Mutex()
 
     init {
         GatenBridgeEmitter.attach(reactContext)
@@ -72,6 +77,34 @@ class GatenWaniKaniModule(
     @ReactMethod
     fun isConfigured(promise: Promise) {
         promise.resolve(WaniKaniRepository.isConfigured(reactApplicationContext))
+    }
+
+    /** Reads the optional daily lesson goal and this device's count of successful starts today. */
+    @ReactMethod
+    fun getLearningPreferences(promise: Promise) {
+        try {
+            promise.resolve(learningPreferences.read().toJsMap())
+        } catch (e: Exception) {
+            promise.reject(CODE_REPOSITORY, e.message ?: "Could not read WaniKani preferences", e)
+        }
+    }
+
+    /** Saves a daily lesson goal; null means unlimited. */
+    @ReactMethod
+    fun setDailyLessonLimit(limit: Double?, promise: Promise) {
+        try {
+            val validatedLimit = limit?.let {
+                require(it.isFinite() && it % 1.0 == 0.0 && it in 1.0..1000.0) {
+                    "Daily lesson limit must be a whole number from 1 to 1000, or unlimited."
+                }
+                it.toInt()
+            }
+            promise.resolve(learningPreferences.setDailyLimit(validatedLimit).toJsMap())
+        } catch (e: IllegalArgumentException) {
+            promise.reject("WK_INVALID_DAILY_LIMIT", e.message, e)
+        } catch (e: Exception) {
+            promise.reject(CODE_REPOSITORY, e.message ?: "Could not save WaniKani preferences", e)
+        }
     }
 
     /**
@@ -314,25 +347,47 @@ class GatenWaniKaniModule(
 
     /**
      * Starts one lesson with `PUT /assignments/<id>/start`, which moves it into the review queue.
-     * Resolves `{ status: "started" }`, `{ status: "needsToken" }`, `{ status: "authRejected" }` or
-     * `{ status: "failed", failure, retryAfterSeconds? }`, exactly as [submitReview] does.
+     * Enforces the device-local daily limit before starting a new assignment. Same-day successful
+     * assignment retries resolve as started without another request. Other outcomes are started,
+     * dailyLimitReached (with the limit and count), needsToken, authRejected or failed.
      */
     @ReactMethod
     fun startLesson(assignmentId: Double, promise: Promise) {
+        if (!assignmentId.isFinite() || assignmentId % 1.0 != 0.0 ||
+            assignmentId !in 1.0..Int.MAX_VALUE.toDouble()
+        ) {
+            promise.reject("WK_INVALID_ASSIGNMENT_ID", "Assignment id must be a positive whole number.")
+            return
+        }
+        val id = assignmentId.toInt()
         scope.launch {
             try {
-                when (
-                    val result = WaniKaniRepository.startLesson(
-                        reactApplicationContext,
-                        assignmentId.toInt()
-                    )
-                ) {
-                    WaniKaniLessonStart.Started -> promise.resolve(status("started"))
-                    WaniKaniLessonStart.NeedsToken -> promise.resolve(status("needsToken"))
-                    WaniKaniLessonStart.AuthRejected -> promise.resolve(status("authRejected"))
-                    is WaniKaniLessonStart.Unreachable -> promise.resolve(
-                        unreachable(result.failure, result.retryAfterSeconds)
-                    )
+                lessonStartMutex.withLock {
+                    if (!WaniKaniRepository.isConfigured(reactApplicationContext)) {
+                        promise.resolve(status("needsToken"))
+                        return@withLock
+                    }
+                    if (learningPreferences.wasStartedToday(id)) {
+                        promise.resolve(status("started"))
+                        return@withLock
+                    }
+                    val preferences = learningPreferences.read()
+                    val dailyLimit = preferences.dailyLimit
+                    if (dailyLimit != null && preferences.learnedToday >= dailyLimit) {
+                        promise.resolve(dailyLimitReached(dailyLimit, preferences.learnedToday))
+                        return@withLock
+                    }
+                    when (val result = WaniKaniRepository.startLesson(reactApplicationContext, id)) {
+                        WaniKaniLessonStart.Started -> {
+                            learningPreferences.recordStartedAssignment(id)
+                            promise.resolve(status("started"))
+                        }
+                        WaniKaniLessonStart.NeedsToken -> promise.resolve(status("needsToken"))
+                        WaniKaniLessonStart.AuthRejected -> promise.resolve(status("authRejected"))
+                        is WaniKaniLessonStart.Unreachable -> promise.resolve(
+                            unreachable(result.failure, result.retryAfterSeconds)
+                        )
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -436,6 +491,19 @@ class GatenWaniKaniModule(
 
     private fun status(value: String): WritableMap =
         Arguments.createMap().apply { putString("status", value) }
+
+    private fun dailyLimitReached(limit: Int, learnedToday: Int): WritableMap =
+        Arguments.createMap().apply {
+            putString("status", "dailyLimitReached")
+            putInt("dailyLimit", limit)
+            putInt("learnedToday", learnedToday)
+        }
+
+    private fun WaniKaniLearningPreferences.Snapshot.toJsMap(): WritableMap =
+        Arguments.createMap().apply {
+            if (dailyLimit == null) putNull("dailyLimit") else putInt("dailyLimit", dailyLimit)
+            putInt("learnedToday", learnedToday)
+        }
 
     /**
      * A request that did not go through: the failure's name, and the wait WaniKani asked for when

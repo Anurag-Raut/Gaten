@@ -16,6 +16,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.PermissionAwareActivity
@@ -430,6 +431,53 @@ class GatenAnkiModule(
         promise.resolve(AnkiPreferences.load(reactApplicationContext).toJsMap())
     }
 
+    /** The selected review decks; null means all decks for existing installs. */
+    @ReactMethod
+    fun getStudyDeckIds(promise: Promise) {
+        scope.launch {
+            try {
+                val ids = AnkiPreferences.loadStudyDeckIds(reactApplicationContext)
+                if (ids == null) {
+                    promise.resolve(null)
+                } else {
+                    promise.resolve(Arguments.createArray().apply { ids.forEach { pushDouble(it.toDouble()) } })
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_SETTINGS, e.message ?: "Could not read Anki study decks", e)
+            }
+        }
+    }
+
+    /** Saves selected review deck ids independently of the export destination. */
+    @ReactMethod
+    fun saveStudyDeckIds(ids: ReadableArray?, promise: Promise) {
+        scope.launch {
+            try {
+                val selected = ids?.let { array ->
+                    (0 until array.size()).map { index ->
+                        require(!array.isNull(index) && array.getType(index) == ReadableType.Number) {
+                            "Anki deck ids must be numbers"
+                        }
+                        val value = array.getDouble(index)
+                        require(
+                            value.isFinite() && value > 0.0 && value <= MAX_SAFE_JS_DECK_ID.toDouble() &&
+                                value % 1.0 == 0.0
+                        ) { "Anki deck ids must be positive safe integers" }
+                        value.toLong()
+                    }
+                }
+                AnkiPreferences.saveStudyDeckIds(reactApplicationContext, selected)
+                promise.resolve(null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_SETTINGS, e.message ?: "Could not save Anki study decks", e)
+            }
+        }
+    }
+
     /**
      * Saves [settings], the same shape [getPreferences] answers with; the wrapped class normalises
      * the deck name and the tags on the way in. The stored values are judged by
@@ -508,6 +556,8 @@ class GatenAnkiModule(
         private const val CODE_STATS = "E_ANKI_STATS"
         private const val CODE_EXPORT = "E_ANKI_EXPORT"
         private const val CODE_ADD = "E_ANKI_ADD"
+        private const val CODE_SETTINGS = "E_ANKI_SETTINGS"
         private const val PERMISSION_REQUEST_CODE = 5417
+        private const val MAX_SAFE_JS_DECK_ID = 9_007_199_254_740_991L
     }
 }

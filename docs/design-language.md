@@ -23,7 +23,7 @@ kept verbatim in this directory.
 - The accent ladder is pitched for contrast: every accent's primary carries its ink (white in light, near-black in dark) and reads as text on the paper at 4.5:1 or better, held by `PaletteTest.everyAccentCarriesItsInkAndReadsOnThePaper`. Black is the colourless accent, replacing the earlier Graphite.
 - Use readable secondary text (`#6C6C75` light, `#B0B0BA` dark). Fine details and status dots have separate roles.
 - Compact explanatory text starts at 12 sp; the selected bottom-navigation label follows the preview's 11 sp size and scales with Android font settings.
-- The selected bottom-navigation pill is filled with the reader's accent (`primary`, with `onPrimary` ink) instead of the v1 document's neutral `--ink-active-bg`. Filled primary actions elsewhere keep that neutral action fill.
+- The reader's accent is the action colour as well as the selection colour: the selected bottom-navigation pill *and* every button are filled with `accent`/`primary` — filled buttons take the accent fill with its ink, tonal ones the accent's container tone, outlined and text ones the accent as their border and label ink. Changing the accent in Settings repaints all of them; the v1 document's neutral `--ink-active-bg` action fill is no longer used. `onPrimary`/`onPrimaryContainer` remain the inks, so the palette's own contrast guarantee still holds.
 - Layout uses dp, a 22 dp content inset (16 dp below 360 dp), and a maximum 560 dp content column.
 - Named corner radii: brand marks 10, setting icon tiles 11, empty-state icons 12, buttons 13, inputs 14, selected navigation 15, settings rows 17, floating navigation/contained groups 20.
 - Separators and visible row borders are 1 dp. Focus indicators are 2 dp. Content surfaces have no shadows.
@@ -47,28 +47,45 @@ kept verbatim in this directory.
 
 ## WaniKani hub and lessons (21 October 2026)
 
-- The WaniKani page is **one page with exactly two vertically stacked cards**, **Reviews** and **New
-  cards** - no tabs, no third "Coming up" module, no chart. Each card is an independent queue
-  snapshot with one strong action inside it; the global "one strong action per screen" rule is
-  deliberately adapted because the two study destinations are mutually exclusive.
-- Page geometry: back glyph, **WaniKani** centred with the sync state on the trailing edge; the
-  **Your study** page title at 35 sp and a 13 sp state subtitle; 14 dp between the two cards. Cards
-  are the page canvas with a 1 dp hairline, radius 21, 19 dp padding, and no shadow or fill tint.
-  The light canvas is `#FDFDFD` and dark `#101114`; light and dark share exactly the same geometry.
-- Card anatomy: an accent-outlined icon (`history` for reviews, `library_books` for new cards), a
-  17/700 title, an 11 sp state word on the trailing edge, a 46 sp tabular numeral with a 13 sp unit,
-  a hairline, two 12 sp key/value rows, then either a 52 dp neutral action (label leading, arrow
-  trailing) or a quiet `surfaceVariant` completed row with a check. The reader's accent colours only
-  the card icons; filled actions stay neutral (`actionPrimary`), inverting in dark mode.
-- Card states are real, not counts: **loading** (stable skeleton, no action), **ready** (count plus
-  next review and next-hour arrivals, or next batch size), **caught up** (a fetched zero, quiet row,
-  no action), **cached** (offline: last-known counts, no session), **sync issue** (last-known counts
-  plus **Retry sync**), **unavailable** (lessons above the account's grant), and **in progress**
-  (batch left part-way: remaining count, `x of y completed`, **Resume lessons**). A zero with no data
-  is never drawn as caught up, and an unknown count is an em dash, never a zero.
-- The counts come from `GET /summary` (already part of the stats read). The page forces that read on
-  entry so the sync label is honest; starting either queue reads it fresh, which is where a stale
-  count becomes a specific answer rather than a wrong one.
+- The app-wide visual authority remains [Gaten / Ink v1](Gaten_Ink_Design_Language_v1.md). The
+  current screen-specific authority for **both** provider hubs is the user-supplied
+  *Gaten unified Ink hubs V4* package (21 October 2026,
+  [kept in the repository](unified-ink-hubs-v4/README.md)), whose `index.html`, `DESIGN_SPEC.md` and
+  `STATE_MATRIX.md` supersede the earlier hub boards and the WaniKani Ink V3 hub visuals: Anki and
+  WaniKani are now one row grammar. The [Anki + WaniKani hub handoff](hubs-procedural-art/README.md)
+  and [WaniKani Ink V3](wanikani-ink-v3/README.md) are retained as historical visual documentation;
+  neither replaces Ink tokens or other screens. A true zero queue is distinct from studied-today
+  status: a zero due count is clear on its own, while `Completed today` needs a confirmed receipt
+  from an accepted grade in this session. Visual QA is specified at 100% font scale.
+- The [WaniKani Ink V3 reference](wanikani-ink-v3/README.md) is retained as historical visual
+  documentation. Its lesson-flow and API notes remain context, subject to current code and the V4
+  hub spec.
+- WaniKani's hub has exactly two rows, **Reviews** and **Lessons**, drawn with the same grammar as
+  Anki's deck rows: a leading 48 dp holder (provider glyph on the neutral surface) or procedural deck
+  art, the title, one subline, at most one `Label · value` extra line, then the trailing lane of count
+  and caption or the green check, and the chevron. The whole row is the action, so there are no black
+  Start buttons, no two-column 51 sp metric, no vertical hairline, no summary or sync line, and no
+  tabs or separate “Coming up” section. `Available study` labels the list exactly as `Available decks`
+  does on Anki. Rows are separated by a 1 dp hairline on a monochrome surface with no radius, at a
+  90 dp (Anki) / 110 dp (WaniKani) minimum. `SuccessCheck` is the one green mark in both hubs: a
+  22 dp filled disc, `#238858` on light and `#69C796` on dark, whose tick turns near-black ink in dark
+  mode. A clear row keeps its neutral surface and shows the check, `All caught up`, and its clear
+  detail; the earlier pale-green row wash was a prototype mistake and is not implemented. The only
+  green surfaces are the optional compact `You're all caught up` notices (`#ECF8F0` on `#D8ECDC`
+  light, `#18291F` on `#294734` dark), which keep both rows visible below them. Anki keeps
+  `Choose a deck`, the due summary and `Available decks`; WaniKani keeps `Your study` with
+  `Choose what to work on next.` (`Everything available is clear for now.` when both queues are clear).
+- A fetched zero is clear on its own and never opens an empty session, and a deck reads `Clear for
+  now` unless a session in it finished today, when it reads `Completed today`. Retain the other queue
+  independently. Unknown data is never rendered as zero: loading draws row-shaped skeletons with no
+  numbers, a cached snapshot stays marked stale, and a failed read keeps its actionable retry/connect
+  row instead of a count. Omit next-review, next-batch and subject-breakdown details unless the
+  existing source supports them, and keep at most one such line per row.
+- See [the V4 package](unified-ink-hubs-v4/README.md) for its state matrix, design spec, prototype
+  captures and procedural Anki deck-art requirements, plus the historical
+  [hub handoff](hubs-procedural-art/README.md) for earlier reference images. Included prototype
+  screenshots use illustrative data and are not evidence that the spec has been implemented or tested
+  in the app.
 - The lesson flow teaches a batch of subjects one card at a time, then quizzes them. A teach card
   carries the kind and level, the character (or the radical image), the meanings and readings with
   their mnemonics, and up to two example sentences for vocabulary. Meaning keeps the semantic teal and
@@ -76,19 +93,24 @@ kept verbatim in this directory.
   pinned footer exactly; a wrong answer shows the right one and asks for it to be typed.
 - A finished lesson is sent with `PUT /assignments/<id>/start` - never as a review, which WaniKani's
   reference forbids. Each subject is started the moment its quiz is passed, so leaving mid-batch keeps
-  what was finished; the hub then offers **Resume lessons**. Starting is idempotent, so a retry is
-  always safe.
-- Visual references: [both ready](../artifacts/visual-review/hub-ready-no.png),
-  [both ready in dark](../artifacts/visual-review/hub-ready-dark.png),
-  [both caught up](../artifacts/visual-review/hub-bothDone.png),
-  [cached/offline](../artifacts/visual-review/hub-live-offline.png),
-  [sync issue](../artifacts/visual-review/hub-error.png),
-  [lessons restricted](../artifacts/visual-review/hub-locked.png),
-  [batch in progress](../artifacts/visual-review/hub-paused.png),
-  [loading](../artifacts/visual-review/hub-loading.png),
-  [130 % text](../artifacts/visual-review/hub-ready-130.png), and
-  [320 dp](../artifacts/visual-review/hub-ready-320.png). The fixture captures use local values;
-  the `hub-live-*` captures show the reader's real account, with no review or lesson write made.
+  what was finished; the Lessons row then reads `N lessons left in batch` with its progress and
+  resumes the batch when tapped. Starting is idempotent, so a retry is always safe.
+- V3 visual references: [the local package](wanikani-ink-v3/README.md). Its included screenshots
+  are captures of the HTML reference and its sample values.
+
+### Settings and production behavior
+
+- WaniKani Settings contains connection status, the daily new-card limit, and token controls. Keep
+  it minimal; do not restore the removed overview or make read-only, token-storage, or account-change
+  claims there. The daily limit is blank and unlimited by default; accept whole numbers from 1 to
+  1000. Count a lesson only after its successful `PUT`, on this device and by local calendar day.
+  Cap each offered batch at the remaining daily allowance. Pausing keeps unfinished work for resume,
+  and the review flow is unchanged.
+- Anki cards Settings stores study-deck selection by stable deck IDs. A null selection means all
+  decks; an explicit empty selection means none. The selection filters the WaniKani hub and Home due
+  counts. Opening Anki always shows the deck hub, including when one deck matches; starting a card
+  queue requires choosing that deck. Parent decks include subdecks as in AnkiDroid. Study-deck
+  selection is separate from the export destination.
 
 ## User-approved preview refinements
 
@@ -100,7 +122,10 @@ The user-supplied `gaten-ink-light-dark-preview.html` is the visual reference fo
 - Settings rows follow the preview's 72 dp minimum height and grow with font scale; small copy remains readable and scalable.
 - Preview geometry never changes route behavior or replaces actual values with sample content.
 
-## Implementation checks (21 October 2026)
+## Earlier implementation checks (21 October 2026; before V3 settings and Anki study-deck changes)
+
+These checks describe the earlier implementation checkpoint only; they do not verify the later
+settings and Anki study-deck changes above.
 
 - TypeScript compilation and Android debug build pass; the native unit suite (including the lesson
   decode, queue ordering, entitlement filter and `PUT …/start` tests) passes.

@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,11 +63,25 @@ class AnkiReviewPolicyTest {
     }
 
     @Test
-    fun deckCountsThatAreMissingOrMalformedCountAsZero() {
-        assertEquals(DeckCounts(0, 0, 0), deckCountsFrom(null))
-        assertEquals(DeckCounts(0, 0, 0), deckCountsFrom(""))
-        assertEquals(DeckCounts(0, 0, 0), deckCountsFrom("not json"))
-        assertEquals(DeckCounts(learn = 1, review = 0, new = 0), deckCountsFrom("[1]"))
+    fun deckCountsRequireExactlyThreeNonnegativeIntegers() {
+        assertEquals(DeckCounts(Int.MAX_VALUE, 0, 3), deckCountsFrom("[2147483647,0,3]"))
+
+        listOf<String?>(
+            null,
+            "",
+            "not json",
+            "[1]",
+            "[1,2]",
+            "[1,2,3,4]",
+            "[1,2.0,3]",
+            "[1,\"2\",3]",
+            "[1,null,3]",
+            "[-1,2,3]",
+            "[2147483648,2,3]"
+        ).forEach { raw ->
+            val error = assertThrows(IllegalArgumentException::class.java) { deckCountsFrom(raw) }
+            assertEquals(AnkiReviewFailure.MALFORMED, reviewFailureOf(error))
+        }
     }
 
     @Test

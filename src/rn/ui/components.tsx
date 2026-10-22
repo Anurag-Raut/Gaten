@@ -269,8 +269,9 @@ export function OutlinedChip({label}: {label: string}) {
 }
 
 /**
- * Shared action control: ink-filled primary, neutral secondary, outlined or text action.
- * Minimum heights and vertical padding allow labels to grow with the reader's font size.
+ * Shared action control: accent-filled primary, accent-tonal secondary, outlined or text action.
+ * Every variant wears the reader's accent — emphasis alone separates them. Minimum heights and
+ * vertical padding allow labels to grow with the reader's font size.
  */
 export function Button({
   label,
@@ -309,20 +310,22 @@ export function Button({
         ? {
             backgroundColor: disabled ? colors.disabled : colors.actionSecondary,
           }
-        : variant === "outlined"
-          ? {
-              borderWidth: 1,
-              borderColor: disabled ? colors.disabled : colors.outline,
-            }
-          : null),
+      : variant === "outlined"
+        ? {
+            borderWidth: 1,
+            borderColor: disabled ? colors.disabled : colors.accent,
+          }
+        : null),
   };
+  // Every variant carries the accent: the filled one as its fill, and the quieter ones as their ink —
+  // disabled is the one state that leaves the accent behind.
   const textColor = disabled
     ? colors.onDisabled
     : variant === "filled"
       ? colors.onActionPrimary
       : variant === "tonal"
         ? colors.onActionSecondary
-        : variant === "outlined" ? colors.onSurface : colors.accent;
+        : colors.accent;
   return (
     <PressableScale
       onPress={onPress}

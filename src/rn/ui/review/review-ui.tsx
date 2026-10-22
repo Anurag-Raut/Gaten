@@ -6,14 +6,16 @@
 
 /**
  * The review flow's own primitives, drawn from the approved Ink review workflow: the page title, the
- * Ink integration row, the sub-screen header, the thin progress line, the deck row, the pinned
- * action and the rating row.
+ * sub-screen header, the thin progress line, the study row the Anki and WaniKani hubs are both made
+ * of, the success check, the pinned action and the rating row.
  *
  * They live here rather than in the shared kit because they are this workflow's visual language —
  * rows separated by hairlines, one dark action, quiet metadata — and because the app's own screens
  * already share the tokens these are built from (`tokens.ts`), so a change to the scale reaches them
- * all. Every measurement is the approved design's, in dp: a 43 dp brand holder at radius 12, a 101 dp
- * source row, a 52 dp action at radius 13, a 63 dp nav capsule drawn by `BottomBar`.
+ * all. Every measurement is the approved design's, in dp: a 43 dp brand holder at radius 12, one 48 dp
+ * art holder at radius 12 for the study rows (90 dp an Anki deck, 110 dp a WaniKani queue, each ended
+ * by the one hairline), a 101 dp source row, a 52 dp action at radius 13, a 63 dp nav capsule drawn
+ * by `BottomBar`.
  *
  * Motion is the design's own, and only ever the result of something the reader did: a nested screen
  * entering (8 dp horizontally, 70% to full opacity), the progress line moving to its new value, and
@@ -40,10 +42,12 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {InkIcon} from "../InkIcon";
+import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
+import DeckThumbnail from "./DeckThumbnail";
 
 /** The curve every short Ink transition uses: fast out, settled in — the app's own emphasized one. */
 const INK_EASING = ReanimatedEasing.bezier(0.2, 0, 0, 1);
@@ -110,7 +114,12 @@ export function SectionCaption({
   const {colors} = useTheme();
   return (
     <Text
-      style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}, styles.caption, style]}
+      style={[
+        typeScale.labelMedium,
+        styles.caption,
+        {color: colors.onSurfaceVariant, borderBottomColor: colors.outlineVariant},
+        style,
+      ]}
       accessibilityRole="header"
     >
       {children}
@@ -220,7 +229,7 @@ export function SourceRow({
               {value}
             </Text>
             {valueLabel != null && (
-              <Text numberOfLines={1} style={[styles.sourceValueLabel, {color: colors.fine}]}>
+              <Text numberOfLines={1} style={[styles.sourceValueLabel, {color: colors.onSurfaceVariant}]}>
                 {valueLabel}
               </Text>
             )}
@@ -265,7 +274,7 @@ export function SubHeader({
         {title}
       </Text>
       {right != null && (
-        <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.fine}]}>
+        <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.onSurfaceVariant}]}>
           {right}
         </Text>
       )}
@@ -301,52 +310,186 @@ export function ProgressLine({value}: {value: number}) {
   );
 }
 
-/** One deck of the collection: its name, AnkiDroid's own counts, and what is due in it right now. */
-export function DeckRow({
-  name,
-  counts,
-  due,
-  dueColor,
-  onPress,
+/**
+ * The one success mark the app draws: a filled disc with a tick on it, at 22 dp. The pair is the
+ * design's own green in both modes — a light disc with dark ink on it in the dark theme, so the tick
+ * keeps its contrast on the lighter green.
+ */
+export function SuccessCheck({size = 22}: {size?: number}) {
+  const {colors} = useTheme();
+  const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
+  return (
+    <View
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        styles.check,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: dark ? "#69C796" : "#238858",
+        },
+      ]}
+    >
+      <Icon name="check" size={size * 0.64} color={dark ? "#17171A" : "#FFFFFF"} />
+    </View>
+  );
+}
+
+/**
+ * The one row both hubs are built from: what the row is about at the leading edge, its name with the
+ * lines under it, and — in the trailing lane both providers share — the count with its caption or the
+ * green check, then the chevron that says the row leads somewhere. Anki puts deck art here and
+ * WaniKani a provider glyph on a neutral holder; only what goes in `art` and how tall the row stands
+ * differ. The row is one target and holds no button of its own.
+ */
+export function StudyRow({
+  art,
+  holderSurface = false,
+  title,
+  subline,
+  extra = null,
+  trailing = null,
+  complete = false,
+  minHeight,
+  accessibilityLabel,
+  disabled = false,
+  onPress = null,
+  titleSize = 15,
 }: {
-  name: string;
-  counts: string;
-  due: number;
-  dueColor?: string;
-  onPress: () => void;
+  /** The leading tile or glyph, drawn by the caller. */
+  art: React.ReactNode;
+  /** True wraps the art in the 48 dp neutral holder the provider rows use. */
+  holderSurface?: boolean;
+  title: string;
+  subline: string;
+  /** The one further line this row has room for, in the `Label · value` grammar. */
+  extra?: string | null;
+  /** The count and its caption; null when the queue has nothing to count. */
+  trailing?: {value: string; label: string} | null;
+  complete?: boolean;
+  minHeight: number;
+  accessibilityLabel: string;
+  disabled?: boolean;
+  /** Null when the row has nowhere to lead, which is what a cleared or locked queue is. */
+  onPress?: (() => void) | null;
+  /** WaniKani's rows carry a 17 dp title; Anki's decks keep the list's own 15. */
+  titleSize?: number;
 }) {
   const {colors} = useTheme();
+  const content = (
+    <>
+      {holderSurface ? (
+        <View
+          accessible={false}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.studyHolder, {backgroundColor: colors.surfaceVariant}]}
+        >
+          {art}
+        </View>
+      ) : (
+        art
+      )}
+      <View style={styles.studyMain}>
+        <Text
+          numberOfLines={2}
+          ellipsizeMode="tail"
+          style={[
+            styles.studyTitle,
+            {fontSize: titleSize, lineHeight: Math.round(titleSize * 1.35), color: colors.onSurface},
+          ]}
+        >
+          {title}
+        </Text>
+        {subline !== "" && (
+          <Text numberOfLines={2} style={[styles.studySubline, {color: colors.onSurfaceVariant}]}>
+            {subline}
+          </Text>
+        )}
+        {extra != null && (
+          <Text numberOfLines={2} style={[styles.studyExtra, {color: colors.onSurfaceVariant}]}>
+            {extra}
+          </Text>
+        )}
+      </View>
+      <View style={styles.studyTrailing}>
+        {complete ? (
+          <SuccessCheck />
+        ) : trailing != null ? (
+          <Text numberOfLines={1} style={[styles.studyCount, {color: colors.accent}]}>
+            {trailing.value}
+          </Text>
+        ) : null}
+        {!complete && trailing != null && (
+          <Text numberOfLines={1} style={[styles.studyCountLabel, {color: colors.onSurfaceVariant}]}>
+            {trailing.label}
+          </Text>
+        )}
+      </View>
+      <InkIcon name="chevron" size={22} color={colors.onSurfaceVariant} />
+    </>
+  );
+  const rowStyle = [styles.studyRow, {minHeight, borderBottomColor: colors.outlineVariant}];
+
+  if (onPress == null) {
+    return (
+      <View accessible accessibilityRole="none" accessibilityLabel={accessibilityLabel} style={rowStyle}>
+        {content}
+      </View>
+    );
+  }
+
   return (
     <PressableScale
       accessibilityRole="button"
-      accessibilityLabel={`${name}, ${counts}, ${due} due`}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{disabled}}
+      disabled={disabled}
       onPress={onPress}
-      style={[
-        styles.deckRow,
-        {borderBottomColor: colors.outlineVariant, borderTopColor: colors.outlineVariant},
-      ]}
+      style={rowStyle}
     >
-      <View style={styles.deckMain}>
-        <Text numberOfLines={2} ellipsizeMode="tail" style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-          {name}
-        </Text>
-        <Text numberOfLines={2} style={[styles.deckCounts, {color: colors.onSurfaceVariant}]}>
-          {counts}
-        </Text>
-      </View>
-      <View style={[styles.sourceSide, styles.deckDueSide]}>
-        <Text
-          numberOfLines={1}
-          style={[styles.deckDue, {color: due > 0 && dueColor != null ? dueColor : colors.onSurface}]}
-        >
-          {String(due)}
-        </Text>
-        <Text numberOfLines={1} style={[styles.sourceValueLabel, {color: colors.fine}]}>
-          due
-        </Text>
-      </View>
-      <InkIcon name="chevron" size={15} color={colors.fine} />
+      {content}
     </PressableScale>
+  );
+}
+
+/** One deck of the collection: its name, AnkiDroid's own counts, and what is due in it right now. */
+export function DeckRow({
+  deckId,
+  name,
+  counts,
+  due,
+  completed = false,
+  completedToday = false,
+  onPress,
+}: {
+  deckId: number | string;
+  name: string;
+  counts: string;
+  due: number;
+  completed?: boolean;
+  /** True only when a session in this deck finished today, which is the evidence "Completed today" needs. */
+  completedToday?: boolean;
+  onPress: () => void;
+}) {
+  // Nothing due is clear on its own: a deck with no cards left does not need a receipt to say so, and
+  // the receipt only changes the words. A deck with cards due is never called clear.
+  const cleared = due === 0;
+  const caughtUp = cleared && completed;
+  return (
+    <StudyRow
+      art={<DeckThumbnail deckId={deckId} width={48} height={48} />}
+      title={name}
+      subline={cleared ? (caughtUp && completedToday ? "Completed today" : "Clear for now") : counts}
+      trailing={cleared ? null : {value: String(due), label: "due"}}
+      complete={cleared}
+      minHeight={90}
+      accessibilityLabel={due > 0 ? `${name}, ${due} due, open deck` : `${name}, clear for now, open deck`}
+      onPress={cleared ? null : onPress}
+    />
   );
 }
 
@@ -452,7 +595,8 @@ function ratingsFor(buttonCount: number): Rating[] {
 /**
  * The deck's ratings: one row of quiet buttons under the answer, each labelled with the interval the
  * scheduler itself reported for that position, so a tap sends back exactly the rating its interval
- * was computed for. "Again" is the only one that takes the error ink — it is the one answer that
+ * was computed for. The ink is the reader's accent — the row is the screen's own action, in the same
+ * tone as every other button — except "Again", which takes the error ink: it is the one answer that
  * means the card was not known.
  */
 export function RatingBar({
@@ -474,7 +618,7 @@ export function RatingBar({
           ? colors.onDisabled
           : isAgain
             ? colors.error
-            : colors.onSurface;
+            : colors.accent;
         return (
           <View key={rating.ease} style={[styles.ratingCell, index > 0 && styles.ratingCellSpaced]}>
             <PressableScale
@@ -670,7 +814,7 @@ export function StepEnter({
 const styles = StyleSheet.create({
   title: {marginTop: 23},
   subtitle: {marginTop: 11},
-  caption: {marginTop: 34, marginBottom: 10},
+  caption: {marginTop: 34, marginBottom: 10, paddingBottom: 12, borderBottomWidth: 1},
   tile: {alignItems: "center", justifyContent: "center", flexShrink: 0},
   source: {
     flexDirection: "row",
@@ -684,7 +828,6 @@ const styles = StyleSheet.create({
   sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4},
   sourceStatus: {marginTop: 5},
   sourceSide: {alignItems: "flex-end", marginStart: spacing.m},
-  deckDueSide: {marginEnd: spacing.l},
   sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45},
   sourceValueLabel: {fontSize: 10, lineHeight: 13},
   sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right"},
@@ -706,20 +849,32 @@ const styles = StyleSheet.create({
   progressArea: {marginTop: 2},
   progressTrack: {height: 2, width: "100%", overflow: "hidden"},
   progressFill: {height: 2},
-  deckRow: {
+  check: {alignItems: "center", justifyContent: "center", flexShrink: 0},
+  studyRow: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 84,
-    paddingVertical: 18,
-    borderTopWidth: 1,
+    gap: spacing.m,
+    paddingVertical: spacing.m,
     borderBottomWidth: 1,
     width: "100%",
   },
-  deckMain: {flex: 1, minWidth: 0},
-  deckCounts: {fontSize: 11, lineHeight: 15, marginTop: 6},
-  deckDue: {fontSize: 25, fontWeight: "700", letterSpacing: -0.8},
+  studyHolder: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  studyMain: {flex: 1, minWidth: 0},
+  studyTitle: {fontWeight: "700", letterSpacing: -0.25},
+  studySubline: {fontSize: 12, lineHeight: 16, marginTop: 3},
+  studyExtra: {fontSize: 11, lineHeight: 15, marginTop: 3},
+  studyTrailing: {alignItems: "flex-end", marginStart: spacing.s},
+  studyCount: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
+  studyCountLabel: {fontSize: 10, lineHeight: 13, marginTop: 1},
   action: {
-    height: 52,
+    minHeight: 52,
     borderRadius: shape.button,
     alignItems: "center",
     justifyContent: "center",

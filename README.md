@@ -77,7 +77,7 @@ The bottom navigation separates four tasks:
   screen-access permission or either optional integration.
 - **Review** — the landing page offers the two places you can study: AnkiDroid's decks, and WaniKani
   when a token is connected. Choosing a deck starts its session immediately; WaniKani connects first
-  if it has to, then opens a page showing what is due for review and what new cards are waiting to be
+  if it has to, then opens a page showing what is due for review and which lessons are waiting to be
   learned. An active session keeps the reveal, the rating controls or the answer field in focus, with
   bottom navigation hidden until you leave it (see *Reviewing in Gaten*).
 - **Settings** — focused pages for Screen lookup, Text recognition, Anki cards, WaniKani, Appearance,
@@ -392,8 +392,8 @@ page Home opens. Home's **Anki** and **WaniKani** cards are the two ways in — 
 deck list directly (or the state that stops it: no AnkiDroid, no permission, no collection), and the
 WaniKani card opens the connection state, or the WaniKani page once a token works. There is no
 landing page and no separate start step: choosing a deck opens its session, and WaniKani opens a page
-showing what is due for review and what new cards are waiting, each with the one action that starts
-it. The page is full-screen, so the floating bottom navigation is away for all
+showing what is due for review and which lessons are waiting; each row opens what it holds. The page
+is full-screen, so the floating bottom navigation is away for all
 of it and Back is one step out.
 
 ### Reviewing Anki cards
@@ -426,11 +426,11 @@ on Gaten's side, and no network is involved — this is on-device provider acces
 
 ### Reviewing WaniKani subjects
 
-With a token connected, Home's WaniKani row opens one page with two sections: what is due for review,
-and what new cards are waiting to be learned. Without a token it opens the connection screen first.
-Each section shows its count and its own action, or a quiet line when there is nothing behind it; a
-review queue with nothing due shows the caught-up state, with the next review time when WaniKani gives
-one.
+With a token connected, Home's WaniKani row opens one page with two rows: what is due for review, and
+the lessons that are waiting. Without a token it opens the connection screen first.
+Each row is the whole action — the count it holds with its caption on the right, and a green check with
+`All caught up` when that queue is verified empty; a locked account says so honestly instead. Both rows
+stay visible whatever their state, and the next review time is shown when WaniKani gives one.
 
 - **The queue** is WaniKani's: `GET /assignments?immediately_available_for_review=true&hidden=false`,
   then one `GET /subjects?ids=…` for the subjects behind those assignments, ordered by when each came
@@ -450,7 +450,7 @@ one.
   fails keeps the finished answer and offers **Send again**; a token WaniKani refuses asks for a
   reconnect instead, because retrying a refused token would only fail again. Nothing is ever sent
   because an animation finished, and a review whose answer is still in the field is not sent at all.
-- **New cards.** The page's second section reads the lesson queue
+- **Lessons.** The page's second row reads the lesson queue
   (`GET /assignments?immediately_available_for_lessons=true&hidden=false`) and teaches a batch of five
   one card at a time — the character or its image, the meanings and readings with their mnemonics, and
   example sentences for vocabulary — then quizzes each one exactly like a review. A subject is finished

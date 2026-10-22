@@ -21,7 +21,7 @@ function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <KeyboardProvider>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
           <ThemeProvider>
             <AppShell />
           </ThemeProvider>

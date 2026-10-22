@@ -243,31 +243,24 @@ export function resetWaniKaniStats(): void {
 }
 
 /**
- * The dashboard's WaniKani numbers. [active] is whether the dashboard is the screen being looked at:
- * the read happens when it becomes true (and the Kotlin side decides whether that costs a request at
- * all), so no render, tab switch or background moment ever asks WaniKani anything.
+ * The dashboard's WaniKani numbers. The read happens once when the screen mounts — every tab mounts
+ * up front, so the numbers are there before the reader arrives — and again when the app returns to
+ * the foreground (the Kotlin side decides whether that costs a request at all), so no render or tab
+ * switch ever asks WaniKani anything.
  */
-export function useWaniKaniStats(
-  active: boolean
-): WaniKaniStatsState & {refresh: () => void} {
+export function useWaniKaniStats(): WaniKaniStatsState & {refresh: () => void} {
   const current = useSyncExternalStore(subscribe, getWaniKaniStats);
   const refresh = useCallback(() => {
     void loadWaniKaniStats(true);
   }, []);
   useEffect(() => {
-    if (!active) {
-      return;
-    }
     void loadWaniKaniStats(false);
-  }, [active]);
-  // Coming back to the app while this screen is on show is a fresh look, and the effect above cannot
-  // see it: `active` is already true when the app resumes. Numbers older than the TTL are brought up
-  // to date — the Kotlin side still decides what that costs, and a read in flight is joined — and
-  // numbers this young cost nothing at all, so a quick foreground asks WaniKani nothing.
+  }, []);
+  // Coming back to the app is a fresh look, and the effect above cannot see it. Numbers older than
+  // the TTL are brought up to date — the Kotlin side still decides what that costs, and a read in
+  // flight is joined — and numbers this young cost nothing at all, so a quick foreground asks
+  // WaniKani nothing.
   useEffect(() => {
-    if (!active) {
-      return;
-    }
     const subscription = AppState.addEventListener("change", (status) => {
       if (status !== "active") {
         return;
@@ -278,6 +271,6 @@ export function useWaniKaniStats(
       }
     });
     return () => subscription.remove();
-  }, [active]);
+  }, []);
   return {...current, refresh};
 }

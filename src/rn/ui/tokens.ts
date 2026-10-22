@@ -73,6 +73,13 @@ export const PAGE_EASING_REANIMATED = ReanimatedEasing.bezier(0.2, 0, 0, 1);
 /** The press-scale curve as a Reanimated easing, for the press feedback's timing. */
 export const PRESS_EASING_REANIMATED = ReanimatedEasing.bezier(...PRESS_EASING);
 
+/**
+ * The leaving curve: Material's "accelerate" (0.4, 0, 1, 1). Chrome that shares a frame with a page
+ * cannot pop out of it, so what leaves — the bottom bar as a page covers it, a sheet being dismissed —
+ * takes this one, and what arrives takes [PAGE_EASING_REANIMATED]'s decelerating curve instead.
+ */
+export const EXIT_EASING_REANIMATED = ReanimatedEasing.bezier(0.4, 0, 1, 1);
+
 /** Inter is bundled for Latin text; Japanese glyphs use the platform font fallback. */
 const INTER = "Inter";
 
@@ -81,7 +88,7 @@ export const typeScale = {
   displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500"},
   displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500"},
   brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
-  headlineSmall: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
+  headlineSmall: {fontSize: 35, lineHeight: 44, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
   titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: INTER},
   titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
   titleSmall: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},

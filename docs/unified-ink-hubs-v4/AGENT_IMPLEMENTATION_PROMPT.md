@@ -1,0 +1,40 @@
+# CODING AGENT — Implement unified Anki/WaniKani hub V4 in Gaten
+
+## Mandate (newest user decision supersedes all old drafts)
+The user finds Anki and WaniKani inconsistent. Make the **entire WaniKani Reviews and New cards sections navigable rows**, visually almost identical to Anki deck rows. Remove the existing TWO black WaniKani action buttons entirely. WaniKani two rows share Anki row title/details/right count/check/right chevron structure. Keep **zero extra sections**; optional compact all-clear notice when BOTH WaniKani queues are verified empty. Anki continues to be `Choose a deck` and WaniKani `Your study`.
+
+Use the supplied `index.html` for the exact visual/interaction target. The latest `screenshots/` are captured from this HTML; `references/` includes older approved designs but their WaniKani black buttons are now outdated. **Newest HTML wins.** Read `DESIGN_SPEC.md`, `STATE_MATRIX.md`, `AGENT_START_HERE.md`, and procedural art files before coding.
+
+## Phase 0: inspect code, do not guess
+Locate the actual Anki deck picker screen, WaniKani hub, review route, lesson route, native Android integrations, theme controls, provider data fetch, cached state, and loading/error/empty states. Produce a quick map of files and current flows. Do not overwrite an in-progress branch or conflict with concurrent work. Reuse existing shared navigation, typography and layout primitives where possible. Learn the actual AnkiDroid integration permissions and WaniKani assignment entitlement API before modifying handlers. Discover current tests and use fixture-based testing. Avoid live review/lesson writes.
+
+## Phase 1: Extract/reuse one shared row grammar
+Implement or harmonize a shared `InkStudyRow` or equivalent: `[48dp thumbnail] [title / status / optional one extra line] [due number or filled GREEN check] [chevron]`. Use existing app technology and tokens, not a webview of HTML. Entire row target >=48dp; it is ONE accessibility action. Provide pressed/focus states. Chevron belongs to trailing row area and indicates navigation. Never render an extra button nested inside the row. Keep 1dp dividers and monochrome surface. Due numbers use selected theme accent. Shared green success icon is a filled 21–22dp circle with white check and contrast-aware colors, same pixel geometry in BOTH providers.
+
+## Phase 2: Anki, keep existing page structure
+Retain back arrow, `Anki`, `Choose a deck`, due summary, `Available decks` and existing list order. Add/keep 48dp procedurally generated thumbnails on the LEFT of each deck title. Use `src/deck-art.ts`, `src/deck-art.js`, `docs/PROCEDURAL_DECK_ART.md` as a portable reference; integrate in native UI as actual inline SVG / component or platform vector renderer. Stable deck identifier is the only seed; **not due count, date, locale, list index or color preference**. Six curated repeating pastel palettes: mist blue, blush, warm sand, mint, lilac, powder teal. No image URLs, random generation per render, or hard-coded stock photos. Dark mode uses paired tones; deck identity/pattern must be stable. Due row shows real new/learning/review counts, right accent total and chevron. Verified zero actionable => `Clear for now` with green check. Show subtle green wash on a *just-finished* deck if a reliable completion event exists; do not green-wash all initially empty decks. Keep browsing behavior if real app supports it, but never launch empty review.
+
+## Phase 3: WaniKani — major visual change
+Retain native back/header, `Your study` and subtitle `Choose what to work on next.`. Under same `Available study` label style as Anki `Available decks`, render exactly two rows:
+1. Reviews: existing review history/clock icon inside 48dp neutral holder; title `Reviews`; `N reviews due`; extra `Next review · ...` if reliable; trailing N + `due` + chevron. ONE click/tap on ANY part of row launches existing review flow if available.
+2. New cards: existing book/stack icon inside same holder; title `New cards`; `N lessons available`; extra `Next batch · 5 cards` if real; trailing N + `ready` + chevron. Entire row launches existing lesson teaching route when available.
+No black action buttons, no separate big-number left/right split, no WaniKani tab, no extra `Coming up` card or section, no top summary line with counts/sync.
+When corresponding queue is verified empty, show `All caught up` with same green check as Anki, description stating no reviews/lessons due, and future review time when known. No disabled Start button. If both queues clear, optional small pale-green notice with single green check and `You're all caught up`, but **keep both rows visible below it**. If lesson access is locked, show a truthful locked state and route appropriately; do not show success.
+
+## Phase 4: State behavior, data correctness, and error handling
+- Distinguish unknown/loading/error/cached/0 counts. `0` from a failed read is NEVER completion. Truthful copy beats a mock metric.
+- Anki: real deck list, new+learning+review counts and parent/child semantics as existing integration defines. Requery after session saves. Do not alter AnkiDroid scheduler, write/review API or permission gate.
+- WaniKani: real summary/assignment queue and next review; lessons from existing entitlement-aware lesson queue and user batch setting (fallback only if valid). Never derive batch composition if subjects have not been fetched. Do not alter `POST /reviews` vs `PUT /assignments/{id}/start` semantics, or request extra metadata solely for decorative UI.
+- Keep last known values only when explicit stale/cached label exists; when API fails show actionable error and retry. Offline actions must honor app policy; retries shouldn't duplicate commits.
+- Immediately after session completion, update cache/refresh as appropriate before showing completion in the hub. Do NOT replay the full-screen celebration just because a queue happens to be zero on initial load.
+- Partial provider failures can affect one section independently; don't erase valid data from the other without a reason. Guard double-taps, lifecycle transitions, and return route.
+- Screen reader labels e.g. `Reviews, 23 due, next review due now, open reviews`; completion e.g. `Reviews, all caught up, next review in two hours`; deck e.g. `Default, 5 due, open deck`. Success is conveyed by text and icon, not green alone.
+
+## Phase 5: Theme + responsive
+Light tokens from `DESIGN_SPEC.md`; dark values too. The seven selected accents control counts/icon strokes and focus; the **green success state remains green across all accents**. Small readable text must pass WCAG 4.5:1; focus visible; dynamic type 100%/130%/160%; 320–430dp widths; RTL not assumed; Android system bars/keyboard insets must come from native platform (prototype status bar is just artwork). No forced phone-height, clipped list or inaccessible bottom action. Reduced-motion option means no compulsory celebration animation.
+
+## Phase 6: Tests + acceptance
+Implement automated UI and data-state tests for: both ready, one Anki clear, all Anki clear, both WK ready, WK reviews clear, WK lessons clear, both WK clear, loading, stale offline, no decks, token/permission error, locked lessons, empty action tap, double-tap, returning from a just-finished session, seven accents, dark mode and font scaling. Verify deck artwork deterministic across reload, theme change, ordering, count changes; at least 6 distinct muted color assignments on a larger fixture and no flashing random art. Verify row hit bounds and chevron alignment between hubs. Confirm no WaniKani black buttons remain. Compare actual emulator captures to `screenshots/`. Do not simulate successful provider writes in test environment; use test mocks.
+
+## Final deliverable from coding agent
+Provide list of modified files, exact before/after routes, screenshots of both hubs in ready/mixed/all-clear light+dark, test results and any missing native/provider capability. Summarize remaining functional limitations honestly. Avoid creating new UX sections outside the agreed scope. Treat `index.html` and `DESIGN_SPEC.md` as visual truth; source repository as API/architecture truth.

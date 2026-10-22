@@ -20,6 +20,7 @@ import React, {useEffect, useMemo} from "react";
 import {
   DeviceEventEmitter,
   StatusBar,
+  View,
   useColorScheme,
   useWindowDimensions,
 } from "react-native";
@@ -462,10 +463,9 @@ export function AppShell() {
   const reducedMotion = useReducedMotion();
 
   return (
-    <>
+    <View style={{flex: 1, backgroundColor: colors.background}}>
       <StatusBar
         barStyle={dark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
       />
       <NavigationContainer ref={navigationRef} theme={navigationTheme}>
         <Tab.Navigator
@@ -506,6 +506,6 @@ export function AppShell() {
           <Tab.Screen name="Settings" component={SettingsTabStack} />
         </Tab.Navigator>
       </NavigationContainer>
-    </>
+    </View>
   );
 }

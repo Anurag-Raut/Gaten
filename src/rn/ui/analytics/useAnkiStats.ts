@@ -222,11 +222,11 @@ let cache: {
 let inFlight: {selectedId: number | null; promise: Promise<AnkiStatsRead>} | null = null;
 
 /**
- * The Anki snapshot, refreshed while [active] — the tab being on screen — and cached for
- * [ANKI_STATS_TTL_MS] beyond it. `refresh` forces a read; `selectDeck` moves the reader's choice
- * and re-reads the deck-scoped numbers for it.
+ * The Anki snapshot, read once when the screen mounts — every tab mounts up front — and again on a
+ * foreground return, cached for [ANKI_STATS_TTL_MS]. `refresh` forces a read; `selectDeck` moves the
+ * reader's choice and re-reads the deck-scoped numbers for it.
  */
-export function useAnkiStats(active: boolean): AnkiStatsState {
+export function useAnkiStats(): AnkiStatsState {
   const [data, setData] = useState<AnkiStatsSnapshot | null>(cache?.snapshot ?? null);
   const [failure, setFailure] = useState<AnkiStatsFailure | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -295,19 +295,18 @@ export function useAnkiStats(active: boolean): AnkiStatsState {
   }, []);
 
   useEffect(() => {
-    if (active) load(false, selectedId);
-  }, [active, load, selectedId]);
+    load(false, selectedId);
+  }, [load, selectedId]);
 
-  // A resume while the tab is on screen cannot be seen by the effect above — `active` is already
-  // true — so it is listened for here. The read it asks for is TTL-aware: it answers from the cache
-  // it already has, and only asks AnkiDroid again once that snapshot has aged out.
+  // A foreground return cannot be seen by the effect above, so it is listened for here. The read it
+  // asks for is TTL-aware: it answers from the cache it already has, and only asks AnkiDroid again
+  // once that snapshot has aged out.
   useEffect(() => {
-    if (!active) return;
     const subscription = AppState.addEventListener("change", (status) => {
       if (status === "active") load(false, selectedId);
     });
     return () => subscription.remove();
-  }, [active, load, selectedId]);
+  }, [load, selectedId]);
 
   const refresh = useCallback(() => load(true, selectedId), [load, selectedId]);
 

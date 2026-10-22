@@ -224,7 +224,7 @@ class PaletteTest {
         assertEquals(Color(0xFF17181C), dark.surface)
         assertEquals(Color(0xFF1B1C21), dark.surfaceVariant)
         assertEquals(Color(0xFFF5F5F6), dark.onSurface)
-        assertEquals(Color(0xFFB0B0BA), dark.onSurfaceVariant)
+        assertEquals(Color(0xFFA7A7B0), dark.onSurfaceVariant)
         assertEquals(Color(0xFF303136), dark.outline)
         assertEquals(Color(0xFFA5B4FC), accentRoles(AccentColor.Indigo, dark = true).primary)
     }

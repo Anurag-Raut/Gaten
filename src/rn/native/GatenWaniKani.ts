@@ -219,12 +219,23 @@ export type WaniKaniLessonQueueResult =
 /** What starting one lesson answered. */
 export type WaniKaniLessonStartResult =
   | { status: "started" }
+  | { status: "dailyLimitReached"; dailyLimit: number; learnedToday: number }
   | { status: "needsToken" }
   | { status: "authRejected" }
   | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
 
+/** Device-local daily goal and successful lesson starts since local midnight. */
+export interface WaniKaniLearningPreferences {
+  /** Null means no daily goal is set. */
+  dailyLimit: number | null;
+  /** Unique assignments successfully started on this device today. */
+  learnedToday: number;
+}
+
 interface GatenWaniKaniNative {
   isConfigured(): Promise<boolean>;
+  getLearningPreferences(): Promise<WaniKaniLearningPreferences>;
+  setDailyLessonLimit(limit: number | null): Promise<WaniKaniLearningPreferences>;
   connect(token: string): Promise<WaniKaniConnectionResult>;
   reconnect(): Promise<WaniKaniConnectionResult>;
   disconnect(): Promise<boolean>;
@@ -248,6 +259,16 @@ const GatenWaniKani = NativeModules.GatenWaniKani as GatenWaniKaniNative;
 /** True when a token is stored; cheap enough to call while a screen renders. */
 export function isConfigured(): Promise<boolean> {
   return GatenWaniKani.isConfigured();
+}
+
+/** Reads the device-local daily goal and successful starts since local midnight. */
+export function getLearningPreferences(): Promise<WaniKaniLearningPreferences> {
+  return GatenWaniKani.getLearningPreferences();
+}
+
+/** Saves a daily goal from 1 through 1000, or null to allow unlimited lessons. */
+export function setDailyLessonLimit(limit: number | null): Promise<WaniKaniLearningPreferences> {
+  return GatenWaniKani.setDailyLessonLimit(limit);
 }
 
 /** Checks the token with WaniKani and stores it when it works; a rejected or unreachable token is not stored. */

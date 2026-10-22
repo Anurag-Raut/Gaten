@@ -74,7 +74,7 @@ export function HomeScreen({
   const contentInset = width < 360 ? spacing.l : spacing.contentInset;
   const reducedMotion = useReducedMotion();
   const focused = useIsFocused();
-  const home = useHomeDashboard(focused);
+  const home = useHomeDashboard();
 
   const searchState = store.useSearchState();
   const rows = useMemo(
@@ -286,7 +286,7 @@ export function HomeScreen({
                     accessibilityRole="button"
                     accessibilityLabel="Cancel search"
                     onPress={exitSearch}
-                    style={styles.cancelSearch}
+                    style={[styles.cancelSearch, {borderColor: colors.outlineVariant}]}
                   >
                     <Icon name="close" size={20} color={colors.accent} />
                   </PressableScale>
@@ -354,6 +354,8 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 560,
     alignSelf: "center",
+    paddingTop: spacing.m,
+    paddingBottom: spacing.m,
   },
   searchRow: {
     width: "100%",
@@ -363,16 +365,15 @@ const styles = StyleSheet.create({
   },
   searchField: {flex: 1},
   cancelSearch: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: "rgba(0, 0, 0, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   brand: {
-    marginTop: 23,
+    marginTop: 11,
     marginBottom: 20,
   },
   listContent: {

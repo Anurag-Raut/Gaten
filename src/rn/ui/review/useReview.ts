@@ -29,6 +29,7 @@ export const reviewActions = {
   openDecks: () => reviewStore.openDecks(),
   openWaniKani: () => reviewStore.openWaniKani(),
   connectWaniKani: (token: string) => reviewStore.connectWaniKani(token),
+  showWaniKaniConnect: () => reviewStore.showWaniKaniConnect(),
   startReviews: () => reviewStore.startReviews(),
   startLessons: () => reviewStore.startLessons(),
   retryWaniKaniSync: () => reviewStore.retryWaniKaniSync(),
@@ -73,6 +74,22 @@ export function useReview(): ReviewState & {
     return () => subscription.remove();
   }, []);
 
+  // An open hub can cross midnight without an AppState change. Re-read only the local daily budget.
+  useEffect(() => {
+    if (state.step.kind !== "wkHome") return;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const midnight = new Date();
+      midnight.setHours(24, 0, 0, 0);
+      timer = setTimeout(() => {
+        reviewActions.onResumed();
+        schedule();
+      }, midnight.getTime() - Date.now());
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [state.step.kind]);
+
   // Back from another app, the card on screen may no longer be the one AnkiDroid would hand
   // out, so the queue is re-read on resume; the time spent away is not answer time. The
   // Activity owned those edges in Compose; AppState owns them here. Unmounting without the app
@@ -94,7 +111,7 @@ export function useReview(): ReviewState & {
   const seenStep = useRef<ReviewStep>(state.step);
   useEffect(() => {
     const previous = seenStep.current;
-    const finishedAnki = state.step.kind === "done" && previous.kind !== "done";
+    const finishedAnki = state.step.kind === "done" && previous.kind === "session";
     // WaniKani has no separate finished step: the hub is what a queue returns to, and it is reached
     // from a session only when every subject in it was saved.
     const finishedWaniKani =

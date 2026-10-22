@@ -19,6 +19,7 @@ import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {Button, IconButton} from "../components";
+import {reviewStore} from "../review/review-store";
 import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
 import {FieldLabel, SettingsTile, TextField} from "./settings-components";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -67,6 +68,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   const insets = useSafeAreaInsets();
   const [token, setToken] = useState("");
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [changingToken, setChangingToken] = useState(false);
   const [busy, setBusy] = useState(false);
   // The last answer from WaniKani, and the outcome of a disconnect: null while nothing was
   // disconnected, true when the token and the whole cache went, false when part of it did not.
@@ -74,6 +76,14 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   /** A rejected or unreachable request, kept apart from the two answers above. */
   const [failure, setFailure] = useState<WaniKaniFailure | null>(null);
   const [cleared, setCleared] = useState<boolean | null>(null);
+  const [dailyLimitInput, setDailyLimitInput] = useState("");
+  const [learnedToday, setLearnedToday] = useState<number | null>(null);
+  const [preferenceBusy, setPreferenceBusy] = useState(false);
+  const [preferenceMessage, setPreferenceMessage] = useState<string | null>(null);
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
+  const [preferenceLoading, setPreferenceLoading] = useState(true);
+  const [preferenceLoadFailed, setPreferenceLoadFailed] = useState(false);
+  const [preferenceRefresh, setPreferenceRefresh] = useState(0);
 
   // The token's state is storage, not memory: read it on every arrival.
   useEffect(() => {
@@ -85,6 +95,52 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreferenceLoading(true);
+    setPreferenceLoadFailed(false);
+    void GatenWaniKani.getLearningPreferences()
+      .then((preferences) => {
+        if (cancelled) return;
+        setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
+        setLearnedToday(preferences.learnedToday);
+        setPreferenceError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPreferenceLoadFailed(true);
+          setPreferenceError("Could not load this setting.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPreferenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [preferenceRefresh]);
+
+  const saveDailyLimit = () => {
+    const value = dailyLimitInput.trim();
+    const limit = value === "" ? null : Number(value);
+    if (limit !== null && (!/^\d+$/.test(value) || !Number.isInteger(limit) || limit < 1 || limit > 1000)) {
+      setPreferenceError("Use 1–1000, or leave blank.");
+      setPreferenceMessage(null);
+      return;
+    }
+    setPreferenceBusy(true);
+    setPreferenceError(null);
+    setPreferenceMessage(null);
+    void GatenWaniKani.setDailyLessonLimit(limit)
+      .then((preferences) => {
+        setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
+        setLearnedToday(preferences.learnedToday);
+        setPreferenceMessage("Saved.");
+      })
+      .catch(() => setPreferenceError("Could not save the daily lesson setting. Try again."))
+      .finally(() => setPreferenceBusy(false));
+  };
 
   let message: string | null = null;
   if (answer == null) {
@@ -111,7 +167,11 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
     setFailure(null);
     void GatenWaniKani.connect(token)
       .then((result) => {
-        if (result.status === "connected") setToken("");
+        if (result.status === "connected") {
+          setToken("");
+          setChangingToken(false);
+          reviewStore.resetWaniKaniAccount();
+        }
         // The token that just connected may belong to another account, so anything the dashboard is
         // still holding — numbers, and a rate-limit wait they came with — is dropped before it can
         // be read again. Nothing of the old account is shown for the new one.
@@ -121,6 +181,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         return GatenWaniKani.isConfigured().then((configured) => {
           setConnected(configured);
           setAnswer(result);
+          if (!configured) reviewStore.resetWaniKaniAccount();
         });
       })
       .catch((error) => {
@@ -139,6 +200,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         return GatenWaniKani.isConfigured().then((configured) => {
           setConnected(configured);
           setAnswer(result);
+          if (!configured) reviewStore.resetWaniKaniAccount();
         });
       })
       .catch((error) => {
@@ -163,7 +225,10 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
           // that was just disconnected, nor wait out a rate limit it left behind. Checked against
           // the read-back rather than the disconnect's own answer, so a partial clear that did take
           // the token clears the state too, and one that did not leaves it alone.
-          if (!configured) resetWaniKaniStats();
+          if (!configured) {
+            resetWaniKaniStats();
+            reviewStore.resetWaniKaniAccount();
+          }
         });
       })
       .catch(() => {
@@ -173,6 +238,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   };
 
   const isKnownConnected = connected === true;
+  const showTokenField = !isKnownConnected || changingToken;
   const openTokenPage = () => {
     void GatenPlatform.openUrl(WANIKANI_TOKEN_URL);
   };
@@ -214,24 +280,76 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         }}
       >
         <WaniKaniCard>
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-            {
-              "WaniKani is reference content: its meanings, readings, radicals and mnemonics for the kanji you tap in a lookup. Connecting checks your token with WaniKani, and every page you open is kept on this device so it stays readable offline. Connected, Gaten also reads your own study progress — the level you are on, the reviews due now and over the next 24 hours, and how your items are spread across WaniKani's review stages — for the analytics screen, and keeps it on this device. It never touches lessons, never answers a review, and never changes anything in your account."
-            }
+          <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>
+            {connected == null
+              ? "Checking connection…"
+              : isKnownConnected
+                ? answer?.status === "connected" && answer.maxLevelGranted < WANIKANI_LEVELS
+                  ? `Connected · Levels 1–${answer.maxLevelGranted}`
+                  : "Connected"
+                : "Not connected"}
           </Text>
-          <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.m}}>
-            <Text style={[typeScale.bodyLarge, {color: colors.onSurface, flex: 1}]}>
-              {isKnownConnected
-                ? "Connected: a token is saved on this device."
-                : "Not connected. Kanji pages say what to do until you connect."}
-            </Text>
-            <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s}]}>
-              {isKnownConnected ? "On" : "None"}
-            </Text>
-          </View>
         </WaniKaniCard>
 
         <View style={{marginTop: spacing.l}}>
+          <WaniKaniCard>
+            <FieldLabel label="New cards per day" />
+            <TextField
+              value={dailyLimitInput}
+              onChangeText={(value) => {
+                setDailyLimitInput(value);
+                setPreferenceError(null);
+                setPreferenceMessage(null);
+              }}
+              placeholder="Unlimited"
+              keyboardType="number-pad"
+              editable={!preferenceBusy && !preferenceLoading && !preferenceLoadFailed}
+              accessibilityLabel="New cards per day. Leave blank for unlimited."
+            />
+            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+              Leave blank for unlimited.
+            </Text>
+            {learnedToday != null && (
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+                Learned today: {learnedToday} · This device
+              </Text>
+            )}
+            <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
+              <Button
+                variant="text"
+                label={preferenceBusy ? "Saving…" : "Save"}
+                disabled={preferenceBusy || preferenceLoading || preferenceLoadFailed}
+                onPress={saveDailyLimit}
+              />
+            </View>
+            {preferenceLoadFailed && (
+              <View style={{alignSelf: "flex-start"}}>
+                <Button
+                  variant="text"
+                  label="Retry"
+                  disabled={preferenceLoading}
+                  onPress={() => setPreferenceRefresh((value) => value + 1)}
+                />
+              </View>
+            )}
+            {(preferenceError != null || preferenceMessage != null) && (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[typeScale.bodySmall, {color: preferenceError ? colors.error : colors.onSurfaceVariant, marginTop: spacing.xs}]}
+              >
+                {preferenceError ?? preferenceMessage}
+              </Text>
+            )}
+          </WaniKaniCard>
+        </View>
+
+        {isKnownConnected && !changingToken && (
+          <View style={{marginTop: spacing.s}}>
+            <Button variant="text" label="Change token" disabled={busy} onPress={() => setChangingToken(true)} />
+          </View>
+        )}
+
+        {showTokenField && <View style={{marginTop: spacing.l}}>
           <WaniKaniCard>
             <FieldLabel label="Personal access token" />
             <TextField
@@ -243,25 +361,20 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
               autoCorrect={false}
               editable={!busy}
             />
-            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-              {
-                "Create a token with read-only access on WaniKani and paste it here. It is kept on this device only — encrypted, outside backups — and is sent only to api.wanikani.com. Gaten never shows it again."
-              }
-            </Text>
             <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
-              <Button variant="text" label="Open WaniKani token settings" onPress={openTokenPage} />
+              <Button variant="text" label="Get a token" onPress={openTokenPage} />
             </View>
           </WaniKaniCard>
-        </View>
+        </View>}
 
-        <View style={{marginTop: spacing.l}}>
+        {showTokenField && <View style={{marginTop: spacing.l}}>
           <Button
-            label={busy ? "Checking…" : "Save and connect"}
+            label={busy ? "Checking…" : "Connect"}
             disabled={busy || token.trim().length === 0}
             fullWidth
             onPress={connect}
           />
-        </View>
+        </View>}
 
         {(isKnownConnected || cleared === false) && (
           <View style={{marginTop: spacing.s, flexDirection: "row", gap: spacing.s}}>
@@ -284,21 +397,6 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
             {message}
           </Text>
         )}
-
-        <View style={{marginTop: spacing.l}}>
-          <WaniKaniCard>
-            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-              {
-                "WaniKani's pages cover the kanji and radicals of its own curriculum, so a kanji outside it has no page here: Gaten says so instead of inventing content. Radical names are WaniKani's own, not linguistic definitions."
-              }
-            </Text>
-            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
-              {
-                "WaniKani and its content belong to Tofugu LLC. These pages are an unofficial third-party reference, not affiliated with or endorsed by WaniKani, and nothing from WaniKani is bundled with Gaten or exported to Anki."
-              }
-            </Text>
-          </WaniKaniCard>
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -153,6 +153,9 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
   const leave = useCallback(() => {
     if (review.busy) return;
     switch (review.step.kind) {
+      case "done":
+        reviewActions.changeDeck();
+        return;
       case "session":
         setConfirmLeave(true);
         return;
@@ -174,7 +177,7 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
   useEffect(() => {
     if (!isFocused) return;
     const insideADeck =
-      review.step.kind === "session" ||
+      review.step.kind === "session" || review.step.kind === "done" ||
       (review.step.kind === "failed" && review.deck != null);
     if (!insideADeck) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -206,7 +209,9 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
     <View style={[styles.screen, {backgroundColor: colors.background}]}>
       <StepEnter pageKey={step.kind} forward={forward}>
         {step.kind === "opening" ? (
-          <OpeningView source={step.source} onBack={onExit} />
+          step.source === "anki" ? (
+            <AnkiDeckPicker decks={[]} busy onBack={onExit} onStart={() => {}} />
+          ) : <OpeningView source={step.source} onBack={onExit} />
         ) : step.kind === "blocked" ? (
           <BlockedView
             theme={theme}
@@ -218,6 +223,8 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
         ) : step.kind === "decks" ? (
           <AnkiDeckPicker
             decks={step.decks}
+            filteredEmpty={step.filteredEmpty}
+            completedDeckIds={step.completedDeckIds}
             busy={review.busy}
             onBack={leave}
             onStart={(deck) => reviewActions.startDeck(deck)}
@@ -257,15 +264,13 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
           />
         ) : step.kind === "wkHome" ? (
           <WaniKaniHome
-            summary={step.summary}
-            failed={step.failed}
-            lessonsLocked={step.lessonsLocked}
-            pausedLesson={step.pausedLesson}
+            hub={step}
             busy={review.busy}
             onBack={leave}
             onStartReviews={() => reviewActions.startReviews()}
             onStartLessons={() => reviewActions.startLessons()}
             onRetrySync={() => reviewActions.retryWaniKaniSync()}
+            onConnect={() => reviewActions.showWaniKaniConnect()}
           />
         ) : step.kind === "wkReview" ? (
           <WaniKaniReview
