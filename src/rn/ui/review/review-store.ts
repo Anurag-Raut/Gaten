@@ -25,7 +25,11 @@
 import * as Anki from "../../native/GatenAnki";
 import * as WaniKani from "../../native/GatenWaniKani";
 import {getAnkiDecks, loadAnkiDecks} from "../anki/useAnkiDecks";
-import {getWaniKaniStats, loadWaniKaniStats} from "../analytics/useWaniKaniStats";
+import {
+  getWaniKaniStats,
+  loadWaniKaniStats,
+  resetWaniKaniStats,
+} from "../analytics/useWaniKaniStats";
 import type {
   AnkiCardResult,
   AnkiDeckResult,
@@ -282,6 +286,15 @@ function waniKaniFailureOf(error: unknown): WaniKaniFailure {
     if (match) return match[1] as WaniKaniFailure;
   }
   return "SERVER";
+}
+
+/**
+ * Whether a shared-stats status is an answer rather than a read still on its way. `idle`,
+ * `loading` and `refreshing` are all transient: a caller that has awaited a read and still sees one
+ * of them got no answer for its account, so it must read again instead of leaving a skeleton up.
+ */
+function isTerminalWaniKaniStatus(status: string): boolean {
+  return status === "ready" || status === "failed" || status === "needsToken" || status === "authRejected";
 }
 
 /** How a meaning is compared: WaniKani answers are case-insensitive and their spacing does not count. */
@@ -573,14 +586,34 @@ class ReviewStore {
       (preferences) => ({preferences, failed: false}),
       () => ({preferences: null, failed: true}),
     );
-    await loadWaniKaniStats(true);
-    const stats = getWaniKaniStats();
-    if (request !== this.hubRequest || this.state.step.kind !== "wkHome") return;
+    // A read a reset superseded answers nothing at all: the store it wrote to no longer exists, so
+    // the hub would sit on its skeletons forever. Read again rather than take that for an answer.
+    // The retry is bounded, so a store that is forgotten in a loop cannot keep this page spinning,
+    // and it joins any read already in flight instead of starting a second run of requests.
+    let stats = getWaniKaniStats();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await loadWaniKaniStats(true);
+      if (request !== this.hubRequest || this.state.step.kind !== "wkHome") return;
+      stats = getWaniKaniStats();
+      if (isTerminalWaniKaniStatus(stats.status)) break;
+    }
     const budget = await learning;
+    if (request !== this.hubRequest || this.state.step.kind !== "wkHome") return;
     this.set({step: this.hubStep({
       learningPreferences: budget.preferences,
       learningPreferencesFailed: budget.failed,
     })});
+    // The budget read above gave a reset another window: take the store as it stands now, not as it
+    // stood when the read finished, so an account forgotten mid-flight is not shown as current.
+    stats = getWaniKaniStats();
+    // A store with no answer at all (a reset landed between the reads, or one is still on its way)
+    // would leave the hub on its skeletons with no way out: state the sync failed so it offers a retry.
+    if (stats.status === "idle" || stats.status === "loading") {
+      this.set({step: this.hubStep({
+        failed: true, refreshing: false, failure: {failure: "SERVER", retryAfterSeconds: null},
+      })});
+      return;
+    }
     switch (stats.status) {
       case "ready": {
         const snapshot = stats.snapshot;
@@ -609,7 +642,15 @@ class ReviewStore {
         return;
       }
       case "refreshing":
-        // A read another surface started is still on its way: what is confirmed stays up.
+        // A read another surface started is still on its way: what is confirmed stays up. With
+        // nothing confirmed — a first connect whose read was superseded — say the sync failed
+        // rather than leave the skeleton with no way out.
+        if (this.lastHub?.summary == null) {
+          this.set({step: this.hubStep({
+            failed: true, refreshing: false, failure: {failure: "SERVER", retryAfterSeconds: null},
+          })});
+          return;
+        }
         this.set({step: this.hubStep({refreshing: true})});
         return;
       case "needsToken":
@@ -625,12 +666,6 @@ class ReviewStore {
             sync: stats.failure === "OFFLINE" ? "offline" : "failed"},
           failure: {failure: stats.failure ?? "SERVER", retryAfterSeconds: stats.retryAfterSeconds},
         })});
-        return;
-      case "idle":
-      case "loading":
-        // No answer to take: a read still on its way, or one WaniKani asked us to wait on. Whatever
-        // is already up stays up rather than being replaced by a spinner.
-        this.set({step: this.hubStep({refreshing: stats.status === "loading"})});
         return;
     }
   }
@@ -806,7 +841,12 @@ class ReviewStore {
       if (result.status === "invalidToken") {
         return { status: "invalidToken" };
       }
+      // The token may belong to a different account, so everything the shared store still holds —
+      // numbers, a rate-limit wait, a read in flight — is dropped before the hub reads it. The
+      // reset has to happen here, before the read: the connection screen used to do it after, which
+      // let the hub read the account that had just been replaced.
       this.resetWaniKaniAccount();
+      resetWaniKaniStats();
       await this.enterWaniKaniHome();
       return { status: "connected" };
     } catch (error) {
