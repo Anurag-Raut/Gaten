@@ -5,11 +5,15 @@
  */
 
 import React, {useEffect, useState} from "react";
+import {Text, View} from "react-native";
 import * as GatenRecognition from "../../native/GatenRecognition";
-import {SettingsGroup, SettingsPageScaffold, SettingsRow} from "./settings-components";
-import {spacing} from "../tokens";
+import {PressableScale} from "../PressableScale";
+import {useTheme} from "../theme";
+import {spacing, typeScale} from "../tokens";
+import {SettingsGroup, SettingsPageScaffold} from "./settings-components";
 
 export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
+  const {colors} = useTheme();
   const [mangaOcrEnabled, setMangaOcrEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -26,7 +30,6 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
     setMangaOcrEnabled(enabled);
     void GatenRecognition.setMangaOcrEnabled(enabled);
   };
-  const selectedMangaOcr = mangaOcrEnabled ?? true;
 
   return (
     <SettingsPageScaffold
@@ -37,24 +40,48 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
         "Google ML Kit is an alternative for standard Japanese text. It runs on this device.",
       ]}
     >
-      <SettingsGroup title="Recognition engine" style={{marginTop: spacing.s}}>
-        <SettingsRow
-          icon={selectedMangaOcr ? "check_circle" : "text_snippet"}
-          title="Manga OCR"
-          summary="Recommended · included with Gaten"
-          value={selectedMangaOcr ? "Selected" : undefined}
-          disabled={mangaOcrEnabled == null}
-          onPress={selectedMangaOcr ? undefined : () => selectEngine(true)}
-        />
-        <SettingsRow
-          icon={selectedMangaOcr ? "text_snippet" : "check_circle"}
-          title="Google ML Kit"
-          summary="Google's on-device Japanese text recognition"
-          value={selectedMangaOcr ? undefined : "Selected"}
-          disabled={mangaOcrEnabled == null}
-          onPress={selectedMangaOcr ? () => selectEngine(false) : undefined}
-        />
-      </SettingsGroup>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Recognition engine">
+        <SettingsGroup title="Recognition engine" style={{marginTop: spacing.s}}>
+          {[
+            {title: "Manga OCR", summary: "Recommended · included with Gaten", enabled: true},
+            {title: "Google ML Kit", summary: "Google's on-device Japanese text recognition", enabled: false},
+          ].map((engine) => {
+            const selected = mangaOcrEnabled === engine.enabled;
+            const disabled = mangaOcrEnabled == null;
+            return (
+              <PressableScale
+                key={engine.title}
+                accessibilityRole="radio"
+                accessibilityLabel={`${engine.title}. ${engine.summary}`}
+                accessibilityState={{checked: selected, disabled}}
+                disabled={disabled}
+                onPress={() => {
+                  if (!selected) selectEngine(engine.enabled);
+                }}
+                style={{minHeight: 60, paddingVertical: spacing.m, flexDirection: "row", alignItems: "center", gap: spacing.m}}
+              >
+                <View style={{flex: 1, minWidth: 0}}>
+                  <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{engine.title}</Text>
+                  <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>{engine.summary}</Text>
+                </View>
+                <View
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    borderWidth: 2,
+                    borderColor: disabled ? colors.disabled : selected ? colors.accent : colors.iconSecondary,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {selected && <View style={{width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent}} />}
+                </View>
+              </PressableScale>
+            );
+          })}
+        </SettingsGroup>
+      </View>
     </SettingsPageScaffold>
   );
 }
