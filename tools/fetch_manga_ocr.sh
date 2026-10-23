@@ -4,9 +4,9 @@
 # Copyright (C) 2026 Anurag Raut
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Downloads the optional manga-ocr model (the app's second-pass Japanese OCR engine) so it can be
-# pushed to a device and imported from Settings. Development convenience only: the app itself never
-# downloads anything, and the model is never part of a release APK.
+# Downloads the manga-ocr model (the app's second-pass Japanese OCR engine) so it can be pushed to a
+# device and imported from Settings. Development convenience only: the build fetches the same files
+# into app/src/main/assets/manga-ocr/ for every APK, so a normal build already carries them.
 #
 # The three files are the ones the settings screen asks for:
 #   encoder_model_int8.onnx  onnx-community/manga-ocr-base-ONNX (ViT encoder, int8)

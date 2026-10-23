@@ -27,6 +27,8 @@ export interface MangaOcrCatalogEntry {
 /** Where the model sits right now, read fresh on every ask. */
 export type RecognitionInstalledState = {
   installed: boolean;
+  /** True when this build carries the weights in its assets, so no download is needed. */
+  bundled: boolean;
   catalogId: string | null;
   sizeBytes: number;
 };
@@ -48,6 +50,7 @@ interface GatenRecognitionNative {
   cancelDownload(): Promise<boolean>;
   pickModelFiles(): Promise<string[]>;
   importFiles(uris: string[]): Promise<RecognitionOutcome>;
+  installBundled(): Promise<RecognitionOutcome>;
   removeModel(): Promise<RecognitionOutcome>;
   isMetered(): Promise<boolean>;
 }
@@ -89,6 +92,14 @@ export function pickModelFiles(): Promise<string[]> {
  */
 export function importFiles(uris: string[]): Promise<RecognitionOutcome> {
   return GatenRecognition.importFiles(uris);
+}
+
+/**
+ * Copies the bundled weights out of the app's assets; `done` tells whether the model is installed
+ * afterwards, and is false when the build carries no bundle. This is how a removed model comes back.
+ */
+export function installBundled(): Promise<RecognitionOutcome> {
+  return GatenRecognition.installBundled();
 }
 
 /** Takes the model off the phone; `removed` tells whether the directory really went. */

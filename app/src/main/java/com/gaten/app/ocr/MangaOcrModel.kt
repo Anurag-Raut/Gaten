@@ -16,18 +16,20 @@ import java.io.File
 import java.io.InputStream
 
 /**
- * Where the optional manga-ocr model lives, and how it gets there.
+ * Where the manga-ocr model lives, and how it gets there.
  *
- * The model is ~117 MB, so it is never shipped in a release APK. There are three ways onto a device,
- * and all of them end in `filesDir/manga-ocr/`, which is the one thing the OCR path asks about
- * ([isInstalled]):
+ * The model (~117 MB) ships inside the app: the build bundles the weights in `assets/manga-ocr`, and
+ * the first second-pass lookup copies them out ([installBundledIfPresent]). Every way in ends in
+ * `filesDir/manga-ocr/`, which is the one thing the OCR path asks about ([isInstalled]):
  *
+ *  - **Bundled** — every build carries the weights, so a fresh install works with no network. A
+ *    reader who removes the model keeps it removed: [remove] records the choice, and the bundle is
+ *    not copied out again until they ask ([installBundled]).
  *  - **Download** — the user picks a [MangaOcrCatalog] entry and taps Download on the settings
- *    screen ([MangaOcrDownloader] does the fetching and the installing).
+ *    screen ([MangaOcrDownloader] does the fetching and the installing), for a build made without
+ *    the bundle.
  *  - **Import** — the user picks the three files from device storage ([importFrom]), for a phone
  *    that has no network or a model fetched elsewhere.
- *  - **A bundled debug build** — `./gradlew :app:assembleDebug -PbundleMangaOcr=true` puts them in
- *    the APK's assets, and the first second-pass lookup copies them out ([installBundledIfPresent]).
  *
  * Files are named by role, not by the name they were fetched under: a picked file is matched on its
  * name prefix ([classifyName]), so `encoder_model_int8.onnx` lands as `encoder.onnx`. Every write
@@ -43,11 +45,14 @@ object MangaOcrModel {
     /** Directory inside `filesDir` holding the three files. */
     private const val DIR = "manga-ocr"
 
-    /** Asset directory a `-PbundleMangaOcr=true` debug build fills in. */
+    /** Asset directory the build fills with the bundled weights. */
     private const val ASSET_DIR = "manga-ocr"
 
     /** File naming the [MangaOcrCatalog] entry the installed model came from, when it is known. */
     private const val MARKER = "catalog.txt"
+
+    /** Marker beside the model directory recording that the reader removed the bundled model. */
+    private const val REMOVED_MARKER = "manga-ocr-removed"
 
     /** The three files the engine needs, as they are stored (and as they are bundled). */
     enum class Slot(val fileName: String) {
@@ -87,15 +92,30 @@ object MangaOcrModel {
     fun installedCatalogId(context: Context): String? = readMarker(dir(context))
 
     /**
-     * Copies the model out of the app's own assets into `filesDir/manga-ocr/` when a debug build
+     * Copies the model out of the app's own assets into `filesDir/manga-ocr/` when the build
      * bundled it and the directory is not already complete. Returns true when the model is installed
-     * afterwards. A no-op (and one asset listing per process) in every release build. Never throws.
+     * afterwards. A no-op (and one asset listing per process) once checked, and never restores a
+     * model the reader removed. Never throws.
      */
     suspend fun installBundledIfPresent(context: Context): Boolean = withContext(Dispatchers.IO) {
         if (bundledChecked) return@withContext isInstalled(context)
         bundledChecked = true
+        if (isInstalled(context)) return@withContext true
+        if (isRemovalRecorded(context)) return@withContext false
+        installBundled(context)
+    }
+
+    /**
+     * Copies the bundled model out, whatever the reader removed before: the settings page's install
+     * row calls this, which is also how a removed model comes back. Returns true when the model is
+     * installed afterwards, false when the build has no bundle. Never throws.
+     */
+    suspend fun installBundled(context: Context): Boolean = withContext(Dispatchers.IO) {
         try {
-            if (isInstalled(context)) return@withContext true
+            if (isInstalled(context)) {
+                clearRemoval(context)
+                return@withContext true
+            }
             val assets = context.assets.list(ASSET_DIR)?.toSet().orEmpty()
             if (!Slot.entries.all { it.fileName in assets }) return@withContext false
 
@@ -112,6 +132,15 @@ object MangaOcrModel {
             Log.w(TAG, "Bundled manga-ocr model could not be installed", e)
             false
         }
+    }
+
+    /** True when the build bundled the weights in the APK's assets. */
+    fun isBundled(context: Context): Boolean = try {
+        val assets = context.assets.list(ASSET_DIR)?.toSet().orEmpty()
+        Slot.entries.all { it.fileName in assets }
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not list the bundled manga-ocr assets", e)
+        false
     }
 
     /**
@@ -154,8 +183,12 @@ object MangaOcrModel {
         }
     }
 
-    /** Deletes the installed model. The engine notices on its next call and drops its sessions. */
+    /**
+     * Deletes the installed model and remembers the choice, so a bundled model is not copied back
+     * on the next launch. The engine notices on its next call and drops its sessions.
+     */
     fun remove(context: Context) {
+        recordRemoval(context)
         val dir = dir(context)
         if (dir.exists() && !dir.deleteRecursively()) {
             Log.w(TAG, "Could not delete ${dir.path}")
@@ -204,9 +237,30 @@ object MangaOcrModel {
                 marker.delete()
             } else {
                 marker.writeText("$id\n")
+                // A completed install is the reader's answer to a removal: the bundle may come back.
+                File(dir.parentFile, REMOVED_MARKER).delete()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not record the installed model's catalog id", e)
+        }
+    }
+
+    /** The file beside the model directory recording a removal, so the bundle is not restored. */
+    private fun removalMarker(context: Context): File = File(context.filesDir, REMOVED_MARKER)
+
+    private fun isRemovalRecorded(context: Context): Boolean = removalMarker(context).isFile
+
+    private fun recordRemoval(context: Context) {
+        try {
+            removalMarker(context).writeText("1\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not record the model removal", e)
+        }
+    }
+
+    private fun clearRemoval(context: Context) {
+        if (!removalMarker(context).delete() && removalMarker(context).exists()) {
+            Log.w(TAG, "Could not clear the recorded model removal")
         }
     }
 

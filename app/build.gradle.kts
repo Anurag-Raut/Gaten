@@ -219,12 +219,15 @@ tasks.named("preBuild") {
     dependsOn(verifyExamplesAsset)
 }
 
-// The optional manga-ocr model (~117 MB) is never shipped in a release APK: the user imports it
-// from device storage, or a debug build downloads it here. `-PbundleMangaOcr=true` makes Gradle
-// fetch the three files into a gitignored, debug-only asset directory (release variants never see
-// it) so the debug APK carries the model for testing; without the property nothing is downloaded.
-val bundleMangaOcr = providers.gradleProperty("bundleMangaOcr").map { it.toBoolean() }.getOrElse(false)
-val mangaOcrAssets = layout.projectDirectory.dir("src/debug/assets/manga-ocr")
+// The manga-ocr model (~117 MB) ships in every build, release included: the APK carries it in its
+// assets and the app copies it out on first use, so there is no download and no import step. The
+// weights are gitignored, so Gradle fetches the three files into `src/main/assets/manga-ocr` before
+// the assets are merged; once they are there the task is up to date and a rebuild is free. The same
+// bytes the settings catalog lists, so a downloaded model and the bundled one are interchangeable.
+// `-PbundleMangaOcr=false` is the escape hatch for a build that must not touch the network; the app
+// then has no bundled model and the settings page's Download is the only way in.
+val bundleMangaOcr = providers.gradleProperty("bundleMangaOcr").map { it.toBoolean() }.getOrElse(true)
+val mangaOcrAssets = layout.projectDirectory.dir("src/main/assets/manga-ocr")
 
 /** Streams [url] into [target] through a temp file, following redirects (Hugging Face serves 307s). */
 fun downloadFollowingRedirects(url: String, target: File) {
@@ -269,7 +272,7 @@ val fetchMangaOcrModel by tasks.registering {
         "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/decoder_model_int8.onnx" to "decoder.onnx",
         "https://huggingface.co/kha-white/manga-ocr-base/resolve/main/vocab.txt" to "vocab.txt"
     )
-    description = "Downloads the optional manga-ocr ONNX model into ${mangaOcrAssets.asFile.relativeTo(projectDir)} (debug builds with -PbundleMangaOcr=true)."
+    description = "Downloads the manga-ocr ONNX model into ${mangaOcrAssets.asFile.relativeTo(projectDir)} so every build can bundle it."
     // Nothing to do while every file is there, so a rebuild after the first fetch is free.
     outputs.upToDateWhen { downloads.values.all { File(targetDir, it).isFile } }
     doLast {
@@ -291,10 +294,10 @@ val fetchMangaOcrModel by tasks.registering {
     }
 }
 
-// Only the debug build, and only when asked for: the model must never reach a release APK, and a
-// normal debug build must not touch the network.
+// Every variant carries the model, so the fetch runs before any asset merge. Turned off only by an
+// explicit `-PbundleMangaOcr=false`.
 if (bundleMangaOcr) {
-    tasks.matching { it.name == "mergeDebugAssets" }.configureEach {
+    tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(fetchMangaOcrModel)
     }
 }
@@ -351,8 +354,8 @@ dependencies {
     // model download and the optional WaniKani pages, nothing here.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
-    // ONNX Runtime Mobile, for the optional manga-ocr second pass (ocr/MangaOcrEngine.kt). The
-    // library asks for INTERNET in its manifest, which the app manifest removes; the model itself
-    // is never bundled in a release APK (see fetchMangaOcrModel above).
+    // ONNX Runtime Mobile, for the manga-ocr second pass (ocr/MangaOcrEngine.kt). The library asks
+    // for INTERNET in its manifest, which the app manifest removes; the weights themselves are
+    // bundled in every build (see fetchMangaOcrModel above).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
 }

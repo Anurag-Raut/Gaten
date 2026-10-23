@@ -26,6 +26,8 @@ export interface RecognitionProgressState {
 /** Everything the recognition page renders. */
 export interface RecognitionStoreState {
   installed: boolean;
+  /** True when the app itself carries the weights, so there is nothing to download. */
+  bundled: boolean;
   installedId: string | null;
   sizeBytes: number;
   /** The entry being fetched, while one is. */
@@ -38,6 +40,7 @@ export interface RecognitionStoreState {
 
 let state: RecognitionStoreState = {
   installed: false,
+  bundled: false,
   installedId: null,
   sizeBytes: 0,
   downloading: null,
@@ -63,6 +66,7 @@ async function readInstalled() {
     const installed = await Recognition.getInstalled();
     patch({
       installed: installed.installed,
+      bundled: installed.bundled,
       installedId: installed.catalogId,
       sizeBytes: installed.sizeBytes,
     });
@@ -174,6 +178,24 @@ export const recognitionStore = {
           ? "manga-ocr model installed"
           : "Import failed: encoder, decoder and vocab files are all needed"
       );
+    });
+  },
+
+  /**
+   * Copies the bundled weights out of the app's assets. Offered when the build carries them and
+   * the directory is empty — a fresh install before the first lookup, or after a removal.
+   */
+  installBundled() {
+    void mutate(async () => {
+      let done = false;
+      try {
+        const outcome = await Recognition.installBundled();
+        done = outcome.kind === "imported" ? outcome.done : false;
+      } catch {
+        done = false;
+      }
+      await readInstalled();
+      void toast(done ? "manga-ocr model installed" : "This build has no bundled model");
     });
   },
 

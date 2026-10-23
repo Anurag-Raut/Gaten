@@ -5,15 +5,14 @@
  */
 
 /**
- * The optional manga-ocr model: what is installed, the models the catalog offers, and the ways
- * onto the phone.
+ * The manga-ocr model: what is installed, the app's own bundled copy, and the ways onto the phone.
  *
  * There is no switch: manga-ocr is the reader as soon as its model is on the phone, and with none
- * installed the built-in reader (ML Kit) reads the screen — the Help dialog says so, because the
- * sentence is longer than a row. Downloading is one of the app's two network uses, and it only
- * happens after the size has been shown and confirmed; importing opens a document picker for a
- * phone with no network or a model fetched elsewhere. Both end in the same directory, and Remove
- * takes the model off again.
+ * installed the built-in reader (ML Kit) reads the screen. Every build carries the weights in its
+ * assets, so a fresh install shows "Bundled" and installs them from the app itself, with no network
+ * and no download; a build made without the bundle (`-PbundleMangaOcr=false`) still offers the
+ * catalog's Download. Importing opens a document picker for a model fetched elsewhere. All ways end
+ * in the same directory, and Remove takes the model off again — and keeps it removed.
  *
  * All of that state lives in the recognition store, outside any screen: leaving the page, opening
  * another one or the phone turning neither cancels a running download nor throws away what it has
@@ -36,9 +35,22 @@ import {
 } from "./settings-components";
 
 const HELP_PARAGRAPHS = [
-  "Without a model, ML Kit reads the screen. manga-ocr helps with stylized lettering; unreadable lines keep ML Kit's text.",
-  "Recognition runs on this device. Import model files offline, or download after confirming the size.",
+  "manga-ocr ships with Gaten and reads stylized lettering; with no model installed ML Kit reads the screen. Unreadable lines keep ML Kit's text.",
+  "Recognition runs on this device. A model fetched elsewhere can still be imported from storage.",
 ];
+
+/** What the model row says under its name, by whether the app carries the weights and has them out. */
+function modelSummary(bundled: boolean, installed: boolean): string {
+  if (installed) {
+    return bundled
+      ? "Included with Gaten; reads stylized text on this device."
+      : "Installed on this device; reads stylized text.";
+  }
+  if (bundled) {
+    return "Included with Gaten; set up on the first lookup, or install it below.";
+  }
+  return "ML Kit reads the screen; manga-ocr is an optional download.";
+}
 
 /** "manga-ocr (int8) installed (117 MB)", or just what is there when the entry is not known. */
 function statusText(
@@ -80,7 +92,7 @@ function shortFileSize(bytes: number): string {
 }
 
 export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
-  const {state, refreshInstalled, download, cancelDownload, importFiles, removeModel} =
+  const {state, refreshInstalled, download, cancelDownload, importFiles, installBundled, removeModel} =
     useRecognition();
   const {colors} = useTheme();
   // The entry the confirm dialog is asking about. The download itself belongs to the store.
@@ -88,10 +100,10 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
   const [metered, setMetered] = useState(false);
   const busy = state.busy;
 
-  // The model directory can change while this page is not looking — a debug build copies its
-  // bundled model out on the first lookup, which the accessibility service runs with the app in
-  // the background — so what is installed is re-read on every arrival and every foregrounding.
-  // The store drops the ask while a download or an import owns the directory.
+  // The model directory can change while this page is not looking — the first lookup copies the
+  // bundled model out, and the accessibility service runs that with the app in the background — so
+  // what is installed is re-read on every arrival and every foregrounding. The store drops the ask
+  // while a download or an import owns the directory.
   useEffect(() => {
     refreshInstalled();
     const subscription = AppState.addEventListener("change", (appState) => {
@@ -121,26 +133,51 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
         <SettingsRow
           icon={state.installed ? "check_circle" : "text_snippet"}
           title="Text recognition"
-          summary="ML Kit reads the screen; manga-ocr is optional and is not bundled in release builds."
-          value={statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)}
+          summary={modelSummary(state.bundled, state.installed)}
+          value={
+            state.installed
+              ? statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)
+              : state.bundled
+                ? "Bundled"
+                : "No model installed"
+          }
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Available model" style={{marginTop: spacing.xl}}>
-        {state.catalog.map((entry) => {
-          const installed = state.installed && state.installedId === entry.id;
-          return (
+      {/* The weights are in the APK, so there is nothing to download; the row is the reader's
+          choice to copy them out now, or to take them off again. */}
+      {state.bundled && !state.installed && (
+        <View style={{marginTop: spacing.xl}}>
+          <SettingsTile>
             <SettingsRow
-              key={entry.id}
-              icon={installed ? "check_circle" : "download"}
-              title={entry.label}
-              value={installed ? "Installed" : `~${entry.approxSizeMb} MB`}
-              disabled={!installed && busy}
-              onPress={installed ? undefined : () => setConfirmDownload(entry)}
+              icon="download"
+              title="Install bundled model"
+              summary="Copies the weights out of the app; no network needed."
+              disabled={busy}
+              onPress={() => installBundled()}
             />
-          );
-        })}
-      </SettingsGroup>
+          </SettingsTile>
+        </View>
+      )}
+
+      {/* Without a bundle the catalog is the only way in, and the download still confirms its size. */}
+      {!state.bundled && (
+        <SettingsGroup title="Available model" style={{marginTop: spacing.xl}}>
+          {state.catalog.map((entry) => {
+            const installed = state.installed && state.installedId === entry.id;
+            return (
+              <SettingsRow
+                key={entry.id}
+                icon={installed ? "check_circle" : "download"}
+                title={entry.label}
+                value={installed ? "Installed" : `~${entry.approxSizeMb} MB`}
+                disabled={!installed && busy}
+                onPress={installed ? undefined : () => setConfirmDownload(entry)}
+              />
+            );
+          })}
+        </SettingsGroup>
+      )}
 
       {state.downloading != null && (
         <View style={{marginTop: spacing.l}}>

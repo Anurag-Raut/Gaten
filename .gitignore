@@ -23,9 +23,9 @@ app/src/main/assets/db/jmdict.sqlite
 # Generated example sentences: build it with tools/build_examples_db.py
 app/src/main/assets/db/examples.sqlite
 
-# Optional manga-ocr model: downloaded by the debug build with -PbundleMangaOcr=true, or by
-# tools/fetch_manga_ocr.sh. ~117 MB of weights, debug-only, never part of a release APK.
-app/src/debug/assets/manga-ocr/
+# manga-ocr model: fetched by the build into the assets every variant bundles, or by
+# tools/fetch_manga_ocr.sh. ~117 MB of weights, gitignored like the dictionary databases.
+app/src/main/assets/manga-ocr/
 
 # Device evidence screenshots stay out of history
 docs/jp-prototype/**/*.png

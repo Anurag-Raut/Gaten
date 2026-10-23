@@ -233,7 +233,7 @@ Both database assets (`app/src/main/assets/db/jmdict.sqlite` and
 `app/src/main/assets/db/examples.sqlite`) are generated and gitignored, so the build fails early with
 a clear message if either builder was skipped.
 
-## Optional stylized-text model (manga-ocr)
+## Stylized-text model (manga-ocr)
 
 ML Kit finds the lines; manga-ocr reads them. ML Kit's own reading is good on plain text but misreads
 stylized fonts — outlined video-thumbnail text, hand-lettered manga lettering — which is exactly what
@@ -259,16 +259,23 @@ from local files or APK assets, with no download; this first lookup may take lon
 Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
 The memory reduction has not been measured on the current version.
 
-The model is ~117 MB, so it is never part of a release APK. There are three ways to get it onto a
-phone, and the app only reaches the network for the first one:
+The model is ~117 MB and is **bundled in every build**: Gradle fetches the three weights into
+`app/src/main/assets/manga-ocr/` (gitignored) before the assets are merged, the APK carries them,
+and the app copies them into its own storage the first time the second pass runs. A fresh install
+therefore has manga-ocr with no download and no network. There are three ways the model can reach
+`filesDir/manga-ocr/`:
 
-- **Download it in the app** — Gaten → **Settings → Text recognition → Download**.
-  The size is shown first and has to be confirmed (with a warning when the phone is on mobile data),
-  the download runs with a progress bar and a Cancel button, and the only hosts it talks to are
-  `huggingface.co` and the CDN it redirects to, over HTTPS. Nothing is fetched until that button is
-  tapped. WaniKani is the app's only other network use, and only with a token connected: a kanji page
-  when one is tapped, and the account's own study progress when the Analytics tab is open. The files
-  come from
+- **The app's own bundle** — the default. **Settings → Text recognition** shows the model as
+  **Bundled** and offers **Install bundled model** for copying the weights out early; the first
+  lookup does it on its own, offline. **Remove model** takes them off and keeps them off, until
+  **Install bundled model** is tapped again.
+- **Download it in the app** — only for a build made without the bundle
+  (`-PbundleMangaOcr=false`): **Settings → Text recognition → Download**. The size is shown first and
+  has to be confirmed (with a warning when the phone is on mobile data), the download runs with a
+  progress bar and a Cancel button, and the only hosts it talks to are `huggingface.co` and the CDN
+  it redirects to, over HTTPS. Nothing is fetched until that button is tapped. WaniKani is the app's
+  only other network use, and only with a token connected: a kanji page when one is tapped, and the
+  account's own study progress when the Analytics tab is open. The files come from
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
   (`encoder_model_int8.onnx`, `decoder_model_int8.onnx`) and
   [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base) (`vocab.txt`).
@@ -276,10 +283,9 @@ phone, and the app only reaches the network for the first one:
   `encoder_model_int8.onnx`, `decoder_model_int8.onnx` and `vocab.txt` from device storage; they are
   recognised by name, so nothing has to be renamed. `tools/fetch_manga_ocr.sh [dir]` downloads them
   on a computer and prints the matching `adb push` command.
-- **For a debug build.** `./gradlew :app:assembleDebug -PbundleMangaOcr=true` has Gradle fetch the
-  three files into `app/src/debug/assets/manga-ocr/` (gitignored), so the debug APK carries them;
-  the app copies them into its own storage the first time the second pass runs. Without the property
-  nothing is downloaded, and a release build never sees the files.
+
+`-PbundleMangaOcr=false` skips the fetch and produces an APK with no model, where Download is the
+only way in.
 
 Without the model, ML Kit both finds and reads the lines, which is exactly what the app did before
 the model existed; a circle is then answered from the index lines it covered, or — before the index
@@ -479,9 +485,10 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 Reading is offline and stays offline. Gaten makes network requests for exactly two things, both of
 them started by the reader and neither of them in the background:
 
-- **The optional stylized-text model**, downloaded by tapping Download, goes to `huggingface.co` and
-  the CDN it redirects to, over HTTPS, and nowhere else (`ocr/MangaOcrDownloader.kt` enforces that
-  allow-list, redirects included).
+- **The stylized-text model**, downloaded by tapping Download in a build made without the bundle,
+  goes to `huggingface.co` and the CDN it redirects to, over HTTPS, and nowhere else
+  (`ocr/MangaOcrDownloader.kt` enforces that allow-list, redirects included). The default build
+  carries the weights and never fetches them.
 - **WaniKani**, once a token is connected: connecting and rechecking send the token to
   `api.wanikani.com` for `GET /user` (the one account call, read only for the subscription's level
   entitlement), and opening a kanji sends that character — a radical, its id, a kanji's composition
@@ -561,8 +568,8 @@ documented here rather than left implicit.
   fetched on request and cached on the reader's device, and Gaten is not affiliated with WaniKani.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
   lines and reads them when no manga-ocr model is installed.
-- **Optional stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
+- **Stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
   Apache-2.0) through the ONNX export at
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),
-  run on [ONNX Runtime](https://onnxruntime.ai/) (Microsoft, MIT). The model files are downloaded by
-  the user or by a debug build, never shipped.
+  run on [ONNX Runtime](https://onnxruntime.ai/) (Microsoft, MIT). The model files are fetched by the
+  build and bundled with the app.

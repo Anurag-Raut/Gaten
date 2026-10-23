@@ -202,6 +202,32 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * Copies the bundled model out of the APK's assets, which is how a removed model comes back.
+     * `done` tells whether it is installed afterwards; false means this build has no bundle.
+     */
+    @ReactMethod
+    fun installBundled(promise: Promise) {
+        if (!busy.compareAndSet(false, true)) {
+            promise.resolve(outcomeMap("busy"))
+            return
+        }
+        scope.launch {
+            try {
+                val done = withContext(Dispatchers.IO) {
+                    MangaOcrModel.installBundled(reactApplicationContext)
+                }
+                promise.resolve(outcomeMap("imported").apply { putBoolean("done", done) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_IMPORT, "The bundled model could not be installed", e)
+            } finally {
+                busy.set(false)
+            }
+        }
+    }
+
+    /**
      * Takes the model off the phone; `removed` tells whether the directory really went, read back
      * rather than assumed, because a directory that cannot be deleted leaves the model in place.
      */
@@ -246,6 +272,7 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     private fun installedState(context: ReactApplicationContext): WritableMap =
         Arguments.createMap().apply {
             putBoolean("installed", MangaOcrModel.isInstalled(context))
+            putBoolean("bundled", MangaOcrModel.isBundled(context))
             val catalogId = MangaOcrModel.installedCatalogId(context)
             if (catalogId != null) putString("catalogId", catalogId) else putNull("catalogId")
             putDouble("sizeBytes", MangaOcrModel.installedSizeBytes(context).toDouble())

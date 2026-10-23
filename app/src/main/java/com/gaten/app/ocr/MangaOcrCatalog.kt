@@ -79,7 +79,7 @@ object MangaOcrCatalog {
 
     /**
      * The entry whose declared file sizes are exactly [sizes], or null when none matches. This is
-     * how a model that was imported (or copied out of a bundled debug APK) is still named in the
+     * how a model that was imported (or copied out of the APK's bundle) is still named in the
      * settings screen: the same bytes, so the same entry.
      */
     fun identify(sizes: Map<MangaOcrModel.Slot, Long>): Entry? = entries.firstOrNull { entry ->

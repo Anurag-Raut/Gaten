@@ -22,6 +22,7 @@ export interface UseRecognition {
   download(entry: MangaOcrCatalogEntry): void;
   cancelDownload(): void;
   importFiles(uris: string[]): void;
+  installBundled(): void;
   removeModel(): void;
 }
 
@@ -37,6 +38,7 @@ export function useRecognition(): UseRecognition {
     download: recognitionStore.download,
     cancelDownload: recognitionStore.cancelDownload,
     importFiles: recognitionStore.importFiles,
+    installBundled: recognitionStore.installBundled,
     removeModel: recognitionStore.removeModel,
   };
 }
