@@ -470,6 +470,85 @@ test("the hub's counts are the ones Home's card reads, from one read", async () 
   assert.equal(reviewStore.getState().step.summary.lessonsNow, 3);
 });
 
+test('connecting from the connection screen lands on a loaded hub, not a skeleton', async () => {
+  let configured = false;
+  const store = mockStore({
+    isConfigured: async () => configured,
+    connect: async () => { configured = true; return {status: 'connected', maxLevelGranted: 60}; },
+    refreshStats: async () => availableStats({dueNow: 2, lessonsNow: 3}),
+  });
+  store.showWaniKaniConnect();
+  assert.equal(store.getState().step.kind, 'wkConnect');
+  const outcome = await store.connectWaniKani('token');
+  assert.equal(outcome.status, 'connected');
+  const step = store.getState().step;
+  assert.equal(step.kind, 'wkHome');
+  assert.equal(step.refreshing, false);
+  assert.doesNotThrow(() => models(step), 'the hub can derive its rows');
+  assert.ok(step.summary, 'the hub has numbers rather than only skeletons');
+  assert.equal(step.summary.dueNow, 2);
+  assert.equal(step.summary.lessonsNow, 3);
+});
+
+test('a reset during the connect hub read is read again instead of leaving skeletons', async () => {
+  const firstRead = deferred();
+  let reads = 0;
+  const {reviewStore, waniKaniStats} = buildStores({
+    isConfigured: async () => true,
+    connect: async () => ({status: 'connected', maxLevelGranted: 60}),
+    refreshStats: async () => {
+      reads += 1;
+      return reads === 1 ? firstRead.promise : availableStats({dueNow: 4, lessonsNow: 5});
+    },
+  });
+  reviewStore.showWaniKaniConnect();
+  const connecting = reviewStore.connectWaniKani('token');
+  await until(
+    () => reviewStore.getState().step.kind === 'wkHome' && reviewStore.getState().step.refreshing,
+    'hub reading',
+  );
+  // A disconnect — or another account — forgets the store while the read is still in flight.
+  waniKaniStats.resetWaniKaniStats();
+  firstRead.resolve(availableStats({dueNow: 99, lessonsNow: 99}));
+  await connecting;
+  await until(
+    () => reviewStore.getState().step.kind === 'wkHome' && !reviewStore.getState().busy,
+    'hub settled',
+  );
+  const step = reviewStore.getState().step;
+  assert.equal(step.failed, false);
+  assert.ok(step.summary, 'the hub did not stay on its skeletons');
+  assert.equal(step.summary.dueNow, 4);
+  assert.equal(step.summary.lessonsNow, 5);
+});
+
+test('connecting forgets a previous account rate-limit wait before the hub reads', async () => {
+  const {reviewStore, waniKaniStats} = buildStores({
+    isConfigured: async () => true,
+    connect: async () => ({status: 'connected', maxLevelGranted: 60}),
+    stats: async () => ({
+      status: 'available',
+      snapshot: availableStats({dueNow: 99, lessonsNow: 99}).snapshot,
+      cached: true,
+      stale: true,
+      failure: 'RATE_LIMITED',
+      retryAfterSeconds: 60,
+    }),
+    refreshStats: async () => availableStats({dueNow: 7, lessonsNow: 8}),
+  });
+  // The old account is rate-limited: the shared store holds a future wait and a stale count.
+  await waniKaniStats.loadWaniKaniStats(false);
+  assert.ok(waniKaniStats.getWaniKaniStats().retryAt != null, 'a wait is in force');
+  reviewStore.showWaniKaniConnect();
+  await reviewStore.connectWaniKani('token');
+  const step = reviewStore.getState().step;
+  assert.equal(step.kind, 'wkHome');
+  assert.ok(step.summary, 'the hub read the new account rather than sitting on the old state');
+  assert.equal(step.summary.dueNow, 7);
+  assert.equal(step.summary.lessonsNow, 8);
+  assert.equal(step.summary.sync, 'fresh');
+});
+
 test("the picker shows the shared deck list, so Home's card cannot disagree with it", async () => {
   let deckReads = 0;
   const {reviewStore, ankiDecks} = buildStores({}, {
