@@ -174,16 +174,17 @@
 <p>
   If you tap <em>Download</em> on the settings screen — the app shows you the file size first — Gaten
   fetches the optional manga-ocr model from Hugging Face (<code>huggingface.co</code>). Only the file
-  request is sent. If you skip it, the app still recognises Japanese text using Google's on-device
-  ML Kit model.
+  request is sent. If you skip it, the app still recognises Japanese text using Google ML Kit, which
+  performs the recognition on your device.
 </p>
 
 <h3>3. Library-level network access</h3>
 <p>
   Gaten declares the <code>INTERNET</code> permission. Gaten's own code contacts only the two hosts
-  above. The on-device OCR libraries it bundles — Google ML Kit and ONNX Runtime — declare the same
-  permission for their own diagnostics. Images and recognised text are processed on your device;
-  Gaten does not send them to us or to Google.
+  above. Two of the libraries Gaten bundles — Google ML Kit and ONNX Runtime, which perform the
+  on-device text recognition — declare the same permission and ship dormant diagnostic components for
+  their own telemetry. Gaten's code never calls them, and images and recognised text are processed on
+  your device: Gaten sends them to no one.
 </p>
 
 <h2>Android backup</h2>
