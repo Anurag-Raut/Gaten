@@ -18,6 +18,8 @@ plugins {
     id("com.facebook.react")
 }
 
+val playBundle = providers.gradleProperty("playBundle").map { it.toBoolean() }.getOrElse(false)
+
 android {
     namespace = "com.gaten.app"
     compileSdk = 36
@@ -35,10 +37,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.gaten.app"
+        applicationId = "com.gaten"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
+        versionCode = providers.gradleProperty("versionCode").orElse("1").get().toInt()
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -90,7 +92,7 @@ android {
 
     splits {
         abi {
-            isEnable = true
+            isEnable = !playBundle
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = false

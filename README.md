@@ -146,7 +146,7 @@ likely to need a real device to confirm.
       turn on auto-start/keep-alive.
    4. Key map: Trigger → **Other** → *Record with Expert Mode* → press the Plus Key (records
       `Scan code 735`, device `gpio-keys`). Actions → **Send intent** → **Broadcast receiver**,
-      Action `com.gaten.app.action.TRIGGER_LOOKUP`, Package `com.gaten.app`.
+      Action `com.gaten.app.action.TRIGGER_LOOKUP`, Package `com.gaten`.
    5. Set the OxygenOS Plus Key function to **`nothing`** so no stock action fires as well.
 
    The trigger is a toggle: firing it while the panel is open closes the panel instead of starting
