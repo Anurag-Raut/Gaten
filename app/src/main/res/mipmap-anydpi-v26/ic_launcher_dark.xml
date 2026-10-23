@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<!-- The launcher tile the app shows while it is in its own dark theme
+     (ui/theme/LauncherIcon.kt): the shipped mark inverted, a white ground behind the black G, as
+     the mark's night variant has always drawn it. Its layers are fixed, never night-qualified —
+     see values/ic_launcher_theme.xml. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_dark_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_dark_foreground"/>
+    <monochrome android:drawable="@drawable/ic_launcher_dark_foreground"/>
+</adaptive-icon>

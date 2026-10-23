@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<resources>
+    <!-- Fixed grounds for the app's explicit Light/Dark icon choices. Keep these unqualified so
+         the launcher's device mode cannot override them. System uses ic_launcher_background. -->
+    <color name="ic_launcher_light_background">#000000</color>
+    <color name="ic_launcher_dark_background">#FFFFFF</color>
+</resources>

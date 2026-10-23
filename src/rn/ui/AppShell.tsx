@@ -21,7 +21,6 @@ import {
   DeviceEventEmitter,
   StatusBar,
   View,
-  useColorScheme,
   useWindowDimensions,
 } from "react-native";
 import {
@@ -363,10 +362,8 @@ function SwipeGate({
 }
 
 export function AppShell() {
-  const {colors, mode} = useTheme();
+  const {colors, dark} = useTheme();
   const searchActive = searchStore.useSearchState().searchActive;
-  const systemScheme = useColorScheme();
-  const dark = mode === "Dark" || (mode === "System" && systemScheme === "dark");
   const navigationRef = useNavigationContainerRef<RootTabParamList>();
   // The pager's own first guess at its size, so the bar's indicator is already at the right tab on
   // the first frame — the navigator measures itself a frame later. Only the width matters; the bar's
@@ -437,8 +434,6 @@ export function AppShell() {
   }, [navigationRef]);
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
-    const dark =
-      mode === "Dark" || (mode === "System" && systemScheme === "dark");
     return {
       dark,
       colors: {
@@ -456,7 +451,7 @@ export function AppShell() {
         heavy: {fontFamily: "Inter", fontWeight: "700"},
       },
     };
-  }, [colors, mode, systemScheme]);
+  }, [colors, dark]);
 
   // A tap on a tab slides the pager to it (that is what `animationEnabled` means to the library);
   // with reduced motion on it lands on the spot, as every other animation in the app does.

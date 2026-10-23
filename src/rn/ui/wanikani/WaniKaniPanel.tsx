@@ -15,7 +15,6 @@
  */
 import React, {useEffect, useMemo, useState} from "react";
 import {
-  Appearance,
   Linking,
   ScrollView,
   StyleSheet,
@@ -303,8 +302,7 @@ function AvailableContent({
   compact: boolean;
   onRadical?: (id: number) => void;
 }) {
-  const {colors, mode} = useTheme();
-  const dark = mode === "Dark" || (mode === "System" && Appearance.getColorScheme() === "dark");
+  const {colors, dark} = useTheme();
   const meanings = radical ? radical.meanings : kanji?.meanings ?? [];
   const primaryMeaning = radical ? radical.primaryMeaning : kanji?.primaryMeaning;
   const alternates = meanings.filter((meaning) => meaning !== primaryMeaning);
