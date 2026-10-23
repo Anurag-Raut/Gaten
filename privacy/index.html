@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Gaten</title>
+<meta name="description" content="Privacy policy for Gaten, the offline Japanese dictionary and study app for Android.">
+<style>
+  :root {
+    color-scheme: light dark;
+    --ink: #1C1D21;
+    --muted: #5B5B63;
+    --rule: #E3E3E7;
+    --accent: #6D28D9;
+    --bg: #FFFFFF;
+    --panel: #F5F5F6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #F2F2F4;
+      --muted: #A7A7B0;
+      --rule: #303136;
+      --accent: #B0A0FF;
+      --bg: #1B1C21;
+      --panel: #23242A;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2.5rem 1.25rem 5rem;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .35rem; letter-spacing: -0.01em; }
+  h2 {
+    font-size: 1.15rem;
+    margin: 2.5rem 0 .75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--rule);
+    letter-spacing: -0.005em;
+  }
+  h3 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+  p, li { margin: 0 0 .85rem; }
+  ul { padding-left: 1.25rem; margin: 0 0 .85rem; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.5rem; }
+  .lede { font-size: 1.05rem; }
+  .panel {
+    background: var(--panel);
+    border-radius: .75rem;
+    padding: 1.25rem 1.35rem;
+    margin: 0 0 1rem;
+  }
+  .panel ul { margin-bottom: 0; }
+  .panel li:last-child { margin-bottom: 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .875em;
+    background: var(--panel);
+    padding: .1em .35em;
+    border-radius: .25rem;
+  }
+  .scroll { overflow-x: auto; margin: 0 0 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .925rem; }
+  th, td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 600; white-space: nowrap; }
+  footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .875rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Privacy Policy — Gaten</h1>
+<p class="meta">
+  Android app, package <code>com.gaten</code> &middot; published by Anurag Raut<br>
+  Last updated: 23 October 2026
+</p>
+
+<p class="lede">
+  Gaten is an offline Japanese dictionary and study companion for Android. This policy explains
+  exactly what the app does with your information. It applies to the Gaten Android app only, and
+  it describes what the app actually does — not what it might do.
+</p>
+
+<div class="panel">
+  <strong>The short version</strong>
+  <ul>
+    <li>No account. Gaten has no sign-up and no Gaten login.</li>
+    <li>No ads, no analytics, no crash reporting, no tracking SDKs of any kind.</li>
+    <li>Screenshots and the Japanese text read from them are processed entirely on your device and are never uploaded.</li>
+    <li>The network is used for exactly two optional things: downloading an optional OCR model, and talking to WaniKani — and only if you connect your own WaniKani token.</li>
+    <li>We do not sell your data. We have no server that receives it.</li>
+  </ul>
+</div>
+
+<h2>What stays on your device</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>What</th><th>Where it is kept</th><th>Why</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Screenshots you ask Gaten to read</td>
+      <td>In memory, for the moment of the lookup. Not written to storage.</td>
+      <td>To recognise the Japanese text on the screen you are looking at.</td>
+    </tr>
+    <tr>
+      <td>Recently looked-up words and recent searches</td>
+      <td>Private app storage (<code>gaten_dictionary_history</code>)</td>
+      <td>So you can reopen a word without searching for it again.</td>
+    </tr>
+    <tr>
+      <td>Your settings — Anki deck and card template, lookup and recognition options, appearance, floating-button position</td>
+      <td>Private app storage (<code>gaten_settings</code>)</td>
+      <td>To keep the app configured the way you set it.</td>
+    </tr>
+    <tr>
+      <td>Dictionary and example sentences</td>
+      <td>Bundled with the app (JMdict and the Tanaka Corpus)</td>
+      <td>So lookup works with no network and no account.</td>
+    </tr>
+    <tr>
+      <td>WaniKani token — only if you connect your own account</td>
+      <td><code>noBackupFilesDir/wanikani/token</code>, encrypted with AES-GCM under a key held in the Android Keystore</td>
+      <td>To authenticate requests to your own WaniKani account.</td>
+    </tr>
+    <tr>
+      <td>WaniKani pages and radical images — only if connected</td>
+      <td><code>noBackupFilesDir/wanikani/cache</code></td>
+      <td>So WaniKani content can be read offline after the first view.</td>
+    </tr>
+    <tr>
+      <td>Optional stylised-text (manga-ocr) model, about 117&nbsp;MB</td>
+      <td>Private app storage, only if you tap Download</td>
+      <td>For a second on-device recognition pass over stylised text.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  None of the above is sent to us. Gaten has no backend service.
+</p>
+
+<h2>What leaves your device, and only when you ask</h2>
+
+<h3>1. WaniKani — only if you connect your own account</h3>
+<p>
+  If you paste a WaniKani personal access token into Settings, Gaten sends that token over HTTPS to
+  <code>api.wanikani.com</code> to authenticate you, and then reads your own WaniKani study data
+  from the same API: your level, the reviews due now and over the next 24 hours, the assignment and
+  review-statistics data behind the Analytics screen, and the subject pages for the kanji and
+  radicals you open. Images for radicals that have no character come from
+  <code>cdn.wanikani.com</code>.
+</p>
+<ul>
+  <li>The token is stored encrypted on your device and is sent to no one except WaniKani.</li>
+  <li>Nothing is fetched in the background. WaniKani pages are cached on your device and read from there offline.</li>
+  <li>Tapping <em>Disconnect</em> deletes the token and the entire cache.</li>
+  <li>
+    WaniKani is operated by Tofugu LLC, not by us, and your use of it is governed by
+    <a href="https://www.wanikani.com/privacy" rel="noopener">WaniKani's own privacy policy</a> and
+    terms. Gaten is not affiliated with WaniKani and bundles none of its content.
+  </li>
+</ul>
+
+<h3>2. The optional OCR model download</h3>
+<p>
+  If you tap <em>Download</em> on the settings screen — the app shows you the file size first — Gaten
+  fetches the optional manga-ocr model from Hugging Face (<code>huggingface.co</code>). Only the file
+  request is sent. If you skip it, the app still recognises Japanese text using Google's on-device
+  ML Kit model.
+</p>
+
+<h3>3. Library-level network access</h3>
+<p>
+  Gaten declares the <code>INTERNET</code> permission. Gaten's own code contacts only the two hosts
+  above. The on-device OCR libraries it bundles — Google ML Kit and ONNX Runtime — declare the same
+  permission for their own diagnostics. Images and recognised text are processed on your device;
+  Gaten does not send them to us or to Google.
+</p>
+
+<h2>Android backup</h2>
+<p>
+  Android's own backup service may copy app data — your settings and your recent lookup and search
+  history — to your personal Google Drive, if you have device backup switched on. That copy is
+  controlled by Android and your Google account, not by Gaten, and it is not something we can read.
+  Your WaniKani token and its cache are stored in a location Android never backs up, so they are
+  never included, and the optional OCR model is too large to be included.
+</p>
+
+<h2>Permissions, and why each one exists</h2>
+<ul>
+  <li>
+    <strong>Accessibility service</strong> — optional and off until you enable it in Android's
+    settings. It lets Gaten read the Japanese text on the screen you are looking at, on demand, when
+    you trigger a lookup. It is not used to monitor your activity.
+  </li>
+  <li>
+    <strong>Notification listener</strong> — Gaten does not read your notifications. It declares this
+    service only because Android gates access to the active media session behind notification access;
+    Gaten uses the media session so it knows when something is playing.
+  </li>
+  <li><strong>Internet</strong> — the two optional uses described above.</li>
+  <li><strong>Network state</strong> — to warn you before downloading the OCR model over mobile data.</li>
+  <li>
+    <strong>AnkiDroid</strong> — Gaten can add the words you look up to your AnkiDroid decks. This is
+    on-device communication with AnkiDroid's own database, through AnkiDroid's published API. Nothing
+    goes over the network. AnkiDroid is a separate application by a separate team, with its own
+    privacy policy.
+  </li>
+</ul>
+
+<h2>Sharing, retention and deletion</h2>
+<ul>
+  <li>We do not collect your data, so there is nothing for us to sell, share, rent or retain.</li>
+  <li>
+    Everything the app stores lives in Gaten's private app storage on your device. Uninstalling Gaten,
+    or using Android's <em>Clear storage</em> for Gaten, deletes all of it.
+  </li>
+  <li>To delete only the WaniKani credential and its cache, use <em>Disconnect</em> in Settings&nbsp;&rarr;&nbsp;WaniKani.</li>
+  <li>
+    The data Gaten sends to WaniKani is held by WaniKani under your own WaniKani account, and is
+    deleted through WaniKani, not through Gaten.
+  </li>
+</ul>
+
+<h2>Children</h2>
+<p>
+  Gaten is a general-purpose language tool and is not directed at children under 13. Because the app
+  collects no personal information at all, it collects none from children.
+</p>
+
+<h2>Security</h2>
+<p>
+  Screenshots and recognised text are processed in memory on your device. Your WaniKani token is
+  encrypted with AES-GCM using a key that is generated in, and never leaves, the Android Keystore,
+  and it is stored where Android's backup cannot reach it. All network traffic to WaniKani and to
+  Hugging Face uses HTTPS.
+</p>
+
+<h2>Changes to this policy</h2>
+<p>
+  If this policy changes, the date at the top changes with it. The current version is always the one
+  published at this address.
+</p>
+
+<h2>Contact</h2>
+<p>
+  Questions about this policy or about the app:
+  <a href="mailto:rautab0@gmail.com">rautab0@gmail.com</a>
+</p>
+
+<footer>
+  Gaten is free software under GPL-3.0-or-later, derived from CircleToSearch by AKS-Labs. Its source
+  code is public at <a href="https://github.com/Anurag-Raut/Gaten" rel="noopener">github.com/Anurag-Raut/Gaten</a>,
+  where every claim on this page can be checked against the code.
+</footer>
+
+</main>
+</body>
+</html>
