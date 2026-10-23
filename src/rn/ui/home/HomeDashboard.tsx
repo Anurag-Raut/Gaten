@@ -167,6 +167,7 @@ function AnkiCard({
   let count: number | null = null;
   let countLabel = "reviews due";
   let detail: string | undefined;
+  let loading = false;
   let action: (() => void) | undefined;
   let actionLabel: string | undefined;
   let hint: string | undefined;
@@ -222,6 +223,7 @@ function AnkiCard({
     case "loading":
       status = "Checking…";
       detail = "Loading reviews…";
+      loading = true;
       break;
   }
 
@@ -233,6 +235,7 @@ function AnkiCard({
       count={count}
       countLabel={countLabel}
       detail={detail}
+      loading={loading}
       artwork={<AnkiServiceMark size={28} />}
       action={action}
       actionLabel={actionLabel}
@@ -257,6 +260,7 @@ function WaniKaniCard({
   let statusTone: ServiceStatusTone = "neutral";
   let count: number | null = null;
   let detail: string | undefined;
+  let loading = false;
   let action: (() => void) | undefined;
   let actionLabel: string | undefined;
   let hint: string | undefined;
@@ -320,6 +324,7 @@ function WaniKaniCard({
     case "loading":
       status = "Checking…";
       detail = "Loading reviews…";
+      loading = true;
       break;
   }
 
@@ -331,6 +336,7 @@ function WaniKaniCard({
       count={count}
       countLabel={waniKani.error ? "due · tap to retry" : "reviews due"}
       detail={detail}
+      loading={loading}
       artwork={<ToriiServiceMark size={28} />}
       action={action}
       actionLabel={actionLabel}
@@ -352,6 +358,7 @@ function ServiceCard({
   count,
   countLabel,
   detail,
+  loading = false,
   artwork,
   action,
   actionLabel,
@@ -364,6 +371,8 @@ function ServiceCard({
   count: number | null;
   countLabel: string;
   detail?: string;
+  /** A read is on its way: the spinner takes the status dot's place until it lands. */
+  loading?: boolean;
   artwork: React.ReactNode;
   action?: () => void;
   actionLabel?: string;
@@ -408,7 +417,11 @@ function ServiceCard({
         <View style={styles.serviceTitles}>
           <Text numberOfLines={1} style={[typeScale.titleSmall, {color: ink}]}>{title}</Text>
           <View style={styles.serviceStatusRow}>
-            <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
+            {loading ? (
+              <ActivityIndicator size={12} color={colors.accent} />
+            ) : (
+              <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
+            )}
             <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceStatus, {color: statusColor}]}>{status}</Text>
           </View>
         </View>

@@ -335,7 +335,19 @@ function deferred() {
   return {promise, resolve, reject};
 }
 
-function mockStore(wkOverrides = {}, ankiOverrides = {}) {
+/** The React surface the stores import but never call here: only their module state is exercised. */
+const reactStub = {
+  useCallback: (fn) => fn,
+  useEffect: () => {},
+  useSyncExternalStore: () => undefined,
+};
+
+/**
+ * The three stores the flow is built from, over one pair of mocked bridges: the review store as the
+ * flow sees it, and the two stores it reads its numbers through, for the cases that assert what has
+ * to stay shared between the flow and Home.
+ */
+function buildStores(wkOverrides = {}, ankiOverrides = {}) {
   const wk = new Proxy(wkOverrides, {
     get(target, name) {
       if (name in target) return target[name];
@@ -345,14 +357,36 @@ function mockStore(wkOverrides = {}, ankiOverrides = {}) {
   });
   const anki = new Proxy(ankiOverrides, {get: (target, name) => {
     if (name in target) return target[name];
+    if (name === 'status') return async () => 'ready';
     return async () => { throw new Error(`Unexpected Anki call: ${String(name)}`); };
   }});
+  // The stores the flow reads its numbers through, loaded for real over the same mocked bridges: the
+  // flow's behaviour is what these cases pin, and the stores are part of how it now behaves. Each
+  // call builds its own copies, so one case's reads and cached state never reach the next.
+  const ankiDecks = loadTypeScript('src/rn/ui/anki/useAnkiDecks.ts', (name) => {
+    if (name === '../../native/GatenAnki') return anki;
+    if (name === 'react') return reactStub;
+    throw new Error(`Unexpected import: ${name}`);
+  });
+  const waniKaniStats = loadTypeScript('src/rn/ui/analytics/useWaniKaniStats.ts', (name) => {
+    if (name === '../../native/GatenWaniKani') return wk;
+    if (name === 'react') return reactStub;
+    if (name === 'react-native') return {AppState: {addEventListener: () => ({remove() {}})}};
+    throw new Error(`Unexpected import: ${name}`);
+  });
   const {reviewStore} = loadTypeScript('src/rn/ui/review/review-store.ts', (name) => {
     if (name === '../../native/GatenAnki') return anki;
     if (name === '../../native/GatenWaniKani') return wk;
+    if (name === '../anki/useAnkiDecks') return ankiDecks;
+    if (name === '../analytics/useWaniKaniStats') return waniKaniStats;
     throw new Error(`Unexpected import: ${name}`);
   });
-  return reviewStore;
+  return {reviewStore, waniKaniStats, ankiDecks};
+}
+
+/** The review store alone, which is what most of these cases exercise. */
+function mockStore(wkOverrides = {}, ankiOverrides = {}) {
+  return buildStores(wkOverrides, ankiOverrides).reviewStore;
 }
 
 function availableStats(patch = {}) {
@@ -385,6 +419,42 @@ test('store opens a connected hub with loaded counts', async () => {
   assert.equal(store.getState().step.summary.dueNow, 1);
   assert.equal(store.getState().step.summary.lessonsNow, 1);
   assert.equal(store.getState().step.refreshing, false);
+});
+
+test("the hub's counts are the ones Home's card reads, from one read", async () => {
+  let statsReads = 0;
+  const {reviewStore, waniKaniStats} = buildStores({
+    isConfigured: async () => true,
+    refreshStats: async () => { statsReads += 1; return availableStats({dueNow: 2, lessonsNow: 3}); },
+  });
+  reviewStore.openWaniKani();
+  await until(() => reviewStore.getState().step.kind === 'wkHome' && !reviewStore.getState().busy, 'hub snapshot');
+  assert.equal(statsReads, 1);
+  const shared = waniKaniStats.getWaniKaniStats();
+  assert.equal(shared.status, 'ready');
+  assert.equal(shared.snapshot.dueNow, 2);
+  // The hub shows that same read rather than one of its own, which is what keeps the two surfaces
+  // from disagreeing about what is due.
+  assert.equal(reviewStore.getState().step.summary.dueNow, 2);
+  assert.equal(reviewStore.getState().step.summary.lessonsNow, 3);
+});
+
+test("the picker shows the shared deck list, so Home's card cannot disagree with it", async () => {
+  let deckReads = 0;
+  const {reviewStore, ankiDecks} = buildStores({}, {
+    status: async () => 'ready',
+    decks: async () => { deckReads += 1; return [deck(1), deck(2)]; },
+    getConfiguredDeckName: async () => 'Deck 1',
+    getStudyDeckIds: async () => null,
+  });
+  reviewStore.openAnki();
+  await until(() => reviewStore.getState().step.kind === 'decks' && !reviewStore.getState().busy, 'Anki deck picker');
+  assert.equal(deckReads, 1);
+  const shared = ankiDecks.getAnkiDecks();
+  assert.equal(shared.status, 'ready');
+  assert.equal(shared.configuredDeckName, 'Deck 1');
+  // The picker's rows are the shared list itself, not a copy of it.
+  assert.equal(reviewStore.getState().step.decks, shared.studyDecks);
 });
 
 test('store retains confirmed counts while a refresh is pending', async () => {
@@ -717,7 +787,13 @@ async function finishSingleAnkiCard(gradeResult) {
       fieldNames: [], fields: [], typedAnswer: false,
     }),
     getPreferences: async () => null,
-    grade: async () => gradeResult,
+    // AnkiDroid's own answer: a submitted grade takes the card off the deck it came from.
+    grade: async () => {
+      if (gradeResult === 'submitted') {
+        visibleDeck = {...deck(7), newCount: 0, learnCount: 0, reviewCount: 0};
+      }
+      return gradeResult;
+    },
   });
   store.openAnki();
   await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, 'Anki deck picker');
@@ -803,8 +879,9 @@ test('resuming while the Anki picker is open refreshes its deck list', async () 
 });
 
 test('a submitted Anki grade marks an empty deck complete until fresh counts become positive', async () => {
+  // The grade empties the deck and the shared list is read again with it, so the picker opens on the
+  // finished deck rather than on the counts it had one card ago.
   const {store, setVisibleDeck} = await finishSingleAnkiCard('submitted');
-  setVisibleDeck({...deck(7), newCount: 0, learnCount: 0, reviewCount: 0});
   store.openDecks();
   await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, 'completed Anki deck');
   assert.deepEqual(store.getState().step.completedDeckIds, [7]);

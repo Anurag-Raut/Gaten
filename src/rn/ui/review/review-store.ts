@@ -24,6 +24,8 @@
  */
 import * as Anki from "../../native/GatenAnki";
 import * as WaniKani from "../../native/GatenWaniKani";
+import {getAnkiDecks, loadAnkiDecks} from "../anki/useAnkiDecks";
+import {getWaniKaniStats, loadWaniKaniStats} from "../analytics/useWaniKaniStats";
 import type {
   AnkiCardResult,
   AnkiDeckResult,
@@ -402,71 +404,55 @@ class ReviewStore {
   }
 
   /**
-   * What entering the flow from Home's Anki card asks for: AnkiDroid's own status first, then its
-   * deck list. A service that cannot be used at all — not installed, no permission, no collection —
-   * is stated where the reader tapped, rather than as an empty deck list.
-   *
-   * Every Home entry reads the current status and deck list so the hub is always the landing page.
+   * What entering the flow from Home's Anki card asks for: AnkiDroid's own status and its deck list,
+   * read through the store Home's card draws from, so the two can never show different decks or
+   * different counts. A service that cannot be used at all — not installed, no permission, no
+   * collection — is stated where the reader tapped, rather than as an empty deck list.
    */
   openAnki() {
     this.ifIdle(() => {
       // Back to the picker, whatever step was left behind: the deck that was being studied is not
       // the one this entry chose.
       this.set({ deck: null, step: { kind: "opening", source: "anki" } });
-      this.setBusy(true);
-      void (async () => {
-        let blocked: ReviewStep | null = null;
-        try {
-          const status = await Anki.status();
-          if (status === "notInstalled") {
-            blocked = { kind: "blocked", failure: "NOT_INSTALLED" };
-          } else if (status === "needsPermission") {
-            blocked = { kind: "blocked", failure: "PERMISSION" };
-          }
-        } catch (error) {
-          blocked = { kind: "blocked", failure: failureOf(error).failure };
-        }
-        this.setBusy(false);
-        // The read of the deck list is its own busy step: it takes over from here, so a status that
-        // can be used goes straight into the picker with no second tap.
-        if (blocked == null) this.openDecks();
-        else this.set({ step: blocked });
-      })();
+      void this.readDecks();
     });
   }
 
-  /** Reads the deck list, fresh. */
+  /** Reads the deck list, fresh, and lands on it. */
   openDecks() {
     if (this.state.busy) return;
-    // Busy is set before the work starts, so two taps in one frame cannot start two reads.
+    void this.readDecks();
+  }
+
+  /**
+   * One read of the shared deck list, then the picker it feeds — or the state that stops it. Busy is
+   * held across the whole read, so two taps in one frame cannot start two.
+   */
+  private async readDecks(): Promise<void> {
     this.setBusy(true);
     this.collapseDetails();
-    void (async () => {
-      try {
-        // The deck Gaten exports to — the picker's default selection — is read with the list, not
-        // after it: the picker's first frame is then already the right one, and a changed export
-        // deck still preselects because this read happens on every entry.
-        const [allDecks, configuredDeckName, includedIds] = await Promise.all([
-          Anki.decks(),
-          Anki.getConfiguredDeckName().catch(() => ""),
-          Anki.getStudyDeckIds(),
-        ]);
-        const decks = includedIds == null ? allDecks : allDecks.filter((deck) => includedIds.includes(deck.id));
-        for (const deck of allDecks) {
-          if (deck.newCount + deck.learnCount + deck.reviewCount > 0) this.completedAnkiDeckIds.delete(deck.id);
-        }
-        this.set({step: {kind: "decks", decks, configuredDeckName,
-          completedDeckIds: decks.filter((deck) => this.completedAnkiDeckIds.has(deck.id)).map((deck) => deck.id),
-          filteredEmpty: decks.length === 0 && allDecks.length > 0}});
-      } catch (error) {
-        const { failure, detail } = failureOf(error);
-        this.set({
-          step: { kind: "failed", failure, detail, afterGrade: false },
-        });
-      } finally {
-        this.setBusy(false);
+    try {
+      await loadAnkiDecks();
+      const {failure, decks, studyDecks, configuredDeckName} = getAnkiDecks();
+      if (failure === "NOT_INSTALLED" || failure === "PERMISSION" || failure === "NOT_SET_UP") {
+        // Stated where the reader tapped: an empty deck list would read as "nothing to study", and
+        // none of these is retried away by asking again.
+        this.set({step: {kind: "blocked", failure}});
+        return;
       }
-    })();
+      if (failure != null || decks == null || studyDecks == null) {
+        this.set({step: {kind: "failed", failure: failure ?? "PROVIDER", afterGrade: false}});
+        return;
+      }
+      for (const deck of decks) {
+        if (deck.newCount + deck.learnCount + deck.reviewCount > 0) this.completedAnkiDeckIds.delete(deck.id);
+      }
+      this.set({step: {kind: "decks", decks: studyDecks, configuredDeckName,
+        completedDeckIds: studyDecks.filter((deck) => this.completedAnkiDeckIds.has(deck.id)).map((deck) => deck.id),
+        filteredEmpty: studyDecks.length === 0 && decks.length > 0}});
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   /** The permission dialog came back refused, so review cannot run yet. */
@@ -554,48 +540,59 @@ class ReviewStore {
     };
   }
 
-  /** Refresh both summary counts without blanking confirmed values; ignore superseded reads. */
+  /**
+   * Refresh both summary counts without blanking confirmed values; ignore superseded reads. The
+   * counts themselves are read through the store Home's card and the dashboard draw from, so one
+   * read serves all three surfaces and they cannot disagree about what is due. The lesson budget
+   * stays this page's own read: nothing else in the app has a use for it.
+   */
   private async enterWaniKaniHome(sessionFinished = false): Promise<void> {
     const request = ++this.hubRequest;
     this.set({step: this.hubStep({refreshing: true, failed: false, failure: null,
       ...(sessionFinished ? {sessionFinished: true} : {})})});
-    const [stats, learning] = await Promise.allSettled([
-      WaniKani.refreshStats(), WaniKani.getLearningPreferences(),
-    ]);
+    const learning = WaniKani.getLearningPreferences().then(
+      (preferences) => ({preferences, failed: false}),
+      () => ({preferences: null, failed: true}),
+    );
+    await loadWaniKaniStats(true);
+    const stats = getWaniKaniStats();
     if (request !== this.hubRequest || this.state.step.kind !== "wkHome") return;
+    const budget = await learning;
     this.set({step: this.hubStep({
-      learningPreferences: learning.status === "fulfilled" ? learning.value : null,
-      learningPreferencesFailed: learning.status === "rejected",
+      learningPreferences: budget.preferences,
+      learningPreferencesFailed: budget.failed,
     })});
-    if (stats.status === "rejected") {
-      const failure = waniKaniFailureOf(stats.reason);
-      this.set({step: this.hubStep({failed: true, refreshing: false,
-        summary: this.lastHub?.summary == null ? null : {...this.lastHub.summary,
-          sync: failure === "OFFLINE" ? "offline" : "failed"},
-        failure: {failure, retryAfterSeconds: null}})});
-      return;
-    }
-    const result = stats.value;
-    switch (result.status) {
-      case "available": {
-        const forecast = result.snapshot.forecast;
-        const failure = result.failure ?? null;
+    switch (stats.status) {
+      case "ready": {
+        const snapshot = stats.snapshot;
+        if (snapshot == null) return;
+        const failure = stats.failure;
+        // A message and no named failure means the bridge itself rejected the call rather than
+        // WaniKani answering: that is the sync the hub offers a retry for.
+        const rejected = stats.message != null;
+        const forecast = snapshot.forecast;
         this.set({step: this.hubStep({
           summary: {
-            dueNow: result.snapshot.dueNow,
-            lessonsNow: result.snapshot.lessonsNow,
-            nextReviewAt: result.snapshot.nextReviewAt,
+            dueNow: snapshot.dueNow,
+            lessonsNow: snapshot.lessonsNow,
+            nextReviewAt: snapshot.nextReviewAt,
             nextHourCount: forecast.length > 1 ? forecast[1].count : null,
-            fetchedAt: result.snapshot.fetchedAt,
-            sync: !result.stale && failure == null ? "fresh" : failure === "OFFLINE" ? "offline" : "failed",
-            retryAfterSeconds: result.retryAfterSeconds ?? null,
+            fetchedAt: snapshot.fetchedAt,
+            sync: !stats.stale && failure == null ? "fresh" : failure === "OFFLINE" ? "offline" : "failed",
+            retryAfterSeconds: stats.retryAfterSeconds,
           },
-          connection: "connected", refreshing: false, failed: false,
-          ...(!result.stale && failure == null ? {sessionFinished: false} : {}),
-          failure: failure == null ? null : {failure, retryAfterSeconds: result.retryAfterSeconds ?? null},
+          connection: "connected", refreshing: false, failed: rejected,
+          ...(!stats.stale && failure == null ? {sessionFinished: false} : {}),
+          failure: rejected
+            ? {failure: "SERVER", retryAfterSeconds: null}
+            : failure == null ? null : {failure, retryAfterSeconds: stats.retryAfterSeconds},
         })});
         return;
       }
+      case "refreshing":
+        // A read another surface started is still on its way: what is confirmed stays up.
+        this.set({step: this.hubStep({refreshing: true})});
+        return;
       case "needsToken":
         this.accountUnavailable("disconnected");
         return;
@@ -606,9 +603,16 @@ class ReviewStore {
         this.set({step: this.hubStep({
           failed: true, refreshing: false,
           summary: this.lastHub?.summary == null ? null : {...this.lastHub.summary,
-            sync: result.failure === "OFFLINE" ? "offline" : "failed"},
-          failure: {failure: result.failure, retryAfterSeconds: result.retryAfterSeconds ?? null},
+            sync: stats.failure === "OFFLINE" ? "offline" : "failed"},
+          failure: {failure: stats.failure ?? "SERVER", retryAfterSeconds: stats.retryAfterSeconds},
         })});
+        return;
+      case "idle":
+      case "loading":
+        // No answer to take: a read still on its way, or one WaniKani asked us to wait on. Whatever
+        // is already up stays up rather than being replaced by a spinner.
+        this.set({step: this.hubStep({refreshing: stats.status === "loading"})});
+        return;
     }
   }
 
@@ -1276,6 +1280,10 @@ class ReviewStore {
       try {
         const result = await Anki.grade(session.token, ease, taken);
         if (result === "submitted") this.ankiSubmittedInSession = true;
+        // Whatever the provider answered, the card is off the deck it came from, so the counts
+        // Home's card and the picker share are read again — one read, joined with anything already
+        // in flight — and the card behind this page is right by the time the reader is back on it.
+        void loadAnkiDecks();
         // Submitted: AnkiDroid took the answer, and the next read only serves cards that are
         // actually due. NotFound/Ignored: the card is gone, or nothing was sent at all — the
         // queue is read as it is either way. All three end this card, and busy stays set
