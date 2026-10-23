@@ -489,6 +489,7 @@ may be longer when the reader needs it.
 | Home layout and search-mode behavior | [HomeScreen.tsx](../src/rn/ui/HomeScreen.tsx), [searchParts.tsx](../src/rn/ui/search/searchParts.tsx) |
 | Home rows, streak, history and artwork | [HomeDashboard.tsx](../src/rn/ui/home/HomeDashboard.tsx), [HomeArtwork.tsx](../src/rn/ui/home/HomeArtwork.tsx) |
 | Home data/observation scope | [useHomeDashboard.ts](../src/rn/ui/home/useHomeDashboard.ts) |
+| Study state Home and the review flow share (Anki deck list, WaniKani counts) | [useAnkiDecks.ts](../src/rn/ui/anki/useAnkiDecks.ts), [useWaniKaniStats.ts](../src/rn/ui/analytics/useWaniKaniStats.ts), [review-store.ts](../src/rn/ui/review/review-store.ts) |
 | Analytics composition and sections | [AnalyticsScreen.tsx](../src/rn/ui/analytics/AnalyticsScreen.tsx) |
 | Analytics borderless blocks (section, rule, metric pair, heatmap, rings, bars, unavailable, skeleton) | [ink.tsx](../src/rn/ui/analytics/ink.tsx) |
 | Analytics copy, sums, heatmap bands and chart labels | [model.ts](../src/rn/ui/analytics/model.ts), [tests/analytics.test.cjs](../tests/analytics.test.cjs) |
