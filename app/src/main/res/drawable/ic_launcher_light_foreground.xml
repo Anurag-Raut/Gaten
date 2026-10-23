@@ -8,13 +8,10 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- The Gaten G in the ink the light tile's black ground needs. Exactly the geometry of
-         drawable/ic_launcher_foreground.xml — which see for how the path sits in the 66dp safe
-         zone — but under a name of its own, because that one is night-qualified and would hand the
-         launcher's light tile the dark theme's ink on a device in night mode. -->
+    <!-- Black G on the light icon's white background, independent of device theme. -->
     <path
         android:pathData="M72.09,35.91 L51.99,35.91 C40.5,35.91 34.76,42.8 34.76,53.71 C34.76,65.77 41.65,72.09 53.14,72.09 L73.24,72.09 L73.24,57.16 L60.03,57.16"
-        android:strokeColor="#FFFFFF"
+        android:strokeColor="#000000"
         android:strokeWidth="8.62"
         android:strokeLineCap="square"
         android:strokeLineJoin="miter"/>

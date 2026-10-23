@@ -1,5 +1,9 @@
 # Theme-aware launcher icon and light/dark fade — device captures
 
+**Historical captures:** these screenshots show the earlier, reversed icon colors. The current
+mapping is Dark → black background / white G, Light → white background / black G, and System →
+the device's light or dark theme. New icon screenshots have not been captured for this correction.
+
 Captured on `emulator-5556` (Android 14 / API 34, 1080×2340, density 440, font scale 1.0) from
 `app/build/outputs/apk/debug/app-x86_64-debug.apk` built from this branch
 (`64c5316`, "Add theme-aware launcher icons and fade transitions").

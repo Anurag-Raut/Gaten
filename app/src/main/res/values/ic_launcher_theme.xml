@@ -10,6 +10,6 @@
 <resources>
     <!-- Fixed grounds for the app's explicit Light/Dark icon choices. Keep these unqualified so
          the launcher's device mode cannot override them. System uses ic_launcher_background. -->
-    <color name="ic_launcher_light_background">#000000</color>
-    <color name="ic_launcher_dark_background">#FFFFFF</color>
+    <color name="ic_launcher_light_background">#FFFFFF</color>
+    <color name="ic_launcher_dark_background">#000000</color>
 </resources>
