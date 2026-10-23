@@ -5,30 +5,28 @@
  */
 
 /**
- * Look up: whether lookup mode is on, the three ways a lookup can start, and the optional pause of
- * whatever is playing behind the overlay.
+ * Look up: whether lookup mode is on, the three ways a lookup can start, and the optional access
+ * that lets Gaten pause and resume media through active sessions.
  *
  * Lookup mode is Gaten's accessibility service being enabled, and that is a system setting the
  * reader grants outside the app, so it is read again on every arrival and every foregrounding — as
- * is the notification-listener permission the media pause needs. Nothing here asks for anything by
- * itself: the disclosure comes first, and only then the system screen.
+ * is the notification-listener permission for session-based media control. Lookup mode's disclosure
+ * comes first, and only then the system screen. The Quick Settings tile is read the same way:
+ * whether it is in the shade at all, and whether the reader has it switched on.
  */
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {AppState, Platform, Text, View} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenTrigger from "../../native/GatenTrigger";
 import * as GatenHaptics from "../../native/GatenHaptics";
 import {IconButton} from "../components";
-import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {
-  LookupModeRow,
-  OutlinedButton,
-  RowIcon,
-  SettingsGroup,
   SettingsPageScaffold,
+  SettingsRow,
+  SettingsTile,
   SwitchRow,
   useLookupModeRequest,
 } from "./settings-components";
@@ -36,7 +34,7 @@ import {
 /** The broadcast a key remapper sends to start a lookup (LookupTriggerReceiver). */
 const TRIGGER_LOOKUP_ACTION = "com.gaten.app.action.TRIGGER_LOOKUP";
 
-/** The API the in-place "Add tile" button asks the system from. */
+/** The API that can be asked to put the tile in Quick Settings in place (requestAddTileService). */
 const ADD_TILE_API = 33;
 
 export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
@@ -46,6 +44,49 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   const [notificationAccess, setNotificationAccess] = useState(false);
   const [floatingEnabled, setFloatingEnabled] = useState(false);
   const [tileAdded, setTileAdded] = useState(false);
+  const [tileEnabled, setTileEnabled] = useState(true);
+  const [tileRequestPending, setTileRequestPending] = useState(false);
+
+  const addTileAvailable = Number(Platform.Version) >= ADD_TILE_API;
+  // On only while the tile is both in Quick Settings and switched on.
+  const tileSwitchOn = tileAdded && tileEnabled;
+
+  // Presence and the enabled flag are read together, and applied only while they are still the
+  // newest read: a read that started before a toggle must not put the old switch back on screen.
+  const tileReadSeq = useRef(0);
+  const readTileState = () => {
+    tileReadSeq.current += 1;
+    const seq = tileReadSeq.current;
+    void Promise.all([GatenTrigger.tileAdded(), GatenTrigger.tileEnabled()])
+      .then(([added, enabled]) => {
+        if (seq !== tileReadSeq.current) {
+          return;
+        }
+        setTileAdded(added);
+        setTileEnabled(enabled);
+      })
+      .catch(() => {
+        if (seq !== tileReadSeq.current) {
+          return;
+        }
+        void GatenPlatform.toast("Could not read the tile setting.");
+      });
+  };
+
+  // Lookup mode is guarded the same way: the switch follows the service's own state, so a read that
+  // started before the reader touched it must not put the old state back.
+  const lookupReadSeq = useRef(0);
+  const readLookupMode = () => {
+    lookupReadSeq.current += 1;
+    const seq = lookupReadSeq.current;
+    void GatenAppInfo.isLookupModeActive()
+      .then((v) => {
+        if (seq === lookupReadSeq.current) {
+          setLookupMode(v);
+        }
+      })
+      .catch(() => {});
+  };
 
   // Tile callbacks can arrive while this page sits under the Quick Settings shade, and both
   // lookup mode and the notification-listener permission are granted in system Settings: re-read
@@ -53,18 +94,14 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   useEffect(() => {
     let cancelled = false;
     const readAll = () => {
-      void GatenAppInfo.isLookupModeActive().then((v) => {
-        if (!cancelled) setLookupMode(v);
-      });
+      readLookupMode();
       void GatenPlatform.isNotificationAccessEnabled().then((v) => {
         if (!cancelled) setNotificationAccess(v);
       });
       void GatenTrigger.getFloatingButtonEnabled().then((v) => {
         if (!cancelled) setFloatingEnabled(v);
       });
-      void GatenTrigger.tileAdded().then((v) => {
-        if (!cancelled) setTileAdded(v);
-      });
+      readTileState();
     };
     readAll();
     const subscription = AppState.addEventListener("change", (state) => {
@@ -72,9 +109,44 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
     });
     return () => {
       cancelled = true;
+      // A read still in flight when the page goes away must not land on it.
+      tileReadSeq.current += 1;
+      lookupReadSeq.current += 1;
       subscription.remove();
     };
   }, []);
+
+  /**
+   * Lookup mode is Android's own accessibility setting, so both directions go outside the app: on is
+   * the disclosure and then the system screen Gaten is listed on, off is the service turning itself
+   * off. The switch is only ever what the service reports — re-read after the action and on every
+   * foregrounding — so a reader who does not enable Gaten is not shown as if they had.
+   */
+  const toggleLookupMode = (next: boolean) => {
+    void GatenHaptics.play("tick").catch(() => {});
+    if (next) {
+      requestLookupMode();
+      return;
+    }
+    void GatenPlatform.disableAccessibilityService()
+      .then((disabled) => {
+        if (disabled) {
+          return;
+        }
+        // No connected service to turn off: the reader does it where Android lists it, and the
+        // switch then shows what really happened rather than what was asked for.
+        void GatenPlatform.toast("Turn Gaten off in Android's Accessibility settings");
+        return GatenPlatform.openAccessibilitySettings().then((opened) => {
+          if (!opened) {
+            void GatenPlatform.toast("Could not open Accessibility Settings");
+          }
+        });
+      })
+      .catch(() => {
+        void GatenPlatform.toast("Could not turn lookup mode off");
+      })
+      .finally(readLookupMode);
+  };
 
   const toggleFloating = (next: boolean) => {
     void GatenHaptics.play("tick").catch(() => {});
@@ -85,193 +157,162 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
     if (next && !lookupMode) requestLookupMode();
   };
 
-  const requestAddTile = () => {
-    void GatenTrigger.requestAddTile().then((outcome) => {
-      if (outcome === "added") {
-        setTileAdded(true);
-        void GatenTrigger.setTileAdded(true).catch(() => {});
-      } else if (outcome !== "notAdded") {
+  /**
+   * The tile's switch. With the tile already present, either direction only writes the flag. Without
+   * it, on asks the system to add it (API 33+) and turns on only once the system answers that it went
+   * in, while a cancelled request stays off. Off never removes a tile — Android's editor owns that.
+   */
+  const toggleTile = (next: boolean) => {
+    void GatenHaptics.play("tick").catch(() => {});
+    if (!next || tileAdded) {
+      void GatenTrigger.setTileEnabled(next)
+        .then(readTileState)
+        .catch(() => {
+          void GatenPlatform.toast("Could not save the tile setting.");
+        });
+      return;
+    }
+    if (!addTileAvailable) {
+      // Nothing can add a tile in place below API 33, and the row does not pretend otherwise.
+      void GatenPlatform.toast("Add Gaten in the Quick Settings editor.");
+      return;
+    }
+    if (tileRequestPending) {
+      return;
+    }
+    setTileRequestPending(true);
+    void GatenTrigger.requestAddTile()
+      .then((outcome) => {
+        if (outcome !== "added") {
+          if (outcome === "failed") {
+            void GatenPlatform.toast("Could not add the tile. Try the Quick Settings editor.");
+          }
+          // "notAdded" is the reader cancelling: the switch stays off, which is where it was.
+          return;
+        }
+        // onTileAdded records presence too; this is the same answer arriving first, so the switch
+        // turns on without waiting for the shade to be drawn again.
+        return GatenTrigger.setTileAdded(true)
+          .then(() => GatenTrigger.setTileEnabled(true))
+          .then(readTileState)
+          .catch(() => {
+            void GatenPlatform.toast("Could not save the tile setting.");
+          });
+      })
+      .catch(() => {
         void GatenPlatform.toast("Could not add the tile. Try the Quick Settings editor.");
-      }
-    });
+      })
+      .finally(() => {
+        setTileRequestPending(false);
+      });
   };
 
   return (
     <SettingsPageScaffold title="Screen lookup" onClose={onClose}>
-      <SettingsGroup title="Lookup" style={{marginTop: spacing.s}}>
-        <LookupModeRow enabled={lookupMode} onTurnOn={requestLookupMode} />
-        <SwitchRow
-          icon="touch_app"
-          title="Floating button"
-          summary={
-            lookupMode
-              ? "Tap to look up"
-              : "Needs lookup mode"
-          }
-          value={floatingEnabled}
-          onValueChange={toggleFloating}
-        />
-        <TileRow added={tileAdded} onAddTile={requestAddTile} />
-        <KeyMapperRow />
-      </SettingsGroup>
-      <SettingsGroup title="During lookup" style={{marginTop: spacing.xl}}>
-        <MediaPauseRow
-          granted={notificationAccess}
-          onGrant={() => {
-            void GatenPlatform.openNotificationListenerSettings().then((opened) => {
-              if (!opened) {
-                void GatenPlatform.toast("Could not open Notification Access settings");
-              }
-            });
-          }}
-        />
-      </SettingsGroup>
+      <View style={{marginTop: spacing.s}}>
+        <SettingsTile>
+          <SwitchRow
+            icon="shield"
+            title="Lookup mode"
+            summary={lookupMode ? "On" : "Off. Needs Android's accessibility permission."}
+            value={lookupMode}
+            onValueChange={toggleLookupMode}
+          />
+        </SettingsTile>
+        <SettingsTile>
+          <SwitchRow
+            icon="touch_app"
+            title="Floating button"
+            summary={lookupMode ? "Tap to look up" : "Needs lookup mode"}
+            value={floatingEnabled}
+            onValueChange={toggleFloating}
+          />
+        </SettingsTile>
+        <SettingsTile>
+          <SwitchRow
+            icon="widgets"
+            title="Quick Settings tile"
+            summary={tileSummary(tileAdded, tileEnabled, addTileAvailable)}
+            value={tileSwitchOn}
+            onValueChange={toggleTile}
+            disabled={tileRequestPending}
+          />
+        </SettingsTile>
+        <SettingsTile>
+          <KeyMapperRow />
+        </SettingsTile>
+        <SettingsTile>
+          <SettingsRow
+            icon="pause_circle"
+            title="Improve media pause"
+            summary={notificationAccess
+              ? "Uses media sessions to pause and resume playback."
+              : "Without notification access, some players may keep playing."}
+            value={notificationAccess ? "Allowed" : "Not allowed"}
+            onPress={() => {
+              void GatenPlatform.openNotificationListenerSettings().then((opened) => {
+                if (!opened) {
+                  void GatenPlatform.toast("Could not open Notification Access settings");
+                }
+              });
+            }}
+          />
+        </SettingsTile>
+      </View>
       {disclosureDialog}
     </SettingsPageScaffold>
   );
 }
 
-/**
- * The Quick Settings tile: its presence comes from the system's own add request, and Android owns
- * removal in its editor, so the row either offers the request (API 33+) or says where the editor
- * is. Once it is there, "Added to Quick Settings" is the row's value on the right.
- */
-function TileRow({added, onAddTile}: {added: boolean; onAddTile: () => void}) {
-  const {colors} = useTheme();
-  const addTileAvailable = Number(Platform.Version) >= ADD_TILE_API;
-  return (
-    <View
-      style={{
-        paddingVertical: spacing.m,
-        flexDirection: "row",
-      }}
-    >
-      <RowIcon name="widgets" />
-      <View style={{flex: 1, marginStart: spacing.m}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>
-            Quick Settings tile
-          </Text>
-          {added && (
-            <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
-              Added
-            </Text>
-          )}
-        </View>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-          {added
-            ? "Remove in the Quick Settings editor."
-            : "Open lookup from Quick Settings."}
-        </Text>
-        {!added && !addTileAvailable && (
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-            Add Gaten in the Quick Settings editor.
-          </Text>
-        )}
-        {!added && addTileAvailable && (
-          <View style={{marginTop: spacing.s, alignSelf: "flex-start"}}>
-            <OutlinedButton label="Add tile" onPress={onAddTile} />
-          </View>
-        )}
-      </View>
-    </View>
-  );
+/** What the tile row says under its name, by whether the tile is there and switched on. */
+function tileSummary(added: boolean, enabled: boolean, addTileAvailable: boolean): string {
+  if (added) {
+    return enabled
+      ? "Open lookup from Quick Settings."
+      : "Disabled. Remove in Quick Settings editor.";
+  }
+  return addTileAvailable
+    ? "Turn on to add Gaten to Quick Settings."
+    : "Add Gaten in the Quick Settings editor.";
 }
 
 /**
- * Optional hardware-key instructions: collapsed until the reader needs the broadcast action, then
- * the action itself in monospace with a copy button beside it.
+ * Optional hardware-key instructions: the row itself expands — its value says what a tap does — into
+ * the broadcast action a key remapper sends, in monospace with a copy button beside it.
  */
 function KeyMapperRow() {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   return (
-    <View
-      style={{
-        paddingVertical: spacing.m,
-        flexDirection: "row",
-      }}
-    >
-      <RowIcon name="key" />
-      <View style={{flex: 1, marginStart: spacing.m}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>
-            Key Mapper
+    <View style={{paddingBottom: expanded ? spacing.m : 0}}>
+      <SettingsRow
+        icon="key"
+        title="Key Mapper"
+        value={expanded ? "Hide" : "Set up"}
+        onPress={() => setExpanded(!expanded)}
+      />
+      {expanded && (
+        <View style={{paddingBottom: spacing.m}}>
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+            Broadcast action
           </Text>
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Key Mapper setup"
-            accessibilityState={{expanded}}
-            accessibilityHint={expanded ? "Hides the broadcast action" : "Shows the broadcast action"}
-            onPress={() => setExpanded(!expanded)}
-            style={{minHeight: 48, paddingHorizontal: spacing.m, alignItems: "flex-end", justifyContent: "center"}}
-          >
-            <Text style={[typeScale.labelLarge, {color: colors.accent}]}>
-              {expanded ? "Hide" : "Set up"}
+          <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
+            <Text
+              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
+            >
+              {TRIGGER_LOOKUP_ACTION}
             </Text>
-          </PressableScale>
-        </View>
-        {expanded && (
-          <>
-            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-              Broadcast action
-            </Text>
-            <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
-              <Text
-                style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
-              >
-                {TRIGGER_LOOKUP_ACTION}
-              </Text>
-              <IconButton
-                name="content_copy"
-                accessibilityLabel="Copy the trigger action"
-                compact
-                onPress={() => {
-                  void GatenPlatform.copyToClipboard(TRIGGER_LOOKUP_ACTION);
-                }}
-              />
-            </View>
-          </>
-        )}
-      </View>
-    </View>
-  );
-}
-
-/**
- * The optional media pause: notification access is what lets Gaten reach the media sessions, so
- * the row says whether it has it on the right, and is the only place the grant is offered.
- */
-function MediaPauseRow({granted, onGrant}: {granted: boolean; onGrant: () => void}) {
-  const {colors} = useTheme();
-  return (
-    <View
-      style={{
-        paddingVertical: spacing.m,
-        flexDirection: "row",
-      }}
-    >
-      <RowIcon name="pause_circle" />
-      <View style={{flex: 1, marginStart: spacing.m}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>
-            Pause media
-          </Text>
-          <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
-            {granted ? "Allowed" : "Not allowed"}
-          </Text>
-        </View>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-          {granted
-            ? "Pauses and resumes media."
-            : "Without access, sends a media key some players ignore."}
-        </Text>
-        {!granted && (
-          <View style={{marginTop: spacing.s, alignSelf: "flex-start"}}>
-            <OutlinedButton label="Turn on" onPress={onGrant} />
+            <IconButton
+              name="content_copy"
+              accessibilityLabel="Copy the trigger action"
+              compact
+              onPress={() => {
+                void GatenPlatform.copyToClipboard(TRIGGER_LOOKUP_ACTION);
+              }}
+            />
           </View>
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 }

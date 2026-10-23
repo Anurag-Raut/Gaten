@@ -70,6 +70,26 @@ class GatenTriggerModule(reactContext: ReactApplicationContext) :
         promise.resolve(null)
     }
 
+    /** Whether the tile is switched on; the tile service reads the same flag for its own state. */
+    @ReactMethod
+    fun tileEnabled(promise: Promise) {
+        promise.resolve(TriggerPreferences.tileEnabled(reactApplicationContext))
+    }
+
+    /**
+     * Stores whether the tile is switched on; the running tile refreshes its state the next time the
+     * shade is opened. A failure to store is the page's to report, so it is rejected.
+     */
+    @ReactMethod
+    fun setTileEnabled(enabled: Boolean, promise: Promise) {
+        try {
+            TriggerPreferences.setTileEnabled(reactApplicationContext, enabled)
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject(CODE_SET_TILE_ENABLED, "Could not store the tile setting", e)
+        }
+    }
+
     /**
      * Asks the system to add the lookup tile, API 33's own request rather than an intent — the
      * system answers the reader directly and tells us which way it went. "added" covers both the
@@ -111,5 +131,6 @@ class GatenTriggerModule(reactContext: ReactApplicationContext) :
         const val NAME = "GatenTrigger"
 
         private const val CODE_ADD_TILE = "E_TRIGGER_ADD_TILE"
+        private const val CODE_SET_TILE_ENABLED = "E_TRIGGER_SET_TILE_ENABLED"
     }
 }

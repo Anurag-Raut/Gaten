@@ -28,12 +28,10 @@ import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {useRecognition} from "./useRecognition";
 import {
-  Chip,
   DialogShell,
-  OutlinedButton,
-  RowIcon,
   SettingsGroup,
   SettingsPageScaffold,
+  SettingsRow,
   SettingsTile,
 } from "./settings-components";
 
@@ -113,9 +111,6 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
     };
   }, [confirmDownload]);
 
-  const content = colors.onSurface;
-  const valueColor = state.installed ? colors.success : colors.onSurfaceVariant;
-
   return (
     <SettingsPageScaffold
       title="Text recognition"
@@ -123,25 +118,28 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
       help={HELP_PARAGRAPHS}
     >
       <SettingsGroup title="Model" style={{marginTop: spacing.s}}>
-        <View style={{paddingVertical: spacing.m, flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: content, flex: 1}]}>Text recognition</Text>
-          <Text style={[typeScale.labelMedium, {color: valueColor, marginStart: spacing.m, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
-            {statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)}
-          </Text>
-        </View>
+        <SettingsRow
+          icon={state.installed ? "check_circle" : "text_snippet"}
+          title="Text recognition"
+          summary="ML Kit reads the screen; manga-ocr is optional and is not bundled in release builds."
+          value={statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)}
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Available model" style={{marginTop: spacing.xl}}>
-        {state.catalog.map((entry) => (
-          <React.Fragment key={entry.id}>
-            <ModelRow
-              entry={entry}
-              installed={state.installed && state.installedId === entry.id}
-              busy={busy}
-              onDownload={() => setConfirmDownload(entry)}
+        {state.catalog.map((entry) => {
+          const installed = state.installed && state.installedId === entry.id;
+          return (
+            <SettingsRow
+              key={entry.id}
+              icon={installed ? "check_circle" : "download"}
+              title={entry.label}
+              value={installed ? "Installed" : `~${entry.approxSizeMb} MB`}
+              disabled={!installed && busy}
+              onPress={installed ? undefined : () => setConfirmDownload(entry)}
             />
-          </React.Fragment>
-        ))}
+          );
+        })}
       </SettingsGroup>
 
       {state.downloading != null && (
@@ -171,33 +169,41 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
                   />
                 )}
               </View>
-              <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.s}}>
-                <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, flex: 1}]}>
-                  {progressText(state.progress)}
-                </Text>
-                <Button
-                  variant="text"
-                  label="Cancel"
-                  onPress={() => cancelDownload()}
-                />
-              </View>
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
+                {progressText(state.progress)}
+              </Text>
             </View>
+            <SettingsRow
+              icon="close"
+              title="Cancel download"
+              onPress={() => cancelDownload()}
+            />
           </SettingsTile>
         </View>
       )}
 
-      <View style={{marginTop: spacing.xl, flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
-        <OutlinedButton
-          label="Import model files"
-          disabled={busy}
-          onPress={() => {
-            void GatenRecognition.pickModelFiles().then((uris) => {
-              if (uris.length > 0) importFiles(uris);
-            });
-          }}
-        />
+      <View style={{marginTop: spacing.xl}}>
+        <SettingsTile>
+          <SettingsRow
+            icon="file_open"
+            title="Import model files"
+            disabled={busy}
+            onPress={() => {
+              void GatenRecognition.pickModelFiles().then((uris) => {
+                if (uris.length > 0) importFiles(uris);
+              });
+            }}
+          />
+        </SettingsTile>
         {state.installed && (
-          <OutlinedButton label="Remove" disabled={busy} onPress={() => removeModel()} />
+          <SettingsTile>
+            <SettingsRow
+              icon="delete"
+              title="Remove model"
+              disabled={busy}
+              onPress={() => removeModel()}
+            />
+          </SettingsTile>
         )}
       </View>
 
@@ -214,45 +220,6 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
         />
       )}
     </SettingsPageScaffold>
-  );
-}
-
-/**
- * One catalog entry: what it is, how big it is, and the one thing that can be done with it. The
- * size is the row's value on the right of the name — the one fact that makes two entries
- * comparable.
- */
-function ModelRow({
-  entry,
-  installed,
-  busy,
-  onDownload,
-}: {
-  entry: MangaOcrCatalogEntry;
-  installed: boolean;
-  busy: boolean;
-  onDownload: () => void;
-}) {
-  const {colors} = useTheme();
-  return (
-    <View style={{paddingVertical: spacing.m, flexDirection: "row"}}>
-      <RowIcon name="download" />
-      <View style={{flex: 1, marginStart: spacing.m}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>{entry.label}</Text>
-          <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s}]}>
-            {`~${entry.approxSizeMb} MB`}
-          </Text>
-        </View>
-        <View style={{marginTop: spacing.s, alignSelf: "flex-start"}}>
-          {installed ? (
-            <Chip label="Installed" />
-          ) : (
-            <OutlinedButton label="Download" disabled={busy} onPress={onDownload} />
-          )}
-        </View>
-      </View>
-    </View>
   );
 }
 

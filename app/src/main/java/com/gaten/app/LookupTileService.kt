@@ -23,13 +23,16 @@ import com.gaten.app.trigger.TriggerPreferences
 /**
  * Quick Settings tile: asks the connected accessibility service to dismiss the shade and start a
  * lookup, or opens accessibility settings when the service is not enabled. Its state mirrors
- * whether the service is enabled.
+ * whether the service is enabled, and is unavailable while the tile is switched off in Gaten's
+ * settings.
  */
 class LookupTileService : TileService() {
 
     override fun onTileAdded() {
         super.onTileAdded()
         TriggerPreferences.setTileAdded(this, true)
+        // A tile the reader added by hand is one they want working.
+        TriggerPreferences.setTileEnabled(this, true)
     }
 
     override fun onTileRemoved() {
@@ -39,6 +42,11 @@ class LookupTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
+
+        // Switched off: the tile is drawn unavailable and does nothing; Android's editor removes it.
+        if (!TriggerPreferences.tileEnabled(this)) {
+            return
+        }
 
         Log.d(TAG, "Tile clicked. Service enabled: ${isAccessibilityServiceEnabled()}")
 
@@ -81,9 +89,12 @@ class LookupTileService : TileService() {
 
     private fun updateTileState() {
         val tile = qsTile ?: return
-        val isEnabled = isAccessibilityServiceEnabled()
 
-        tile.state = if (isEnabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.state = when {
+            !TriggerPreferences.tileEnabled(this) -> Tile.STATE_UNAVAILABLE
+            isAccessibilityServiceEnabled() -> Tile.STATE_ACTIVE
+            else -> Tile.STATE_INACTIVE
+        }
         tile.label = getString(R.string.tile_label)
         tile.updateTile()
     }
