@@ -46,6 +46,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -538,7 +539,7 @@ internal fun LookupSearchCover(
                         .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
                 )
         ) {
-            SearchTopBar(title = title, onBack = onBack, onClose = onClose)
+            SearchTopBar(title = title, onBack = onBack)
 
             BoxWithConstraints(
                 modifier = Modifier
@@ -584,6 +585,7 @@ internal fun LookupSearchCover(
                                 field = field,
                                 onEdit = onEdit,
                                 onSearchAction = onSearchAction,
+                                onClose = onClose,
                                 focusRequester = focusRequester,
                                 onFocusChange = { focused = it },
                                 tooLong = tooLong,
@@ -656,6 +658,7 @@ internal fun LookupSearchCover(
                             field = field,
                             onEdit = onEdit,
                             onSearchAction = onSearchAction,
+                            onClose = onClose,
                             focusRequester = focusRequester,
                             onFocusChange = { focused = it },
                             tooLong = tooLong,
@@ -730,15 +733,15 @@ internal fun LookupSearchCover(
 }
 
 /**
- * The cover's bar: a leading back-chevron that leaves search, the mode's title, and a trailing
- * close that ends the lookup. Two distinct actions at the two ends, so escape is always where it
- * has always been; the chevron follows the locale's own back direction.
+ * The cover's bar: a leading back-chevron that leaves search and the mode's title. The field below
+ * carries the cover's own close control on its own line, at Home's cancel control, so the bar keeps
+ * the one action that belongs to a bar and the field keeps the one that belongs to it.
  *
- * The title is painted only when the two 48 dp targets leave room for it: below that measure it is
- * the pane title, not a clipped word, that names the mode.
+ * The title is painted only when the 48 dp target leaves room for it: below that measure it is the
+ * pane title, not a clipped word, that names the mode.
  */
 @Composable
-private fun SearchTopBar(title: String, onBack: () -> Unit, onClose: () -> Unit) {
+private fun SearchTopBar(title: String, onBack: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val type = MaterialTheme.typography
     val measurer = rememberTextMeasurer()
@@ -765,7 +768,7 @@ private fun SearchTopBar(title: String, onBack: () -> Unit, onClose: () -> Unit)
                 description = R.string.lookup_search_back,
                 onClick = onBack
             )
-            if (barWidth - MinTarget * 2 - Spacing.xs >= titleWidth) {
+            if (barWidth - MinTarget - Spacing.xs >= titleWidth) {
                 Text(
                     text = title,
                     style = type.titleLarge,
@@ -775,12 +778,6 @@ private fun SearchTopBar(title: String, onBack: () -> Unit, onClose: () -> Unit)
                     modifier = Modifier.padding(start = Spacing.xs)
                 )
             }
-            Spacer(Modifier.weight(1f))
-            BarAction(
-                icon = Icons.Rounded.Close,
-                description = R.string.lookup_cd_close,
-                onClick = onClose
-            )
         }
     }
 }
@@ -821,6 +818,9 @@ private fun BarAction(icon: ImageVector, @StringRes description: Int, onClick: (
  * [enabled] is false while the cover is still arriving, so the field takes neither focus nor input
  * until its parent's transition has settled.
  *
+ * [onClose] ends the lookup. Its control sits on the field's own line, at Home's cancel control, so
+ * the field and its way out read as one row rather than two.
+ *
  * [intoView] is set only where the field shares a scroller with the results, so an IME arrival can
  * bring the field back without a responder having to exist in the pinned layout.
  */
@@ -829,6 +829,7 @@ private fun QueryBlock(
     field: TextFieldValue,
     onEdit: (TextFieldValue) -> Unit,
     onSearchAction: () -> Unit,
+    onClose: () -> Unit,
     focusRequester: FocusRequester,
     onFocusChange: (Boolean) -> Unit,
     tooLong: Boolean,
@@ -863,10 +864,7 @@ private fun QueryBlock(
         label = "query field outline"
     )
     Column(modifier = modifier.fillMaxWidth()) {
-        BasicTextField(
-            value = field,
-            onValueChange = onEdit,
-            enabled = enabled,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
@@ -875,51 +873,62 @@ private fun QueryBlock(
                     } else {
                         Modifier.bringIntoViewRequester(intoView)
                     }
-                )
-                .focusRequester(focusRequester)
-                .onFocusChanged {
-                    focused = it.isFocused
-                    onFocusChange(it.isFocused)
-                }
-                // The field's own name, for a reader who cannot see the placeholder: the painted
-                // label the cover used to carry above the field is gone, so this is what names it.
-                .semantics { contentDescription = label },
-            textStyle = type.bodyMedium.copy(color = colors.onSurface),
-            singleLine = true,
-            cursorBrush = SolidColor(colors.primary),
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                autoCorrectEnabled = false,
-                keyboardType = KeyboardType.Unspecified,
-                imeAction = ImeAction.Search,
-                showKeyboardOnFocus = !touchExploration
-            ),
-            keyboardActions = KeyboardActions(onSearch = { onSearchAction() }),
-            decorationBox = { innerTextField ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = fieldMinHeight)
-                        .background(colors.surfaceVariant, ControlShape)
-                        .border(FieldOutline, outline, ControlShape)
-                        .padding(horizontal = FieldPaddingH, vertical = FieldPaddingV),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SearchGlyph(tint = colors.glyphInk())
-                    Spacer(Modifier.width(FieldIconGap))
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (field.text.isEmpty()) {
-                            Text(
-                                text = placeholder,
-                                style = type.bodyMedium,
-                                color = colors.onSurfaceVariant
-                            )
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BasicTextField(
+                value = field,
+                onValueChange = onEdit,
+                enabled = enabled,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        onFocusChange(it.isFocused)
+                    }
+                    // The field's own name, for a reader who cannot see the placeholder: the painted
+                    // label the cover used to carry above the field is gone, so this is what names it.
+                    .semantics { contentDescription = label },
+                textStyle = type.bodyMedium.copy(color = colors.onSurface),
+                singleLine = true,
+                cursorBrush = SolidColor(colors.primary),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Unspecified,
+                    imeAction = ImeAction.Search,
+                    showKeyboardOnFocus = !touchExploration
+                ),
+                keyboardActions = KeyboardActions(onSearch = { onSearchAction() }),
+                decorationBox = { innerTextField ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = fieldMinHeight)
+                            .background(colors.surfaceVariant, ControlShape)
+                            .border(FieldOutline, outline, ControlShape)
+                            .padding(horizontal = FieldPaddingH, vertical = FieldPaddingV),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SearchGlyph(tint = colors.glyphInk())
+                        Spacer(Modifier.width(FieldIconGap))
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (field.text.isEmpty()) {
+                                Text(
+                                    text = placeholder,
+                                    style = type.bodyMedium,
+                                    color = colors.onSurfaceVariant
+                                )
+                            }
+                            innerTextField()
                         }
-                        innerTextField()
                     }
                 }
-            }
-        )
+            )
+            Spacer(Modifier.width(Spacing.s))
+            CloseAction(onClick = onClose)
+        }
         if (tooLong) {
             Spacer(Modifier.height(Spacing.xs))
             Text(
@@ -961,6 +970,32 @@ private fun SearchGlyph(tint: Color, modifier: Modifier = Modifier) {
             end = Offset(21f * unit, 21f * unit),
             strokeWidth = stroke,
             cap = StrokeCap.Round
+        )
+    }
+}
+
+/**
+ * The field's own way out, at Home's own cancel control: a 48 dp circle with a 2 dp neutral
+ * perimeter and the close glyph in the accent, on the field's own line. Home's search field carries
+ * the same control beside it, so the cover borrows it rather than inventing a second escape.
+ */
+@Composable
+private fun CloseAction(onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val interactions = remember { MutableInteractionSource() }
+    IconButton(
+        onClick = onClick,
+        interactionSource = interactions,
+        modifier = Modifier
+            .size(MinTarget)
+            .border(FieldOutline, colors.outlineVariant, CircleShape)
+            .pressOpacity(interactions)
+    ) {
+        Icon(
+            Icons.Rounded.Close,
+            contentDescription = stringResource(R.string.lookup_cd_close),
+            tint = colors.primary,
+            modifier = Modifier.size(GlyphSize)
         )
     }
 }
