@@ -467,12 +467,16 @@ class ReviewStore {
     }
   }
 
-  /** Opens the hub, preserving an unfinished session until the reader chooses to resume it. */
+  /**
+   * Opens WaniKani, preserving an unfinished session until the reader chooses to resume it. The read
+   * decides where to land, so nothing is drawn until it answers: a token that is missing, or one
+   * WaniKani refuses, opens the connection page, which is the only screen that can fix it.
+   */
   openWaniKani() {
     this.ifIdle(() => {
       if (this.state.step.kind === "wkLesson") this.pausedLesson = this.state.step.session;
       if (this.state.step.kind === "wkReview") this.pausedReview = this.state.step.session;
-      this.set({ deck: null, step: this.hubStep() });
+      this.set({ deck: null, step: { kind: "opening", source: "waniKani" } });
       this.setBusy(true);
       const request = this.hubRequest;
       void (async () => {
@@ -485,7 +489,8 @@ class ReviewStore {
           }
           await this.enterWaniKaniHome();
         } catch (error) {
-          if (this.state.step.kind !== "wkHome") return;
+          // The opening step is still up while the token check runs, so it has to surface too.
+          if (this.state.step.kind !== "wkHome" && this.state.step.kind !== "opening") return;
           this.set({step: this.hubStep({failed: true, refreshing: false,
             failure: {failure: waniKaniFailureOf(error), retryAfterSeconds: null}})});
         } finally {
@@ -506,7 +511,21 @@ class ReviewStore {
     }
   }
 
+  /**
+   * The token is gone, or WaniKani refuses it. Both open the connection page: the hub can only say
+   * the queues are unreachable, and this is the one screen where the reader can do something about
+   * it. A refused token is carried over so the page explains why it is being asked for again.
+   */
   private accountUnavailable(connection: "disconnected" | "expired") {
+    this.resetWaniKaniAccount();
+    this.set({step: {kind: "wkConnect", rejected: connection === "expired"}});
+  }
+
+  /**
+   * The same loss, met from a queue the reader asked for inside the hub: the failure belongs to that
+   * queue, so the hub stays up and its own row explains it rather than dropping the reader out.
+   */
+  private accountUnavailableInSession(connection: "disconnected" | "expired") {
     this.resetWaniKaniAccount();
     this.set({step: this.hubStep({connection})});
   }
@@ -679,10 +698,10 @@ class ReviewStore {
         await this.finishWaniKani();
         return;
       case "needsToken":
-        this.accountUnavailable("disconnected");
+        this.accountUnavailableInSession("disconnected");
         return;
       case "authRejected":
-        this.accountUnavailable("expired");
+        this.accountUnavailableInSession("expired");
         return;
       case "failed":
         this.set({step: this.hubStep({reviewFailure: {
@@ -763,10 +782,10 @@ class ReviewStore {
         return;
       }
       case "needsToken":
-        this.accountUnavailable("disconnected");
+        this.accountUnavailableInSession("disconnected");
         return;
       case "authRejected":
-        this.accountUnavailable("expired");
+        this.accountUnavailableInSession("expired");
         return;
       case "failed":
         this.set({step: this.hubStep({lessonFailure: {
