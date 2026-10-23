@@ -22,6 +22,12 @@ import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {SettingsGroup, SettingsPageScaffold, SettingsRow} from "./settings-components";
 
+/**
+ * The published privacy policy. It is the same URL the Play listing points at, and it is linked from
+ * inside the app because Play requires both.
+ */
+const PRIVACY_POLICY_URL = "https://anurag-raut.github.io/Gaten/privacy/";
+
 /** Where each attribution and licence lives. Opened in the browser, which may be nowhere. */
 const EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html";
 const MANGA_OCR_URL = "https://github.com/kha-white/manga-ocr";
@@ -63,6 +69,12 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, paddingVertical: spacing.m}]}>
           Lookup and recognition run on this device; screenshots stay here. Optional network use: model downloads and WaniKani when connected. Nothing else is sent.
         </Text>
+        <SettingsRow
+          icon="shield"
+          title="Privacy policy"
+          summary="What Gaten keeps, and the only two things it ever sends"
+          onPress={() => open(PRIVACY_POLICY_URL)}
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Attributions" style={{marginTop: spacing.xl}}>
