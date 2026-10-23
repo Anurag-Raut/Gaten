@@ -12,13 +12,20 @@
     <string name="anki_add">Add to Anki</string>
     <string name="anki_added">Added</string>
     <string name="anki_duplicate">Already in Anki</string>
-    <string name="anki_error_permission">AnkiDroid did not allow writing to its database</string>
-    <string name="anki_error_deck">Could not create the deck in AnkiDroid</string>
-    <string name="anki_error_model">Could not create the note type in AnkiDroid</string>
-    <string name="anki_error_failed">Could not add the word to AnkiDroid</string>
-    <string name="anki_error_share">AnkiDroid cannot be opened for sharing</string>
-    <string name="anki_error_configuration">Anki settings no longer match the note type. Open Customize cards and select the note type again.</string>
-    <string name="anki_error_empty_first_field">The first Anki field is empty for this word. Choose a different field mapping.</string>
+    <!-- The permissionless route: the word goes to AnkiDroid's own add screen, so the action names
+         the handoff instead of claiming a direct write Gaten cannot make. -->
+    <string name="anki_send">Send to AnkiDroid</string>
+    <string name="anki_checking">Checking Anki…</string>
+    <string name="anki_adding">Adding…</string>
+    <string name="anki_deck">Anki deck</string>
+    <string name="anki_not_installed">Install AnkiDroid to add cards</string>
+    <string name="anki_error_permission">AnkiDroid denied access</string>
+    <string name="anki_error_deck">Could not create the deck</string>
+    <string name="anki_error_model">Could not create the note type</string>
+    <string name="anki_error_failed">Could not add the word</string>
+    <string name="anki_error_share">Could not open AnkiDroid</string>
+    <string name="anki_error_configuration">Check the note type in Anki cards</string>
+    <string name="anki_error_empty_first_field">The first Anki field is empty. Check field mappings in Anki cards.</string>
     <string name="anki_settings_title">Anki</string>
     <string name="anki_settings_summary">Choose a deck, map note fields, and customize your cards.</string>
     <string name="anki_settings_open">Customize cards</string>

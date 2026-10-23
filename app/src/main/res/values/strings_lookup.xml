@@ -8,23 +8,39 @@
 
 <resources>
 
-    <!-- Lookup overlay -->
-    <string name="lookup_hint">Circle Japanese text</string>
-    <string name="lookup_reading">Reading…</string>
+    <!--
+      Lookup overlay: the status rail. One line each, one job each. "Reading screen…" is the
+      full-screen index still running; "Reading selection…" is the crop the reader just committed.
+      The instruction names both ways in — the lasso and the tap — because the tap is invisible.
+    -->
+    <string name="lookup_reading_screen">Reading screen…</string>
+    <string name="lookup_reading_selection">Reading selection…</string>
+    <string name="lookup_hint">Circle or tap Japanese text</string>
+    <!-- Shown when the index is unavailable: only the lasso can still read text by itself. -->
+    <string name="lookup_circle_hint">Circle Japanese text</string>
+    <string name="lookup_tap_miss">No text here</string>
+
+    <!-- Lookup overlay: results -->
     <string name="lookup_no_text">No text found</string>
-    <string name="lookup_no_words">No dictionary words found</string>
-    <string name="lookup_dict_error">Dictionary unavailable: %1$s</string>
+    <string name="lookup_no_words">No dictionary matches</string>
+    <string name="lookup_dict_error">Dictionary unavailable</string>
+    <!-- The real cause under the failure title; never a class name or an invented one. -->
+    <string name="lookup_dict_error_cause">%1$s</string>
     <string name="lookup_select_again">Select again</string>
     <string name="lookup_other_matches">Other matches (%1$d)</string>
-    <string name="lookup_base_form">from %1$s</string>
-    <string name="lookup_common">common</string>
+    <string name="lookup_base_form">From %1$s</string>
+    <string name="lookup_common">Common</string>
     <string name="lookup_also_written">Also written: %1$s</string>
+    <string name="lookup_meaning_caption">Meaning</string>
+    <string name="lookup_pos_caption">Part of speech</string>
+    <string name="lookup_no_meaning">No meaning supplied</string>
     <string name="lookup_toast_copied">Copied</string>
 
     <!-- Lookup overlay content descriptions -->
-    <string name="lookup_cd_close">Close</string>
-    <string name="lookup_cd_copy">Copy recognized text</string>
+    <string name="lookup_cd_close">Close lookup</string>
+    <string name="lookup_cd_copy">Copy text</string>
     <string name="lookup_cd_select_again">Select again</string>
     <string name="lookup_cd_scroll_back">Show earlier words</string>
     <string name="lookup_cd_scroll_forward">Show more words</string>
+    <string name="lookup_cd_dismiss">Dismiss lookup</string>
 </resources>

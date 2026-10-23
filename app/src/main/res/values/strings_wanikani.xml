@@ -38,39 +38,40 @@
     <!-- Kanji strip in the result sheet -->
     <string name="wk_strip_label">WaniKani kanji</string>
     <string name="wk_cd_kanji">WaniKani details for %1$s</string>
-    <string name="wk_cd_radical">WaniKani details for the radical %1$s</string>
+    <string name="wk_cd_radical">WaniKani details for %1$s</string>
 
     <!-- Kanji and radical pages -->
-    <string name="wk_cd_back">Close these details</string>
-    <string name="wk_cd_open">Open this page on WaniKani</string>
-    <string name="wk_cd_refresh">Refresh this page from WaniKani</string>
+    <string name="wk_cd_back">Back</string>
+    <string name="wk_cd_open">Open on WaniKani</string>
+    <string name="wk_cd_refresh">Refresh WaniKani page</string>
     <string name="wk_radical">Radical</string>
     <string name="wk_meaning">Meaning</string>
     <string name="wk_onyomi">On&#8217;yomi</string>
     <string name="wk_kunyomi">Kun&#8217;yomi</string>
     <string name="wk_radicals">Radicals</string>
-    <string name="wk_meaning_mnemonic">WaniKani&#8217;s meaning mnemonic</string>
-    <string name="wk_reading_mnemonic">WaniKani&#8217;s reading mnemonic</string>
-    <string name="wk_saved">Saved on this device: readable offline.</string>
-    <string name="wk_not_saved">Some details could not be saved for offline use.</string>
-    <string name="wk_stale">Showing the saved copy — WaniKani could not be reached just now.</string>
-    <string name="wk_loading">Looking up WaniKani…</string>
-    <string name="wk_retry">Retry</string>
+    <string name="wk_meaning_mnemonic">Meaning mnemonic</string>
+    <string name="wk_reading_mnemonic">Reading mnemonic</string>
+    <string name="wk_saved">Saved for offline use</string>
+    <string name="wk_not_saved">Not saved for offline use</string>
+    <string name="wk_stale">Showing saved copy</string>
+    <string name="wk_stale_support">Could not refresh WaniKani</string>
+    <string name="wk_loading">Loading WaniKani…</string>
+    <string name="wk_retry">Try again</string>
     <string name="wk_open_app">Open Gaten</string>
-    <string name="wk_no_entry_kanji">WaniKani has no entry for %1$s.</string>
-    <string name="wk_no_entry_radical">WaniKani has no entry for this radical.</string>
-    <string name="wk_restricted_kanji">%1$s is above the levels your WaniKani account includes.</string>
-    <string name="wk_restricted_radical">This radical is above the levels your WaniKani account includes.</string>
-    <string name="wk_needs_token">Connect a WaniKani personal access token in the Gaten app to see kanji and radical pages here.</string>
-    <string name="wk_auth">WaniKani rejected the saved token. Open Gaten to connect again.</string>
-    <string name="wk_unreachable">Could not load this page from WaniKani: %1$s.</string>
+    <string name="wk_no_entry_kanji">No WaniKani entry for %1$s</string>
+    <string name="wk_no_entry_radical">No WaniKani entry for this radical</string>
+    <string name="wk_restricted_kanji">%1$s is outside your subscription</string>
+    <string name="wk_restricted_radical">This radical is outside your subscription</string>
+    <string name="wk_needs_token">Connect WaniKani in Gaten</string>
+    <string name="wk_auth">Reconnect WaniKani in Gaten</string>
+    <string name="wk_unreachable">Could not load WaniKani</string>
 
     <!-- Why a WaniKani request could not be answered -->
-    <string name="wk_failure_offline">no connection</string>
-    <string name="wk_failure_timeout">the request timed out</string>
-    <string name="wk_failure_rate_limited">WaniKani is limiting requests just now</string>
-    <string name="wk_failure_server">WaniKani reported a server error</string>
-    <string name="wk_failure_too_large">the answer was too large to keep</string>
-    <string name="wk_failure_malformed">WaniKani sent something Gaten could not read</string>
-    <string name="wk_failure_storage">this device could not save the answer</string>
+    <string name="wk_failure_offline">No connection</string>
+    <string name="wk_failure_timeout">Request timed out</string>
+    <string name="wk_failure_rate_limited">WaniKani is limiting requests</string>
+    <string name="wk_failure_server">WaniKani reported an error</string>
+    <string name="wk_failure_too_large">WaniKani&#8217;s answer is too large</string>
+    <string name="wk_failure_malformed">Could not read WaniKani&#8217;s answer</string>
+    <string name="wk_failure_storage">Could not save WaniKani&#8217;s answer</string>
 </resources>

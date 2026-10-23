@@ -11,7 +11,6 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.EnterTransition
@@ -23,24 +22,16 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +67,7 @@ import com.gaten.app.ocr.prefetchOrder
 import com.gaten.app.ui.FeedbackHaptic
 import com.gaten.app.ui.rememberFeedback
 import com.gaten.app.ui.overlay.ViewMapping
+import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.Spacing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -102,33 +94,51 @@ private val TapTolerance = 24.dp
  */
 private const val MAX_GESTURE_LINES = 3
 
+/**
+ * How long one settled rail message stays up before the next one replaces it, or the rail goes.
+ * Two seconds is the floor the accessibility guidance sets for a transient status.
+ */
+private const val NOTICE_MS = 2000L
+
 /** Lifecycle of the offline dictionary handle. */
 private sealed interface RepoState {
     object Loading : RepoState
     data class Ready(val repo: JmdictRepository) : RepoState
-    data class Failed(val message: String) : RepoState
+    /**
+     * The dictionary could not be opened. [message] is whatever the failure itself can say; null
+     * when it can say nothing usable, in which case the sheet shows the failure without inventing a
+     * cause for it — an exception class name is not a reason a reader can act on.
+     */
+    data class Failed(val message: String?) : RepoState
 }
 
 /** The three states of one overlay session. */
 private enum class Phase { Selecting, Scanning, Result }
 
 /**
+ * A settled message for the floating rail, and the instruction that replaces it two seconds later:
+ * a miss says "No text here" and then how to try again; an index that came back empty names the zero
+ * it really found before naming the one path that can still recover text.
+ */
+private data class RailNotice(val text: Int, val glyph: RailGlyph? = null, val then: RailNotice? = null)
+
+/**
  * The sheet slides in from its own docked edge and back out that way. The transitions travel the
  * measured panel's own size — they are applied to the sheet Surface via [Modifier.animateEnterExit],
  * so the portrait panel moves its own height and a side panel its own width, never the whole
- * screen — over polished timings: ~260ms to open, ~200ms to leave.
+ * screen — over the house steps: MEDIUM to arrive, SHORT to leave, both on the emphasized curve.
  */
 private fun sheetEnter(dock: SheetDock): EnterTransition = when (dock) {
-    SheetDock.Bottom -> slideInVertically(tween(260, easing = FastOutSlowInEasing)) { it }
-    SheetDock.Left -> slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it }
-    SheetDock.Right -> slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it }
+    SheetDock.Bottom -> slideInVertically(tween(Motion.MEDIUM, easing = Motion.emphasized)) { it }
+    SheetDock.Left -> slideInHorizontally(tween(Motion.MEDIUM, easing = Motion.emphasized)) { -it }
+    SheetDock.Right -> slideInHorizontally(tween(Motion.MEDIUM, easing = Motion.emphasized)) { it }
 }
 
 /** @see sheetEnter */
 private fun sheetExit(dock: SheetDock): ExitTransition = when (dock) {
-    SheetDock.Bottom -> slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { it }
-    SheetDock.Left -> slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -it }
-    SheetDock.Right -> slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { it }
+    SheetDock.Bottom -> slideOutVertically(tween(Motion.SHORT, easing = Motion.emphasized)) { it }
+    SheetDock.Left -> slideOutHorizontally(tween(Motion.SHORT, easing = Motion.emphasized)) { -it }
+    SheetDock.Right -> slideOutHorizontally(tween(Motion.SHORT, easing = Motion.emphasized)) { it }
 }
 
 /**
@@ -143,6 +153,7 @@ private fun sheetExit(dock: SheetDock): ExitTransition = when (dock) {
  * and kept warm for the whole overlay lifetime.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun LookupOverlay(
     screenshot: Bitmap?,
     /**
@@ -211,36 +222,94 @@ fun LookupOverlay(
         }
     }
 
-    // The pill at the top is up only while it has something to say: "Reading…" for as long as any
-    // work runs, then — once the scan has settled — one of the two short notices. [pillText] holds
-    // the text last shown, so the pill still has something to draw while it fades out.
-    var pillText by remember { mutableStateOf(R.string.lookup_reading) }
+    // The floating rail names the work that is really running — the full-screen index, then the
+    // committed crop — and otherwise reads out one settled message for two seconds before it goes.
+    // [railText] holds the text last shown so the rail still has something to draw while it fades.
+    var railText by remember { mutableStateOf(R.string.lookup_reading_screen) }
+    var railGlyph by remember { mutableStateOf<RailGlyph?>(null) }
     var noticeUp by remember { mutableStateOf(false) }
-    var noticeJob by remember { mutableStateOf<Job?>(null) }
-    val busy = phase == Phase.Scanning || scanState == ScanState.Scanning
+    // Re-keyed on every request: the next notice has to outlive whatever countdown the last one
+    // left running, whether that is a second miss or "Select again" after an answer.
+    var notice by remember { mutableStateOf<RailNotice?>(null) }
+    var noticeSerial by remember { mutableStateOf(0) }
+    // Work outranks any notice: a status that names what is happening is never hidden by a message
+    // about what already happened.
+    val busyText = when {
+        scanState == ScanState.Scanning -> R.string.lookup_reading_screen
+        phase == Phase.Scanning -> R.string.lookup_reading_selection
+        else -> null
+    }
+    val railUp = busyText != null || noticeUp
 
-    // Restart the hint's lifetime on each miss so an earlier notice cannot hide the new one.
-    fun showNotice(text: Int) {
-        noticeJob?.cancel()
-        pillText = text
-        noticeUp = true
-        noticeJob = scope.launch {
-            delay(2000)
-            noticeUp = false
-        }
+    fun showNotice(next: RailNotice) {
+        notice = next
+        noticeSerial++
     }
 
-    // A scan that settled without an index to tap says so for a couple of seconds: no text on the
-    // screen at all, or no scan at all — and while the latter holds, the circle-to-read path is
-    // still the way in.
+    // The rail's whole life, in one place: the running work, then the last settled message and its
+    // follow-up — two seconds each — and then away. Text replacement is deliberately immediate
+    // rather than animated: the rail relayouts its own height, and a height animation over clipped
+    // text is the one thing a status line must not do.
+    LaunchedEffect(busyText, noticeSerial) {
+        // Work first: while something is really running, its message takes the rail and whatever was
+        // settling is dropped — a notice about the last state must never outlive the new one.
+        if (busyText != null) {
+            railText = busyText
+            railGlyph = null
+            notice = null
+            return@LaunchedEffect
+        }
+        val scheduled = notice
+        if (scheduled != null) {
+            railText = scheduled.text
+            railGlyph = scheduled.glyph
+            noticeUp = true
+            delay(NOTICE_MS)
+            val followUp = scheduled.then
+            if (followUp != null) {
+                railText = followUp.text
+                railGlyph = followUp.glyph
+                delay(NOTICE_MS)
+            }
+        }
+        noticeUp = false
+        // Read once, then gone: a result the reader is already looking at never gets a message from
+        // the state before it replayed over the top.
+        notice = null
+    }
+
+    // A drag takes the instruction away at once — it must not sit over the mark being drawn — and
+    // restarts nothing: the request is dropped so the countdown cannot bring it back mid-gesture.
+    fun hideInstruction() {
+        notice = null
+        noticeUp = false
+        noticeSerial++
+    }
+
+    /**
+     * What the rail asks for once the screen has settled: the instruction when there is an index to
+     * use, and the circle alone when there is not. An index that never arrived and one that came
+     * back with no lines are both only recoverable by hand, and neither is an instruction to tap.
+     */
+    fun instruction(state: ScanState): RailNotice =
+        if (state is ScanState.Ready && state.screen.lines.isNotEmpty()) {
+            RailNotice(R.string.lookup_hint, RailGlyph.Gesture)
+        } else {
+            RailNotice(R.string.lookup_circle_hint)
+        }
+
+    // A scan that settled says what it settled on, once: the instruction it can honour, the zero it
+    // really found, or — for an index that never arrived — the circle, because a missing index is
+    // not the same fact as an empty screen and must never be reported as one.
     LaunchedEffect(scanState) {
         val settled = scanState
-        val notice = when {
-            settled is ScanState.Ready && settled.screen.lines.isEmpty() -> R.string.lookup_no_text
-            settled == ScanState.Unavailable -> R.string.lookup_hint
-            else -> null
+        val next = when {
+            settled == ScanState.Scanning -> null
+            settled is ScanState.Ready && settled.screen.lines.isEmpty() ->
+                RailNotice(R.string.lookup_no_text, RailGlyph.SearchOff, then = instruction(settled))
+            else -> instruction(settled)
         } ?: return@LaunchedEffect
-        showNotice(notice)
+        showNotice(next)
     }
 
     // ML Kit's index is what the overlay goes Ready with, instantly. The reader then replaces each
@@ -284,7 +353,7 @@ fun LookupOverlay(
             RepoState.Ready(JmdictRepository.open(context))
         } catch (e: Exception) {
             Log.e(TAG, "Dictionary open failed", e)
-            RepoState.Failed(e.message ?: e.javaClass.simpleName)
+            RepoState.Failed(e.message)
         }
     }
     val readyRepo = (repoState as? RepoState.Ready)?.repo
@@ -294,15 +363,19 @@ fun LookupOverlay(
 
     LaunchedEffect(Unit) { overlayState.targetState = true }
 
-    // Closing runs two coordinated transitions, each awaited on its real completion: the sheet
-    // slides out first, then the overlay fades, and only then is control handed back — once.
-    // (The sheet's AnimatedVisibility animates nothing itself; its transition still waits for the
-    // Surface's animateEnterExit slide to finish before currentState settles on false.)
+    // Closing runs both exits at once — the sheet leaves toward its dock while the dim and the rail
+    // fade — and hands control back once they have both finished, so teardown never waits out a
+    // decorative animation any longer than the longest of them. (The sheet's AnimatedVisibility
+    // animates nothing itself; its transition still waits for the Surface's animateEnterExit slide
+    // to finish before currentState settles on false, which is why both are awaited here.)
     LaunchedEffect(closing) {
         if (!closing) return@LaunchedEffect
-        snapshotFlow { sheetState.isIdle && !sheetState.currentState }.first { it }
+        sheetState.targetState = false
         overlayState.targetState = false
-        snapshotFlow { overlayState.isIdle && !overlayState.currentState }.first { it }
+        snapshotFlow {
+            overlayState.isIdle && !overlayState.currentState &&
+                sheetState.isIdle && !sheetState.currentState
+        }.first { it }
         onDismiss()
     }
 
@@ -310,7 +383,6 @@ fun LookupOverlay(
         lookupJob?.cancel()
         if (closing) return
         closing = true
-        sheetState.targetState = false
     }
 
     // Suspend until the dictionary has finished opening (or failed).
@@ -349,6 +421,9 @@ fun LookupOverlay(
         if (bmp == null || box == null ||
             box.width < MIN_SELECTION_PX || box.height < MIN_SELECTION_PX
         ) {
+            // Nothing was selected: the reader is back where they started, so the instruction the
+            // drag took away comes back instead of leaving the screen silently without one.
+            showNotice(instruction(scanState))
             return
         }
         // The trail is drawn in view pixels; the index, the hit tests and the selection crop are all in
@@ -405,7 +480,7 @@ fun LookupOverlay(
                 // Dismissing mid-lookup closes the dictionary under the blocking query, which
                 // cannot be interrupted; the overlay is already going away, so just report it.
                 Log.w(TAG, "Lookup failed", e)
-                LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
+                LookupResult(ocrText = "", words = emptyList(), error = e.message)
             }
             currentCoroutineContext().ensureActive()
             result = outcome
@@ -423,7 +498,10 @@ fun LookupOverlay(
         val live = screen
         val bmp = screenshot
         if (bmp == null || live == null) {
-            showNotice(R.string.lookup_hint)
+            // No index to hit-test against. While the screen is still being read the rail already
+            // says so; an index that never arrived leaves the circle as the only way in, and saying
+            // "circle or tap" there would promise a lookup the tap cannot deliver.
+            if (scanState == ScanState.Unavailable) showNotice(instruction(scanState))
             return
         }
         // The finger is in view pixels; the index, and everything it is hit-tested against, is in
@@ -436,7 +514,9 @@ fun LookupOverlay(
         val lineIndex = ScreenHits.hitTestLine(live, x, y, tolerance)
         if (lineIndex == null) {
             Log.d(TAG, "Tap missed: no text box within $tolerance px")
-            showNotice(R.string.lookup_hint)
+            // Absence, then the way to try again: a miss never dismisses the overlay, so the reader
+            // is told what happened and how to recover, in that order.
+            showNotice(RailNotice(R.string.lookup_tap_miss, then = instruction(scanState)))
             return
         }
         Log.d(TAG, "Tap hit line $lineIndex")
@@ -464,7 +544,7 @@ fun LookupOverlay(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Tap lookup failed", e)
-                LookupResult(ocrText = "", words = emptyList(), error = e.message ?: e.javaClass.simpleName)
+                LookupResult(ocrText = "", words = emptyList(), error = e.message)
             }
             currentCoroutineContext().ensureActive()
             result = outcome
@@ -483,13 +563,18 @@ fun LookupOverlay(
         frozenBox = null
         phase = Phase.Selecting
         sheetState.targetState = false
+        // The instruction comes back with the state it belongs to, over the outgoing sheet: the
+        // reader who just asked for another selection should not have to guess the gesture again.
+        showNotice(instruction(scanState))
     }
 
-    // Fade in on open and fade out on close, so the overlay never pops.
+    // Fade in on open and fade out on close, so the overlay never pops. The frozen capture is not
+    // part of this: the window behind already shows the undimmed frame, and only the dim, the rail
+    // and the sheet ride this alpha — so 0 -> 0.40 is the dim's own entry, over SHORT/emphasized.
     AnimatedVisibility(
         visibleState = overlayState,
-        enter = fadeIn(tween(160)),
-        exit = fadeOut(tween(150)),
+        enter = fadeIn(tween(Motion.SHORT, easing = Motion.emphasized)),
+        exit = fadeOut(tween(Motion.SHORT, easing = Motion.emphasized)),
         modifier = Modifier.zIndex(3000f)
     ) {
         // The constraints are the full-screen overlay in view pixels — the same space the selection
@@ -502,30 +587,44 @@ fun LookupOverlay(
                 frozenBox = frozenBox,
                 interactive = phase == Phase.Selecting && !closing,
                 showingResult = phase == Phase.Result,
-                onLassoStart = { points = listOf(it) },
+                // A drag takes the instruction away at once; a lasso that produced nothing puts it
+                // back, so the rail is never left blank just because a gesture ended.
+                onLassoStart = {
+                    hideInstruction()
+                    points = listOf(it)
+                },
                 onLassoUpdate = { points = points + it },
                 onLassoEnd = { startLookup() },
-                onLassoCancel = { points = emptyList() },
+                onLassoCancel = {
+                    points = emptyList()
+                    showNotice(instruction(scanState))
+                },
                 onTap = { onTap(it) }
             )
 
-            // Pure drawing, over the selection canvas and under the pill: the ring around the edge
-            // of the display, telling work apart from idle without ever taking a touch.
-            EdgeOutline(
-                busy = busy,
-                shown = phase != Phase.Result,
-                modifier = Modifier.fillMaxSize()
-            )
-
+            // The rail: opaque paper with its own accent rule, so it reads over somebody else's
+            // screen. It sits below the real status-bar and cutout insets — the frozen frame still
+            // carries the app's own status bar, and a rail drawn over the clock reads as broken
+            // chrome — and only its opacity animates.
             AnimatedVisibility(
-                visible = busy || noticeUp,
-                enter = fadeIn(tween(160)),
-                exit = fadeOut(tween(150)),
-                modifier = Modifier.align(Alignment.TopCenter)
+                visible = railUp,
+                enter = fadeIn(tween(Motion.SHORT, easing = Motion.emphasized)),
+                exit = fadeOut(tween(Motion.SHORT, easing = Motion.emphasized)),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(
+                        WindowInsets.statusBarsIgnoringVisibility
+                            .union(WindowInsets.displayCutout)
+                            .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                    )
+                    .padding(top = Spacing.l)
             ) {
-                StatusPill(
-                    text = if (busy) R.string.lookup_reading else pillText,
-                    busy = busy
+                FloatingStatusRail(
+                    text = stringResource(railText),
+                    busy = busyText != null,
+                    glyph = railGlyph,
+                    tone = RailTone.Neutral,
+                    supporting = null
                 )
             }
 
@@ -576,51 +675,3 @@ fun LookupOverlay(
     }
 }
 
-/**
- * The one pill at the top: "Reading…" with a spinner for as long as work runs — the screen scan or
- * a gesture lookup — and a short notice in its place once the scan has settled. It is only up while
- * it has something to say, so it never covers the text the reader is selecting.
- */
-@Composable
-@OptIn(ExperimentalLayoutApi::class)
-private fun StatusPill(text: Int, busy: Boolean) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        modifier = Modifier
-            // Below whatever occupies the top band — the status bar even when the app behind
-            // hides it, and the camera cutout — plus one fixed gap. Horizontal sides ride along
-            // so a landscape side cutout cannot cover the pill either.
-            .windowInsetsPadding(
-                WindowInsets.statusBarsIgnoringVisibility
-                    .union(WindowInsets.displayCutout)
-                    .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-            )
-            .padding(top = Spacing.l)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(
-                start = Spacing.l,
-                top = Spacing.xs,
-                end = Spacing.l,
-                bottom = Spacing.xs
-            )
-        ) {
-            Text(
-                text = stringResource(text),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(vertical = Spacing.s)
-            )
-            if (busy) {
-                Spacer(Modifier.width(Spacing.s))
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}

@@ -6,6 +6,10 @@
 
 package com.gaten.app.trigger
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.TimeInterpolator
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -20,9 +24,12 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
+import androidx.compose.animation.core.Easing
 import androidx.compose.ui.graphics.toArgb
 import com.gaten.app.R
+import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.ThemePreferences
 import com.gaten.app.ui.theme.accentRoles
 import kotlin.math.hypot
@@ -33,6 +40,9 @@ private const val TAG = "Gaten"
 private const val BUBBLE_DP = 48
 private const val ICON_DP = 24
 
+/** The hard keyline inside the circle's edge, drawn in the glyph's own colour. */
+private const val PERIMETER_DP = 2
+
 /** Gap kept between the bubble and the screen's right edge on first show. */
 private const val EDGE_MARGIN_DP = 8
 
@@ -42,8 +52,8 @@ private const val TOUCH_SLOP_DP = 8f
 /** Where the bubble starts vertically: a little above the middle, clear of both screen edges. */
 private const val DEFAULT_HEIGHT_FRACTION = 0.45f
 
-/** ~90% opacity, so the bubble reads as a float without hiding the text underneath it. */
-private const val BUBBLE_ALPHA = 0xE6
+/** How far a finger on the bubble takes its opacity down; see [pressAlpha]. */
+private const val PRESSED_ALPHA = 0.72f
 
 /** Longest [FloatingTriggerButton.hideThen] waits for the cleared bubble to reach the screen. */
 private const val GONE_TIMEOUT_MS = 150L
@@ -68,6 +78,10 @@ private const val GONE_TIMEOUT_MS = 150L
  *
  * [show]/[hide] are idempotent and hop to the main thread themselves, since adding or removing a
  * window anywhere else throws.
+ *
+ * The bubble's one piece of motion is its opacity: it fades in where it was left, dims under a
+ * finger, and fades out when the reader switches it off. Its geometry is never animated — the drag
+ * and the clamp answer a finger, and the service takes the window down outright before a capture.
  */
 class FloatingTriggerButton(
     private val context: Context,
@@ -84,6 +98,15 @@ class FloatingTriggerButton(
     private var view: ImageView? = null
     private var params: WindowManager.LayoutParams? = null
 
+    /**
+     * Whatever is writing the bubble's opacity: a press, an entrance, or the fade out of a bubble
+     * the reader switched off. One at a time, so two of them can never fight over it.
+     */
+    private var alphaAnimator: ValueAnimator? = null
+
+    /** True from the start of a fade out until the bubble is gone or is asked for again. */
+    private var fadingOut = false
+
     // Press bookkeeping for the drag/tap split, reset on every DOWN.
     private var downRawX = 0f
     private var downRawY = 0f
@@ -91,12 +114,27 @@ class FloatingTriggerButton(
     private var downY = 0
     private var dragging = false
 
+    /**
+     * True while the bubble is up and staying up. A bubble fading out is on its way down and says
+     * so, which is what has the service ask for it again if the reader switches it back on inside
+     * that fade.
+     */
     val isShowing: Boolean
-        get() = view != null
+        get() = view != null && !fadingOut
 
     /** Puts the bubble up at its restored (or default) position; a no-op when already up. */
     fun show() = onMain {
-        if (view != null) return@onMain
+        val existing = view
+        if (existing != null) {
+            // A bubble still fading out — switched back on inside that fade — is this bubble
+            // coming back, not a second one: take the fade over and raise the opacity where it was
+            // left standing.
+            if (fadingOut) {
+                fadingOut = false
+                animateAlpha(existing, 1f, Motion.emphasized)
+            }
+            return@onMain
+        }
         // The build/position work sits inside the guard too: reading the persisted position and
         // measuring the bubble touch the same resources addView does, and any of it failing must
         // leave the button down rather than propagate. A service has no valid overlay window token
@@ -106,10 +144,14 @@ class FloatingTriggerButton(
         try {
             val bubble = buildBubble()
             val layoutParams = buildParams(restoredOrDefaultPosition())
+            // Invisible until the entrance's first frame lands, so a bubble returning from a
+            // capture cannot flash back at full strength.
+            bubble.alpha = 0f
             windowManager.addView(bubble, layoutParams)
             // Only now is the window really on screen; isShowing derives from these.
             view = bubble
             params = layoutParams
+            animateAlpha(bubble, 1f, Motion.emphasized)
         } catch (e: WindowManager.BadTokenException) {
             logWindowNotAdded("add", e)
         } catch (e: WindowManager.InvalidDisplayException) {
@@ -126,8 +168,34 @@ class FloatingTriggerButton(
     /** Takes the bubble down; a no-op when it is already down. Drops the window references. */
     fun hide() = onMain {
         val current = view ?: return@onMain
-        // Clear the state first: whatever removeViewImmediate does, no view is retained and
-        // isShowing ends false, so a failed removal cannot strand a half-gone bubble.
+        if (fadesOut(current)) {
+            fadingOut = true
+            animateAlpha(current, 0f, Motion.emphasized) {
+                fadingOut = false
+                if (view === current) removeNow(current)
+            }
+        } else {
+            removeNow(current)
+        }
+    }
+
+    /**
+     * Whether this hide may be seen going. Exactly one hide may: the reader switched the bubble off,
+     * which is the case where the preference has already gone false while the bubble is still on
+     * screen and opaque. Every other hide — a lock, a teardown, the overlay coming up — is about not
+     * being on screen a frame longer than needed, and one of them ([hideThen]) is waited on frame by
+     * frame before a screenshot.
+     */
+    private fun fadesOut(current: View): Boolean =
+        current.alpha > 0f && !TriggerPreferences.floatingButtonEnabled(context)
+
+    /**
+     * Drops the window. The state goes first: whatever removeViewImmediate does, no view is
+     * retained and isShowing ends false, so a failed removal cannot strand a half-gone bubble.
+     */
+    private fun removeNow(current: View) {
+        stopAlpha()
+        fadingOut = false
         view = null
         params = null
         try {
@@ -174,6 +242,11 @@ class FloatingTriggerButton(
         current.viewTreeObserver.registerFrameCommitCallback {
             mainHandler.post { Choreographer.getInstance().postFrameCallback { finish.run() } }
         }
+        // The opacity is written here and now, so nothing else may be writing it: a press, an
+        // entrance or a fade out still running would put the bubble back on screen inside this
+        // wait. Any fade is over with it — from here this bubble only has one way left to go.
+        stopAlpha()
+        fadingOut = false
         current.alpha = 0f
         mainHandler.postDelayed(finish, GONE_TIMEOUT_MS)
     }
@@ -184,10 +257,16 @@ class FloatingTriggerButton(
     }
 
     /**
-     * A round [ImageView]: accent-coloured oval behind the tiled lookup glyph, tinted `onPrimary`
-     * so it reads on that fill in both light and dark modes. The theme is the app's own choice
-     * ([ThemePreferences]), not the device's: this window has no composition to read it from, so
-     * the preferences are read here and resolved against the system setting the same way.
+     * A round [ImageView]: an opaque accent disk, a hard keyline inside its edge, and the tiled
+     * lookup glyph tinted `onPrimary` so it reads on that fill in both light and dark modes. The
+     * theme is the app's own choice ([ThemePreferences]), not the device's: this window has no
+     * composition to read it from, so the preferences are read here and resolved against the system
+     * setting the same way.
+     *
+     * The fill is opaque and the keyline is the paired ink rather than a paler accent. This disk
+     * floats over whatever the other app happens to be drawing, so it has to name its action by
+     * itself on a dark page and on a bright one — a translucent disk, or one held together by a
+     * hairline alone, would not.
      */
     private fun buildBubble(): ImageView {
         val dark = ThemePreferences.themeMode(context).isDark(
@@ -200,10 +279,13 @@ class FloatingTriggerButton(
 
         val circle = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
+            // One solid colour and one stroke, never a gradient. A drawable's stroke is inset
+            // inside its bounds, which is where this keyline belongs: inside the 48 dp circle.
             setColor(primary)
-            alpha = BUBBLE_ALPHA
+            setStroke((PERIMETER_DP * density).toInt(), onPrimary)
         }
         val inset = ((BUBBLE_DP - ICON_DP) / 2f * density).toInt()
+        val hint = context.getString(R.string.bubble_lookup_hint)
 
         return ImageView(context).apply {
             setImageResource(R.drawable.ic_qs_lookup)
@@ -213,7 +295,23 @@ class FloatingTriggerButton(
             setPadding(inset, inset, inset, inset)
             minimumWidth = bubblePx
             minimumHeight = bubblePx
+            contentDescription = context.getString(R.string.bubble_lookup_label)
+            accessibilityDelegate = object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(
+                    host: View,
+                    info: AccessibilityNodeInfo
+                ) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    // The description names the action; the hint is what a finger on it does,
+                    // which an icon on its own cannot say.
+                    info.hintText = hint
+                }
+            }
             setOnTouchListener { touched, event -> handleTouch(touched, event) }
+            // A finger is handled above — drag and tap both — so a real touch never reaches this.
+            // It is what an accessibility service activates, though, and without it the label and
+            // hint above would be describing an action nobody can perform.
+            setOnClickListener { onTrigger() }
         }
     }
 
@@ -288,9 +386,15 @@ class FloatingTriggerButton(
      * this bubble to do nothing at all, and nothing here is bound to a long press to deserve one. A
      * drag is clamped into the display, so a released position is always one the bubble can be seen
      * and touched at.
+     *
+     * A press dims the bubble and the drag gives the opacity back: once the finger is moving the
+     * window, the position is the feedback and the dim has nothing left to say. A bubble on its way
+     * out has no action to offer and takes the touch, so nothing underneath receives a press the
+     * reader aimed at the bubble.
      */
     private fun handleTouch(touched: View, event: MotionEvent): Boolean {
         val layoutParams = params ?: return false
+        if (fadingOut) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downRawX = event.rawX
@@ -298,12 +402,16 @@ class FloatingTriggerButton(
                 downX = layoutParams.x
                 downY = layoutParams.y
                 dragging = false
+                pressAlpha(touched, pressed = true)
             }
 
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.rawX - downRawX
                 val dy = event.rawY - downRawY
-                if (!dragging && hypot(dx, dy) > touchSlopPx) dragging = true
+                if (!dragging && hypot(dx, dy) > touchSlopPx) {
+                    dragging = true
+                    pressAlpha(touched, pressed = false)
+                }
                 if (dragging) {
                     val (x, y) = clampToDisplay(downX + dx.toInt() to downY + dy.toInt())
                     layoutParams.x = x
@@ -313,6 +421,7 @@ class FloatingTriggerButton(
             }
 
             MotionEvent.ACTION_UP -> {
+                pressAlpha(touched, pressed = false)
                 if (dragging) {
                     TriggerPreferences.setFloatingButtonPosition(
                         context, layoutParams.x, layoutParams.y
@@ -323,6 +432,7 @@ class FloatingTriggerButton(
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                pressAlpha(touched, pressed = false)
                 if (dragging) {
                     TriggerPreferences.setFloatingButtonPosition(
                         context, layoutParams.x, layoutParams.y
@@ -331,6 +441,51 @@ class FloatingTriggerButton(
             }
         }
         return true
+    }
+
+    /** A finger on the bubble takes its opacity to [PRESSED_ALPHA]; letting go restores it. */
+    private fun pressAlpha(touched: View, pressed: Boolean) =
+        animateAlpha(touched, if (pressed) PRESSED_ALPHA else 1f, Motion.pressEasing)
+
+    /**
+     * Moves the bubble's opacity over [Motion.SHORT] with [easing]. One animator at a time:
+     * whatever was running is stopped first, and cleared before the stop, so its own end callback
+     * sees itself superseded — that is what keeps a press, an entrance and a fade out from writing
+     * the same property together. [onEnd] runs only for the animation that really finished.
+     *
+     * A [ValueAnimator] rather than a view property animator because these fades have to obey the
+     * system's animator duration scale — what the reduced-motion setting drives — and this is the
+     * animator the framework hands that scale to. At zero the fades land on their end value at
+     * once, which is exactly what a press and an entrance should do there.
+     */
+    private fun animateAlpha(
+        target: View,
+        to: Float,
+        easing: Easing,
+        onEnd: (() -> Unit)? = null
+    ) {
+        stopAlpha()
+        val animator = ValueAnimator.ofFloat(target.alpha, to).apply {
+            duration = Motion.SHORT.toLong()
+            setInterpolator(TimeInterpolator { easing.transform(it) })
+            addUpdateListener { target.alpha = it.animatedValue as Float }
+        }
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (alphaAnimator !== animation) return
+                alphaAnimator = null
+                onEnd?.invoke()
+            }
+        })
+        alphaAnimator = animator
+        animator.start()
+    }
+
+    /** Stops whatever is writing the opacity, so a direct write is the last word on it. */
+    private fun stopAlpha() {
+        val running = alphaAnimator ?: return
+        alphaAnimator = null
+        running.cancel()
     }
 
     private inline fun onMain(crossinline block: () -> Unit) {

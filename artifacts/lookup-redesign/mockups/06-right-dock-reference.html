@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>6 Right dock reference</title>
+<link rel="stylesheet" href="http://127.0.0.1:8899/tokens.css">
+<style>
+
+/* Ink mockup scaffolding. The frame is authored in dp: 393 x 851 dp, rendered at
+   2.75 px/dp, so what you see is the reference device's 1080 x 2340 px. Only the
+   sp type steps scale with --ts; every dp dimension is a floor and stays put. */
+:root{--ts:1}
+html,body{margin:0;padding:0;background:#000}
+.frame{
+  position:relative;width:393px;height:851px;overflow:hidden;
+  background:var(--bg);color:var(--on-surface);
+  font-family:Inter,"Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;
+}
+.frame.land{width:851px;height:393px}
+.abs{position:absolute}
+.veil,.edge{position:absolute}
+
+/* --- type roles, in sp --- */
+.t-display{font-weight:500;font-size:calc(34px*var(--ts));line-height:calc(44px*var(--ts))}
+.t-title-l{font-weight:700;font-size:calc(17px*var(--ts));line-height:calc(21px*var(--ts))}
+.t-title-m{font-weight:600;font-size:calc(15px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-body{font-weight:400;font-size:calc(14px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-body-s{font-weight:400;font-size:calc(13px*var(--ts));line-height:calc(19px*var(--ts))}
+.t-label-l{font-weight:600;font-size:calc(15px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-label-m{font-weight:600;font-size:calc(12px*var(--ts));line-height:calc(18px*var(--ts))}
+.t-label-s{font-weight:500;font-size:calc(12px*var(--ts));line-height:calc(16px*var(--ts))}
+.t-mono{font-family:ui-monospace,"DejaVu Sans Mono",monospace;font-size:calc(13px*var(--ts));line-height:calc(19px*var(--ts))}
+
+/* --- chrome--- */
+.topinset{height:24px;background:var(--bg)}
+.appbar{height:64px;margin-top:0;display:flex;align-items:center}
+.iconbtn{width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--on-surface)}
+.page{padding:0 22px 40px}
+.group+.group{margin-top:24px}
+.ghead{margin-bottom:8px;color:var(--on-surface-variant)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;min-height:60px;border-bottom:1px solid var(--outline)}
+.ricon{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant)}
+.rmain{flex:1;min-width:0}
+.rtitle{color:var(--on-surface)}
+.rsum{margin-top:0;color:var(--on-surface-variant)}
+.rtrail{flex:none;max-width:40%;color:var(--on-surface);text-align:right}
+.kmx{margin-left:34px;padding-bottom:4px}
+.action48{height:48px;display:flex;align-items:center;color:var(--primary)}
+.switch{width:52px;height:32px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:flex-end;padding:4px}
+.switch .thumb{width:24px;height:24px;border-radius:50%;background:var(--on-primary)}
+.switch.off{background:var(--on-surface-variant);justify-content:flex-start;opacity:.5}
+
+/* --- status rail --- */
+.rail{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:360px;min-height:48px;
+  background:var(--surface);border:1px solid var(--outline);border-radius:0;display:flex;align-items:stretch}
+.railrule{width:2px;flex:none;background:var(--primary)}
+.railbody{padding:12px;display:flex;flex-direction:column;justify-content:center}
+.railrow{display:flex;align-items:center;gap:8px}
+.railsup{margin-top:4px}
+.irail{padding:16px 0;display:flex;align-items:stretch}
+.glyph{flex:none;display:block}
+
+/* --- bubble --- */
+.bubble{position:absolute;width:48px;height:48px;border-radius:50%;background:var(--primary);
+  border:2px solid var(--on-primary);display:flex;align-items:center;justify-content:center}
+
+/* --- sheet --- */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);
+  border-radius:20px 20px 0 0;display:flex;flex-direction:column;z-index:4}
+.sheetrule{position:absolute;left:0;right:0;top:0;height:20px;border:1px solid var(--outline);
+  border-bottom:none;border-radius:20px 20px 0 0;pointer-events:none}
+.grip{height:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.handle{width:32px;height:4px;border-radius:2px;background:var(--on-surface-variant);opacity:.6}
+.handle-v{width:4px;height:32px;border-radius:2px;background:var(--on-surface-variant);opacity:.6}
+.sheethead{height:48px;flex:none;display:flex;align-items:center;justify-content:flex-end;padding:0 16px}
+.sheetbody{flex:1;overflow:hidden;padding:0 16px}
+.sheetfoot{flex:none;border-top:1px solid var(--outline);padding:12px 16px 32px}
+.deck{display:flex;flex-direction:column;min-height:24px;margin-bottom:8px}
+.deck.rowform{flex-direction:row;align-items:baseline;justify-content:space-between}
+.pbtn{min-height:52px;border-radius:13px;background:var(--primary);color:var(--on-primary);
+  display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px}
+.rule{height:1px;background:var(--outline)}
+
+/* --- word tabs --- */
+.tabs{position:relative;display:flex;gap:8px;overflow:hidden}
+.tab{flex:none;min-width:48px;min-height:48px;padding:12px;display:flex;align-items:center;gap:4px;
+  color:var(--on-surface-variant);position:relative}
+.tab .slot{width:16px;height:16px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--primary)}
+.tab.sel{color:var(--primary)}
+.tab.sel::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--primary)}
+.pagearrow{position:absolute;left:0;top:0;bottom:0;width:48px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant)}
+
+/* --- glosses --- */
+.gloss{display:flex;align-items:flex-start}
+.gloss .idx{width:24px;flex:none;color:var(--on-surface-variant)}
+.gloss+.gloss{margin-top:12px}
+
+/* --- side dock --- */
+.dock{position:absolute;top:0;bottom:0;width:383px;background:var(--surface);display:flex;z-index:4}
+.dock.right{right:0;border-left:1px solid var(--outline);border-radius:20px 0 0 20px}
+.dock.left{left:0;border-right:1px solid var(--outline);border-radius:0 20px 20px 0}
+.gutter{width:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.dockcol{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 16px}
+.dockhead{height:48px;flex:none;display:flex;align-items:center}
+.dockbody{flex:1;overflow:hidden}
+
+/* --- foreign content drawn flat --- */
+.manga{position:absolute;inset:0;background:#FFFFFF}
+.panel{position:absolute;border:2px solid #111111;background:#FFFFFF;overflow:hidden}
+.tone{position:absolute;background-image:radial-gradient(#111 0.9px,transparent 0.9px);background-size:5px 5px;opacity:.55}
+.balloon{position:absolute;border:2px solid #111;border-radius:50%/40%;background:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.narr{position:absolute;border:2px solid #111;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center}
+.ink{color:#111}
+.jpline{font-size:19px;line-height:25px;font-weight:500}
+.jpline.lg{font-size:24px;line-height:32px}
+.jpline.sm{font-size:16px;line-height:22px}
+.paperline{background:#111;height:2px;position:absolute}
+.solid-black{position:absolute;background:#000}
+.white-line{position:absolute;background:#fff}
+
+.dblock+.dblock{margin-top:16px}
+.dbul{margin-top:4px;color:var(--on-surface-variant)}
+
+
+</style></head>
+<body>
+<div class="frame land" data-theme="dark" style="--primary:#5EEAD4;--on-primary:#111111;--primary-container:#134E4A;--on-primary-container:#CCFBF1;--tertiary:#14B8A6;--ts:1.3">
+<div style="position:absolute;inset:0;background:#17181C"></div><div style="position:absolute;left:0;top:0;width:851px;height:40px;background:#101114"></div><div style="position:absolute;left:24px;top:64px;font-size:20px;line-height:28px;color:#8A8A94">夜の散歩</div><div style="position:absolute;left:24px;top:120px;font-size:24px;line-height:36px;color:#E8E8EE">今日はゆっくり<span id="sel6">休もう</span>。明日は</div><div style="position:absolute;left:24px;top:156px;font-size:24px;line-height:36px;color:#E8E8EE">早いから、もう寝よう。</div><div style="position:absolute;left:24px;top:230px;font-size:24px;line-height:36px;color:#E8E8EE">静かな部屋に時計の音</div><div style="position:absolute;left:24px;top:266px;font-size:24px;line-height:36px;color:#E8E8EE">だけが響いている。</div><div style="position:absolute;left:24px;top:340px;font-size:24px;line-height:36px;color:#5E5E68">窓の外は雨だった。</div>
+<div class="dock right" style="padding:24px 0">
+  <div class="gutter"><span class="handle-v"></span></div>
+  <div class="dockcol">
+    <div class="dockhead" style="gap:4px">
+      <span class="iconbtn" style="color:var(--on-surface)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></span>
+      <span style="color:var(--on-surface);display:flex;align-items:center"><svg viewBox="0 0 40 56" width="40" height="56" style="display:block"><circle cx="20" cy="11" r="7.5" fill="currentColor"/><path d="M20 18.5c-7 0-11 4.6-12 12L5.5 54h9l1.6-14 1.4 14h5l1.4-14 1.6 14h9L34 30.5c-1-7.4-5-12-12-12z" fill="currentColor"/></svg></span>
+      <span class="t-label-l" style="margin-left:8px;flex:1;color:var(--on-surface)">Leader</span>
+      <span class="iconbtn" style="color:var(--on-surface)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.6 4.4v4.2h-4.2"/></svg></span>
+      <span class="iconbtn" style="color:var(--on-surface)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 14.5v3.2A1.8 1.8 0 0 1 16.2 19.5H6.3A1.8 1.8 0 0 1 4.5 17.7V7.8A1.8 1.8 0 0 1 6.3 6h3.2"/></svg></span>
+    </div>
+    <div class="dockbody">
+      <div class="irail"><div class="railrule"></div><div class="railbody"><div class="railrow"><span class="glyph" style="color:var(--on-surface)"></span><span class="t-body" style="color:var(--on-surface)">Showing saved copy</span></div><div class="railsup t-body-s" style="color:var(--on-surface-variant)">Could not refresh WaniKani</div></div></div>
+      <div style="height:20px"></div>
+      <div class="t-label-m" style="color:var(--on-surface-variant)">Meaning</div>
+      <div style="height:8px"></div>
+      <div class="t-body" style="color:var(--on-surface)">person</div>
+      <div style="height:20px"></div>
+      <div class="t-label-m" style="color:var(--on-surface-variant)">Meaning mnemonic</div>
+      <div style="height:8px"></div>
+      <div class="t-body" style="color:var(--on-surface)">This radical is a person standing up, so it means person.</div>
+      <div style="height:20px"></div>
+      <div class="t-label-m" style="color:var(--on-surface-variant)">Radicals</div>
+      <div style="height:8px"></div>
+      <div class="action48 t-label-l" style="color:var(--primary)">person</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function __mk(frame, cls, css){var d=document.createElement('div');d.className=cls;d.style.cssText=css;frame.appendChild(d);return d;}
+function hole(sel,o){
+  o=o||{};var frame=document.querySelector('.frame');
+  var fr=frame.getBoundingClientRect(),r=sel.getBoundingClientRect();
+  var pad=o.pad||0;
+  var x=Math.round(r.left-fr.left-pad),y=Math.round(r.top-fr.top-pad);
+  var w=Math.round(r.width+2*pad),h=Math.round(r.height+2*pad);
+  var v=o.veil||'rgba(0,0,0,0.4)',z=o.z||5;
+  __mk(frame,'veil','left:0;top:0;width:100%;height:'+y+'px;background:'+v+';z-index:'+z);
+  __mk(frame,'veil','left:0;top:'+(y+h)+'px;right:0;bottom:0;background:'+v+';z-index:'+z);
+  __mk(frame,'veil','left:0;top:'+y+'px;width:'+x+'px;height:'+h+'px;background:'+v+';z-index:'+z);
+  __mk(frame,'veil','left:'+(x+w)+'px;top:'+y+'px;right:0;height:'+h+'px;background:'+v+';z-index:'+z);
+  var ow=o.edge[0],iw=o.edge[1],rad=o.radius;
+  if(ow)__mk(frame,'edge','left:'+(x-ow/2)+'px;top:'+(y-ow/2)+'px;width:'+(w+ow)+'px;height:'+(h+ow)+'px;border:'+ow+'px solid var(--on-primary);border-radius:'+(rad+ow/2)+'px;z-index:'+(z+1));
+  if(iw)__mk(frame,'edge','left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;border:'+iw+'px solid var(--primary);border-radius:'+rad+'px;z-index:'+(z+2));
+  return {x:x,y:y,w:w,h:h,cx:x+w/2,cy:y+h/2};
+}
+/* A closed-ish hand path around a box: deterministic wobble, round caps, one width. */
+function lasso(box,inflate,startFrac,endFrac){
+  var rx=box.w/2+inflate, ry=box.h/2+inflate, cx=box.cx, cy=box.cy, pts=[], n=26;
+  for(var i=0;i<=n;i++){
+    var t=startFrac+(endFrac-startFrac)*i/n, th=t*Math.PI*2;
+    var k=1+0.05*Math.sin(3*th+0.7)+0.03*Math.sin(5*th+2.1);
+    pts.push([cx+rx*k*Math.cos(th), cy+ry*k*Math.sin(th)]);
+  }
+  var d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
+  for(var i=0;i<pts.length-1;i++){
+    var p0=pts[i>0?i-1:i],p1=pts[i],p2=pts[i+1],p3=pts[i+2<pts.length?i+2:i+1];
+    var c1=[p1[0]+(p2[0]-p0[0])/6, p1[1]+(p2[1]-p0[1])/6];
+    var c2=[p2[0]-(p3[0]-p1[0])/6, p2[1]-(p3[1]-p1[1])/6];
+    d+=' C'+c1[0].toFixed(1)+' '+c1[1].toFixed(1)+' '+c2[0].toFixed(1)+' '+c2[1].toFixed(1)+' '+p2[0].toFixed(1)+' '+p2[1].toFixed(1);
+  }
+  return d;
+}
+</script>
+
+<script>hole(document.getElementById('sel6'), {pad:6, edge:[3,1], radius:4, z:5});</script>
+
+</div>
+</body></html>

@@ -1,6 +1,6 @@
 # Gaten / Ink — Design Language
 
-**Version 1.3 · 22 October 2026 · Current Home, Analytics and Settings baseline**
+**Version 1.4 · 23 October 2026 · Current Home, Analytics, Settings and Screen lookup baseline**
 
 ## Summary
 
@@ -12,6 +12,7 @@
 | Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
 | Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
 | Navigation | Three bottom tabs: Home, Analytics and Settings. Review is a pushed flow, not a fourth tab. |
+| Screen lookup | Over foreign content: a 40 % black freeze veil, a two-pass paired selection mark, a square status rail with a 2 dp accent rule, and one flat result sheet (grip → header → one body scroller → pinned footer). No screen-edge ring, no gradient or bloom, no nested cards. |
 | Exceptions | Neutral input fills, brand-mark holders, dialogs and approved sparse empty-state artwork have specific treatments below. |
 | Source of truth | This document consolidates the current Home/Analytics/Settings implementation and shared tokens. Historical previews do not override it. |
 | Audit scope | Checked against source code on 22 October 2026, and against a debug build on an Android 14 emulator at 392 dp in all seven accents, light and dark, plus 320/340/430 dp and 130/160 % text. |
@@ -417,7 +418,163 @@ Selection must be conveyed semantically as well as visually.
   Concise hub copy must not conceal permission consequences.
 - Anki selectors and editors remain their real controls, not decorative sample menus.
 
-## 8. Floating bottom navigation
+## 8. Screen lookup
+
+The lookup workflow is the one part of Gaten drawn *over* somebody else's content: an accessibility
+overlay window, a frozen screenshot, a finger-drawn selection, and a reading surface. It carries the
+same paper, ink, accent and type scale as the app; what it adds is a small set of overlay-specific
+recipes (§8.10) that exist only because the pixels underneath are not ours. The exhaustive tables —
+every value, state, string and mockup — are in
+[the lookup design specification](../artifacts/lookup-redesign/DESIGN.md).
+
+### 8.1 Surfaces and states
+
+Four surfaces, one instrument: the **floating button** (the entry point on foreign screens), the
+**freeze scrim with the selection mark**, the **status rail** (what the tool is doing), and the
+**result sheet** (what it found). The states are selecting → reading the screen → reading the
+selection → result, plus the terminal no-text, no-words and dictionary-unavailable states and the
+non-destructive tap miss.
+
+- Resolve the reader's theme and accent exactly as the app does (`ThemePreferences` → `accentRoles`
+  → `GatenTheme`); never infer the overlay's theme from the brightness of the screenshot.
+- Opaque surfaces are alpha 1.00, elevation 0, no shadow, blur, glow or gradient.
+- The capture is never animated, tinted, moved or scaled. A missing region stays opaque black and
+  never reveals the live app.
+
+### 8.2 Freeze and arming
+
+- The first visible frame is the opaque frozen capture alone. Keep the controller's
+  frame-commit → additional vsync → media-pause → UI ordering and its safety timeouts; no visual
+  animation may delay capture, media pause or OCR.
+- The dim is fixed black at **0.40** in both modes, fading 0 → 0.40 over `SHORT` on `emphasized`. It
+  is context separation, not a contrast guarantee for whatever is underneath.
+- There is **no screen-edge ring**: no reveal, no drift, no retraction. The tool does not own the
+  screen edge, and an idle instrument has nothing to say.
+
+### 8.3 The selection mark
+
+- The lasso is two solid strokes on one smoothed path: **5 dp `onPrimary` outside, 3 dp `primary`
+  inside**, both alpha 1.00, round cap and round join, with the width independent of how far the
+  finger travelled. A single sample draws the same pair as concentric disks. No bloom, no gradient,
+  no dark casing: the pair *is* the contrast strategy — on a white page the deep member reads, on a
+  dark frame the light one does, and both are always present as one hard-edged mark.
+- The hole is the sampled (or tapped) bounding rectangle with a **4 dp** corner radius, clamped to
+  half its smaller side. Outside it the dim stays 0.40; inside it the frozen pixels are untouched.
+- Edge while drawing and while the crop is read: **4 dp `onPrimary` + 2 dp `primary`**. With a result
+  up: **3 dp `onPrimary` + 1 dp `primary`**. Weight, never transparency, makes the source secondary.
+- The mark is a source marker, not a card: no connector, arrow, thumbnail or accent line ties it to
+  the sheet, and selecting another word in the sheet does not pretend a narrower source is known.
+- The 24 view-px minimum selection and the 24 dp tap tolerance are thresholds, not a gesture model:
+  the lasso and the tap both stay available, and a miss never dismisses.
+
+### 8.4 The status rail
+
+One component carries every message. **Floating** over the frozen screen: opaque `surface`, a 1 dp
+`outline` perimeter, a **2 dp `primary` leading rule** drawn inside that perimeter, **0 dp radius**,
+48 dp minimum height, capped at 360 dp, 16 dp below the real top insets and 16 dp side margins.
+**Inline** in the sheet: transparent, the same rule and padding, 16 dp of air above and below, with
+its one text action (`Select again`, `labelLarge` `primary`, 48 dp target) below the message.
+
+Text is `bodyMedium` `onSurface`; a failure is `error` with an 18 dp glyph; a cause line is
+`bodySmall` `onSurfaceVariant`. A real **16 dp / 2 dp** spinner appears only while foreground work is
+pending — otherwise a static 18 dp glyph. Enter, exit and text replacement are opacity only, over
+`SHORT` on `emphasized`; the rail relayouts to its new text immediately rather than animating through
+a clipped state. Announcements are polite live regions, once per change.
+
+Lifecycle: index loading → **Reading screen…**; ready → **Circle or tap Japanese text** (2000 ms,
+hidden the instant a drag starts); committed crop → **Reading selection…**; tap miss → **No text
+here**, then the instruction; a zero-line index → **No text found**, then the circle-only hint; an
+unavailable index → the circle-only hint, never a confirmed zero. Terminal results are inline in the
+sheet and persist until the reader selects again or dismisses; they are never repeated in the rail.
+
+### 8.5 The result sheet
+
+Keep the **20 dp** dock corner and the **60 % / 45 %** dock fractions — this is a window that
+genuinely contains the reading task, not an in-page row card — on `surface` at alpha 1.00, elevation
+0, with one **1 dp `outline` rule on the exposed boundary only** (top for the bottom dock, the
+inner/free edge for a side dock). Content inset is the house 22 dp — `16 dp` below 360 dp of content
+width, and on a side dock (a strip down the edge rather than the width of the screen) — and the
+column caps at 560 dp.
+
+Inside, there is no intermediate filled card: **grip → header → one body scroller → pinned footer**.
+
+- **Grip**: 48 dp band, a 32 × 4 dp handle at radius 2 dp in `onSurfaceVariant` 0.60, fixed width
+  while dragging, carrying the accessible dismiss action.
+- **Header**: transparent; the source line is `bodyMedium` `onSurfaceVariant` with the complete string
+  for Copy and for TalkBack; three **48 dp** controls with **20 dp** neutral glyphs and no backing;
+  one 1 dp rule below. Under 300 dp of usable width the source line reflows into the body and the
+  controls keep their targets.
+- **Word tabs** replace the old filled chips: transparent, 0 dp radius, selected = `primary` text +
+  a **2 dp `primary` bottom rule** + a check in a reserved slot, unselected `onSurfaceVariant`. They
+  live in the body scroller and are omitted when only one word can be selected.
+- **Entry**: headword `displaySmall` in **`onSurface`** (never accent — the word is content), reading
+  `titleMedium` `onSurfaceVariant`, metadata as plain text (`Common · {short POS}`), optional
+  `Also written:` / `From {}` lines in `bodySmall`, then a 1 dp rule and a **Meaning** caption with
+  numbered glosses in `bodyLarge` and **neutral** numbering, then the full part-of-speech line, then
+  the kanji strip as **bare `primary` glyph actions** (no tiles, borders or radii).
+- **Footer**: a deck row plus one full-width **52 dp / 13 dp radius** accent action above the bottom
+  inset, with a 1 dp rule above it. Completion labels stay honest (`Added`, `Already in Anki`), the
+  permissionless route is named for what it does (`Send to AnkiDroid`), and only an explicit
+  activation ever writes to Anki.
+- **WaniKani reference pages** are another depth in the same sheet — same grip, header and selector,
+  one body scroller, no second sheet, no Anki footer, neutral section labels, flat skeletons.
+
+### 8.6 The floating button
+
+48 dp, **opaque `primary` fill**, a 24 dp glyph in `onPrimary`, and a hard **2 dp `onPrimary`
+perimeter** drawn inside the circle; no shadow, gradient or secondary ring. It is an isolated accent
+action over foreign content, so it keeps a filled disc and a paired rim instead of a tinted holder —
+arbitrary pixels cannot be trusted to supply an icon's background. Press is opacity 0.72 over
+`SHORT`/`pressEasing`; drag is immediate and clamped to the display; the saved position is restored.
+It is **absent**, not dimmed, while a lookup is being admitted, captured or open, and it never appears
+on a locked screen.
+
+### 8.7 Settings, disclosure and the tile
+
+- The **Screen lookup** page uses the shared detail-page grammar (§7.2): flat rows, bare 22 dp icons,
+  real values, no row cards. Lookup mode shows the service's own state; Pause media is an access
+  grant, not a preference switch; the tile row shows `Added` or the one `Add tile` action; Key Mapper
+  exposes the exact broadcast action in monospace with a Copy action.
+- The **accessibility disclosure** keeps every consequence visible, in four headed blocks (Screen
+  access, On this device, Optional connections, Next step), with the acknowledgement and the actions
+  pinned outside the scrolling text. Privacy and permission consequences never move behind Help; only
+  operational detail (tile removal, media fallback, key mapping) does.
+- The **Quick Settings tile** is labelled **Screen lookup**, keeps the app's own glyph, and leaves
+  size, tint and radius to the system. Its state describes lookup availability, not a latched capture
+  toggle. A disabled tile routes to the same disclosure before any native permission prompt.
+
+### 8.8 Copy
+
+Sentence case, one clause per line, in the app's voice; the workflow's full string list is in
+[the specification](../artifacts/lookup-redesign/DESIGN.md#9-copy-inventory). Data — the OCR source,
+glosses, forms, parts of speech, deck names, mnemonics — is never rewritten to fit the one-clause
+rule. Failure copy names the real cause and the one action that fixes it, and never claims a success
+the app did not observe.
+
+### 8.9 Motion
+
+Overlay timings use the shared tokens only: dim and rail `SHORT` (150 ms), sheet entrance `MEDIUM`
+(300 ms), sheet exit and full dismissal `SHORT`, all on `emphasized`; finger-driven geometry is
+immediate; state changes (commit, edge weight, expand/collapse, action label) are 0 ms layout changes;
+a sub-threshold drag returns on the `overshoot` spring. Functional spinners keep the platform's own
+timing. Reduced motion is the platform's animation scale — every one of these is a Compose animation
+and scales with it, and no custom loop is added that would defeat it.
+
+### 8.10 Amendments this workflow makes
+
+Approved for surfaces drawn over foreign content, and nowhere else:
+
+1. A fixed **40 % black freeze veil** in both modes.
+2. A **square, opaque status rail** with a 2 dp accent leading rule, in place of a rounded pill.
+3. A **two-pass opaque paired stroke** (5/3 dp, 4/2 dp and 3/1 dp pairs) for the lasso and the
+   selection edge, where a single theme role cannot guarantee contrast on arbitrary pixels.
+4. A **4 dp selection corner**, alongside the external sheet's 20 dp dock corner.
+5. A **2 dp paired perimeter** on the isolated floating action.
+
+These are recipes, not tokens: they use the existing roles, radii and spacing and add no colour, type,
+shape or motion rung to the language.
+
+## 9. Floating bottom navigation
 
 The app has **Home · Analytics · Settings**. Review is pushed from Home.
 Settings uses the app's gear glyph; do not copy a preview's person/Profile icon.
@@ -437,7 +594,7 @@ The existing short tap-settle and icon-arrival gestures, and the spring-based ba
 departure/return, are intentional. Preserve reduced-motion behavior and measured labels;
 do not truncate Settings to make a fixed capsule fit.
 
-## 9. Feedback, motion and microcopy
+## 10. Feedback, motion and microcopy
 
 | Concern | Current convention |
 | --- | --- |
@@ -462,7 +619,7 @@ Use the actual **days**, **No recent searches found**, **Screen lookup** and **A
 where specified above, rather than obsolete mockup copy. Legal, error and permission detail
 may be longer when the reader needs it.
 
-## 10. Accessibility and responsive requirements
+## 11. Accessibility and responsive requirements
 
 - Keep effective touch targets at least 48 × 48 dp; smaller painted icons are fine inside them.
 - Keep system-scalable fonts and flexible row height. Do not fix a Settings row at the
@@ -478,7 +635,7 @@ may be longer when the reader needs it.
   100%/130%/160% text scale, including keyboard and TalkBack behavior. These are future checks,
   not claims that they were run in this documentation audit.
 
-## 11. Source map and maintenance
+## 12. Source map and maintenance
 
 | Concern | Current source |
 | --- | --- |
@@ -499,6 +656,12 @@ may be longer when the reader needs it.
 | Settings detail pages | [settings/](../src/rn/ui/settings/) |
 | Buttons and press/focus feedback | [components.tsx](../src/rn/ui/components.tsx), [PressableScale.tsx](../src/rn/ui/PressableScale.tsx) |
 | Bottom navigation and route behavior | [BottomBar.tsx](../src/rn/ui/BottomBar.tsx), [AppShell.tsx](../src/rn/ui/AppShell.tsx) |
+| Lookup overlay: session, scrim, status rail, gesture wiring | [LookupOverlay.kt](../app/src/main/java/com/gaten/app/ui/lookup/LookupOverlay.kt), [LookupStatusRail.kt](../app/src/main/java/com/gaten/app/ui/lookup/LookupStatusRail.kt) |
+| Lookup overlay: lasso, selection hole and edge | [LassoLayer.kt](../app/src/main/java/com/gaten/app/ui/lookup/LassoLayer.kt) |
+| Lookup result sheet, docks and inner reference pages | [ResultSheet.kt](../app/src/main/java/com/gaten/app/ui/lookup/ResultSheet.kt), [SheetPlacement.kt](../app/src/main/java/com/gaten/app/ui/lookup/SheetPlacement.kt), [WaniKaniDetail.kt](../app/src/main/java/com/gaten/app/ui/wanikani/WaniKaniDetail.kt) |
+| Lookup trigger: floating button, tile, capture ordering | [FloatingTriggerButton.kt](../app/src/main/java/com/gaten/app/trigger/FloatingTriggerButton.kt), [LookupTileService.kt](../app/src/main/java/com/gaten/app/LookupTileService.kt), [GatenAccessibilityService.kt](../app/src/main/java/com/gaten/app/GatenAccessibilityService.kt), [OverlayWindowController.kt](../app/src/main/java/com/gaten/app/ui/overlay/OverlayWindowController.kt) |
+| Lookup strings, settings page and disclosure | [strings_lookup.xml](../app/src/main/res/values/strings_lookup.xml), [LookupSettingsScreen.tsx](../src/rn/ui/settings/LookupSettingsScreen.tsx) |
+| Lookup design specification and evidence | [lookup-redesign/DESIGN.md](../artifacts/lookup-redesign/DESIGN.md), [lookup-redesign/](../artifacts/lookup-redesign/) |
 | Other screen refinements and historical checks | [Implementation record](design-language.md) |
 
 For a future UI change, update the affected section here and the shared token source where
@@ -519,8 +682,29 @@ motion and dark secondary text. This was a documentation-only source audit.
 Added §6 Analytics: the three-view borderless layout, the switcher and section grammar, the
 per-element colour roles with the three-step accent ladder and the one `success` segment, and the
 honesty rules for missing, unavailable and cached figures. Renumbered the following sections; added
-the analytics sources to §11. Checked on a debug build at 392 dp across all seven accents in light
+the analytics sources to §12. Checked on a debug build at 392 dp across all seven accents in light
 and dark, and at 160 % text scale.
+
+### Version 1.4 changes
+
+Added §8 **Screen lookup**: the freeze veil with no screen-edge ring, the two-pass paired selection
+mark (a 5/3 dp trail, 4/2 dp while reading and 3/1 dp once the answer is up, a 4 dp hole), the square
+status rail with its 2 dp accent rule and its four lifetimes, the flat result sheet (grip → header →
+one body scroller → pinned footer, unfilled word tabs, neutral headword, bare-glyph kanji strip,
+honest Anki labels), the opaque floating button with its paired rim, the Screen lookup settings rows,
+the regrouped disclosure, the tile's own name and state, the workflow's copy, and the amendments this
+workflow is allowed to make (§8.10). Renumbered §8–§11 to §9–§12 and added the lookup sources and
+evidence to the source map. The specification, the brief, the eight design renders and the device
+stills are in [artifacts/lookup-redesign](../artifacts/lookup-redesign/README.md).
+
+Checked on a debug build on the `Pixel_Safe` emulator (1080 × 2340 @ 440 dpi, portrait): the sheet,
+lasso and rails in light (Indigo) and in dark with the Black accent, which resolves to white ink on a
+dark page; the right dock in landscape; the empty-crop and tap-miss rails; the floating button at
+rest over another app's content; and the sheet at 160 % text over a browser page, where the header
+source reflows into the body and the deck value stacks above the action. The eight renders cover all
+seven accents across light and dark, both side docks, the live gesture, the committed crop and the
+disclosure. Reduced motion was not exercised: the transitions are Compose animations and follow the
+platform's animation scale, which was left untouched.
 
 ### Version 1.3 changes
 
