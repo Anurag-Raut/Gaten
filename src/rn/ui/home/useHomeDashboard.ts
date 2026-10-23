@@ -9,8 +9,10 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {AppState} from "react-native";
 import * as Anki from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
+import type {AnkiDeckResult} from "../../native/GatenAnki";
 import type {SearchResult} from "../../native/GatenDict";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
+import {loadAnkiDecks, useAnkiDecks, type AnkiDecksState} from "../anki/useAnkiDecks";
 import {useWaniKaniStats} from "../analytics/useWaniKaniStats";
 import {primeRecentLookupHits} from "../search/searchStore";
 
@@ -95,6 +97,9 @@ export interface HomeDashboardData {
   refreshRecentLookups: () => void;
 }
 
+/** How many study days Home's week and its streak are drawn from, today first. */
+const STUDY_DAYS = 7;
+
 const EMPTY_ANKI: HomeAnkiState = {
   status: "loading",
   deckName: null,
@@ -126,11 +131,6 @@ const EMPTY_WANIKANI: HomeWaniKaniState = {
   failure: null,
   refreshing: false,
 };
-
-interface AnkiRead {
-  anki: HomeAnkiState;
-  streak: HomeStreakState;
-}
 
 function errorCode(error: unknown): string {
   if (typeof error === "object" && error != null && "code" in error && typeof error.code === "string") {
@@ -210,27 +210,26 @@ function makeStreak(daily: Array<number | null>): HomeStreakState {
   };
 }
 
-/** Reads collection-wide due counts and study days, excluding nested decks from the due sum. */
-async function readAnki(): Promise<AnkiRead> {
-  const status = await Anki.status();
-  if (status === "notInstalled") {
-    return {
-      anki: {...EMPTY_ANKI, status: "missing"},
-      streak: {...EMPTY_STREAK, status: "unavailable", error: "AnkiDroid is not installed"},
-    };
-  }
-  if (status === "needsPermission") {
-    return {
-      anki: {...EMPTY_ANKI, status: "permissionNeeded"},
-      streak: {...EMPTY_STREAK, status: "unavailable", error: "AnkiDroid database permission is needed"},
-    };
-  }
+/** The seven study-day searches Home's week and its streak need, today first. */
+function studyDayQueries(): string[] {
+  return Array.from({length: STUDY_DAYS}, (_, daysAgo) => `prop:rated=${daysAgo === 0 ? 0 : -daysAgo}`);
+}
 
-  try {
-    const [allDecks, includedIds] = await Promise.all([Anki.decks(), Anki.getStudyDeckIds()]);
-    const decks = includedIds == null ? allDecks : allDecks.filter((deck) => includedIds.includes(deck.id));
-    // Parent deck counts include their children; adding nested rows would count cards twice.
-    const totals = decks.filter((deck) => !decks.some((parent) => deck.name.startsWith(`${parent.name}::`))).reduce(
+/**
+ * Reads the collection-wide study days behind Home's week. This is Home's own read rather than the
+ * shared deck list's: the picker has no use for a week of history, so it does not pay for one.
+ */
+async function readStudyDays(): Promise<Array<number | null>> {
+  const counts = await Anki.counts(studyDayQueries());
+  return Array.from({length: STUDY_DAYS}, (_, index) => counts[index] ?? null);
+}
+
+/** The due counts of the decks the reader studies; a parent's counts already include its children. */
+function studyTotals(decks: AnkiDeckResult[] | null): {newCount: number; learnCount: number; reviewCount: number} {
+  if (decks == null) return {newCount: 0, learnCount: 0, reviewCount: 0};
+  return decks
+    .filter((deck) => !decks.some((parent) => deck.name.startsWith(`${parent.name}::`)))
+    .reduce(
       (sum, deck) => ({
         newCount: sum.newCount + deck.newCount,
         learnCount: sum.learnCount + deck.learnCount,
@@ -238,36 +237,34 @@ async function readAnki(): Promise<AnkiRead> {
       }),
       {newCount: 0, learnCount: 0, reviewCount: 0},
     );
-    const counts = await Anki.counts(
-      Array.from({length: 7}, (_, daysAgo) => `prop:rated=${daysAgo === 0 ? 0 : -daysAgo}`),
-    );
-    const daily = Array.from({length: 7}, (_, index) => counts[index] ?? null);
-    const completedToday = daily[0];
-    const streak = makeStreak(daily);
-    const dueCount = totals.newCount + totals.learnCount + totals.reviewCount;
-    return {
-      anki: {
-        status: "connected",
-        deckName: null,
-        ...totals,
-        dueCount,
-        completedToday,
-        error: null,
-        refreshing: false,
-      },
-      streak: {...streak, completedToday: daily[0] ?? null},
-    };
-  } catch (error) {
-    const code = errorCode(error);
-    const status: HomeAnkiStatus =
-      code === "NOT_INSTALLED" ? "missing" :
-      code === "PERMISSION" ? "permissionNeeded" :
-      code === "NOT_SET_UP" ? "notSetUp" : "error";
-    return {
-      anki: {...EMPTY_ANKI, status, error: errorMessage(error)},
-      streak: {...EMPTY_STREAK, status: "unavailable", error: errorMessage(error)},
-    };
+}
+
+/**
+ * Home's Anki card, as the shared deck list has it. The card never invents a number the list does not
+ * hold: a service that is missing or unpermitted says so, a refresh that failed keeps the last counts
+ * with the failure beside them, and the list's own status carries the loading state.
+ */
+function ankiCard(decks: AnkiDecksState, completedToday: number | null): HomeAnkiState {
+  if (decks.status === "idle" || decks.status === "loading") {
+    return {...EMPTY_ANKI, refreshing: true};
   }
+  if (decks.status === "unavailable") {
+    const status: HomeAnkiStatus =
+      decks.failure === "NOT_INSTALLED" ? "missing" :
+      decks.failure === "PERMISSION" ? "permissionNeeded" :
+      decks.failure === "NOT_SET_UP" ? "notSetUp" : "error";
+    return {...EMPTY_ANKI, status, error: status === "error" ? "Anki could not be read" : null};
+  }
+  const totals = studyTotals(decks.studyDecks);
+  return {
+    status: decks.failure == null ? "connected" : "error",
+    deckName: null,
+    ...totals,
+    dueCount: totals.newCount + totals.learnCount + totals.reviewCount,
+    completedToday,
+    error: decks.failure == null ? null : "Refresh failed",
+    refreshing: decks.refreshing,
+  };
 }
 
 /**
@@ -277,53 +274,28 @@ async function readAnki(): Promise<AnkiRead> {
  */
 export function useHomeDashboard(): HomeDashboardData {
   const waniKaniStats = useWaniKaniStats();
-  const [anki, setAnki] = useState(EMPTY_ANKI);
-  const [streak, setStreak] = useState(EMPTY_STREAK);
+  const decks = useAnkiDecks();
+  const [daily, setDaily] = useState<Array<number | null> | null>(null);
+  const [dailyError, setDailyError] = useState<string | null>(null);
   const [recentLookups, setRecentLookups] = useState<SearchResult[]>([]);
   const [recentLookupsStatus, setRecentLookupsStatus] = useState<RecentLookupsStatus>("loading");
   const [recentLookupsError, setRecentLookupsError] = useState<string | null>(null);
-  const ankiGeneration = useRef(0);
+  const daysGeneration = useRef(0);
   const historyGeneration = useRef(0);
 
-  const loadAnki = useCallback(() => {
-    const mine = ankiGeneration.current + 1;
-    ankiGeneration.current = mine;
-    setAnki((current) => ({...current, refreshing: true}));
-    setStreak((current) => ({...current, error: null}));
-
-    void readAnki()
-      .then((result) => {
-        if (mine !== ankiGeneration.current) return;
-        setAnki((current) => {
-          if (result.anki.status !== "error") return {...result.anki, refreshing: false};
-          return {
-            ...result.anki,
-            deckName: current.deckName,
-            newCount: current.newCount,
-            learnCount: current.learnCount,
-            reviewCount: current.reviewCount,
-            dueCount: current.dueCount,
-            completedToday: current.completedToday,
-            refreshing: false,
-          };
-        });
-        setStreak((current) => {
-          const accessLost = ["missing", "permissionNeeded", "notSetUp"].includes(result.anki.status);
-          if (accessLost) return result.streak;
-          return result.streak.status === "unavailable" && current.status === "ready"
-            ? {...current, error: result.streak.error}
-            : result.streak;
-        });
+  const loadStudyDays = useCallback(() => {
+    const mine = daysGeneration.current + 1;
+    daysGeneration.current = mine;
+    setDailyError(null);
+    void readStudyDays()
+      .then((counts) => {
+        if (mine !== daysGeneration.current) return;
+        setDaily(counts);
       })
       .catch((error: unknown) => {
-        if (mine !== ankiGeneration.current) return;
-        const message = errorMessage(error);
-        setAnki((current) => ({...current, status: "error", error: message, refreshing: false}));
-        setStreak((current) =>
-          current.status === "ready"
-            ? {...current, error: message}
-            : {...current, status: "unavailable", error: message}
-        );
+        // A week that could not be read leaves the one already up alone, with the reason beside it.
+        if (mine !== daysGeneration.current) return;
+        setDailyError(errorMessage(error));
       });
   }, []);
 
@@ -348,9 +320,16 @@ export function useHomeDashboard(): HomeDashboardData {
   }, []);
 
   const load = useCallback(() => {
-    loadAnki();
+    void loadAnkiDecks();
+    loadStudyDays();
     loadRecentLookups();
-  }, [loadAnki, loadRecentLookups]);
+  }, [loadStudyDays, loadRecentLookups]);
+
+  /** The card's own retry: the shared deck list and Home's week, both read again. */
+  const refreshAnki = useCallback(() => {
+    void loadAnkiDecks();
+    loadStudyDays();
+  }, [loadStudyDays]);
 
   useEffect(() => {
     load();
@@ -362,6 +341,21 @@ export function useHomeDashboard(): HomeDashboardData {
     });
     return () => subscription.remove();
   }, [load]);
+
+  const anki = ankiCard(decks, daily?.[0] ?? null);
+  const accessLost =
+    decks.status === "unavailable" &&
+    (decks.failure === "NOT_INSTALLED" || decks.failure === "PERMISSION" || decks.failure === "NOT_SET_UP");
+  let streak: HomeStreakState;
+  if (accessLost) {
+    // AnkiDroid is gone or unreadable: the week drawn from it is not one we can still claim.
+    streak = {...EMPTY_STREAK, status: "unavailable", error: dailyError ?? "Anki could not be read"};
+  } else if (daily == null) {
+    streak = {...EMPTY_STREAK, status: dailyError == null ? "loading" : "unavailable", error: dailyError};
+  } else {
+    const week = makeStreak(daily);
+    streak = dailyError == null ? week : {...week, error: dailyError};
+  }
 
   let waniKani: HomeWaniKaniState;
   switch (waniKaniStats.status) {
@@ -405,7 +399,7 @@ export function useHomeDashboard(): HomeDashboardData {
     recentLookups,
     recentLookupsStatus,
     recentLookupsError,
-    refreshAnki: loadAnki,
+    refreshAnki,
     refreshWaniKani: waniKaniStats.refresh,
     refreshRecentLookups: loadRecentLookups,
   };

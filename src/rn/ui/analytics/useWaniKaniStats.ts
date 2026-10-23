@@ -256,6 +256,16 @@ export function useWaniKaniStats(): WaniKaniStatsState & {refresh: () => void} {
   useEffect(() => {
     void loadWaniKaniStats(false);
   }, []);
+  // A disconnect — or a token that belongs to another account — forgets everything the store held,
+  // and no caller should have to remember to read again: the first subscriber to see the forgotten
+  // state asks for the numbers. That is what keeps Home's card from sitting on "Checking…" after the
+  // reader connects or disconnects in Settings.
+  useEffect(() => {
+    if (current.status !== "idle") {
+      return;
+    }
+    void loadWaniKaniStats(false);
+  }, [current.status]);
   // Coming back to the app is a fresh look, and the effect above cannot see it. Numbers older than
   // the TTL are brought up to date — the Kotlin side still decides what that costs, and a read in
   // flight is joined — and numbers this young cost nothing at all, so a quick foreground asks
