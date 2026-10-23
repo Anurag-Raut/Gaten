@@ -21,15 +21,17 @@ import com.gaten.app.trigger.TriggerPreferences
 
 /**
  * Quick Settings tile: asks the connected accessibility service to dismiss the shade and start a
- * lookup while lookup mode is on, and opens Gaten's own Screen lookup page while it is off. The
- * page raises the consent disclosure that has to come before Android's accessibility list, so the
- * tile never jumps past it. Its state mirrors whether the service is enabled.
+ * lookup while lookup mode is on, and opens Gaten's own Screen lookup page while it is off so the
+ * consent disclosure comes before Android's accessibility list. The tile can also be switched off
+ * in Gaten's settings; while off it is unavailable and ignores taps.
  */
 class LookupTileService : TileService() {
 
     override fun onTileAdded() {
         super.onTileAdded()
         TriggerPreferences.setTileAdded(this, true)
+        // A tile the reader added by hand is one they want working.
+        TriggerPreferences.setTileEnabled(this, true)
     }
 
     override fun onTileRemoved() {
@@ -39,6 +41,11 @@ class LookupTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
+
+        // Switched off: the tile is drawn unavailable and does nothing; Android's editor removes it.
+        if (!TriggerPreferences.tileEnabled(this)) {
+            return
+        }
 
         Log.d(TAG, "Tile clicked. Service enabled: ${isAccessibilityServiceEnabled()}")
 
@@ -97,16 +104,20 @@ class LookupTileService : TileService() {
 
     private fun updateTileState() {
         val tile = qsTile ?: return
-        val isEnabled = isAccessibilityServiceEnabled()
+        val serviceEnabled = isAccessibilityServiceEnabled()
 
-        // The state says whether a lookup can start, not that a capture is latched on: active
-        // exactly while the service is enabled.
-        tile.state = if (isEnabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.state = when {
+            !TriggerPreferences.tileEnabled(this) -> Tile.STATE_UNAVAILABLE
+            serviceEnabled -> Tile.STATE_ACTIVE
+            else -> Tile.STATE_INACTIVE
+        }
         tile.label = getString(R.string.tile_label)
-        // Subtitles exist from API 29, which is this app's floor, so the words can always match
-        // the state; whether there is room to show them stays the system's call.
         tile.subtitle = getString(
-            if (isEnabled) R.string.tile_subtitle_ready else R.string.tile_subtitle_setup_needed
+            when {
+                !TriggerPreferences.tileEnabled(this) -> R.string.tile_subtitle_disabled
+                serviceEnabled -> R.string.tile_subtitle_ready
+                else -> R.string.tile_subtitle_setup_needed
+            }
         )
         tile.updateTile()
     }

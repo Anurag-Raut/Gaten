@@ -30,7 +30,7 @@ The screenshot path intentionally makes one full-screen ARGB_8888 software copy 
 
 `ScreenLineReader` caches in-flight and completed per-line reads (`ocr/ScreenLineReader.kt:67-75, 121-151`). Prefetch reprioritization cancels only its ordering coroutine; an existing deferred remains joinable. Ordinary prefetch therefore does not reread a line. Meiki full-screen tiling and byte-array/model reload work, and manga-ocr decoder full-prefix repetition, remain static cost candidates; no device timing exists. The 90-second idle release, native ML Kit Task pinning, session locks, and current ONNX allocator defaults remain required.
 
-Reviewed without a clear source-only optimization: Home `onResume` checks and preference reads, streaming model downloads, Anki/provider I/O and status handling, trigger receiver/tile/activity entrypoints, ABI splits, and release shrinking. These remain measure-first areas; no behavior change is proposed from inspection alone.
+Reviewed without a clear source-only optimization: Home `onResume` checks and preference reads, bundled OCR model extraction, Anki/provider I/O and status handling, trigger receiver/tile/activity entrypoints, ABI splits, and release shrinking. These remain measure-first areas; no behavior change is proposed from inspection alone.
 
 The empty-placeholder manga acceptance limit is 16 characters in the current policy. Circle crop acceptance deliberately bypasses that short-text limit. This audit does not weaken either filter. No BGR/letterbox failing-screen evidence exists.
 

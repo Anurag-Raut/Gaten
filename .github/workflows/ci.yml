@@ -56,6 +56,16 @@ jobs:
         if: steps.examples-cache.outputs.cache-hit != 'true'
         run: python3 tools/build_examples_db.py
 
+      # The manga-ocr weights are gitignored and fetched by the build, so a run without the cache
+      # downloads ~117 MB. The key is bumped by hand when the catalog's URLs or files change.
+      - name: Cache the bundled manga-ocr model
+        id: manga-ocr-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/manga-ocr
+          key: manga-ocr-int8-v1
+          restore-keys: manga-ocr-int8-
+
       - name: Assemble debug and run unit tests
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest
 

@@ -31,9 +31,6 @@ object GatenBridgeEmitter {
     /** Carries the settings page an outside launch asked for: {"page": "wanikani"} or empty. */
     const val SETTINGS_PAGE_REQUEST = "gaten.settingsPageRequest"
 
-    /** Carries a model download's progress: {"fraction": 0..1 or null, "fileName": string}. */
-    const val RECOGNITION_PROGRESS = "gaten.recognitionProgress"
-
     private val reactContext = AtomicReference<ReactContext?>(null)
 
     /** Records the context events are sent through. Called by every module on creation. */
@@ -55,14 +52,6 @@ object GatenBridgeEmitter {
         val payload = Arguments.createMap()
         if (page != null) payload.putString("page", page)
         emit(SETTINGS_PAGE_REQUEST, payload)
-    }
-
-    /** Tells JS how far the model download is; `fraction` is null until totals are known. */
-    fun emitRecognitionProgress(fraction: Double?, fileName: String) {
-        val payload = Arguments.createMap()
-        if (fraction != null) payload.putDouble("fraction", fraction) else payload.putNull("fraction")
-        payload.putString("fileName", fileName)
-        emit(RECOGNITION_PROGRESS, payload)
     }
 
     /** Sends one event through the shared context; quiet when JS is not listening yet. */

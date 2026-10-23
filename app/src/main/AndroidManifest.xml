@@ -13,13 +13,9 @@
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
     <!-- Reading is offline: the screenshot is recognised on-device, the dictionary is bundled and
-         the Anki export is local IPC. INTERNET is here for two optional things, and neither happens
-         until the user asks:
-
-         1. Downloading the stylized-text model (ocr/MangaOcrDownloader.kt), when the user taps
-            Download on the settings screen, having been shown the size.
-         2. WaniKani (wanikani/), once a personal access token is connected on the WaniKani settings
-            screen: connecting or rechecking sends the token to api.wanikani.com over HTTPS, and
+         the Anki export is local IPC. INTERNET is here for optional WaniKani (wanikani/) after a
+         personal access token is connected on the WaniKani settings screen: connecting or
+         rechecking sends the token to api.wanikani.com over HTTPS, and
             opening a kanji or one of its radicals sends that character or that subject id to fetch
             the page (plus cdn.wanikani.com for the SVG of a radical that has no character). Pages
             are cached on the device and read from there offline; nothing is fetched or cached in the
@@ -33,9 +29,8 @@
 
          It also has to be declared rather than removed: ML Kit's transport library and ONNX Runtime
          both ask for it for their analytics and telemetry backends, and stripping it from the merged
-         manifest would take the model download with it. ACCESS_NETWORK_STATE comes from
-         profileinstaller, ONNX Runtime and androidx; the app reads it to warn when the download would
-         run on mobile data. -->
+         manifest would take those libraries' integrations with it. ACCESS_NETWORK_STATE comes from
+         profileinstaller, ONNX Runtime and androidx. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- AnkiDroid is reached through its `flashcards` ContentProvider, which Android 11+ hides from

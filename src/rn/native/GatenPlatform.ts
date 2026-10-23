@@ -18,6 +18,8 @@ interface GatenPlatformNative {
   openNotificationListenerSettings(): Promise<boolean>;
   /** True when Gaten is an enabled notification listener (the media-pause permission). */
   isNotificationAccessEnabled(): Promise<boolean>;
+  /** Turns Gaten's own accessibility service off; `false` when there is no instance to turn off. */
+  disableAccessibilityService(): Promise<boolean>;
   openUrl(url: string): Promise<boolean>;
   copyToClipboard(text: string): Promise<boolean>;
   toast(message: string): Promise<boolean>;
@@ -43,6 +45,14 @@ export function openUrl(url: string): Promise<boolean> {
 /** True when Gaten is an enabled notification listener — the media-pause permission. */
 export function isNotificationAccessEnabled(): Promise<boolean> {
   return GatenPlatform.isNotificationAccessEnabled();
+}
+
+/**
+ * Turns Gaten's own accessibility service off. `false` means no service instance was connected, so
+ * the reader turns it off where Android lists it.
+ */
+export function disableAccessibilityService(): Promise<boolean> {
+  return GatenPlatform.disableAccessibilityService();
 }
 
 /** Puts text on the clipboard. */

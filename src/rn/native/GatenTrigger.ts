@@ -9,6 +9,8 @@ interface GatenTriggerNative {
   setFloatingButtonEnabled(enabled: boolean): Promise<void>;
   tileAdded(): Promise<boolean>;
   setTileAdded(added: boolean): Promise<void>;
+  tileEnabled(): Promise<boolean>;
+  setTileEnabled(enabled: boolean): Promise<void>;
   /** "added" or "notAdded" is the system's own answer; "failed" means the request could not be made. */
   requestAddTile(): Promise<"added" | "notAdded" | "failed">;
 }
@@ -36,6 +38,22 @@ export function tileAdded(): Promise<boolean> {
 /** Records the tile's presence; the system's own editor owns removing it. */
 export function setTileAdded(added: boolean): Promise<void> {
   return GatenTrigger.setTileAdded(added);
+}
+
+/**
+ * Whether the tile is switched on in Gaten's settings. Separate from presence: a tile can be in
+ * Quick Settings and switched off, and only Android's editor removes one.
+ */
+export function tileEnabled(): Promise<boolean> {
+  return GatenTrigger.tileEnabled();
+}
+
+/**
+ * Switches the tile on or off; the running tile refreshes its state when the shade is opened next.
+ * A rejection is the page's to report.
+ */
+export function setTileEnabled(enabled: boolean): Promise<void> {
+  return GatenTrigger.setTileEnabled(enabled);
 }
 
 /**

@@ -6,8 +6,8 @@
 
 /**
  * The pieces every settings page is built from: the scaffold with its top bar, the row of a
- * group, the group itself, the dialogs a page raises, and the lookup-mode row with the
- * disclosure flow behind its "Turn on".
+ * group, the group itself, the dialogs a page raises, and the lookup-mode disclosure behind the
+ * switch that needs it.
  *
  * These are the RN ports of the shared composables in `SettingsScreen.kt`; the pages in
  * `ui/settings/` assemble them, and the copy stays in each page. Buttons, icons and the
@@ -54,12 +54,13 @@ export const CONTENT_COLUMN: ViewStyle = {
   paddingHorizontal: 22,
 };
 
-/** A neutral settings glyph using the hub's existing icon set. */
-export function RowIcon({name, inkName}: {name: IconName; inkName?: InkIconName}) {
+/** A neutral settings glyph using the hub's existing icon set; [color] is for a disabled row. */
+export function RowIcon({name, inkName, color}: {name: IconName; inkName?: InkIconName; color?: string}) {
   const {colors} = useTheme();
+  const ink = color ?? colors.iconSecondary;
   return inkName
-    ? <InkIcon name={inkName} size={22} color={colors.iconSecondary} />
-    : <Icon name={name} size={24} color={colors.iconSecondary} />;
+    ? <InkIcon name={inkName} size={22} color={ink} />
+    : <Icon name={name} size={24} color={ink} />;
 }
 
 /** A flat form section; its closing rule separates it from the next section. */
@@ -111,6 +112,8 @@ export function SettingsGroup({
 /**
  * A destination or informational row. Important values wrap instead of disappearing at large text
  * sizes; the optional description is reserved for information the title and value cannot convey.
+ * A [disabled] row — one whose action is busy — draws dimmed, carries no chevron, and reports
+ * itself disabled to a screen reader instead of looking tappable and doing nothing.
  */
 export function SettingsRow({
   icon,
@@ -119,6 +122,7 @@ export function SettingsRow({
   summary,
   value,
   onPress,
+  disabled,
 }: {
   icon: IconName;
   inkIcon?: InkIconName;
@@ -126,8 +130,10 @@ export function SettingsRow({
   summary?: string;
   value?: string | null;
   onPress?: () => void;
+  disabled?: boolean;
 }) {
   const {colors} = useTheme();
+  const inactive = disabled === true;
   const rowStyle: ViewStyle = {
     minHeight: 60,
     paddingVertical: spacing.m,
@@ -137,25 +143,31 @@ export function SettingsRow({
   };
   const body = (
     <>
-      <RowIcon name={icon} inkName={inkIcon} />
+      <RowIcon name={icon} inkName={inkIcon} color={inactive ? colors.onDisabled : undefined} />
       <View style={{flex: 1, minWidth: 0}}>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        <Text style={[typeScale.titleMedium, {color: inactive ? colors.onDisabled : colors.onSurface}]}>
+          {title}
+        </Text>
         {summary != null && (
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+          <Text style={[typeScale.bodySmall, {color: inactive ? colors.onDisabled : colors.onSurfaceVariant, marginTop: spacing.xs}]}>
             {summary}
           </Text>
         )}
       </View>
       {value != null && (
-        <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
+        <Text style={[typeScale.labelMedium, {color: inactive ? colors.onDisabled : colors.onSurfaceVariant, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
           {value}
         </Text>
       )}
-      {onPress != null && <InkIcon name="chevron" size={15} color={colors.fine} />}
+      {onPress != null && !inactive && <InkIcon name="chevron" size={15} color={colors.fine} />}
     </>
   );
-  if (onPress == null) {
-    return <View style={rowStyle}>{body}</View>;
+  if (onPress == null || inactive) {
+    return (
+      <View style={rowStyle} accessibilityState={inactive ? {disabled: true} : undefined}>
+        {body}
+      </View>
+    );
   }
   return (
     <PressableScale
@@ -197,7 +209,7 @@ const DISCLOSURE_BLOCKS: {heading: string; lines: string[]}[] = [
   {
     heading: "Optional connections",
     lines: [
-      "The stylized-text model downloads only when requested.",
+      "The included Manga OCR model is prepared automatically on first lookup.",
       "WaniKani connects only when you add a token.",
       "The token is checked with wanikani.com.",
       "A tapped kanji requests its reference page.",
@@ -304,12 +316,6 @@ export function TextField(props: TextInputProps) {
       ]}
     />
   );
-}
-
-/** A small state chip: what a row currently is, stated in the accent's own colour. */
-export function Chip({label}: {label: string}) {
-  const {colors} = useTheme();
-  return <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{label}</Text>;
 }
 
 /**

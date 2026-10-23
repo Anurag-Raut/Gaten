@@ -37,12 +37,12 @@ import java.util.concurrent.ConcurrentHashMap
  * the overlay is usable at once. This class is what happens next: every line is read in the
  * background (see [prefetchOrder]) and [text] republishes the index with each line's text replaced
  * as it lands. A gesture asks for the lines it touched with [read], which waits for them and falls
- * back to ML Kit's text when the model is missing, fails, or takes longer than [timeoutMillis] —
+ * back to ML Kit's text when Manga OCR is unavailable, fails, or takes longer than [timeoutMillis] —
  * the reader must never be the reason a tap does nothing.
  *
  * Every line ML Kit found is offered to the model, whatever script it read it in: a line read as
  * Latin can still be stylized Japanese. The line's final text is what decides whether it stays in
- * the index — manga-ocr's reading, or ML Kit's own text when there is no model — and a line with no
+ * the index — manga-ocr's reading, or ML Kit's own text when the model is unavailable — and a line with no
  * Japanese in it is dropped ([withDroppedLine]) as soon as that is known.
  *
  * One line is read at a time ([mutex]): there is one model and one phone. A request for a line
@@ -179,7 +179,7 @@ class ScreenLineReader(
         val raw = mutex.withLock {
             try {
                 // withTimeout rather than withTimeoutOrNull: a read that returns nothing (the model
-                // is not installed) is not a timeout and is not logged.
+                // is unavailable) is not a timeout and is not logged.
                 withTimeout(timeoutMillis) { reader(line) }
             } catch (_: TimeoutCancellationException) {
                 timedOut = true

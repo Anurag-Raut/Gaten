@@ -5,13 +5,12 @@
  */
 
 /**
- * About: the version, what the app does with the screen, the only two things it ever sends
+ * About: the version, what the app does with the screen, the optional network use
  * anywhere, and who the parts belong to.
  *
  * The two claims here are the app's contract with the reader — the screenshot and the looked-up
- * text stay on the device, and the network is used only for the model download and for WaniKani
- * when a token is connected — so they are stated as plainly as they can be. Every attribution is
- * a row that opens the licence or the project it names; with no browser to open, the tap does
+ * text stay on the device, and the network is used only for WaniKani when a token is connected.
+ * Every attribution is a row that opens the licence or the project it names; with no browser to open, the tap does
  * nothing.
  */
 import React, {useEffect, useState} from "react";
@@ -67,12 +66,12 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
 
       <SettingsGroup title="Privacy" style={{marginTop: spacing.l}}>
         <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, paddingVertical: spacing.m}]}>
-          Lookup and recognition run on this device; screenshots stay here. Optional network use: model downloads and WaniKani when connected. Nothing else is sent.
+          Lookup and recognition run on this device; screenshots stay here. Optional network use: WaniKani when connected. Nothing else is sent.
         </Text>
         <SettingsRow
           icon="shield"
           title="Privacy policy"
-          summary="What Gaten keeps, and the only two things it ever sends"
+          summary="What Gaten keeps, and when it uses the network"
           onPress={() => open(PRIVACY_POLICY_URL)}
         />
       </SettingsGroup>
@@ -87,7 +86,7 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <SettingsRow
           icon="public"
           title="manga-ocr"
-          summary="Optional model by kha-white · Apache-2.0 · ONNX Runtime"
+          summary="Bundled recommended reader by kha-white · Apache-2.0 · ONNX Runtime"
           onPress={() => open(MANGA_OCR_URL)}
         />
         <SettingsRow
