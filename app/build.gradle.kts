@@ -224,9 +224,6 @@ tasks.named("preBuild") {
 // weights are gitignored, so Gradle fetches the three files into `src/main/assets/manga-ocr` before
 // the assets are merged; once they are there the task is up to date and a rebuild is free. The same
 // bytes the settings catalog lists, so a downloaded model and the bundled one are interchangeable.
-// `-PbundleMangaOcr=false` is the escape hatch for a build that must not touch the network; the app
-// then has no bundled model and the settings page's Download is the only way in.
-val bundleMangaOcr = providers.gradleProperty("bundleMangaOcr").map { it.toBoolean() }.getOrElse(true)
 val mangaOcrAssets = layout.projectDirectory.dir("src/main/assets/manga-ocr")
 
 /** Streams [url] into [target] through a temp file, following redirects (Hugging Face serves 307s). */
@@ -294,12 +291,9 @@ val fetchMangaOcrModel by tasks.registering {
     }
 }
 
-// Every variant carries the model, so the fetch runs before any asset merge. Turned off only by an
-// explicit `-PbundleMangaOcr=false`.
-if (bundleMangaOcr) {
-    tasks.matching { it.name == "preBuild" }.configureEach {
-        dependsOn(fetchMangaOcrModel)
-    }
+// Every variant carries the model, so fetch before any asset merge.
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(fetchMangaOcrModel)
 }
 
 dependencies {
@@ -350,8 +344,8 @@ dependencies {
 
     // AnkiDroid's instant-add API: a ContentProvider, so an export reads and writes on-device and
     // needs no network — nor does anything a card carries: glosses and parts of speech both come from
-    // the bundled dictionary in assets/db. The app's INTERNET permission is for the optional OCR
-    // model download and the optional WaniKani pages, nothing here.
+    // the bundled dictionary in assets/db. The app's INTERNET permission is for optional WaniKani
+    // pages, nothing here.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
     // ONNX Runtime Mobile, for the manga-ocr second pass (ocr/MangaOcrEngine.kt). The library asks

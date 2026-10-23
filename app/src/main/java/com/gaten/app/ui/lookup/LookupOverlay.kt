@@ -67,6 +67,7 @@ import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
 import com.gaten.app.ocr.MangaOcrEngine
+import com.gaten.app.ocr.RecognitionPreference
 import com.gaten.app.ocr.ScanState
 import com.gaten.app.ocr.ScreenHits
 import com.gaten.app.ocr.ScreenLineReader
@@ -243,12 +244,12 @@ fun LookupOverlay(
         showNotice(notice)
     }
 
-    // ML Kit's index is what the overlay goes Ready with, instantly. The reader then replaces each
-    // line's text as manga-ocr reads it, and [screen] is that live index: the gestures and the
-    // faint highlights use it, so a line read a moment ago is already the better text.
+    // ML Kit's index is ready instantly. When Manga OCR is selected, the reader replaces each
+    // line's text in that index as it reads; with ML Kit selected, skip the background reader.
     val scannedScreen = (scanState as? ScanState.Ready)?.screen
-    val reader = remember(scannedScreen, screenshot) {
-        if (scannedScreen == null || screenshot == null) {
+    val mangaOcrEnabled = RecognitionPreference.isMangaOcrEnabled(context)
+    val reader = remember(scannedScreen, screenshot, mangaOcrEnabled) {
+        if (scannedScreen == null || screenshot == null || !mangaOcrEnabled) {
             null
         } else {
             ScreenLineReader(

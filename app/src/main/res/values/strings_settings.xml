@@ -24,14 +24,10 @@
     <string name="settings_row_lookup_title">Screen lookup</string>
     <string name="settings_row_lookup_support">Floating button, Quick Settings tile and hardware key</string>
     <string name="settings_row_recognition_title">Text recognition</string>
-    <string name="settings_row_recognition_support">Optional stylized-text model</string>
     <string name="settings_row_anki_support">Deck, note type and card layout</string>
     <string name="settings_row_wanikani_support">Kanji and vocabulary reference</string>
     <string name="settings_row_appearance_support">Theme and accent</string>
     <string name="settings_row_appearance_value">%1$s &#183; %2$s</string>
-    <string name="settings_row_recognition_installed">Installed: %1$s (%2$s)</string>
-    <string name="settings_row_recognition_unknown">Installed model (%1$s)</string>
-    <string name="settings_row_recognition_none">Built-in reader, no extra model</string>
     <string name="settings_row_anki_title">Anki cards</string>
     <string name="settings_row_anki_missing">AnkiDroid is not installed</string>
     <string name="settings_row_anki_permission">Allow Gaten to add cards to AnkiDroid</string>
@@ -87,34 +83,6 @@
     <string name="settings_lookup_media_granted">Allowed</string>
     <string name="settings_lookup_media_denied">Not allowed</string>
 
-    <!-- Text recognition: the optional manga-ocr model -->
-    <string name="settings_recognition_title">Text recognition</string>
-    <string name="settings_recognition_status_installed">%1$s installed (%2$s)</string>
-    <string name="settings_recognition_status_none">No model installed</string>
-    <string name="settings_recognition_status_none_help">The built-in reader (ML Kit) is reading your screen. A model below makes the stylized lettering it misreads readable.</string>
-    <string name="settings_recognition_chip_installed">Installed</string>
-    <string name="settings_recognition_group_models">Models</string>
-    <string name="settings_recognition_size">~%1$d MB</string>
-    <string name="settings_recognition_download">Download</string>
-    <string name="settings_recognition_import">Import model files</string>
-    <string name="settings_recognition_remove">Remove</string>
-    <string name="settings_recognition_downloading">Downloading %1$s&#8230;</string>
-    <string name="settings_recognition_progress_starting">Starting&#8230;</string>
-    <string name="settings_recognition_progress">%1$d%% &#183; %2$s</string>
-    <string name="settings_recognition_cancel">Cancel</string>
-    <string name="settings_recognition_confirm_title">Download %1$s?</string>
-    <string name="settings_recognition_confirm_body">About %1$d MB will be downloaded from huggingface.co. Use Wi-Fi if you can.</string>
-    <string name="settings_recognition_confirm_metered">You are on mobile data. About %1$d MB will be downloaded from huggingface.co &#8212; use Wi-Fi if you can.</string>
-    <string name="settings_recognition_help">ML Kit finds the lines on screen; manga-ocr reads them, including the stylized fonts it misreads &#8212; outlined video-thumbnail text, hand-lettered manga lettering. Any line it cannot read keeps ML Kit&#8217;s text. Everything runs on the device, and a model already on your phone can be imported instead of downloaded.</string>
-    <string name="settings_recognition_network_note">The download is one of the two network uses Gaten has, and it only ever starts from this page.</string>
-    <string name="settings_recognition_toast_installed">%1$s installed</string>
-    <string name="settings_recognition_toast_cancelled">Download cancelled</string>
-    <string name="settings_recognition_toast_failed">Download failed: %1$s</string>
-    <string name="settings_recognition_toast_imported">manga-ocr model installed</string>
-    <string name="settings_recognition_toast_import_failed">Import failed: encoder, decoder and vocab files are all needed</string>
-    <string name="settings_recognition_toast_removed">Model removed</string>
-    <string name="settings_recognition_toast_remove_failed">Could not remove the model files</string>
-
     <!-- Appearance: theme and accent -->
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_appearance_theme_title">Theme</string>
@@ -138,8 +106,8 @@
     <string name="settings_about_version">Gaten %1$s</string>
     <string name="settings_about_offline_title">Offline by default</string>
     <string name="settings_about_offline_body">The dictionary, the recognition and the lookup all run on this device, and the screenshot never leaves it.</string>
-    <string name="settings_about_network_title">Two network uses, both optional</string>
-    <string name="settings_about_network_body">Downloading a text-recognition model from huggingface.co, and WaniKani if you connect a personal access token. Nothing else is ever sent.</string>
+    <string name="settings_about_network_title">Optional network use</string>
+    <string name="settings_about_network_body">WaniKani if you connect a personal access token. Nothing else is ever sent.</string>
     <string name="settings_about_attribution_title">Attributions</string>
     <string name="settings_about_attr_dict">EDRDG dictionary</string>
     <string name="settings_about_attr_ocr">manga-ocr</string>
@@ -150,8 +118,8 @@
     <string name="settings_about_manrope">SIL Open Font License 1.1 &#8212; Mikhail Sharanda and the Manrope Project Authors. Bundled to draw Gaten&#8217;s Latin text.</string>
     <string name="settings_about_wanakana">MIT licence &#8212; the Kotlin port of WanaKana. Turns typed romaji into kana for dictionary search.</string>
     <string name="settings_about_dict">JMdict and JMnedict, the dictionary Gaten reads: © EDRDG, CC BY-SA 4.0</string>
-    <string name="settings_about_ocr">Optional stylized-text model (kha-white, Apache-2.0) run on ONNX Runtime</string>
-    <string name="settings_about_mlkit">Google&#8217;s on-device text recognition, which reads the screen when no model is installed</string>
+    <string name="settings_about_ocr">Bundled recommended stylized-text reader (kha-white, Apache-2.0) run on ONNX Runtime</string>
+    <string name="settings_about_mlkit">Google&#8217;s on-device text recognition, available as an alternative reader</string>
     <string name="settings_about_wanikani">Reference content © Tofugu LLC. Gaten is not affiliated with WaniKani, and nothing from it is bundled with the app.</string>
     <string name="settings_about_licence_title">Licence</string>
     <string name="settings_about_licence_body">Gaten is free software under GPL-3.0-or-later, derived from CircleToSearch by AKS-Labs.</string>

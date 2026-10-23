@@ -8,7 +8,7 @@
  * The settings hub: what lookup mode is, then a row per page under the group it belongs to.
  *
  * Everything on it is a summary read from wherever the truth lives — the platform's
- * enabled-services setting, the model directory, AnkiDroid, the stored token — and read again on
+ * enabled-services setting, the selected OCR engine, AnkiDroid, the stored token — and read again on
  * every arrival and every time the app comes back to the foreground, because all of it can change
  * while the reader is elsewhere. Nothing here asks for anything: a missing permission or model is
  * stated, and the page that owns it is where it is asked for.
@@ -26,18 +26,6 @@ import type {SettingsPageName} from "../navigation";
 import {useTheme} from "../theme";
 import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
-
-/** The name of the model in place, shown on the right of the recognition row. */
-function recognitionValue(
-  installed: boolean,
-  installedId: string | null,
-  catalog: GatenRecognition.MangaOcrCatalogEntry[]
-): string {
-  if (!installed) {
-    return "None";
-  }
-  return catalog.find((entry) => entry.id === installedId)?.label ?? "None";
-}
 
 /** What the Anki row says under its name: the page's own business, or AnkiDroid's other two states. */
 function ankiSummary(status: AnkiStatus): string {
@@ -58,13 +46,11 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const {width} = useWindowDimensions();
 
   const [lookupMode, setLookupMode] = useState(false);
-  const [modelInstalled, setModelInstalled] = useState(false);
-  const [modelId, setModelId] = useState<string | null>(null);
+  const [mangaOcrEnabled, setMangaOcrEnabled] = useState(true);
   const [ankiStatus, setAnkiStatus] = useState<AnkiStatus>("notInstalled");
   const [ankiDeck, setAnkiDeck] = useState<string | null>(null);
   const [wanikaniConnected, setWanikaniConnected] = useState(false);
   const [versionName, setVersionName] = useState("");
-  const [catalog, setCatalog] = useState<GatenRecognition.MangaOcrCatalogEntry[]>([]);
 
   // Lookup mode is a system setting the reader grants outside Gaten, and a model or a token
   // changes inside a page, so the rows are read on every arrival — the return from one of the
@@ -83,10 +69,8 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
       void GatenAppInfo.isLookupModeActive().then((v) => {
         if (!cancelled) setLookupMode(v);
       });
-      void GatenAppInfo.getMangaOcrState().then((v) => {
-        if (cancelled) return;
-        setModelInstalled(v.installed);
-        setModelId(v.catalogId);
+      void GatenRecognition.isMangaOcrEnabled().then((v) => {
+        if (!cancelled) setMangaOcrEnabled(v);
       });
       void GatenAnki.status().then((v) => {
         if (!cancelled) setAnkiStatus(v);
@@ -99,9 +83,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
       });
       void GatenAppInfo.getAppVersion().then((v) => {
         if (!cancelled) setVersionName(v);
-      });
-      void GatenRecognition.getCatalog().then((v) => {
-        if (!cancelled) setCatalog(v);
       });
     };
     readAll();
@@ -146,7 +127,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               icon="text_snippet"
               inkIcon="text"
               title="Text recognition"
-              value={recognitionValue(modelInstalled, modelId, catalog)}
+              value={mangaOcrEnabled ? "Manga OCR" : "Google ML Kit"}
               onPress={() => onOpenPage("recognition")}
             />
           </SettingsGroup>

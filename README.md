@@ -5,9 +5,8 @@ in a game, a manga viewer, a website, a chat — you fire a trigger, lasso the t
 shows the words it recognises, their kana readings and English meanings from an offline
 dictionary. You can also search by kanji, kana, or romaji directly in Gaten, explore an
 entry, and add it to Anki without capturing a screen. Reading runs entirely on the device: there is no account and no server, and it works
-in airplane mode. Gaten uses the network for exactly two things, and only after the reader asks for
-them: downloading the optional stylized-text model (see *Optional stylized-text model*), and WaniKani
-— connecting a personal access token, reading the reference page for a kanji the reader taps, and
+in airplane mode. Gaten uses the network for WaniKani only after the reader asks for it — connecting
+a personal access token, reading the reference page for a kanji the reader taps, and
 reviewing what the account has due (see *Optional WaniKani reference pages* and *Reviewing in
 Gaten*).
 
@@ -20,19 +19,18 @@ Gaten*).
 3. **Detect** — as soon as the overlay opens, ML Kit finds the lines on the whole screen and indexes
    each one with a box per character for hit testing. Those boxes are not drawn: only your own
    selection is highlighted, so the frozen screen stays uncluttered.
-4. **Read** — with the optional manga-ocr model installed, it then reads those lines in the
-   background and replaces each one's text as it lands, biggest boxes first (see *Optional
-   stylized-text model* below). ML Kit's own reading stays for any line it cannot read: no model, a
-   failure, or an answer slower than 2.5 s.
+4. **Read** — Manga OCR (the default, bundled reader) reads those lines in the background and
+   replaces each one's text as it lands, biggest boxes first. Google ML Kit can be selected instead.
+   ML Kit's own reading stays for any line Manga OCR cannot read: a failure or an answer slower than 2.5 s.
 5. **Tap or circle** — tap text to select its entire indexed line and all its words, or circle some text.
    A tap highlights the whole box immediately and answers from the index, reading only that line.
    The lasso trail is visible only while drawing and disappears on finger lift; the selected region
    stays marked while the lookup runs and the result is shown.
    A circle always crops the exact rectangle that was drawn and attempts manga-ocr on it — index or no index,
-   Japanese in the index or not — and the index lines the loop actually covered then add the words
-   they hold behind that reading, deduplicated. With no model installed the crop yields no reading,
-   and the answer is those index lines' text — or, before the index exists, ML Kit's own reading of
-   the crop. The rest of the screen keeps being read behind the result.
+   Japanese in the index or not — when Manga OCR is selected — and the index lines the loop actually
+   covered then add the words they hold behind that reading, deduplicated. With Google ML Kit selected,
+   the answer comes from the detected index lines, or ML Kit's reading of the crop before the index
+   exists. The rest of the screen keeps being read behind the result.
 6. **Repair** — common OCR confusions are fixed against the dictionary before lookup (ー/一,
    カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
@@ -47,8 +45,8 @@ Gaten*).
    to choose the deck, tags, field mapping and card layout. Export stays on-device.
 
 Steps 2–7 are fully offline. Gaten makes no network request of any kind until — and unless — the
-reader downloads the optional stylized-text model, or connects WaniKani (which checks the token) and
-then opens a kanji, looks at the Analytics tab, or reviews what is due.
+reader connects WaniKani (which checks the token) and then opens a kanji, looks at the Analytics tab,
+or reviews what is due.
 
 **Settings → Appearance** lets you choose the light/dark theme and accent
 independently. Gaten ships a single neutral ladder, so the accent picker changes the one
@@ -194,7 +192,7 @@ The in-app UI is React Native (0.86.3, Fabric / new architecture, Hermes). `Main
 (hidden under pushed pages, which is what the review flow is), and a theme resolved on the Kotlin
 side.
 JS talks to the Kotlin logic through bridge modules in `app/src/main/java/com/gaten/app/rn/`
-(dictionary search, Anki review/export, WaniKani, theme, haptics, recognition downloads, platform
+(dictionary search, Anki review/export, WaniKani, theme, haptics, recognition choice, platform
 utilities) — no business logic is duplicated in JavaScript.
 
 The accessibility lookup overlay retains its independent service window and navigation, still
@@ -235,69 +233,40 @@ a clear message if either builder was skipped.
 
 ## Stylized-text model (manga-ocr)
 
-ML Kit finds the lines; manga-ocr reads them. ML Kit's own reading is good on plain text but misreads
-stylized fonts — outlined video-thumbnail text, hand-lettered manga lettering — which is exactly what
+ML Kit finds the lines for selection. **Manga OCR is the default reader**; Google ML Kit can be
+selected to read standard Japanese text. Manga OCR handles stylized fonts — outlined video-thumbnail
+text, hand-lettered manga lettering — which is exactly what
 [manga-ocr](https://github.com/kha-white/manga-ocr) (a ViT encoder plus a BERT decoder, run on
 [ONNX Runtime](https://onnxruntime.ai/)) is trained on. With the model installed it is offered every
-line ML Kit found, whatever script ML Kit read it in — a line it read as Latin can still be stylized
+when selected, it is offered every line ML Kit found, whatever script ML Kit read it in — a line it read as Latin can still be stylized
 Japanese — and the line's final text decides whether it stays: a line with no Japanese in it is
 dropped, so Latin and digit lines do not stay on screen as text. A circle does not depend on any of
-that: it crops the rectangle it was drawn around and attempts manga-ocr on that, whatever the index
-found elsewhere on the screen.
+that: when Manga OCR is selected, it crops the rectangle it was drawn around and attempts manga-ocr
+on that, whatever the index found elsewhere on the screen.
 
 Nothing waits for it. The overlay is usable as soon as ML Kit's index exists; the lines are then read
 in the background, biggest boxes first, and a tap waits only for the line it touched — one, usually,
 at 2.5 s at the very worst. A circle's crop is read before the lines it covered are, so the answer
-never queues behind them. Any line it cannot read (no model, a failure, a timeout, a runaway answer)
+never queues behind them. Any line it cannot read (a failure, a timeout, or a runaway answer)
 keeps ML Kit's text, and the rest of the screen keeps being read behind the result sheet, so the next
-gesture usually needs no wait at all.
+gesture usually needs no wait at all. With Google ML Kit selected, Manga OCR is skipped and ML Kit's
+index readings are used directly.
 
 The engines are not kept for the life of the process. Once no lookup has used them for 90 seconds —
 or when the system asks for memory, or when the accessibility service is torn down — Gaten releases
 them (manga-ocr's ONNX sessions and ML Kit's Japanese recognizer). The next lookup builds them again
-from local files or APK assets, with no download; this first lookup may take longer.
+from local files or APK assets; the first Manga OCR lookup may take longer while the bundled model
+is extracted.
 Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
 The memory reduction has not been measured on the current version.
 
-The model is ~117 MB and is **bundled in every build**: Gradle fetches the three weights into
-`app/src/main/assets/manga-ocr/` (gitignored) before the assets are merged, the APK carries them,
-and the app copies them into its own storage the first time the second pass runs. A fresh install
-therefore has manga-ocr with no download and no network. There are three ways the model can reach
-`filesDir/manga-ocr/`:
-
-- **The app's own bundle** — the default. **Settings → Text recognition** shows the model as
-  **Bundled** and offers **Install bundled model** for copying the weights out early; the first
-  lookup does it on its own, offline. **Remove model** takes them off and keeps them off, until
-  **Install bundled model** is tapped again.
-- **Download it in the app** — only for a build made without the bundle
-  (`-PbundleMangaOcr=false`): **Settings → Text recognition → Download**. The size is shown first and
-  has to be confirmed (with a warning when the phone is on mobile data), the download runs with a
-  progress bar and a Cancel button, and the only hosts it talks to are `huggingface.co` and the CDN
-  it redirects to, over HTTPS. Nothing is fetched until that button is tapped. WaniKani is the app's
-  only other network use, and only with a token connected: a kanji page when one is tapped, and the
-  account's own study progress when the Analytics tab is open. The files come from
-  [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
-  (`encoder_model_int8.onnx`, `decoder_model_int8.onnx`) and
-  [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base) (`vocab.txt`).
-- **Import files you already have** — the same section's **Import model files** takes
-  `encoder_model_int8.onnx`, `decoder_model_int8.onnx` and `vocab.txt` from device storage; they are
-  recognised by name, so nothing has to be renamed. `tools/fetch_manga_ocr.sh [dir]` downloads them
-  on a computer and prints the matching `adb push` command.
-
-`-PbundleMangaOcr=false` skips the fetch and produces an APK with no model, where Download is the
-only way in.
-
-Without the model, ML Kit both finds and reads the lines, which is exactly what the app did before
-the model existed; a circle is then answered from the index lines it covered, or — before the index
-exists — from ML Kit's own reading of the crop.
-
-The catalog also lists `encoder_model_fp16.onnx` / `decoder_model_fp16.onnx` from the same
-repository — they are **not** offered, because ONNX Runtime refuses to load the fp16 decoder (its
-Cast node is typed float16 where its consumer expects float32: `Type Error: Type (tensor(float16))
-of output arg ... does not match expected type (tensor(float))`). The fp16 encoder does load, and the
-4-bit pair (`encoder_model_q4.onnx` / `decoder_model_q4.onnx`, ~93 MB) runs and reads the reference
-image identically to int8, but its accuracy on real manga has not been measured, so it is not offered
-either. Adding one is a new entry in `ocr/MangaOcrCatalog.kt`.
+The manga-ocr int8 model is ~117 MB and is **bundled in every build**. Gradle fetches the three
+weights into `app/src/main/assets/manga-ocr/` before the assets are merged; the app extracts them
+to private storage only when Manga OCR is selected and a lookup runs. This keeps startup and the
+Google ML Kit option free of model extraction and ONNX session initialization. Both readers work
+offline. **Settings → Text recognition** lets readers switch between Manga OCR (recommended) and
+Google ML Kit. No model import or download is needed. `tools/fetch_manga_ocr.sh [dir]` can fetch the
+same model for local development.
 
 ## Optional WaniKani reference pages
 
@@ -453,8 +422,8 @@ stay visible whatever their state, and the next review time is shown when WaniKa
   as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
   (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrModels`
   (when the OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
-  `MangaOcrCatalog` is the list of downloadable models and `MangaOcrDownloader` is the model
-  download itself; the app's only other network code is the optional WaniKani client in `wanikani/`.
+  `RecognitionPreference` stores the selected reader; the app's network code is the optional
+  WaniKani client in `wanikani/`.
 - `anki/` — AnkiDroid export plus deck, tags, field-mapping and card-template preferences, and the
   provider reader behind the in-app review screen (queue, rendered card HTML, rating).
 - `wanikani/` — the optional WaniKani client: the token (Keystore-encrypted, stored off the backup
@@ -464,7 +433,7 @@ stay visible whatever their state, and the next review time is shown when WaniKa
   (`DictionarySearch`), OCR word scanning (`WordScanner`) and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
 - `rn/` — the React Native bridge: native modules exposing the dictionary, Anki, WaniKani, theme,
-  feedback, recognition downloads and platform utilities to JS, plus the `GatenCardWebView`
+  feedback, recognition choice and platform utilities to JS, plus the `GatenCardWebView`
   view manager used by the review card and the radical image.
 - `src/rn/` — the React Native app: `native/` (typed bridge wrappers) and `ui/` (shell, tabs,
   screens). See `docs/rn-migration/`.
@@ -477,18 +446,14 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 - `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light and accent
   choices the overlay, the floating bubble and the RN theme bridge read).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
-  which downloads the optional manga-ocr model for pushing to a device.
+  which fetches model assets used by local builds.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
 
 ## Privacy
 
-Reading is offline and stays offline. Gaten makes network requests for exactly two things, both of
-them started by the reader and neither of them in the background:
+Reading is offline and stays offline. Gaten makes optional network requests only for WaniKani,
+started by the reader and never in the background:
 
-- **The stylized-text model**, downloaded by tapping Download in a build made without the bundle,
-  goes to `huggingface.co` and the CDN it redirects to, over HTTPS, and nowhere else
-  (`ocr/MangaOcrDownloader.kt` enforces that allow-list, redirects included). The default build
-  carries the weights and never fetches them.
 - **WaniKani**, once a token is connected: connecting and rechecking send the token to
   `api.wanikani.com` for `GET /user` (the one account call, read only for the subscription's level
   entitlement), and opening a kanji sends that character — a radical, its id, a kanji's composition
@@ -542,8 +507,7 @@ every lookup feature working (only the session-based pause gives way to a media 
 
 ML Kit's transport library and ONNX Runtime also declare `INTERNET` for their own analytics and
 telemetry backends. Gaten's code never calls those, but while the permission is in the merged
-manifest the OS no longer blocks them — removing it would block them, the model download and the
-WaniKani client with it. That is the trade the two features cost, and it is why the permission is
+manifest the OS no longer blocks them — removing it would block them, the WaniKani client with it. That is the trade the two features cost, and it is why the permission is
 documented here rather than left implicit.
 
 ## Credits and licences
@@ -567,7 +531,7 @@ documented here rather than left implicit.
   connects a token. Nothing from WaniKani is bundled with the app: each kanji or radical page is
   fetched on request and cached on the reader's device, and Gaten is not affiliated with WaniKani.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
-  lines and reads them when no manga-ocr model is installed.
+  lines and is available as an alternative reader.
 - **Stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
   Apache-2.0) through the ONNX export at
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),

@@ -11,13 +11,10 @@ import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
-import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.WritableMap
 import com.gaten.app.GatenAccessibilityService
-import com.gaten.app.ocr.MangaOcrModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -26,11 +23,10 @@ import java.io.IOException
 
 /**
  * The small facts about the app the RN screens put on their settings pages: the version, the
- * dictionary's schema version, whether the optional manga-ocr model is on the phone, and whether
- * lookup mode is on.
+ * dictionary's schema version, and whether lookup mode is on.
  *
- * Everything is a read of something that already exists: [MangaOcrModel]'s directory and the
- * platform's own enabled-accessibility-services list, which is what lookup mode's "On" and "Off"
+ * Everything is a read of something that already exists: the platform's own
+ * enabled-accessibility-services list, which is what lookup mode's "On" and "Off"
  * report on. The dictionary's schema
  * version is read from the SQLite header the way `app/build.gradle.kts` verifies the packaged
  * asset — `PRAGMA user_version` at bytes 60-63 — read from the extracted copy when there is one
@@ -80,16 +76,6 @@ class GatenAppInfoModule(
     }
 
     /**
-     * What is on the phone of the optional manga-ocr model: `{ installed, catalogId, sizeBytes }` —
-     * the same three reads the recognition page's view model makes, answered fresh every ask,
-     * because the directory can change while no screen is looking.
-     */
-    @ReactMethod
-    fun getMangaOcrState(promise: Promise) {
-        promise.resolve(mangaOcrState(reactApplicationContext))
-    }
-
-    /**
      * Whether lookup mode is on: Gaten's accessibility service is enabled in the system's own
      * settings. That grant is given outside the app, so this is re-read on every ask rather than
      * cached.
@@ -122,15 +108,6 @@ class GatenAppInfoModule(
         }
         return false
     }
-
-    /** The three reads of the installed model, in one map. */
-    private fun mangaOcrState(context: Context): WritableMap =
-        Arguments.createMap().apply {
-            putBoolean("installed", MangaOcrModel.isInstalled(context))
-            val catalogId = MangaOcrModel.installedCatalogId(context)
-            if (catalogId != null) putString("catalogId", catalogId) else putNull("catalogId")
-            putDouble("sizeBytes", MangaOcrModel.installedSizeBytes(context).toDouble())
-        }
 
     /**
      * [PRAGMA user_version] of the dictionary database, read from the 64-byte SQLite header — the

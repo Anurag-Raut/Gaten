@@ -25,7 +25,7 @@ import java.nio.LongBuffer
 import kotlin.coroutines.coroutineContext
 
 /**
- * The optional reader: manga-ocr, a ViT encoder plus a two-layer BERT decoder, run on ONNX Runtime.
+ * Manga OCR reader: a ViT encoder plus a two-layer BERT decoder, run on ONNX Runtime when selected.
  *
  * It exists because ML Kit reads stylized fonts — outlined thumbnail text, hand-lettered manga
  * lettering — as the kanji their strokes resemble. This model was trained on exactly that kind of
