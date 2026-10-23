@@ -36,15 +36,15 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
       title="Text recognition"
       onClose={onClose}
       help={[
-        "Manga OCR is included with Gaten and recommended for stylized manga lettering. It is prepared automatically on the first lookup and works offline.",
-        "Google ML Kit is an alternative for standard Japanese text. It runs on this device.",
+        "Manga OCR is recommended for manga pages. It handles stylized lettering and varied layouts that Google ML Kit may miss. The model is included with Gaten, prepared automatically on the first lookup, and works offline.",
+        "Google ML Kit is an alternative for standard Japanese text and runs on this device.",
       ]}
     >
       <View accessibilityRole="radiogroup" accessibilityLabel="Recognition engine">
         <SettingsGroup title="Recognition engine" style={{marginTop: spacing.s}}>
           {[
-            {title: "Manga OCR", summary: "Recommended · included with Gaten", enabled: true},
-            {title: "Google ML Kit", summary: "Google's on-device Japanese text recognition", enabled: false},
+            {title: "Manga OCR", summary: "Recommended for manga pages · included with Gaten", enabled: true},
+            {title: "Google ML Kit", summary: "Alternative for standard Japanese text", enabled: false},
           ].map((engine) => {
             const selected = mangaOcrEnabled === engine.enabled;
             const disabled = mangaOcrEnabled == null;
