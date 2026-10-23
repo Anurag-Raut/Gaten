@@ -387,6 +387,37 @@ test('store opens a connected hub with loaded counts', async () => {
   assert.equal(store.getState().step.refreshing, false);
 });
 
+test('store opens the connection page when no token is stored, not the hub', async () => {
+  // The mocked bridge refuses unexpected calls, so reading counts here would fail the case too.
+  const store = mockStore({isConfigured: async () => false});
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkConnect' && !store.getState().busy, 'connection page');
+  assert.equal(store.getState().step.rejected, false);
+});
+
+test('a refused token opens the connection page rejected rather than an empty hub', async () => {
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => ({status: 'authRejected'}),
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkConnect' && !store.getState().busy, 'rejected connection page');
+  assert.equal(store.getState().step.rejected, true);
+});
+
+test('a token lost while a chosen queue is read keeps the hub that explains the failure', async () => {
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => availableStats(),
+    reviewQueue: async () => ({status: 'needsToken'}),
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  store.startReviews();
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub after a lost token');
+  assert.equal(store.getState().step.connection, 'disconnected');
+});
+
 test('store retains confirmed counts while a refresh is pending', async () => {
   const nextRead = deferred();
   let calls = 0;
@@ -519,7 +550,7 @@ test('store resumes a paused review at the saved answer', async () => {
   assert.equal(store.getState().step.session.entry, 'my saved answer');
 });
 
-test('auth rejection clears the saved review session and account queues', async () => {
+test('auth rejection opens the connection page and clears the saved review session', async () => {
   const item = {
     subjectId: 11, type: 'radical', characters: '川', meanings: ['river'],
     primaryMeaning: 'river', readings: [], primaryReading: null,
@@ -527,7 +558,7 @@ test('auth rejection clears the saved review session and account queues', async 
   let statsReads = 0;
   const store = mockStore({
     isConfigured: async () => true,
-    refreshStats: async () => (++statsReads < 3 ? availableStats() : {status: 'authRejected'}),
+    refreshStats: async () => (++statsReads === 3 ? {status: 'authRejected'} : availableStats()),
     reviewQueue: async () => ({status: 'available', items: [item]}),
   });
   store.openWaniKani();
@@ -538,7 +569,11 @@ test('auth rejection clears the saved review session and account queues', async 
   await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'paused review in hub');
   assert.ok(store.getState().step.pausedReview);
   store.retryWaniKaniSync();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && store.getState().step.connection === 'expired', 'auth rejection');
+  await until(() => store.getState().step.kind === 'wkConnect' && !store.getState().busy, 'auth rejection');
+  assert.equal(store.getState().step.rejected, true);
+  // Reconnecting does not bring back the session that went with the refused token.
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub after reconnecting');
   assert.equal(store.getState().step.pausedReview, null);
 });
 
