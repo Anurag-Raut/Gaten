@@ -13,7 +13,7 @@
  * not the device's.
  */
 import React, {useEffect, useState} from "react";
-import {Text, useColorScheme, useWindowDimensions, View} from "react-native";
+import {Text, useWindowDimensions, View} from "react-native";
 import * as GatenHaptics from "../../native/GatenHaptics";
 import * as GatenTheme from "../../native/GatenTheme";
 import type {Accent, ThemeMode} from "../../native/GatenTheme";
@@ -27,7 +27,6 @@ const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", 
 
 export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   const theme = useTheme();
-  const scheme = useColorScheme();
   const {width} = useWindowDimensions();
   const horizontalPadding = width < 360 ? 16 : 22;
   const accentGridWidth = Math.min(width - horizontalPadding * 2, MAX_CONTENT_WIDTH - 44);
@@ -35,7 +34,7 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
     (accentGridWidth - spacing.s * 3) / 4
   );
   // What the swatches below sit on: the reader's choice, not their device's.
-  const dark = theme.mode === "Dark" || (theme.mode === "System" && scheme === "dark");
+  const {dark} = theme;
 
   // Each accent's primary, resolved once per mode through the bridge, so every swatch shows the
   // accent's own tone rather than the selected one's.

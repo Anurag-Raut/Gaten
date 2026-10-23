@@ -38,7 +38,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useColorScheme,
 } from "react-native";
 import Reanimated, {
   cancelAnimation,
@@ -454,9 +453,7 @@ export function BottomBar({
   layout,
   searchActive = false,
 }: MaterialTopTabBarProps & {searchActive?: boolean}) {
-  const {colors, mode} = useTheme();
-  const systemMode = useColorScheme();
-  const dark = mode === "Dark" || (mode === "System" && systemMode === "dark");
+  const {colors, dark} = useTheme();
   // The selected pill wears the reader's accent, not the neutral action fill: the bar's active
   // state is the one place the accent is always visible, and `onPrimary` is already the ink that
   // reads on that tone in either mode.

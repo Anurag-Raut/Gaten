@@ -8,7 +8,6 @@
  -->
 
 <resources>
-    <!-- The icon's ground, as the source mark draws it: black behind the white G.
-         The dark-theme ground is white (values-night/ic_launcher_background.xml). -->
-    <color name="ic_launcher_background">#000000</color>
+    <!-- System mode: white background in the device's light theme. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

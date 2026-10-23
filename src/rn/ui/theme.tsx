@@ -19,9 +19,10 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import {useColorScheme} from "react-native";
+import {Alert, findNodeHandle, requireNativeComponent, useColorScheme, type ViewProps} from "react-native";
 import * as ThemeBridge from "../native/GatenTheme";
 import type {Accent, ThemeChoices, ThemeColorMap, ThemeMode} from "../native/GatenTheme";
 
@@ -53,6 +54,8 @@ export interface ThemeColors extends ThemeColorMap {
 export interface Theme {
   /** The resolved scheme for the current choices; opaque `#RRGGBB` per Material role. */
   colors: ThemeColors;
+  /** The light/dark mode resolved together with these colors. */
+  dark: boolean;
   mode: ThemeMode;
   accent: Accent;
   setMode(mode: ThemeMode): void;
@@ -61,21 +64,28 @@ export interface Theme {
 
 const ThemeContext = createContext<Theme | null>(null);
 
-/** The stored defaults, until the bridge's own answer arrives. */
-const DEFAULT_CHOICES: ThemeChoices = {
-  mode: "System",
-  accent: "Indigo",
-};
+interface ResolvedTheme {
+  choices: ThemeChoices;
+  colorMap: ThemeColorMap;
+  dark: boolean;
+  revision: number;
+}
 
+const NativeThemeTransition = requireNativeComponent<ViewProps & {revision: number}>(
+  "GatenThemeTransition",
+);
+
+function reportSaveError(error: unknown) {
+  console.error("Could not save the appearance preference", error);
+  Alert.alert("Could not change appearance", "Please try again.");
+}
+
+/** Resolves each theme atomically and captures the outgoing screen before a light/dark change. */
 export function ThemeProvider({children}: {children: React.ReactNode}) {
   const systemScheme = useColorScheme();
-  const [choices, setChoices] = useState<ThemeChoices>(DEFAULT_CHOICES);
-  const [colorMap, setColorMap] = useState<ThemeColorMap | null>(null);
-
-  const apply = useCallback(async (next: ThemeChoices) => {
-    setChoices(next);
-    setColorMap(await ThemeBridge.colors(next.mode, next.accent));
-  }, []);
+  const [resolved, setResolved] = useState<ResolvedTheme | null>(null);
+  const lastResolved = useRef<ResolvedTheme | null>(null);
+  const transitionView = useRef<React.ComponentRef<typeof NativeThemeTransition>>(null);
 
   useEffect(() => {
     let live = true;
@@ -87,11 +97,26 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
       try {
         const stored = await ThemeBridge.getTheme();
         if (!live || currentRequest !== request) return;
-        const resolved = await ThemeBridge.colors(stored.mode, stored.accent);
+        const colorMap = await ThemeBridge.colors(stored.mode, stored.accent);
         if (!live || currentRequest !== request) return;
-        setChoices(stored);
-        setColorMap(resolved);
-      } catch {
+        const dark = stored.mode === "Dark" || (stored.mode === "System" && systemScheme === "dark");
+        const previous = lastResolved.current;
+        if (previous && previous.dark !== dark) {
+          const viewTag = findNodeHandle(transitionView.current);
+          if (viewTag != null) {
+            try {
+              await ThemeBridge.prepareThemeTransition(viewTag);
+            } catch (error) {
+              console.warn("Could not prepare the theme transition", error);
+            }
+          }
+        }
+        if (!live || currentRequest !== request) return;
+        const next = {choices: stored, colorMap, dark, revision: (previous?.revision ?? 0) + 1};
+        lastResolved.current = next;
+        setResolved(next);
+      } catch (error) {
+        console.warn("Could not read the appearance preference", error);
         // Keep the last complete theme; the next preference or system change retries the read.
       }
     };
@@ -105,27 +130,24 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
 
   const setMode = useCallback(
     (mode: ThemeMode) => {
-      ThemeBridge.setThemeMode(mode)
-        .then((stored) => apply(stored))
-        .catch(() => {});
+      // The bridge event is the single reload path, so a setter and its event cannot race a fade.
+      void ThemeBridge.setThemeMode(mode).catch(reportSaveError);
     },
-    [apply],
+    [],
   );
 
   const setAccent = useCallback(
     (accent: Accent) => {
-      ThemeBridge.setAccent(accent)
-        .then((stored) => apply(stored))
-        .catch(() => {});
+      void ThemeBridge.setAccent(accent).catch(reportSaveError);
     },
-    [apply],
+    [],
   );
 
   const theme = useMemo<Theme | null>(() => {
-    if (!colorMap) {
+    if (!resolved) {
       return null;
     }
-    const dark = choices.mode === "Dark" || (choices.mode === "System" && systemScheme === "dark");
+    const {choices, colorMap, dark} = resolved;
     return {
       colors: {
         ...colorMap,
@@ -151,19 +173,26 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         disabled: dark ? colorMap.surfaceContainerHighest : "#E9E9ED",
         onDisabled: dark ? colorMap.onSurfaceVariant : "#83838C",
       },
+      dark,
       mode: choices.mode,
       accent: choices.accent,
       setMode,
       setAccent,
     };
-  }, [choices, colorMap, systemScheme, setMode, setAccent]);
+  }, [resolved, setMode, setAccent]);
 
-  if (!theme) {
+  if (!theme || !resolved) {
     // The first resolve has not landed yet; nothing is drawn until the colours exist.
     return null;
   }
 
-  return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={theme}>
+      <NativeThemeTransition ref={transitionView} revision={resolved.revision} style={{flex: 1}}>
+        {children}
+      </NativeThemeTransition>
+    </ThemeContext.Provider>
+  );
 }
 
 /** The theme of the shell this screen sits in. Must render below [ThemeProvider]. */

@@ -51,8 +51,13 @@ reader downloads the optional stylized-text model, or connects WaniKani (which c
 then opens a kanji, looks at the Analytics tab, or reviews what is due.
 
 **Settings → Appearance** lets you choose the light/dark theme and accent
-independently. Gaten ships a single neutral ladder, so the accent picker changes the one
-colour in the app while the paper and text stay as designed.
+independently. The home-screen icon follows the light/dark mode: the app ships a light and a dark
+tile and switches its launcher entry between them. *System* uses an Android night-qualified icon
+that follows the device's own mode even while Gaten is closed. Switching between light and dark
+crossfades the current screen over 260 ms, respecting Android's reduced motion setting.
+Two things stay with the launcher — when it redraws its copy of the icon, and, if it draws themed
+(monochrome) icons, the colours it draws the glyph in. Gaten ships a single neutral ladder, so the
+accent picker changes the one colour in the app while the paper and text stay as designed.
 
 ## Inside the app
 
@@ -468,8 +473,9 @@ stay visible whatever their state, and the next review time is shown when WaniKa
   (`WaniKaniDetail.kt`).
 - `ui/overlay/` — `OverlayWindowController`, the accessibility-overlay window host.
 - `ui/components/` — `KanjiStrip` and `pressScale` used by the overlay result sheet.
-- `ui/theme/` — the palette and `ThemePreferences` (the stored dark/light and accent
-  choices the overlay, the floating bubble and the RN theme bridge read).
+- `ui/theme/` — the palette, `ThemePreferences` (the stored dark/light and accent choices the
+  overlay, the floating bubble and the RN theme bridge read) and `LauncherIcon` (the launcher entry
+  those choices switch).
 - `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
   which downloads the optional manga-ocr model for pushing to a device.
 - `docs/` — the historical feasibility study (see `docs/README.md`).

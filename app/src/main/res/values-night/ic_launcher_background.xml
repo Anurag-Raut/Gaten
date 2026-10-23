@@ -8,9 +8,6 @@
  -->
 
 <resources>
-    <!-- The dark-theme ground: tile and glyph swap so the icon keeps its
-         contrast on a dark home screen. Resolved by the launcher whenever the
-         system is in night mode, together with
-         drawable-night/ic_launcher_foreground.xml. -->
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- System mode: black background in the device's dark theme. -->
+    <color name="ic_launcher_background">#000000</color>
 </resources>

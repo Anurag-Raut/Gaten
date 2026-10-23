@@ -4,7 +4,7 @@
  * The colours are resolved on the Kotlin side from the same functions the Compose theme used, so JS
  * does no colour maths and renders exactly the tones Compose rendered. `colors()`
  * answers a flat map of `#RRGGBB` strings whose keys are the Material roles. Rejections:
- * `E_THEME_UNKNOWN` for a name the app does not know.
+ * `E_THEME_UNKNOWN` for a name the app does not know; `E_THEME_SAVE` for a failed preference write.
  *
  * Every setter announces the change through the `gaten.themeChanged` device event — listen with
  * [onThemeChanged] and re-read the choices and colours.
@@ -67,6 +67,7 @@ export interface ThemeColorMap {
 
 interface GatenThemeNative {
   getTheme(): Promise<ThemeChoices>;
+  prepareThemeTransition(viewTag: number): Promise<boolean>;
   setThemeMode(mode: ThemeMode): Promise<ThemeChoices>;
   setAccent(accent: Accent): Promise<ThemeChoices>;
   setNavigationBarAppearance(dark: boolean): Promise<void>;
@@ -78,6 +79,11 @@ const GatenTheme = NativeModules.GatenTheme as GatenThemeNative;
 /** The two choices as stored. */
 export function getTheme(): Promise<ThemeChoices> {
   return GatenTheme.getTheme();
+}
+
+/** Keeps the old screen visible until the matching theme revision reaches the native container. */
+export function prepareThemeTransition(viewTag: number): Promise<boolean> {
+  return GatenTheme.prepareThemeTransition(viewTag);
 }
 
 /** Stores the mode and announces it. */

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * Portions derived from CircleToSearch, Copyright (C) 2025 AKS-Labs
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ -->
+
+<!-- Light app theme: white background, black G, independent of device theme. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_light_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_light_foreground"/>
+    <monochrome android:drawable="@drawable/ic_launcher_light_foreground"/>
+</adaptive-icon>
