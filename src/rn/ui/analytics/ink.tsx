@@ -13,18 +13,18 @@
  * A number is set apart from its neighbour by whitespace and a single 1 dp hairline, and hierarchy
  * is carried by type size alone: the eyebrow is a whisper, the figure is the loudest type on the
  * page. The only filled shapes permitted are the ones whose fill *is* a value — a heatmap cell, a
- * ring's arc, a chart column, a progress fill, a stacked segment — and what surrounds each one is a
- * hairline-coloured track, a hairline-coloured outline, or nothing at all, so the empty remainder
- * stays visible without a surface being drawn behind it.
+ * ring's arc, a progress fill, a stacked segment — and what surrounds each one is a hairline-coloured
+ * track, a hairline-coloured outline, or nothing at all, so the empty remainder stays visible without
+ * a surface being drawn behind it.
  *
  * The geometry follows the approved package (docs/DESIGN_SPEC.md, "borderless editorial"): sections
  * are 22 dp of top padding beneath a hairline with 24 dp above them, the first section starts 10 dp
  * under the view switcher with no rule of its own, metrics are 34 sp with -1.5 tracking, a metric
- * pair is split by one vertical hairline and nothing else, the SRS bar is 5 dp, the column chart is
- * 86 dp tall with lightly rounded column tops, the heatmap is twelve columns of lightly rounded
- * cells with only M/W/F labelled, and the ring is an 84 dp circle with a 9 dp stroke. Colours come
- * from `useTheme` — never a hardcoded hex, never a fixed violet — so the reader's accent repaints
- * every fill and the hairlines follow the light and dark schemes.
+ * pair is split by one vertical hairline and nothing else, the bar rows are a 5 dp track, the heatmap
+ * is twelve columns of lightly rounded cells with only M/W/F labelled, and the ring is an 84 dp
+ * circle with a 9 dp stroke. Colours come from `useTheme` — never a hardcoded hex, never a fixed
+ * violet — so the reader's accent repaints every fill and the hairlines follow the light and dark
+ * schemes.
  */
 import React from "react";
 import {
@@ -40,15 +40,6 @@ import {PressableScale} from "../PressableScale";
 import {useTheme, type ThemeColors} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import type {HeatmapCell} from "./model";
-
-/** The column chart's default height, in dp: the approved number, and the axis a column is scaled on. */
-const DEFAULT_COLUMN_HEIGHT = 86;
-
-/**
- * A bucket the source counted as zero still gets this much column, so an honest zero reads as a zero
- * and never collapses into the same nothing as a bucket the source would not answer.
- */
-const MIN_BAR_HEIGHT = 2;
 
 /**
  * The height of one heatmap cell, in dp. The width is deliberately not fixed: the twelve week
@@ -83,6 +74,12 @@ const HEATMAP_LABEL_WIDTH = 13;
 
 /** The legend swatch, in dp: the cell's corner at a smaller size, so a day and its key read as one mark. */
 const HEATMAP_SWATCH_SIZE = 11;
+
+/**
+ * The key of a distribution segment, in dp: a small square before the category's name, drawn in the
+ * segment's own tone and opacity so the bar and the key under it cannot be read two ways.
+ */
+const DISTRIBUTION_SWATCH_SIZE = 8;
 
 /**
  * The accent opacities for activity levels 1 to 4, in order. The ramp is carried by opacity on the
@@ -323,104 +320,95 @@ export function InlineBar({
 }
 
 /**
- * One row of an SRS list: a fixed label column, a thin bar, and a fixed count column. The columns are
- * pinned at 72 dp and 32 dp with a 10 dp gap so every bar in the list starts and ends on the same two
- * lines, which is what lets the eye compare rows; the bar itself is the 5 dp hairline height. The row
- * is one accessibility node reading "Apprentice: 183", never the label and the number separately.
+ * The columns a bar row reserves at 100 % text, in dp: the label, the count, and the note after it.
+ * A row scales all three by the reader's text size, so a count never clips once the type is enlarged,
+ * and a caller hands the same bases to every row of one list — a wider count for a list of durations,
+ * a narrower label for a list of two-character level names — so all its tracks start and end together.
+ */
+const BAR_ROW_LABEL_WIDTH = 56;
+const BAR_ROW_COUNT_WIDTH = 34;
+const BAR_ROW_NOTE_WIDTH = 56;
+
+/**
+ * One row of a bar list: a label column, a thin bar, and a count column, with 10 dp between them. The
+ * columns are the sizes a list hands to every one of its rows, so all its bars start and end on the
+ * same two lines — which is what lets the eye compare them — and the bar itself is the 5 dp hairline
+ * height. The row is one accessibility node reading "Apprentice: 183", never the label and the number
+ * separately.
+ *
+ * `muted` is for the one value in a list that is not being compared — the level still being lived —
+ * and `note` is the word that says why ("so far"); the row is then read in the quiet ink, so it never
+ * looks like a finished measurement beside the others. `spoken` replaces the label for a screen
+ * reader when the drawn one is an abbreviation ("L18" against "Level 18"). `labelWidth` and
+ * `countWidth` are a list's own column bases, at 100 % text.
  */
 export function BarRow({
   label,
   count,
   share,
   color,
+  muted = false,
+  note,
+  spoken,
+  labelWidth = BAR_ROW_LABEL_WIDTH,
+  countWidth = BAR_ROW_COUNT_WIDTH,
 }: {
   label: string;
   count: string;
   share: number;
   color: string;
+  muted?: boolean;
+  note?: string;
+  spoken?: string;
+  labelWidth?: number;
+  countWidth?: number;
 }): React.JSX.Element {
   const {colors} = useTheme();
+  // The three fixed columns grow with the reader's text size: their contents are text, so a column
+  // that stays put would clip the moment the type did not.
+  const {fontScale} = useWindowDimensions();
+  const said = note != null && note !== "" ? ` ${note}` : "";
   return (
-    <View accessible accessibilityLabel={`${label}: ${count}`} style={styles.barRow}>
-      <Text numberOfLines={1} style={[typeScale.labelSmall, styles.barRowLabel, {color: colors.onSurfaceVariant}]}>
+    <View accessible accessibilityLabel={spoken ?? `${label}: ${count}${said}`} style={styles.barRow}>
+      <Text
+        numberOfLines={1}
+        style={[
+          typeScale.labelSmall,
+          {width: Math.ceil(labelWidth * fontScale), color: colors.onSurfaceVariant},
+        ]}
+      >
         {label}
       </Text>
       <View style={styles.barRowTrack}>
         <InlineBar share={share} color={color} height={5} />
       </View>
-      <Text style={[typeScale.labelSmall, styles.barRowCount, {color: colors.onSurface}]}>{count}</Text>
-    </View>
-  );
-}
-
-/**
- * The column chart: one column per bucket of a series — a day of study, an hour of the coming day's
- * schedule — standing on a shared baseline. A bucket the source answered is a column whose height is
- * its share of the series' busiest bucket; a bucket it answered zero for is a 2 dp stub, so an honest
- * zero is visibly not the same as an empty bucket; a `null` bucket draws no column at all. That last
- * distinction is the point of the chart — a missing reading must never be painted as a zero, so the
- * column exists only when a number does.
- *
- * `height` is both the axis and the drawing height: the study-activity week is the approved 86 dp,
- * and a section that wants a shorter chart — the Ahead schedule — passes its own number rather than
- * letting a tall chart be scaled down, which would blur its 2 dp stub into the baseline. The
- * component is deliberately unit-agnostic, so the spoken label is the bucket and its count and never
- * names a unit the caller did not: the same chart carries Anki's cards and WaniKani's scheduled
- * reviews, and those are two different things.
- *
- * There is no animation and no enclosing surface: the design's motion budget belongs to the screen,
- * and a chart that springs on every re-read would compete with it. Each column is one accessibility
- * node, spoken as its bucket and count, or as "no reading" when the number is missing.
- */
-export function ColumnBars({
-  points,
-  height = DEFAULT_COLUMN_HEIGHT,
-}: {
-  points: {label: string; value: number | null}[];
-  height?: number;
-}): React.JSX.Element {
-  const {colors} = useTheme();
-  // The busiest bucket sets the axis. A series with nothing positive leaves `max` at 0, and then
-  // every counted bucket falls back to the minimum stub rather than dividing by zero. The same 2 dp
-  // floor applies to a positive bucket too small to round to a pixel: a bucket the source answered
-  // with a one must still be a visible mark, and never indistinguishable from one it could not
-  // answer at all.
-  const max = points.reduce(
-    (top, point) => (point.value != null && point.value > top ? point.value : top),
-    0,
-  );
-  const columnHeight = (value: number): number =>
-    max <= 0 ? MIN_BAR_HEIGHT : Math.max(MIN_BAR_HEIGHT, Math.round((value / max) * height));
-  return (
-    <View>
-      <View style={[styles.columnChart, {height, borderBottomColor: colors.outlineVariant}]}>
-        {points.map((point, index) => (
-          <View
-            key={index}
-            accessible
-            accessibilityLabel={
-              point.value == null ? `${point.label}: no reading` : `${point.label}: ${point.value}`
-            }
-            style={styles.columnChartSlot}
-          >
-            {point.value == null ? null : (
-              <View
-                style={[
-                  styles.columnChartBar,
-                  {height: columnHeight(point.value), backgroundColor: colors.accent},
-                ]}
-              />
-            )}
-          </View>
-        ))}
-      </View>
-      <View style={styles.columnChartLabels}>
-        {points.map((point, index) => (
-          <Text key={index} style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>
-            {point.label}
-          </Text>
-        ))}
-      </View>
+      <Text
+        numberOfLines={1}
+        style={[
+          typeScale.labelSmall,
+          styles.barRowCount,
+          {
+            width: Math.ceil(countWidth * fontScale),
+            color: muted ? colors.onSurfaceVariant : colors.onSurface,
+          },
+        ]}
+      >
+        {count}
+      </Text>
+      {note == null ? null : (
+        <Text
+          numberOfLines={1}
+          style={[
+            typeScale.labelSmall,
+            {
+              width: Math.ceil(BAR_ROW_NOTE_WIDTH * fontScale),
+              color: colors.onSurfaceVariant,
+            },
+          ]}
+        >
+          {note}
+        </Text>
+      )}
     </View>
   );
 }
@@ -655,21 +643,42 @@ export function Heatmap({columns}: {columns: (HeatmapCell | null)[][]}): React.J
 }
 
 /**
- * The counts under a distribution bar: each item is its figure over its label, and the row wraps when
+ * One part of a distribution: the segment a bar sizes by its count, and the row the legend states
+ * under it. The two are the same object on purpose — the bar reads its count and its tone, the legend
+ * reads its figure and its name — so the key under a bar can never drift from the segment it explains.
+ */
+export interface DistributionPart {
+  key: string;
+  /** The name the legend sets under its figure ("Guru"). */
+  label: string;
+  /** The longer name the bar's spoken summary uses when the legend's own is an abbreviation. */
+  spoken?: string;
+  /** The count the bar sizes the segment by. */
+  count: number;
+  /** That count as the legend states it, formatted by the screen. */
+  value: string;
+  /** The tone of the segment: the reader's accent, never a hue of the page's own. */
+  color: string;
+  /** The strength of that accent, which the swatch repeats exactly. */
+  opacity?: number;
+}
+
+/**
+ * The counts under a distribution bar: each item is its figure over its key, and the row wraps when
  * the type is scaled up rather than letting one column crush another. The row spreads across the
- * width the bar above it spans, so a label sits under the segment it names instead of in a list of
- * its own; when the items wrap, the last line keeps the same spread and reads as a continuation.
+ * width the bar above it spans, so a key sits under the segment it names instead of in a list of its
+ * own; when the items wrap, the last line keeps the same spread and reads as a continuation.
  *
- * A count is a figure and not prose: it is set at the value size in the strongest ink, with its label
+ * Every key leads with a small square in its segment's own tone, strength and backing — a category the
+ * bar drew, and one it dropped for a zero count, alike — so a key never has to be matched to a bar by
+ * position.
+ *
+ * A count is a figure and not prose: it is set at the value size in the strongest ink, with its name
  * beneath it at the section-meta size in the quiet ink — the same two-step the metrics use, at one
  * scale down. Each item is one accessibility node reading "312 New", so a screen reader never has to
  * pair a floating number with the word under it.
  */
-export function CountLegend({
-  items,
-}: {
-  items: {key: string; label: string; value: string}[];
-}): React.JSX.Element {
+export function CountLegend({items}: {items: DistributionPart[]}): React.JSX.Element {
   const {colors} = useTheme();
   return (
     <View style={styles.countLegend}>
@@ -681,12 +690,26 @@ export function CountLegend({
           style={styles.countLegendItem}
         >
           <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{item.value}</Text>
-          <Text
-            numberOfLines={1}
-            style={[typeScale.labelSmall, styles.countLegendLabel, {color: colors.onSurfaceVariant}]}
-          >
-            {item.label}
-          </Text>
+          <View style={styles.countLegendKey}>
+            {/* The swatch repeats the segment's fill on the segment's own backing — the bar draws its
+                accent over the hairline track — so the two composite the same shade, black accents
+                included. */}
+            <View style={[styles.countLegendSwatch, {backgroundColor: colors.outlineVariant}]}>
+              <View
+                style={[
+                  styles.countLegendSwatchFill,
+                  {backgroundColor: item.color},
+                  item.opacity != null && {opacity: item.opacity},
+                ]}
+              />
+            </View>
+            <Text
+              numberOfLines={2}
+              style={[typeScale.labelSmall, styles.countLegendLabel, {color: colors.onSurfaceVariant}]}
+            >
+              {item.label}
+            </Text>
+          </View>
         </View>
       ))}
     </View>
@@ -696,19 +719,17 @@ export function CountLegend({
 /**
  * One proportional bar for parts of a whole: the segments take width by their counts and the
  * hairline-coloured remainder shows what is left, all in a single 9 dp capsule. The bar carries the
- * whole statement for a screen reader — every segment named and counted — and the visible legend
- * belongs to the caller, because the two charts that use this bar label their parts differently
- * (Anki's four card states against WaniKani's five SRS stages). Zero-count segments are dropped from
- * the bar: they would be invisible anyway, and the legend beside it still says "Guru 0".
+ * whole statement for a screen reader — every segment named and counted — and the visible key belongs
+ * to the caller, which hands the same parts to [CountLegend] so the bar and its key are one array
+ * read twice. Zero-count segments are dropped from the bar: they would be invisible anyway, and the
+ * legend beside it still says "Guru 0".
  */
-export function StackedBar({
-  segments,
-}: {
-  segments: {key: string; label: string; count: number; color: string; opacity?: number}[];
-}): React.JSX.Element {
+export function StackedBar({segments}: {segments: DistributionPart[]}): React.JSX.Element {
   const {colors} = useTheme();
   const drawn = segments.filter((segment) => segment.count > 0);
-  const summary = segments.map((segment) => `${segment.label} ${segment.count}`).join(", ");
+  const summary = segments
+    .map((segment) => `${segment.spoken ?? segment.label} ${segment.count}`)
+    .join(", ");
   return (
     <View>
       <View
@@ -840,30 +861,10 @@ const styles = StyleSheet.create({
   inlineBar: {width: "100%", borderRadius: 8, overflow: "hidden"},
   inlineBarFill: {height: "100%"},
   barRow: {flexDirection: "row", alignItems: "center", gap: 10},
-  // The label column is only as wide as the words a row carries ("Reading", "Meaning"): the track is
-  // the point of the row, and every dp the label does not need is a dp the bar gets. At the page's
-  // half-width the three columns leave the track about 70 dp, which is what the design measures.
-  barRowLabel: {width: 56},
   barRowTrack: {flex: 1, minWidth: 0},
-  barRowCount: {width: 34, textAlign: "right", fontWeight: "700"},
-  // The chart's own height is set inline, because `height` is the caller's axis: a fixed column lane
-  // and an 18 dp bar do not change with it.
-  columnChart: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: spacing.s,
-    borderBottomWidth: 1,
-  },
-  // Full height so a missing bucket still reserves its lane, and so every lane is an 18 dp column the
-  // screen reader can reach rather than a zero-height sliver.
-  columnChartSlot: {width: 18, height: "100%", justifyContent: "flex-end"},
-  columnChartBar: {width: 18, borderTopLeftRadius: 5, borderTopRightRadius: 5, opacity: 0.7},
-  columnChartLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 7,
-  },
+  // The count is the figure of the row, so it is set in the strongest ink and right-aligned against
+  // its column; its width, like the label's and the note's, is set inline at the reader's text size.
+  barRowCount: {textAlign: "right", fontWeight: "700"},
   // Twelve columns of seven rows. The gaps are the size of the hole between two cells, and the rows
   // share the grid's width because the cells flex — that is what keeps the grid inside a 320 dp
   // section without a scroll or a second layout for narrow screens.
@@ -911,8 +912,24 @@ const styles = StyleSheet.create({
     columnGap: spacing.m,
     rowGap: spacing.s,
   },
-  countLegendItem: {minWidth: 0},
-  countLegendLabel: {marginTop: 2},
+  countLegendItem: {minWidth: 0, flexShrink: 1},
+  // The swatch sits on the label's first line rather than centred on the block, so a name that wraps
+  // to a second line still has its key beside the word it starts with. The 4 dp is half of the 16 dp
+  // label line less the 8 dp square, which is what puts the two on one optical line.
+  countLegendKey: {flexDirection: "row", alignItems: "flex-start", gap: 5, marginTop: 2},
+  countLegendSwatch: {
+    width: DISTRIBUTION_SWATCH_SIZE,
+    height: DISTRIBUTION_SWATCH_SIZE,
+    borderRadius: 2,
+    marginTop: 4,
+    // The backing is the bar's own track tone and the fill inside is clipped to it, so the two draw
+    // the same composite rather than one over paper and one over a track.
+    overflow: "hidden",
+  },
+  countLegendSwatchFill: {flex: 1},
+  // A name may wrap rather than truncate: "Apprentice 1-4" cut to "Appren…" would be a key that does
+  // not name anything, and the row has already spread itself around whatever space is left.
+  countLegendLabel: {flexShrink: 1},
   stackedBar: {height: 9, flexDirection: "row", borderRadius: 9, overflow: "hidden"},
   stackedSegment: {height: "100%"},
   unavailable: {borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10},

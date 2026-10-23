@@ -28,7 +28,6 @@ import {
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
 import {FieldLabel, TextField} from "../settings/settings-components";
 import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
 import {spacing, typeScale} from "../tokens";
@@ -73,10 +72,8 @@ export function WaniKaniConnect({
       .then((outcome: Outcome) => {
         switch (outcome.status) {
           case "connected":
-            // A different account may be behind this token, so anything the dashboard still holds is
-            // dropped before it can be shown for the new one. The screen itself is replaced by the
-            // queue the store has already entered.
-            resetWaniKaniStats();
+            // The store has already forgotten the old account and read the new one — see
+            // `connectWaniKani` — so there is nothing left to drop here; only the secret goes.
             setToken("");
             return;
           case "invalidToken":

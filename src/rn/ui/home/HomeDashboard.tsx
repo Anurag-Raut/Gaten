@@ -98,7 +98,7 @@ function StreakBanner({
           </Text>
         </View>
         <View style={styles.streakTotal}>
-          <Text style={[styles.streakCount, {color: ink}]}>{streakDaysLabel}</Text>
+          <Text style={[styles.streakCount, {color: colors.accent}]}>{streakDaysLabel}</Text>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[typeScale.bodySmall, styles.streakTotalLabel, {color: muted}]}>days</Text>
         </View>
       </View>
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
   streakCopy: {flex: 1, minWidth: 0},
   streakTitle: {flexShrink: 1},
   streakTotal: {minWidth: 88, alignItems: "flex-end", justifyContent: "center", gap: 3},
-  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "500"},
+  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "700"},
   streakTotalLabel: {textAlign: "right"},
   weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 20},
   weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: spacing.s},

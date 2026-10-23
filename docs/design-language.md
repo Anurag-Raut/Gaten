@@ -23,28 +23,35 @@ The original supplied v1 document remains inside the frozen unified-hubs referen
 - This audit read source and updated documentation only. It did not launch the app, capture new
   screenshots, run a build or execute tests. The checks at the end of this file remain historical.
 
-## Analytics single page (22 October 2026)
+## Analytics single page (22 October 2026; last two sections revised 23 October)
 
 - Rebuilt the Analytics tab from the final approved package: **one page, no source switcher**, with
-  `Anki → WaniKani → Study activity → Recall → Ahead` in that order and every card, panel, tile and
-  raised chart removed. Sections are hairlines, whitespace and type size. The geometry, the
+  `Anki → WaniKani → Study activity → Accuracy → Level progress` in that order and every card, panel,
+  tile and raised chart removed. Sections are hairlines, whitespace and type size. The geometry, the
   per-element colour roles and the state model are in [analytics/PLAN.md](analytics/PLAN.md).
 - **Colour is accent-only.** No analytical element uses `success`, brand pink or brand blue: the
-  heatmap levels, the Anki distribution, the SRS distribution, the two rings and the recall tracks are
-  the reader's accent at one of a few strengths. A green accent chosen by the reader still flows
+  heatmap levels, the Anki distribution, the SRS distribution, the two rings and the accuracy tracks
+  are the reader's accent at one of a few strengths. A green accent chosen by the reader still flows
   through as the accent.
 - Study activity reads twelve weeks of AnkiDroid study days (84 exact-day searches, batched twelve to
   a bridge call, cached five minutes). A day the provider refuses is an outlined cell, a confirmed
   zero is filled in the hairline tone, and the two figures above the grid count exactly the days the
   grid draws.
-- Recall is new: `GET /review_statistics` is aggregated into cumulative reading and meaning accuracy
-  (counts summed, never percentages averaged) plus the three worst subjects with at least five
-  answers, with one `/subjects` read for their characters. The read degrades to an unavailable line
-  without disturbing the level, queue or SRS numbers beside it.
+- **Accuracy** is cumulative: `GET /review_statistics` is aggregated into one weighted
+  reading-and-meaning percentage (counts summed, never percentages averaged), shown with the
+  per-kind figures as a three-column `By subject` group. The read also carries the account's
+  worst-scoring subjects; the page draws no list of them. The read degrades to an unavailable line
+  without disturbing the level, queue or SRS numbers beside it. **Level progress** carries the level history instead of the 24-hour forecast:
+  `GET /level_progressions` gives the level the reader is on with its elapsed time, the average
+  completed duration and the five most recent durations, from the latest non-abandoned attempt per
+  level with `passed_at − started_at` as the duration (`completed_at` is the burn, not the pass).
 - Verified on a debug build on an Android 14 emulator at 392 dp: every accent in light and dark,
   320/340/430 dp, 130 % and 160 % text, the Anki-unavailable state and the refresh action. The
   TypeScript check, the node test suite (70 tests) and the Kotlin unit suite (15 tests) pass. Captures
-  are in `docs/analytics/screenshots/`.
+  are in `docs/analytics/screenshots/`: `page-*`, `accents-*`, `width-*` and `text-*` show the shipped
+  22 October page, and `accuracy-level-2026-10-23-verified-{light,dark}-{top,details}` show the two new
+  sections against a real WaniKani account at 393 dp and font scale 1.0, on a device whose AnkiDroid
+  collection is empty. Neither new section is captured at 320/340/430 dp or at 130 %/160 % text.
 - The TalkBack pass, the reduced-motion preference and the WaniKani rate-limited / offline-cached
   states have not been exercised in this pass.
 

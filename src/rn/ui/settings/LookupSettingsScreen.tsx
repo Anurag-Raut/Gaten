@@ -37,6 +37,17 @@ const TRIGGER_LOOKUP_ACTION = "com.gaten.app.action.TRIGGER_LOOKUP";
 /** The API that can be asked to put the tile in Quick Settings in place (requestAddTileService). */
 const ADD_TILE_API = 33;
 
+const HELP_PARAGRAPHS = [
+  "Circle text or tap a Japanese line. A missed tap keeps lookup open.",
+  "Drag the floating button to move it. The button appears while lookup mode is on.",
+  "The Quick Settings tile can be switched off here and removed in Android's Quick Settings editor.",
+  "Map a key to the broadcast action shown in Key Mapper.",
+  "Notification access lets Gaten control media sessions. Without it, some players may ignore media keys. Gaten resumes playback after a normal lookup dismissal; media stays paused after an interruption.",
+  "Japanese recognition and dictionary lookup run on this device. Manga OCR is recommended for manga pages and handles stylized lettering and varied layouts that Google ML Kit may miss. Google ML Kit is an alternative for standard Japanese text. The Manga OCR model is included with Gaten, prepared on first lookup, and works offline.",
+  "WaniKani is an optional online reference. Its content is not included in Anki exports.",
+  "With AnkiDroid access, Add to Anki writes a card. Without access, Send to AnkiDroid opens its add screen. Card layout and deck settings live in Anki cards.",
+];
+
 export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   const {request: requestLookupMode, dialog: disclosureDialog} = useLookupModeRequest();
 
@@ -208,7 +219,7 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   };
 
   return (
-    <SettingsPageScaffold title="Screen lookup" onClose={onClose}>
+    <SettingsPageScaffold title="Screen lookup" onClose={onClose} help={HELP_PARAGRAPHS}>
       <View style={{marginTop: spacing.s}}>
         <SettingsTile>
           <SwitchRow

@@ -33,6 +33,8 @@ enum class ThemeMode {
  *
  * They are read by whoever composes a theme — the activity and the accessibility service's overlay —
  * rather than pushed to them, so a change reaches the next overlay without the service being told.
+ * The one consumer that is pushed to is [LauncherIcon], whose launcher entry is a state that has to
+ * be written when the choice changes rather than read from here later.
  */
 object ThemePreferences {
     private const val PREFS_NAME = "gaten_settings"
@@ -47,8 +49,10 @@ object ThemePreferences {
             else -> ThemeMode.System
         }
 
+    /** Stores the mode immediately and queues the matching launcher icon without blocking the UI. */
     fun setThemeMode(context: Context, mode: ThemeMode) {
         prefs(context).edit().putString(KEY_THEME_MODE, mode.name).apply()
+        LauncherIcon.sync(context)
     }
 
     /** The accent, defaulting to the app's own indigo for an unset or unrecognised value. */

@@ -80,20 +80,10 @@ const HEATMAP_ROWS = 7;
 const FALLBACK_BANDS = [4, 19, 49];
 
 /**
- * The eight bars the "Ahead" section draws, and the hours of WaniKani's summary each one covers.
- * The ranges tile hours 0–24 with no gap and no overlap, so a review lands in exactly one bar and
- * the bars add up to the total the header states.
+ * How many level rows the Level progress chart draws: the latest five levels the account has a
+ * measurable run at, which is a screenful of comparison rather than a scroll of history.
  */
-const AHEAD_BUCKETS: {label: string; firstHour: number; lastHour: number}[] = [
-  {label: "Now", firstHour: 0, lastHour: 0},
-  {label: "2h", firstHour: 1, lastHour: 2},
-  {label: "4h", firstHour: 3, lastHour: 4},
-  {label: "8h", firstHour: 5, lastHour: 8},
-  {label: "12h", firstHour: 9, lastHour: 12},
-  {label: "16h", firstHour: 13, lastHour: 16},
-  {label: "20h", firstHour: 17, lastHour: 20},
-  {label: "24h", firstHour: 21, lastHour: 24},
-];
+const LEVEL_ROWS = 5;
 
 /**
  * A count as the reader sees it: grouped by thousands, or a dash when the source did not answer.
@@ -345,33 +335,248 @@ export function freshnessLabel(at: number | null, now: number): string | null {
   return `Updated on ${when.getDate()} ${MONTH_LABELS[when.getMonth()]}`;
 }
 
-/**
- * WaniKani's hourly review counts as the eight bars the "Ahead" section draws, in the design's own
- * order. Membership is by hour offset and the ranges tile the day without a gap, so the eight values
- * add up to the same total the section's own figure states. An empty schedule returns the eight
- * labels with null values rather than zeros: a schedule nobody answered is not a quiet one.
- */
-export function aheadBuckets(buckets: {count: number}[]): {label: string; value: number | null}[] {
-  if (buckets.length === 0) {
-    return AHEAD_BUCKETS.map((bucket) => ({label: bucket.label, value: null}));
-  }
-  return AHEAD_BUCKETS.map((bucket) => ({
-    label: bucket.label,
-    value: buckets.reduce(
-      (total, hour, index) =>
-        index >= bucket.firstHour && index <= bucket.lastHour ? total + hour.count : total,
-      0
-    ),
-  }));
+/** One side of WaniKani's answer record: how many answers were right, out of how many were asked. */
+export interface AnswerCounts {
+  correct: number;
+  total: number;
+}
+
+/** An accuracy as the page draws it: the share a bar fills to, and the percentage stated beside it. */
+export interface Accuracy {
+  /** 0 through 1, or null when there is no accuracy to draw. */
+  share: number | null;
+  /** The percentage, or a dash when there is none. */
+  label: string;
 }
 
 /**
- * Every review the schedule named, or null when it named none at all. A schedule that answered with
- * zeroes is a real zero and is stated as one; a schedule that did not answer shows a dash instead.
+ * One side's accuracy — the readings, or the meanings. A side the account was never asked, or one the
+ * source reported with no answers at all, is a dash rather than a zero percent: nothing was answered,
+ * so nothing was got wrong either, and "0%" would be a claim about answers that do not exist.
  */
-export function aheadTotal(buckets: {count: number}[]): number | null {
-  if (buckets.length === 0) {
+export function accuracyOf(side: AnswerCounts | null): Accuracy {
+  if (side == null || side.total <= 0) {
+    return {share: null, label: BLANK};
+  }
+  return {share: side.correct / side.total, label: `${Math.round((side.correct / side.total) * 100)}%`};
+}
+
+/** Every answer behind WaniKani's accuracy record, and the accuracy the two sides add up to. */
+export interface OverallAccuracy extends Accuracy {
+  correct: number;
+  total: number;
+  /** The answers that were not right, which is what the page states under the headline. */
+  wrong: number;
+}
+
+/**
+ * The readings and the meanings added together, weighted by the answers each side was taken over:
+ * the accuracy the section leads with. Summing the counts rather than averaging the two percentages
+ * is the point — a side with ten answers must not weigh as much as a side with ten thousand — and it
+ * is why this is one accuracy and not two. `null` when the record itself could not be read at all,
+ * which the section states instead of a figure; a record whose sides were both unasked is a real
+ * zero answers, and its percentage is a dash.
+ */
+export function overallAccuracy(
+  recall: {reading: AnswerCounts | null; meaning: AnswerCounts | null} | null
+): OverallAccuracy | null {
+  if (recall == null) {
     return null;
   }
-  return buckets.reduce((total, hour) => total + hour.count, 0);
+  const sides = [recall.reading, recall.meaning].filter((side): side is AnswerCounts => side != null);
+  const correct = sides.reduce((sum, side) => sum + side.correct, 0);
+  const total = sides.reduce((sum, side) => sum + side.total, 0);
+  const {share, label} = accuracyOf({correct, total});
+  return {correct, total, wrong: total - correct, share, label};
+}
+
+/** One subject kind's cumulative answers: radicals, kanji or vocabulary, including kana vocabulary. */
+export interface AccuracySubject {
+  key: string;
+  label: string;
+  correct: number;
+  total: number;
+}
+
+/** One subject kind's accuracy, as the compact "By subject" line states it. */
+export interface SubjectAccuracy {
+  key: string;
+  /** The subject kind's own name ("Kanji"). */
+  name: string;
+  /** Its accuracy as a percentage, or a dash when it has never been asked. */
+  value: string;
+}
+
+/**
+ * The per-subject accuracy line, in the order the read gave its kinds. A read that did not answer the
+ * breakdown at all — an older cache — returns nothing, and the line is left out rather than drawn
+ * empty; a kind the account was never asked keeps its place with a dash, because "no answers" and
+ * "not measured" are different facts and only one of them is about that kind.
+ */
+export function subjectAccuracies(subjects: AccuracySubject[] | null): SubjectAccuracy[] {
+  if (subjects == null) {
+    return [];
+  }
+  return subjects.map((subject) => ({
+    key: subject.key,
+    name: subject.label,
+    value: accuracyOf({correct: subject.correct, total: subject.total}).label,
+  }));
+}
+
+/** One run at one level, as WaniKani's level progressions report it, in epoch milliseconds. */
+export interface LevelAttempt {
+  id: number;
+  level: number;
+  startedAt: number | null;
+  passedAt: number | null;
+  abandonedAt: number | null;
+}
+
+/** One level's run as the chart draws it: how long it took, and whether it is still running. */
+export interface LevelDuration {
+  level: number;
+  /** Fractional days, which the row states to one decimal. */
+  days: number;
+  /** True for the level the snapshot says the account is on and has not passed yet. */
+  current: boolean;
+}
+
+/**
+ * The attempt at each level the page measures: the latest one that was not abandoned. A reset abandons
+ * the run it interrupts and starts the same level again, so one level can hold several attempts, and
+ * only the newest live one is the run the reader actually spent their days on — counting the
+ * abandoned ones beside it would count those days twice and report a level that took twice as long.
+ */
+function liveAttempts(history: LevelAttempt[]): Map<number, LevelAttempt> {
+  const chosen = new Map<number, LevelAttempt>();
+  for (const attempt of history) {
+    if (attempt.abandonedAt != null) {
+      continue;
+    }
+    const held = chosen.get(attempt.level);
+    // Latest by start time, and by id when two attempts carry the same one, so the order is total.
+    const mine = attempt.startedAt ?? -Infinity;
+    const theirs = held?.startedAt ?? -Infinity;
+    if (held == null || (mine === theirs ? attempt.id > held.id : mine > theirs)) {
+      chosen.set(attempt.level, attempt);
+    }
+  }
+  return chosen;
+}
+
+/**
+ * How long one attempt took, in fractional days, or null when the record cannot state it. An attempt
+ * that never started, a run that ended before it began, and a run dated in the future — or not dated
+ * with a number at all — are records the page leaves out rather than measures wrongly. A run with no
+ * pass time has not finished, so only the level the snapshot names is measured against `now`: an older
+ * unfinished run is history the account moved past, and there is no end to measure it to.
+ */
+function attemptDays(attempt: LevelAttempt, now: number, currentLevel: number): number | null {
+  const {startedAt, passedAt} = attempt;
+  if (startedAt == null || !Number.isFinite(startedAt) || startedAt > now) {
+    return null;
+  }
+  if (passedAt == null) {
+    return attempt.level === currentLevel ? (now - startedAt) / DAY_MS : null;
+  }
+  if (!Number.isFinite(passedAt) || passedAt > now || passedAt < startedAt) {
+    return null;
+  }
+  return (passedAt - startedAt) / DAY_MS;
+}
+
+/**
+ * The duration rows the Level progress chart draws: the latest levels the account has a measurable run
+ * at, oldest first, so the chart reads down the way the levels were lived. The level the snapshot says
+ * the account is on is `current` while it is unpassed — the row is then a run so far rather than a
+ * finished one — and levels above it are left out, because a snapshot's level is the frontier.
+ *
+ * A level whose only runs were abandoned has no row: those days were unspent, and a bar drawn from
+ * them would say a level took time it did not.
+ */
+export function levelDurations(
+  history: LevelAttempt[],
+  now: number,
+  currentLevel: number
+): LevelDuration[] {
+  const rows: LevelDuration[] = [];
+  for (const attempt of liveAttempts(history).values()) {
+    if (attempt.level > currentLevel) {
+      continue;
+    }
+    const days = attemptDays(attempt, now, currentLevel);
+    if (days == null) {
+      continue;
+    }
+    rows.push({
+      level: attempt.level,
+      days,
+      current: attempt.level === currentLevel && attempt.passedAt == null,
+    });
+  }
+  rows.sort((left, right) => left.level - right.level);
+  return rows.slice(-LEVEL_ROWS);
+}
+
+/**
+ * How long the account has been on [currentLevel] so far, in fractional days, or null when that
+ * cannot be stated — no run recorded at that level, a start date the read did not carry, or a run
+ * whose start is dated in the future. Only the level the snapshot names is answered for, and only
+ * while it is unpassed: a finished level's days are its duration, not time spent waiting.
+ */
+export function daysOnLevel(
+  history: LevelAttempt[],
+  now: number,
+  currentLevel: number
+): number | null {
+  const attempt = liveAttempts(history).get(currentLevel);
+  if (attempt == null || attempt.passedAt != null) {
+    return null;
+  }
+  return attemptDays(attempt, now, currentLevel);
+}
+
+/**
+ * The mean of the finished levels' durations, in fractional days, or null when no level has a
+ * measurable run. The level the snapshot names is left out even when its run has a pass time — the
+ * average is what a level costs, and the level the account is standing on is the one run whose cost
+ * is not settled yet — and so is anything above it, which a snapshot's level makes impossible and a
+ * stale history could still carry.
+ */
+export function averageLevelDays(
+  history: LevelAttempt[],
+  now: number,
+  currentLevel: number
+): number | null {
+  const days: number[] = [];
+  for (const attempt of liveAttempts(history).values()) {
+    if (attempt.level >= currentLevel || attempt.passedAt == null) {
+      continue;
+    }
+    const measured = attemptDays(attempt, now, currentLevel);
+    if (measured != null) {
+      days.push(measured);
+    }
+  }
+  if (days.length === 0) {
+    return null;
+  }
+  return days.reduce((sum, day) => sum + day, 0) / days.length;
+}
+
+/**
+ * Days on a level as the headline says them: whole days, so "5 days on this level" reads as time
+ * elapsed rather than as a measurement — the chart and the average are where the tenths belong. Null
+ * when the start is unknown, because a sentence with a hole in it is worse than no sentence at all.
+ */
+export function daysOnLevelLabel(days: number | null): string | null {
+  if (days == null) {
+    return null;
+  }
+  const whole = Math.floor(days);
+  if (whole <= 0) {
+    return "Less than a day on this level";
+  }
+  return `${whole} ${whole === 1 ? "day" : "days"} on this level`;
 }

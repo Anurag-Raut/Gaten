@@ -33,5 +33,5 @@ class GatenBridgePackage : ReactPackage {
         )
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
-        listOf(GatenCardWebViewManager())
+        listOf(GatenCardWebViewManager(), GatenThemeTransitionManager())
 }

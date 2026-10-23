@@ -13,12 +13,16 @@
     <!-- General -->
     <string name="btn_cancel">Cancel</string>
     <string name="btn_close">Close</string>
-    <string name="toast_accessibility_settings_error">Could not open Accessibility Settings</string>
+    <string name="toast_accessibility_settings_error">Could not open accessibility settings</string>
 
-    <!-- Toast Messages -->
-    <string name="toast_enable_accessibility_tile">Please enable the Gaten Accessibility Service</string>
-    <string name="toast_tile_service_not_ready">Gaten accessibility service is not ready. Try again.</string>
-    <string name="toast_tile_collapse_failed">Could not close Quick Settings. Use another lookup trigger.</string>
+    <!--
+      Toast Messages. A failure and its way out are two short lines rather than one long sentence,
+      and each real failure keeps its own message: a service that is not ready, a shade that would
+      not close and a permission screen that would not open are three different things to do next.
+    -->
+    <string name="toast_turn_on_lookup_mode">Turn on lookup mode in Gaten</string>
+    <string name="toast_tile_service_not_ready">Lookup service is not ready\nTry again</string>
+    <string name="toast_tile_collapse_failed">Could not close Quick Settings\nUse the floating button or a key</string>
 
     <!-- Accessibility Disclosure Dialog -->
     <string name="title_accessibility_permission">Grant Accessibility Permission</string>
@@ -28,8 +32,19 @@
     <string name="body_accessibility_permission">Gaten uses the accessibility service to capture a screenshot when you start a lookup and detect interruptions so the lookup closes automatically. The screenshot never leaves your device — Japanese text is recognised and looked up entirely offline. The service does not read notification messages or type for you.\n\nOptional, and off until you ask: WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character\'s page. With a token connected, Gaten also reads your own study progress from wanikani.com - the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages - and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device.</string>
     <string name="label_accessibility_agree">I understand how this permission will be used and agree to proceed</string>
 
-    <!-- Quick Settings Tile -->
-    <string name="tile_label">Gaten</string>
-    <string name="qs_tile_label">Gaten</string>
-    <string name="toast_notification_settings_error">Could not open Notification Access settings</string>
+    <!--
+      Quick Settings Tile. The tile is named for what it does, not for the app: Android attributes
+      it to Gaten by itself. Its label is the same string the in-app page uses for the surface.
+    -->
+    <string name="tile_label">Screen lookup</string>
+    <string name="qs_tile_label">Screen lookup</string>
+    <!-- The tile's subtitle, on versions that show one: whether it is available and ready. -->
+    <string name="tile_subtitle_ready">Ready</string>
+    <string name="tile_subtitle_setup_needed">Setup needed</string>
+    <string name="tile_subtitle_disabled">Disabled in Gaten</string>
+    <string name="toast_notification_settings_error">Could not open notification access settings</string>
+
+    <!-- The floating lookup bubble's own window; it has no composition to read strings from. -->
+    <string name="bubble_lookup_label">Screen lookup</string>
+    <string name="bubble_lookup_hint">Tap to look up; drag to move</string>
 </resources>

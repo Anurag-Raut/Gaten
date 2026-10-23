@@ -12,7 +12,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.provider.Settings
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -22,9 +21,9 @@ import com.gaten.app.trigger.TriggerPreferences
 
 /**
  * Quick Settings tile: asks the connected accessibility service to dismiss the shade and start a
- * lookup, or opens accessibility settings when the service is not enabled. Its state mirrors
- * whether the service is enabled, and is unavailable while the tile is switched off in Gaten's
- * settings.
+ * lookup while lookup mode is on, and opens Gaten's own Screen lookup page while it is off so the
+ * consent disclosure comes before Android's accessibility list. The tile can also be switched off
+ * in Gaten's settings; while off it is unavailable and ignores taps.
  */
 class LookupTileService : TileService() {
 
@@ -63,20 +62,36 @@ class LookupTileService : TileService() {
             // temporary activity that can expose the launcher while the shade is collapsing.
             GatenAccessibilityService.triggerCaptureFromTile()
         } else {
-            // Guide user to enable accessibility
-            Toast.makeText(this, getString(R.string.toast_enable_accessibility_tile), Toast.LENGTH_LONG).show()
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val pendingIntent = PendingIntent.getActivity(
-                    this, 0, intent, PendingIntent.FLAG_IMMUTABLE
-                )
-                startActivityAndCollapse(pendingIntent)
-            } else {
-                @Suppress("DEPRECATION")
-                startActivityAndCollapse(intent)
-            }
+            // Lookup mode is off, so this opens Gaten's own page for it rather than Android's
+            // accessibility list: that page is where lookup mode is turned on, and the consent
+            // disclosure before the system list is raised from there. Nothing on this route
+            // captures a screen, and coming back from it only re-reads whether the service is on.
+            Toast.makeText(
+                this,
+                getString(R.string.toast_turn_on_lookup_mode),
+                Toast.LENGTH_LONG
+            ).show()
+            openLookupSettings()
+        }
+    }
+
+    /**
+     * Gaten's Screen lookup page, brought up over a collapsing shade. From Android 14 that call
+     * only takes a [PendingIntent]; before it, the plain intent is the spelling it still accepts.
+     */
+    private fun openLookupSettings() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(MainActivity.EXTRA_SETTINGS_PAGE, SETTINGS_PAGE_LOOKUP)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val pendingIntent = PendingIntent.getActivity(
+                this, 0, intent, PendingIntent.FLAG_IMMUTABLE
+            )
+            startActivityAndCollapse(pendingIntent)
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(intent)
         }
     }
 
@@ -89,13 +104,21 @@ class LookupTileService : TileService() {
 
     private fun updateTileState() {
         val tile = qsTile ?: return
+        val serviceEnabled = isAccessibilityServiceEnabled()
 
         tile.state = when {
             !TriggerPreferences.tileEnabled(this) -> Tile.STATE_UNAVAILABLE
-            isAccessibilityServiceEnabled() -> Tile.STATE_ACTIVE
+            serviceEnabled -> Tile.STATE_ACTIVE
             else -> Tile.STATE_INACTIVE
         }
         tile.label = getString(R.string.tile_label)
+        tile.subtitle = getString(
+            when {
+                !TriggerPreferences.tileEnabled(this) -> R.string.tile_subtitle_disabled
+                serviceEnabled -> R.string.tile_subtitle_ready
+                else -> R.string.tile_subtitle_setup_needed
+            }
+        )
         tile.updateTile()
     }
 
@@ -113,5 +136,8 @@ class LookupTileService : TileService() {
 
     companion object {
         private const val TAG = "Gaten"
+
+        /** The settings route key the shell reads to open its Screen lookup page. */
+        private const val SETTINGS_PAGE_LOOKUP = "lookup"
     }
 }

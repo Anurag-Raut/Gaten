@@ -104,6 +104,8 @@ export function HomeScreen({
   };
 
   const enterSearch = useCallback(() => {
+    // A lookup overlay can add a recent search while Home stays mounted underneath it.
+    store.loadRecentSearches();
     if (!searchMode) {
       store.searchScroll.offset = 0;
       list.current?.scrollToOffset({offset: 0, animated: false});
