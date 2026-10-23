@@ -100,6 +100,14 @@ export interface WaniKaniRecall {
   reading: {correct: number; total: number} | null;
   /** The meanings, counted the same way and over the same reviews. */
   meaning: {correct: number; total: number} | null;
+  /**
+   * The same accuracy per kind of subject, always all three and always in this order: `radical`,
+   * `kanji`, `vocabulary` — with kana vocabulary counted as vocabulary, because the split only says
+   * which vocabulary is written in kana. `correct` and `total` are sums of the account's own answer
+   * counts, never averages of per-subject percentages, so a kind the account has never answered is a
+   * zero row rather than a missing one. Null only when the stored section carries no such rows.
+   */
+  bySubject: {key: string; label: string; correct: number; total: number}[] | null;
   /** The worst three subjects with a sample worth ranking, weakest first. */
   difficult: {
     subjectId: number;
@@ -138,6 +146,24 @@ export interface WaniKaniStatsSnapshot {
    * of them, and a section whose sides are null means the account has simply never been asked.
    */
   recall: WaniKaniRecall | null;
+  /**
+   * Every attempt the account has made at a level, oldest first, or null when that read could not be
+   * made at all. A level reached, reset out of and reached again is two rows — each keeps its own
+   * `id`, and the attempt the reset left behind carries `abandonedAt` — so nothing here assumes sixty
+   * rows, and an account that has never started a level's first lesson answers with an empty list
+   * rather than a null: a history of nothing is not a missing history.
+   */
+  levelHistory: {
+    /** WaniKani's own id for this attempt, which tells two attempts at one level apart. */
+    id: number;
+    level: number;
+    /** Epoch milliseconds the level's first lesson was started, or null. */
+    startedAt: number | null;
+    /** Epoch milliseconds at least 90% of the level's kanji were passed, or null. */
+    passedAt: number | null;
+    /** Epoch milliseconds the level was abandoned (a reset), or null when it was not. */
+    abandonedAt: number | null;
+  }[] | null;
   /** Epoch milliseconds when this snapshot was read from WaniKani. */
   fetchedAt: number;
 }

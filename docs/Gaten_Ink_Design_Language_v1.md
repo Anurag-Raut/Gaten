@@ -8,7 +8,7 @@
 | --- | --- |
 | Visual language | Quiet, mostly monochrome pages; flat rows, whitespace and 1 dp separators establish hierarchy. |
 | Home | Gaten heading → search → Daily streak → Anki and WaniKani rows → Recently looked up. The service rows are the study actions; there is no separate Start studying button. |
-| Analytics | One page, no source switcher: Anki → WaniKani → Study activity → Recall → Ahead, with no cards at all — hairline-separated sections, paired figures split by a single vertical rule, unboxed charts. |
+| Analytics | One page, no source switcher: Anki → WaniKani → Study activity → Accuracy → Level progress, with no cards at all — hairline-separated sections, paired figures split by a single vertical rule, unboxed charts. |
 | Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
 | Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
 | Navigation | Three bottom tabs: Home, Analytics and Settings. Review is a pushed flow, not a fourth tab. |
@@ -293,8 +293,10 @@ geometry, colour roles and states are recorded in
   (`Updated now`, `Updated 4m ago`, `Updated on 21 Oct`), and one 43 dp refresh square (radius 14 dp,
   `surfaceVariant` fill, accent glyph, ≥48 dp target) — the only chip on the page.
 - **Five sections, in this order:** `Anki` (the collection's shape), `WaniKani` (the curriculum's
-  shape), `Study activity` (a twelve-week Anki heatmap), `Recall` (cumulative accuracy and what needs
-  work), `Ahead` (the next 24 hours). The two source summaries lead — they are what the page is
+  shape), `Study activity` (a twelve-week Anki heatmap), `Accuracy` (cumulative accuracy and its
+  per-kind figures as three columns), `Level progress` (the level the reader is
+  on, with its elapsed time and the recent level durations). The two source summaries lead — they are
+  what the page is
   opened for — and the long-history chart follows them. Each names its source and scope in its own
   meta line; there is no `All / Anki / WaniKani` switcher.
 - **Sections** are separated by a 1 dp `outlineVariant` rule with 24 dp above and 22 dp of padding
@@ -303,10 +305,10 @@ geometry, colour roles and states are recorded in
 - **Paired figures** sit side by side split by exactly one vertical 1 dp rule, 18 dp of inset on the
   right figure and 12 dp on the left. There is no outer boundary of any kind.
 - **Charts** are unboxed: a 12 × 7 heatmap of 17 dp cells with only `M`/`W`/`F` row labels, 84 dp
-  rings with a 9 dp stroke, 9 dp distribution bars, two labelled recall tracks, and eight 56 dp
-  columns for the day ahead. Nothing on this screen animates.
+  rings with a 9 dp stroke, 9 dp distribution bars, two labelled accuracy tracks, and the level
+  durations as rows. Nothing on this screen animates.
 - **Copy is a label, not an explanation.** The meta line carries the scope (`12 weeks · Anki`,
-  `Collection`, `Next 24h · WaniKani`); a note under the numbers is one short line and exists only to
+  `Collection`, `Progress`); a note under the numbers is one short line and exists only to
   stop a misreading — a unit (`Distinct cards, not button presses.`), a definition (`Young: under 21
   days.`) or a gap (`Some days unknown.`). Reasoning longer than that belongs in
   [analytics/PLAN.md](analytics/PLAN.md), not on the page.
@@ -316,7 +318,7 @@ geometry, colour roles and states are recorded in
 Analytics is near-monochrome: the shared neutral roles, plus the reader's selected accent at a few
 strengths. **No `success` green, no brand pink and no brand blue appears in an analytical element** —
 a green accent chosen by the reader flows through like any other, but the page never invents an
-independent colour language of its own. The rings, the recall tracks, the bars, the text actions and
+independent colour language of its own. The rings, the accuracy tracks, the bars, the text actions and
 the heatmap's levels are all the one accent; the heatmap and the two distribution bars are that accent
 at 20/42/67/100 %, and the five SRS stages at 20/40/60/80/100 %.
 
@@ -493,7 +495,7 @@ may be longer when the reader needs it.
 | Analytics composition and sections | [AnalyticsScreen.tsx](../src/rn/ui/analytics/AnalyticsScreen.tsx) |
 | Analytics borderless blocks (section, rule, metric pair, heatmap, rings, bars, unavailable, skeleton) | [ink.tsx](../src/rn/ui/analytics/ink.tsx) |
 | Analytics copy, sums, heatmap bands and chart labels | [model.ts](../src/rn/ui/analytics/model.ts), [tests/analytics.test.cjs](../tests/analytics.test.cjs) |
-| Analytics reads (twelve-week Anki activity, WaniKani recall) | [useAnkiStats.ts](../src/rn/ui/analytics/useAnkiStats.ts), [WaniKaniStats.kt](../app/src/main/java/com/gaten/app/wanikani/WaniKaniStats.kt) |
+| Analytics reads (twelve-week Anki activity, WaniKani accuracy and level history) | [useAnkiStats.ts](../src/rn/ui/analytics/useAnkiStats.ts), [WaniKaniStats.kt](../app/src/main/java/com/gaten/app/wanikani/WaniKaniStats.kt) |
 | Analytics data contract, colour mapping and states | [analytics/PLAN.md](analytics/PLAN.md) |
 | Settings hub | [SettingsScreen.tsx](../src/rn/ui/settings/SettingsScreen.tsx) |
 | Settings groups, rows, fields and dialogs | [settings-components.tsx](../src/rn/ui/settings/settings-components.tsx) |
@@ -527,7 +529,8 @@ and dark, and at 160 % text scale.
 
 §6 Analytics rewritten for the final single-page design: the source switcher is gone, the sections are
 `Anki → WaniKani → Study activity → Recall → Ahead` (the two source summaries lead; the twelve-week
-heatmap follows them), and the colour rule is now accent-only — the
+heatmap follows them; the last two became `Accuracy` and `Level progress` on 23 October, and §6 above
+carries the current names), and the colour rule is now accent-only — the
 `success` segment on the collection bar is removed, so no analytical element carries a hue the reader
 did not choose. Added the heatmap's unknown-versus-zero treatment, the cumulative-accuracy rule, and
 the once-per-source action rule. Checked on a debug build at 392 dp across all seven accents in light
