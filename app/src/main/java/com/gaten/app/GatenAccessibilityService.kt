@@ -20,6 +20,7 @@ import android.graphics.Bitmap
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
+import android.provider.Settings
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
@@ -97,6 +98,17 @@ class GatenAccessibilityService : AccessibilityService() {
     private var overlayGeometry: DisplayGeometry? = null
     /** The foreground app before a capture; SystemUI and our overlay do not replace it. */
     private var foregroundPackage: String? = null
+
+    /**
+     * The package of the input method in use, or null when the platform names none. Read once: a
+     * keyboard can only be switched from a system picker, which takes the screen and ends any lookup
+     * that is up through the ordinary dismissal paths, so the value cannot go stale while one is.
+     */
+    private val inputMethodPackage: String? by lazy {
+        Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+            ?.substringBefore('/')
+            ?.takeIf { it.isNotBlank() }
+    }
     private var capturePackage: String? = null
 
     private val powerManager by lazy { getSystemService(PowerManager::class.java) }
@@ -322,6 +334,38 @@ class GatenAccessibilityService : AccessibilityService() {
                         syncFloatingButton()
                     }
                     foregroundPackage = source
+                }
+
+                // The reader left while the frozen frame was up. The overlay holds the window focus
+                // itself - it is an accessibility overlay above every app window, and it has to be
+                // focusable for the keyboard to reach the query field - so when the launcher or
+                // another app comes forward the overlay is never told about it through a focus loss,
+                // and without this the frozen screen would sit on top of whatever the reader
+                // switched to.
+                //
+                // What counts is a full-screen window from a package that is neither ours nor the app
+                // the capture froze: the app beneath emits its own window events as it settles behind
+                // the overlay (a paused player raising its controls, say), and those must not end a
+                // lookup the reader is still using. The keyboard's window is not full screen, so
+                // typing never lands here either.
+                //
+                // The frozen app is unknown in one case - the service was enabled while that app was
+                // already in the foreground, so no event ever named it - and there any full-screen
+                // window from another package counts. The alternative is worse: a frozen screen left
+                // covering whatever the reader switched to.
+                //
+                // The keyboard is excluded by name: it is a window of its own that reports itself as
+                // full screen, and it arrives exactly when the reader starts typing in the query
+                // field, so without this the lookup would close the moment they tried to search.
+                val frozen = capturePackage
+                if (overlay.isShowing && source != null && event.isFullScreen &&
+                    source != packageName && source != inputMethodPackage &&
+                    (frozen == null || frozen != source)
+                ) {
+                    Log.d(TAG, "Another app took the foreground while the lookup was up" +
+                        " - ending it ($source)")
+                    cancelLookup()
+                    syncFloatingButton()
                 }
             }
 

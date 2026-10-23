@@ -169,26 +169,53 @@ export function SettingsRow({
   );
 }
 
-/** Lookup status and its existing permission action, without a separate card or explanation. */
-export function LookupModeRow({
-  enabled,
-  onTurnOn,
-}: {
-  enabled: boolean;
-  onTurnOn: () => void;
-}) {
-  const {colors} = useTheme();
-  return (
-    <View style={{minHeight: 60, paddingVertical: spacing.m, flexDirection: "row", alignItems: "center", gap: spacing.m}}>
-      <Icon name={enabled ? "check_circle" : "shield"} size={24} color={enabled ? colors.success : colors.iconSecondary} />
-      <View style={{flex: 1}}>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Lookup mode</Text>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>{enabled ? "On" : "Off"}</Text>
-      </View>
-      {!enabled && <Button label="Turn on" onPress={onTurnOn} />}
-    </View>
-  );
-}
+/**
+ * The disclosure's facts, grouped and in the order the reader meets them: what the service sees,
+ * what stays on the device, what is optional and off until asked, and what happens next. Every
+ * consequence stays a visible line here — none of it is shortened into a summary and none of it
+ * moves behind Help, which carries operational detail only.
+ */
+const DISCLOSURE_BLOCKS: {heading: string; lines: string[]}[] = [
+  {
+    heading: "Screen access",
+    lines: [
+      "Gaten captures the screen when you start a lookup.",
+      "Gaten closes lookup when it is interrupted.",
+    ],
+  },
+  {
+    heading: "On this device",
+    lines: [
+      "Screenshots and selected text stay on this device.",
+      "Japanese recognition and dictionary lookup work offline.",
+      "The screenshot is discarded after lookup.",
+      "Nothing is captured between lookups.",
+      "The service does not read notification messages.",
+      "The service does not type for you.",
+    ],
+  },
+  {
+    heading: "Optional connections",
+    lines: [
+      "The stylized-text model downloads only when requested.",
+      "WaniKani connects only when you add a token.",
+      "The token is checked with wanikani.com.",
+      "A tapped kanji requests its reference page.",
+      "WaniKani study progress is saved on this device for Analytics.",
+      "Progress includes your level, due reviews and review stages.",
+      "Due reviews cover now and the next 24 hours.",
+      "Gaten never answers or changes WaniKani lessons or reviews.",
+      "Your screenshot, sentence and other words are not sent to WaniKani.",
+    ],
+  },
+  {
+    heading: "Next step",
+    lines: [
+      "Enable Gaten in Android accessibility settings.",
+      "Return here to check lookup mode.",
+    ],
+  },
+];
 
 /** An outlined action: a quiet alternative to the filled one on the same page. */
 export function OutlinedButton({
@@ -345,6 +372,7 @@ export function DialogShell({
   onDismiss,
   scrollBody = false,
   footer,
+  bodyGap = spacing.m,
 }: {
   title: string;
   children: React.ReactNode;
@@ -353,6 +381,8 @@ export function DialogShell({
   scrollBody?: boolean;
   /** Pinned under the body, scrolling or not: what the reader must reach whatever the body's length. */
   footer?: React.ReactNode;
+  /** The gap between the title and the body; the disclosure pulls its first heading closer. */
+  bodyGap?: number;
 }) {
   const {colors} = useTheme();
   return (
@@ -379,9 +409,9 @@ export function DialogShell({
         >
           <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
           {scrollBody ? (
-            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: spacing.m}}>{children}</ScrollView>
+            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: bodyGap}}>{children}</ScrollView>
           ) : (
-            <View style={{marginTop: spacing.m}}>{children}</View>
+            <View style={{marginTop: bodyGap}}>{children}</View>
           )}
           {footer}
           <View style={{flexDirection: "row", justifyContent: "flex-end", marginTop: spacing.l}}>
@@ -448,7 +478,8 @@ export function HelpAction({paragraphs}: {paragraphs: string[]}) {
 /**
  * The disclosure behind every "Turn on": the app's own explanation of the accessibility service
  * lookup mode needs first, the checkbox before the confirm, and system Settings only once the
- * reader has agreed.
+ * reader has agreed. The facts scroll in four headed groups while the acknowledgement and the two
+ * actions stay pinned below them, so a consequence is never what the confirmation hides.
  */
 export function LookupModeDisclosureDialog({
   onAccept,
@@ -458,26 +489,46 @@ export function LookupModeDisclosureDialog({
   onDismiss: () => void;
 }) {
   const {colors} = useTheme();
+  const {fontScale} = useWindowDimensions();
   const [agreed, setAgreed] = useState(false);
+  // At the largest system text the two actions no longer fit on one line without shrinking below
+  // their touch target, so each takes a full-width line instead.
+  const stackedActions = fontScale >= 1.6;
   return (
     <DialogShell
       title="Turn on lookup mode"
       onDismiss={onDismiss}
       scrollBody
+      bodyGap={spacing.s}
       actions={
-        <>
-          <Button variant="text" label="Cancel" onPress={onDismiss} />
-          <Button variant="text" label="Turn on" disabled={!agreed} onPress={onAccept} />
-        </>
+        <View
+          style={{
+            width: "100%",
+            flexDirection: stackedActions ? "column" : "row",
+            justifyContent: "flex-end",
+            alignItems: stackedActions ? "stretch" : "flex-end",
+            gap: spacing.s,
+          }}
+        >
+          <Button variant="text" label="Cancel" onPress={onDismiss} fullWidth={stackedActions} />
+          <Button
+            variant="text"
+            label="Open settings"
+            disabled={!agreed}
+            fullWidth={stackedActions}
+            onPress={onAccept}
+          />
+        </View>
       }
       footer={
-        // Pinned rather than a child of the scrolling body: the body is long enough on a phone that
-        // the checkbox lands below the fold, and "Turn on" then looks broken instead of gated.
+        // Pinned rather than a child of the scrolling body: the four groups are longer than any
+        // phone, and an acknowledgement the reader cannot reach makes "Open settings" look broken
+        // instead of gated.
         <Pressable
           accessibilityRole="checkbox"
           accessibilityState={{checked: agreed}}
           onPress={() => setAgreed(!agreed)}
-          style={{flexDirection: "row", alignItems: "center", marginTop: spacing.l}}
+          style={{flexDirection: "row", alignItems: "center", minHeight: 48, marginTop: spacing.l}}
         >
           <View
             style={{
@@ -495,20 +546,28 @@ export function LookupModeDisclosureDialog({
           </View>
           <Text
             style={[
-              typeScale.bodySmall,
+              typeScale.description,
               {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s},
             ]}
           >
-            I understand how this permission will be used and agree to proceed
+            I understand how this permission is used
           </Text>
         </Pressable>
       }
     >
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-        {
-          "Gaten uses one accessibility service, and only for lookup: it screenshots the screen when you start a lookup, and notices the things that end one — a call, an alarm, the screen locking — so a lookup closes by itself instead of sitting over what you are reading. The screenshot never leaves your device: the Japanese on it is recognised and looked up offline, then dropped. Between lookups nothing is captured, and the service does not read notification messages or type for you.\n\nTurning lookup mode on opens Android's own Accessibility settings, where Gaten is listed: enable it there, and come back to this page — it reads the service's state again as soon as it is on screen.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character's page. With a token connected, Gaten also reads your own study progress from wanikani.com — the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages — and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device."
-        }
-      </Text>
+      {DISCLOSURE_BLOCKS.map((block, index) => (
+        <View key={block.heading} style={index > 0 ? {marginTop: spacing.l} : undefined}>
+          <Text style={[typeScale.labelMedium, {color: colors.onSurface}]}>{block.heading}</Text>
+          {block.lines.map((line) => (
+            <Text
+              key={line}
+              style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}
+            >
+              {line}
+            </Text>
+          ))}
+        </View>
+      ))}
     </DialogShell>
   );
 }
