@@ -54,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.gaten.app.R
+import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
@@ -95,10 +96,18 @@ private val TapTolerance = 24.dp
 private const val MAX_GESTURE_LINES = 3
 
 /**
- * How long one settled rail message stays up before the next one replaces it, or the rail goes.
- * Two seconds is the floor the accessibility guidance sets for a transient status.
+ * How long a settled rail message stays up before the next one replaces it, or the rail goes. The
+ * first message takes the longer dwell: an instruction that vanishes after two seconds is not
+ * enough time to read it and act on it.
  */
-private const val NOTICE_MS = 2000L
+private const val NOTICE_MS = 3000L
+
+/**
+ * How long the message that follows one in the same sequence stays — the instruction behind a tap
+ * miss, the recovery hint behind an empty scan. Shorter than the first, so a miss and its
+ * instruction cannot hold the rail for six seconds while the reader is already drawing.
+ */
+private const val FOLLOW_UP_MS = 2000L
 
 /** Lifecycle of the offline dictionary handle. */
 private sealed interface RepoState {
@@ -162,6 +171,12 @@ fun LookupOverlay(
      */
     mapping: ViewMapping,
     earlyScan: Deferred<ScreenText?>,
+    /**
+     * Whether the reader is typing in the overlay's own query field. The window keeps its focus while
+     * they type and the keyboard takes the window focus instead, so the controller has to know that a
+     * focus loss belongs to this session's IME rather than to another app.
+     */
+    onTextEntryActive: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -241,9 +256,45 @@ fun LookupOverlay(
     }
     val railUp = busyText != null || noticeUp
 
+    // The reader's own query, typed in the full-screen cover when the captured text was wrong or
+    // missing. The draft outlives closing search inside one lookup; a chosen entry then replaces
+    // what the sheet shows until the reader asks for the captured result back.
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchedEntry by remember { mutableStateOf<DictEntry?>(null) }
+    var searchedQuery by remember { mutableStateOf<String?>(null) }
+    // A confirmed zero-line index opens the no-text sheet once per lookup: asking for another
+    // selection must not immediately put the same empty shell back in front of the reader.
+    var zeroShellSpent by remember { mutableStateOf(false) }
+
+    // The keyboard takes the window focus while the reader types; the controller attributes the loss
+    // through this flag so a lookup being typed into is never dismissed by its own IME.
+    LaunchedEffect(searchOpen) { onTextEntryActive(searchOpen) }
+    DisposableEffect(Unit) { onDispose { onTextEntryActive(false) } }
+
     fun showNotice(next: RailNotice) {
         notice = next
         noticeSerial++
+    }
+
+    /**
+     * The confirmed zero-line index, shown as the sheet's no-text body rather than as a timed notice.
+     *
+     * Once per lookup: after the reader has asked to select again, the empty shell does not come back
+     * by itself — the circle-only instruction does, and a fresh selection can still recover text.
+     * No selection is fabricated: there is no anchor, so the dock is the default one (bottom in
+     * portrait, the reading edge in landscape).
+     */
+    fun openZeroShell() {
+        if (zeroShellSpent || closing || result != null || searchOpen) return
+        if (phase != Phase.Selecting || frozenBox != null || points.isNotEmpty()) return
+        zeroShellSpent = true
+        val session = Any()
+        result = LookupResult(ocrText = "", words = emptyList(), error = null)
+        displayedResultSession = session
+        resultAnchor = null
+        phase = Phase.Result
+        sheetState.targetState = true
     }
 
     // The rail's whole life, in one place: the running work, then the last settled message and its
@@ -269,7 +320,7 @@ fun LookupOverlay(
             if (followUp != null) {
                 railText = followUp.text
                 railGlyph = followUp.glyph
-                delay(NOTICE_MS)
+                delay(FOLLOW_UP_MS)
             }
         }
         noticeUp = false
@@ -298,18 +349,21 @@ fun LookupOverlay(
             RailNotice(R.string.lookup_circle_hint)
         }
 
-    // A scan that settled says what it settled on, once: the instruction it can honour, the zero it
-    // really found, or — for an index that never arrived — the circle, because a missing index is
-    // not the same fact as an empty screen and must never be reported as one.
+    // A scan that settled says what it settled on, once: the instruction it can honour, or — for an
+    // index that never arrived — the circle, because a missing index is not the same fact as an
+    // empty screen and must never be reported as one.
+    //
+    // A *confirmed* zero is not a message at all: the screen really holds no Japanese, so the sheet
+    // opens with the no-text body, where the reader can search the dictionary by hand or go back to
+    // selecting. That only happens while the overlay is idle and has shown nothing yet — never over
+    // a gesture in progress, a crop being read, an existing result or an open search.
     LaunchedEffect(scanState) {
         val settled = scanState
-        val next = when {
-            settled == ScanState.Scanning -> null
-            settled is ScanState.Ready && settled.screen.lines.isEmpty() ->
-                RailNotice(R.string.lookup_no_text, RailGlyph.SearchOff, then = instruction(settled))
-            else -> instruction(settled)
-        } ?: return@LaunchedEffect
-        showNotice(next)
+        when {
+            settled == ScanState.Scanning -> Unit
+            settled is ScanState.Ready && settled.screen.lines.isEmpty() -> openZeroShell()
+            else -> showNotice(instruction(settled))
+        }
     }
 
     // ML Kit's index is what the overlay goes Ready with, instantly. The reader then replaces each
@@ -396,7 +450,31 @@ fun LookupOverlay(
         return (settled as? RepoState.Ready)?.repo
     }
 
+    // Search: a full-screen surface inside this same window, above the frozen capture and the sheet.
+    // The sheet stays composed underneath, so its entry, selection, scroll and reference-page stack
+    // are exactly as the reader left them when search closes.
+    fun openSearch() {
+        if (!closing) searchOpen = true
+    }
+
+    /** A row the reader chose: it becomes what the sheet shows, labelled with the query it came from. */
+    fun pickSearched(entry: DictEntry, committedQuery: String) {
+        searchedEntry = entry
+        searchedQuery = committedQuery
+        searchOpen = false
+    }
+
+    /** Back to what the capture actually said — no rescan, no new dock, no reopened shell. */
+    fun originalLookup() {
+        searchedEntry = null
+        searchedQuery = null
+    }
+
     BackHandler { close() }
+
+    // System Back while the reader is searching leaves search first — the keyboard, while it is up,
+    // has already taken the first Back for itself — and never dismisses the lookup or picks a row.
+    BackHandler(enabled = searchOpen) { searchOpen = false }
 
     /**
      * The index with [lineIndices] read by manga-ocr: waits for those lines (bounded by the
@@ -563,6 +641,12 @@ fun LookupOverlay(
         frozenBox = null
         phase = Phase.Selecting
         sheetState.targetState = false
+        // Asking for another selection discards everything this lookup had shown: the typed entry and
+        // its provenance, the draft the reader left in search, and the shell a zero index opened.
+        searchOpen = false
+        searchQuery = ""
+        searchedEntry = null
+        searchedQuery = null
         // The instruction comes back with the state it belongs to, over the outgoing sheet: the
         // reader who just asked for another selection should not have to guess the gesture again.
         showNotice(instruction(scanState))
@@ -602,10 +686,10 @@ fun LookupOverlay(
                 onTap = { onTap(it) }
             )
 
-            // The rail: opaque paper with its own accent rule, so it reads over somebody else's
-            // screen. It sits below the real status-bar and cutout insets — the frozen frame still
-            // carries the app's own status bar, and a rail drawn over the clock reads as broken
-            // chrome — and only its opacity animates.
+            // The rail: opaque paper with a neutral hairline and its own rounded corners, so it reads
+            // over somebody else's screen without borrowing an accent from it. It sits below the real
+            // status-bar and cutout insets — the frozen frame still carries the app's own status bar,
+            // and a rail drawn over the clock reads as broken chrome — and only its opacity animates.
             AnimatedVisibility(
                 visible = railUp,
                 enter = fadeIn(tween(Motion.SHORT, easing = Motion.emphasized)),
@@ -660,6 +744,10 @@ fun LookupOverlay(
                     key(displayedResultSession) {
                         ResultSheet(
                             result = state,
+                            searchedEntry = searchedEntry,
+                            searchedQuery = searchedQuery,
+                            onSearch = { openSearch() },
+                            onOriginalLookup = { originalLookup() },
                             modifier = Modifier.animateEnterExit(
                                 enter = sheetEnter(sheetLayout.dock),
                                 exit = sheetExit(sheetLayout.dock)
@@ -670,6 +758,26 @@ fun LookupOverlay(
                         )
                     }
                 }
+            }
+
+            // The reader's own query, full screen over everything the lookup has shown so far. The
+            // sheet stays composed underneath; the cover is opaque, so the app behind it is never
+            // exposed through it either.
+            AnimatedVisibility(
+                visible = searchOpen,
+                enter = fadeIn(tween(Motion.SHORT, easing = Motion.emphasized)),
+                exit = fadeOut(tween(Motion.SHORT, easing = Motion.emphasized)),
+                modifier = Modifier.zIndex(1f)
+            ) {
+                LookupSearchCover(
+                    repo = readyRepo,
+                    failure = (repoState as? RepoState.Failed)?.message,
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    onBack = { searchOpen = false },
+                    onClose = { close() },
+                    onPick = { entry, committed -> pickSearched(entry, committed) }
+                )
             }
         }
     }

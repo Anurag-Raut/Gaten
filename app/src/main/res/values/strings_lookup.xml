@@ -43,4 +43,34 @@
     <string name="lookup_cd_scroll_back">Show earlier words</string>
     <string name="lookup_cd_scroll_forward">Show more words</string>
     <string name="lookup_cd_dismiss">Dismiss lookup</string>
+
+    <!--
+      Lookup search: the reader's own query, typed in the full-screen cover when the captured text
+      was wrong or missing. The label is always painted; the hint is only a hint.
+    -->
+    <string name="lookup_search">Search dictionary</string>
+    <string name="lookup_search_back">Back to lookup</string>
+    <string name="lookup_search_query_label">Dictionary query</string>
+    <string name="lookup_search_query_hint">Japanese or romaji</string>
+    <string name="lookup_cd_clear_query">Clear query</string>
+    <string name="lookup_search_too_long">Use 32 characters or fewer</string>
+    <string name="lookup_search_prompt">Enter Japanese or romaji</string>
+    <string name="lookup_search_unsupported">English definitions are not searchable</string>
+    <!-- What romaji was read as: why "neko" can have an exact ねこ match. -->
+    <string name="lookup_search_converted">Searching: %1$s</string>
+    <string name="lookup_search_one_result">1 result</string>
+    <string name="lookup_search_results">%1$d results</string>
+    <string name="lookup_search_capped">Showing up to 24 results</string>
+
+    <!-- How each hit was reached: exact, folded or deinflected, a loose reading, or a prefix. -->
+    <string name="lookup_match_exact">Exact match</string>
+    <string name="lookup_match_form">Matched form: %1$s</string>
+    <string name="lookup_match_loose">Approximate reading: %1$s</string>
+    <string name="lookup_match_prefix">Starts with: %1$s</string>
+    <string name="lookup_cd_open_entry">Open dictionary entry</string>
+    <string name="lookup_entry_opened">Dictionary entry opened</string>
+
+    <!-- A typed entry says where it came from, so the captured source never claims it. -->
+    <string name="lookup_searched">Searched: %1$s</string>
+    <string name="lookup_original_result">Original lookup</string>
 </resources>

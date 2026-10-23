@@ -21,6 +21,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityWindowInfo
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.widget.FrameLayout
@@ -103,6 +104,12 @@ class OverlayWindowController(
 
     /** The overlay on screen, if any. */
     private var showing: Showing? = null
+
+    /**
+     * Whether the reader is typing in the overlay's own query field right now. Set from the
+     * composition, read on the main thread when a focus loss has to be attributed.
+     */
+    private var textEntryActive = false
 
     /** The accepted capture's detector pass starts before the frozen-frame/UI transition. */
     private var pendingScan: Deferred<ScreenText?>? = null
@@ -294,6 +301,7 @@ class OverlayWindowController(
                         screenshot = bitmap,
                         mapping = mapping,
                         earlyScan = scan,
+                        onTextEntryActive = ::setTextEntryActive,
                         onDismiss = ::hide
                     )
                 }
@@ -305,11 +313,54 @@ class OverlayWindowController(
      * Closes the overlay for a focus loss that was not handed back within [FocusBounceMs]. Checked
      * again here rather than acted on at once, so the transient focus changes that a window sees
      * while it is coming up cannot dismiss a lookup the reader just opened.
+     *
+     * A loss that went to this session's own keyboard is not a departure (see
+     * [focusWentToInputMethod]): while the reader is typing, the check re-arms instead of closing,
+     * so the search they are in the middle of survives the keyboard opening and closing. Any other
+     * recipient - home, recents, another app, the shade - still closes the lookup, keyboard up or
+     * not.
      */
     private fun closeIfFocusStayedAway(view: View) {
         if (showing?.view !== view || view.hasWindowFocus()) return
+        if (focusWentToInputMethod()) {
+            mainHandler.postDelayed({ closeIfFocusStayedAway(view) }, FocusBounceMs)
+            return
+        }
         Log.d(TAG, "Overlay lost window focus - the user went elsewhere, closing it")
         dismissAutomatically()
+    }
+
+    /** Called from the composition as the query field takes and loses the reader's text entry. */
+    private fun setTextEntryActive(active: Boolean) {
+        textEntryActive = active
+    }
+
+    /**
+     * Whether the focus the overlay just lost belongs to this session's input method.
+     *
+     * The window's own `onWindowFocusChanged(false)` says only that the focus went *somewhere*, and
+     * a view's own focus flag says nothing about where: the keyboard is a window of its own and
+     * takes the window focus while the editor keeps the input connection. So the recipient is named
+     * positively, from the service's own window list - the focused window's type - rather than
+     * inferred from keyboard visibility or from a field being focused. That is also why an
+     * IME-visible check is not enough: a query field left focused while another app came forward
+     * must still end the lookup, and there the focused window is that app, not the keyboard.
+     *
+     * Only while the reader is actually typing in the overlay: the keyboard may be up for somebody
+     * else's field, and this overlay must not be kept alive by it.
+     */
+    private fun focusWentToInputMethod(): Boolean {
+        if (!textEntryActive) return false
+        val service = GatenAccessibilityService.instance ?: return false
+        val focused = runCatching { service.windows }.getOrNull()
+            ?.firstOrNull { it.isFocused }
+            ?: return false
+        // The IME's own window only: a keyboard's candidate and decoration popups are not focusable
+        // windows in their own right, so the focus the editor hands over lands here. A keyboard that
+        // reports itself as something else reads as a departure and takes the 200 ms bounce — the
+        // honest failure, rather than a rule loose enough to keep the overlay alive over an app the
+        // reader has actually switched to.
+        return focused.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD
     }
 
     /** Takes the overlay down when it is up; true when there was one to take down. */

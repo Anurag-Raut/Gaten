@@ -1,5 +1,11 @@
 # Ink — screen lookup design specification
 
+> **Revised by [DESIGN-REV2.md](DESIGN-REV2.md).** The rail's form (§4), the terminal empty states
+> (§5-§6), the sheet header's control cluster and the copy for those states are superseded there — the
+> rail is now a 13 dp rounded neutral surface with no accent rule, the empty states are centred
+> illustrated bodies, and the sheet carries a four-control header plus a full-screen dictionary-search
+> cover. Everything else in this document still stands.
+
 All ten reference PNGs in BRIEF §4 were received and viewed, including the light result sheet, live lasso, bubble, and Ink sibling screens. This is a design decision document, not an implementation or a verification report.
 
 This specification extends Ink v1.3 to an instrument drawn over somebody else's content. The result is **a frozen page, a precise two-tone selection mark, and one flat reading surface**. Remove the screen-edge ring, gradient, bloom, tinted entry cards and metadata capsules. Keep the external sheet's existing 20 dp dock corners; a floating window is not an in-page row card.

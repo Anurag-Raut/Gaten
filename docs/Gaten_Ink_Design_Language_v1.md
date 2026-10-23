@@ -1,6 +1,6 @@
 # Gaten / Ink — Design Language
 
-**Version 1.4 · 23 October 2026 · Current Home, Analytics, Settings and Screen lookup baseline**
+**Version 1.5 · 23 October 2026 · Current Home, Analytics, Settings and Screen lookup baseline**
 
 ## Summary
 
@@ -12,7 +12,7 @@
 | Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
 | Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
 | Navigation | Three bottom tabs: Home, Analytics and Settings. Review is a pushed flow, not a fourth tab. |
-| Screen lookup | Over foreign content: a 40 % black freeze veil, a two-pass paired selection mark, a square status rail with a 2 dp accent rule, and one flat result sheet (grip → header → one body scroller → pinned footer). No screen-edge ring, no gradient or bloom, no nested cards. |
+| Screen lookup | Over foreign content: a 40 % black freeze veil, a two-pass paired selection mark, a 13 dp rounded neutral status rail with no accent rule, a full-screen dictionary-search cover, and one flat result sheet (grip → header → one body scroller → pinned footer). No screen-edge ring, no gradient or bloom, no nested cards. |
 | Exceptions | Neutral input fills, brand-mark holders, dialogs and approved sparse empty-state artwork have specific treatments below. |
 | Source of truth | This document consolidates the current Home/Analytics/Settings implementation and shared tokens. Historical previews do not override it. |
 | Audit scope | Checked against source code on 22 October 2026, and against a debug build on an Android 14 emulator at 392 dp in all seven accents, light and dark, plus 320/340/430 dp and 130/160 % text. |
@@ -469,23 +469,41 @@ non-destructive tap miss.
 
 ### 8.4 The status rail
 
-One component carries every message. **Floating** over the frozen screen: opaque `surface`, a 1 dp
-`outline` perimeter, a **2 dp `primary` leading rule** drawn inside that perimeter, **0 dp radius**,
-48 dp minimum height, capped at 360 dp, 16 dp below the real top insets and 16 dp side margins.
-**Inline** in the sheet: transparent, the same rule and padding, 16 dp of air above and below, with
-its one text action (`Select again`, `labelLarge` `primary`, 48 dp target) below the message.
+One rounded, neutral status rail carries instructions, real progress and notices; empty lookup
+results have a different, centred body treatment. Floating over the frozen screen, the rail is opaque
+`surface` at alpha 1.00, with **13 dp corners**, a **1 dp `outlineVariant` perimeter**, 12 dp content
+padding on every side and a 48 dp minimum height. It has **no accent leading rule and no decorative
+substitute for one**. It is content-sized up to 360 dp, with 16 dp safe side margins and a position
+16 dp below the real top insets. Inline notices use the same opaque fill, 13 dp corners, 1 dp neutral
+perimeter and padding, at full content-column width with 16 dp of air above and below. Neither
+placement has elevation, shadow, gradient, glow or screenshot-dependent colour sampling.
 
-Text is `bodyMedium` `onSurface`; a failure is `error` with an 18 dp glyph; a cause line is
-`bodySmall` `onSurfaceVariant`. A real **16 dp / 2 dp** spinner appears only while foreground work is
-pending — otherwise a static 18 dp glyph. Enter, exit and text replacement are opacity only, over
-`SHORT` on `emphasized`; the rail relayouts to its new text immediately rather than animating through
-a clipped state. Announcements are polite live regions, once per change.
+The opaque paper, neutral hairline and readable ink identify the rail over foreign content; the
+existing 40 % black veil separates context but is not a universal contrast guarantee. Text is
+`bodyMedium` in `onSurface`; a failure title and its 18 dp glyph use `error`, with an optional
+`bodySmall` cause in `onSurfaceVariant` 4 dp below. A real foreground task uses a 16 dp, 2 dp-stroke
+`primary` spinner with an 8 dp text gap; otherwise use an 18 dp neutral outline glyph. An inline
+action sits 8 dp below the message, uses `labelLarge` in `primary`, and has a wrapping 48 dp-minimum
+target. Enter, exit and text replacement are opacity only over `SHORT` on `emphasized`; relayout
+height immediately and announce each changed status once, politely.
 
-Lifecycle: index loading → **Reading screen…**; ready → **Circle or tap Japanese text** (2000 ms,
-hidden the instant a drag starts); committed crop → **Reading selection…**; tap miss → **No text
-here**, then the instruction; a zero-line index → **No text found**, then the circle-only hint; an
-unavailable index → the circle-only hint, never a confirmed zero. Terminal results are inline in the
-sheet and persist until the reader selects again or dismisses; they are never repeated in the rail.
+Index loading says **Reading screen…**; readiness says **Circle or tap Japanese text** for three
+seconds (at least 2000 ms, extended by the accessibility timeout, and hidden immediately on drawing);
+the message that follows one in the same sequence stays two seconds. A committed crop says **Reading
+selection…** until usable content or a terminal result. A tap miss says **No text here** and then the
+applicable instruction without dismissing. An unavailable index says **Circle Japanese text**, never
+a false confirmed zero. A confirmed zero-line index while idle opens the **No text found** sheet
+without fabricating a selection; it never interrupts an active gesture, crop, result or search.
+Selecting again returns to selection without reopening that same zero-index notice.
+
+**No text found** and **No dictionary matches** use sparse neutral SVG artwork and a secondary caption
+centred in the bounded modal body, with **Search dictionary** as the primary recovery and **Select
+again** as the secondary action. They persist until the reader acts, reflow and scroll at large type,
+and have no word tabs or Anki footer. Recognized source is preserved for the no-matches state.
+**Dictionary unavailable** is a persistent inline error rail with its real readable cause, not an
+illustrated empty state. No terminal message is duplicated in a floating rail. The exact artwork,
+centring rules and search behaviour are specified in
+[DESIGN-REV2.md](../artifacts/lookup-redesign/DESIGN-REV2.md) §§2–4.
 
 ### 8.5 The result sheet
 
@@ -501,9 +519,15 @@ Inside, there is no intermediate filled card: **grip → header → one body scr
 - **Grip**: 48 dp band, a 32 × 4 dp handle at radius 2 dp in `onSurfaceVariant` 0.60, fixed width
   while dragging, carrying the accessible dismiss action.
 - **Header**: transparent; the source line is `bodyMedium` `onSurfaceVariant` with the complete string
-  for Copy and for TalkBack; three **48 dp** controls with **20 dp** neutral glyphs and no backing;
-  one 1 dp rule below. Under 300 dp of usable width the source line reflows into the body and the
-  controls keep their targets.
+  for Copy and for TalkBack; a responsive cluster of **four `48 dp` controls** — Copy text → Search
+  dictionary → Select again → Close lookup — with **20 dp** neutral glyphs and no backing; one 1 dp
+  rule below. Physical width decides where they live, in this order: the source keeps the row only
+  while `availableWidth / fontScale ≥ 300 dp` **and** 96 dp remains after the controls; below 192 dp
+  Copy moves into the body as a text action after the reflowed source (omitted when the source is
+  blank); below 144 dp Select again joins it (except where the body already offers it — an empty state
+  or a failure rail); only below 96 dp does Search also become a labelled body action, leaving Close
+  alone. Targets are never shrunk to keep icon density, and a blank source keeps its disabled Copy
+  slot only where the four slots fit.
 - **Word tabs** replace the old filled chips: transparent, 0 dp radius, selected = `primary` text +
   a **2 dp `primary` bottom rule** + a check in a reserved slot, unselected `onSurfaceVariant`. They
   live in the body scroller and are omitted when only one word can be selected.
@@ -518,6 +542,39 @@ Inside, there is no intermediate filled card: **grip → header → one body scr
   activation ever writes to Anki.
 - **WaniKani reference pages** are another depth in the same sheet — same grip, header and selector,
   one body scroller, no second sheet, no Anki footer, neutral section labels, flat skeletons.
+
+**Search within lookup.** **Search dictionary** is a 48 dp neutral search action in the sheet's
+top-right control cluster, ordered Copy → Search → Select again → Close. Source text reflows before
+controls shrink; Copy, then Select again, relocate into the body when physical width requires it.
+Search remains beside Close unless even two 48 dp targets cannot fit, when its labelled body action
+remains available. Empty states also offer the prominent **Search dictionary** recovery.
+
+Search opens a **full-screen opaque `surface` cover inside the same accessibility overlay** — not an
+inline field, an activity, a second window or an expansion of a side dock. Its **Back to lookup**
+chevron restores the saved sheet; **Close lookup** ends the overlay. A labelled **Dictionary query**
+field uses the house 49 dp minimum, 14 dp radius, 1 dp neutral outline, opaque surface fill and 2 dp
+accent focus outline with 2 dp offset. The first query starts blank, Japanese and romaji are both
+accepted, and the existing offline `DictionarySearch` helper and the already-open repository are used
+verbatim. Flat, wrapping rows preserve that helper's bounded order and expose their exact,
+matched-form, approximate-reading or prefix provenance — never a distinction the result data do not
+provide.
+
+Picking a row returns to the original sheet with that chosen entry and an explicit Anki footer. OCR
+word tabs are hidden while a searched entry is shown, the committed capture and original source are
+preserved, the typed provenance is labelled **Searched**, and **Original lookup** restores the
+captured result. Cancel restores the saved reference page; choosing clears its old WaniKani stack. No
+search operation or row selection writes to Anki — only a fresh explicit footer activation may commit
+the existing write/share route.
+
+The full-size opaque window does not resize for the keyboard. The cover composes its content against
+`WindowInsets.ime`, keeping Back/Close and the query reachable and reducing the results viewport; when
+the height cannot hold both, the control bar stays and query plus results become one scroller. The
+frozen capture is never resized or shifted. A positively attributed handoff to the active editor's own
+IME is not a focus-loss dismissal, while another app or unrelated window taking focus still uses the
+existing 200 ms bounce and automatic-dismiss policy, keyboard visible or not. System Back hides the
+keyboard first, leaves search second, and then follows the existing sheet/reference/overlay order.
+Full interaction and accessibility rules are in
+[DESIGN-REV2.md](../artifacts/lookup-redesign/DESIGN-REV2.md) §4.
 
 ### 8.6 The floating button
 
@@ -556,23 +613,30 @@ the app did not observe.
 Overlay timings use the shared tokens only: dim and rail `SHORT` (150 ms), sheet entrance `MEDIUM`
 (300 ms), sheet exit and full dismissal `SHORT`, all on `emphasized`; finger-driven geometry is
 immediate; state changes (commit, edge weight, expand/collapse, action label) are 0 ms layout changes;
-a sub-threshold drag returns on the `overshoot` spring. Functional spinners keep the platform's own
-timing. Reduced motion is the platform's animation scale — every one of these is a Compose animation
-and scales with it, and no custom loop is added that would defeat it.
+a sub-threshold drag returns on the `overshoot` spring. The full-screen search cover enters and leaves
+by `SHORT` opacity on `emphasized`; query and result changes are immediate, and keyboard geometry
+follows the native IME insets. Functional spinners keep the platform's own timing. Reduced motion is
+the platform's animation scale — every one of these is a Compose animation and scales with it, and no
+custom loop is added that would defeat it.
 
 ### 8.10 Amendments this workflow makes
 
 Approved for surfaces drawn over foreign content, and nowhere else:
 
 1. A fixed **40 % black freeze veil** in both modes.
-2. A **square, opaque status rail** with a 2 dp accent leading rule, in place of a rounded pill.
+2. A neutral, opaque status rail with **13 dp corners and a 1 dp `outlineVariant` perimeter**, in both
+   floating and inline placements, with **no accent leading rule**. Its boundary is a notice recipe,
+   not a general rounded-card treatment.
 3. A **two-pass opaque paired stroke** (5/3 dp, 4/2 dp and 3/1 dp pairs) for the lasso and the
    selection edge, where a single theme role cannot guarantee contrast on arbitrary pixels.
 4. A **4 dp selection corner**, alongside the external sheet's 20 dp dock corner.
 5. A **2 dp paired perimeter** on the isolated floating action.
 
-These are recipes, not tokens: they use the existing roles, radii and spacing and add no colour, type,
-shape or motion rung to the language.
+These are component recipes, not new shared tokens: they use existing roles, the existing 13 dp
+control radius value and shared spacing without adding a colour, typography, shape or motion rung.
+Centred lookup artwork and the full-screen dictionary-search cover reuse the app's sparse-artwork,
+field and focus grammar; they do not authorize translucent fields, tinted content cards or extra
+windows.
 
 ## 9. Floating bottom navigation
 
@@ -685,6 +749,16 @@ honesty rules for missing, unavailable and cached figures. Renumbered the follow
 the analytics sources to §12. Checked on a debug build at 392 dp across all seven accents in light
 and dark, and at 160 % text scale.
 
+### Version 1.3 changes
+
+§6 Analytics rewritten for the final single-page design: the source switcher is gone, the sections are
+`Anki → WaniKani → Study activity → Recall → Ahead` (the two source summaries lead; the twelve-week
+heatmap follows them), and the colour rule is now accent-only — the
+`success` segment on the collection bar is removed, so no analytical element carries a hue the reader
+did not choose. Added the heatmap's unknown-versus-zero treatment, the cumulative-accuracy rule, and
+the once-per-source action rule. Checked on a debug build at 392 dp across all seven accents in light
+and dark, at 320/340/430 dp, and at 130 % and 160 % text.
+
 ### Version 1.4 changes
 
 Added §8 **Screen lookup**: the freeze veil with no screen-edge ring, the two-pass paired selection
@@ -706,12 +780,27 @@ seven accents across light and dark, both side docks, the live gesture, the comm
 disclosure. Reduced motion was not exercised: the transitions are Compose animations and follow the
 platform's animation scale, which was left untouched.
 
-### Version 1.3 changes
+### Version 1.5 changes
 
-§6 Analytics rewritten for the final single-page design: the source switcher is gone, the sections are
-`Anki → WaniKani → Study activity → Recall → Ahead` (the two source summaries lead; the twelve-week
-heatmap follows them), and the colour rule is now accent-only — the
-`success` segment on the collection bar is removed, so no analytical element carries a hue the reader
-did not choose. Added the heatmap's unknown-versus-zero treatment, the cumulative-accuracy rule, and
-the once-per-source action rule. Checked on a debug build at 392 dp across all seven accents in light
-and dark, at 320/340/430 dp, and at 130 % and 160 % text.
+Revision 2 of the lookup workflow, from a review pass on the shipped redesign. The **status rail** is
+now a 13 dp rounded neutral surface with **no accent leading rule** (it was square and carried one),
+and a settled message stays three seconds before fading with the message that follows it staying two.
+**No text found** and **No dictionary matches** became **centred, illustrated empty states** — sparse
+neutral SVG artwork, the message, **Search dictionary** as the primary recovery and **Select again** as
+the secondary action — replacing the left-aligned inline rails; **Dictionary unavailable** stays an
+error rail. A confirmed zero-line screen index now opens that no-text sheet instead of spending a timed
+notice. The sheet's header grew to a four-control cluster (Copy → Search → Select again → Close) that
+yields controls into the body as physical width shrinks, and **Search dictionary** opens a
+**full-screen query cover inside the same overlay window**: the house field, the existing offline
+search helper verbatim (romaji included), flat rows carrying exact / matched-form / approximate-reading
+/ prefix provenance, and a chosen entry returning to the sheet labelled **Searched** with **Original
+lookup** to restore what the capture said.
+
+Checked on a debug build on the `Pixel_Safe` emulator (1080 × 2340 @ 440 dpi, portrait and landscape,
+100 % and 160 % text): the rounded rail and its dwell, both illustrated empty states (a blank crop and
+a zero-hit query), the bottom dock and a 45 % side dock, the full-screen cover with the system keyboard
+up, romaji input (`neko` → ねこ, 9 results, exact and prefix provenance), choosing a row, and
+**Original lookup** restoring the captured result. The keyboard taking focus no longer ends the lookup,
+which is what lets the reader type at all; the existing 200 ms focus bounce is otherwise unchanged. Not
+exercised: the WaniKani reference page inside a searched entry (needs a token) and the reduced-motion
+path (every transition is a Compose animation and follows the platform's animation scale).

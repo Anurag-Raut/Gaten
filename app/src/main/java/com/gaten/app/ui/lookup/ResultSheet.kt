@@ -71,6 +71,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Gesture
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -110,6 +111,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -132,6 +134,7 @@ import com.gaten.app.anki.AnkiCard
 import com.gaten.app.anki.AnkiExporter
 import com.gaten.app.anki.AnkiPreferences
 import com.gaten.app.anki.AnkiStatus
+import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.alternativeHeadwordFor
 import com.gaten.app.dict.headwordFor
@@ -169,10 +172,22 @@ private val RightSheetShape = RoundedCornerShape(topStart = SheetShape, bottomSt
 private val NarrowPanelWidth = 360.dp
 
 /**
- * The usable width below which a scaled line and three targets stop sharing a row: the source line
- * moves into the body rather than the controls or the words being cut down.
+ * The measure per scaled dp the pinned row has to reach before the source line keeps its place on
+ * it: the line moves into the body rather than the controls or the words being cut down.
  */
 private val ReflowWidth = 300.dp
+
+/** The pinned band's four 48 dp targets — Copy, Search, Select again, Close — in real dp. */
+private val FourControlWidth = 192.dp
+
+/** Three of them: Search, Select again and Close. Copy is the first to leave the band. */
+private val ThreeControlWidth = 144.dp
+
+/** Two: Search and Close. Below this even Search moves into the body. */
+private val TwoControlWidth = 96.dp
+
+/** What the source line needs left over beside the four targets before it keeps its row. */
+private val SourceRowRemainder = 96.dp
 
 /** The house content column, insets included, centred when the window is wider. */
 private val ContentColumnMaxWidth = 560.dp
@@ -274,19 +289,37 @@ internal fun sheetType(): SheetType {
  * width with a bottom-docked cap on its height and rounded top corners; it paints edge-to-edge to
  * the physical bottom, under the navigation strip, and insets only its content.
  *
- * Both docks are one flat surface: a grip band, a transparent header with the three controls, a
- * hairline, one vertical scroller holding the recognized line, the word tabs and the entry (or the
- * WaniKani page, or a terminal notice), and the Anki action pinned below it. Nothing inside is a
- * card, and the only rules are the sheet's own boundary and the lines between sections.
+ * Both docks are one flat surface: a grip band, a transparent header with its 48 dp control band, a
+ * hairline, one body holding the recognized line, the word tabs and the entry (or the WaniKani page,
+ * or a terminal notice), and the Anki action pinned below it. Nothing inside is a card, and the only
+ * rules are the sheet's own boundary and the lines between sections.
+ *
+ * The header carries up to four controls — Copy, Search, Select again, Close — and gives up what the
+ * measure cannot hold to labelled 48 dp actions at the top of the body; nothing is ever squeezed to
+ * keep icon density. A result with nothing to read (no text, or no dictionary match) is a centred,
+ * illustrated empty state with the two ways out, and a dictionary failure is the inline status rail.
+ * A chosen search result is drawn by the same entry column, with its provenance above it and the OCR
+ * word tabs hidden.
  *
  * Everything beside the sheet stays as scrim; tapping it dismisses the overlay, as does dragging the
  * grip — and the rest of the panel — toward the docked edge past [DISMISS_DRAG_DP]. While dragged,
  * the bottom sheet follows the finger and springs back if the drag was short. Word-tab selection
- * crossfades the entry; empty and failed results show the inline status rail with its one way back.
+ * crossfades the entry.
  */
 @Composable
 fun ResultSheet(
     result: LookupResult,
+    /**
+     * The entry the reader typed their way to, or null while the captured result is showing. It
+     * replaces the selected word's own entry, hides the OCR word tabs and carries its provenance.
+     */
+    searchedEntry: DictEntry?,
+    /** The committed query that produced [searchedEntry]. */
+    searchedQuery: String?,
+    /** Opens the full-screen dictionary search. The sheet never draws that cover itself. */
+    onSearch: () -> Unit,
+    /** Puts the captured result, its word and its scroll back. The parent owns that state. */
+    onOriginalLookup: () -> Unit,
     onDismiss: () -> Unit,
     onSelectAgain: () -> Unit,
     layout: SheetLayout,
@@ -308,6 +341,32 @@ fun ResultSheet(
         if (wanikani.isNotEmpty()) wanikani.removeAt(wanikani.lastIndex)
     }
     BackHandler(enabled = wanikani.isNotEmpty()) { closeWaniKaniPage() }
+    // Choosing a search result discards the reference pages the lookup had open: the chosen entry is
+    // the new starting point, and Original lookup restores the original dictionary result rather
+    // than a stack that belonged to the word it replaced. Cancelling search touches nothing, which
+    // is what puts the reader back on the exact page they left.
+    //
+    // It also announces itself once. The reader picked a row on a cover that has just closed, so the
+    // surface under their finger changed without anything they touched saying so; after this, the
+    // ordinary reading order takes over and nothing else is spoken on their behalf.
+    //
+    // A one-shot announcement has no Compose-native equivalent: a live region speaks when the text
+    // inside it *changes*, and here there is nothing to change — the entry simply replaces a page
+    // that is gone. The View call is the platform's own answer to exactly this, and the replacement
+    // API is still being settled, so it stays with the deprecation suppressed rather than replaced
+    // by a live region that would announce nothing.
+    val entryOpened = stringResource(R.string.lookup_entry_opened)
+    val view = LocalView.current
+    @Suppress("DEPRECATION")
+    LaunchedEffect(searchedEntry) {
+        if (searchedEntry != null) {
+            wanikani.clear()
+            view.announceForAccessibility(entryOpened)
+        }
+    }
+    // The chosen entry is drawn instead of whatever page the stack held, in the frame it arrives:
+    // the entry must not cross-fade with a reference page, and the page must not flash first.
+    val wanikaniPage = if (searchedEntry != null) null else wanikani.lastOrNull()
     val dock = layout.dock
     val compact = dock != SheetDock.Bottom
     val type = sheetType()
@@ -402,6 +461,8 @@ fun ResultSheet(
                     CappedContentColumn(sideDock = false) {
                         SheetBody(
                             result = result,
+                            searchedEntry = searchedEntry,
+                            searchedQuery = searchedQuery,
                             selected = selected,
                             onSelect = {
                                 if (selected != it) feedback.haptic(FeedbackHaptic.Tick)
@@ -413,7 +474,9 @@ fun ResultSheet(
                                 wanikani.clear()
                                 onSelectAgain()
                             },
-                            target = wanikani.lastOrNull(),
+                            onSearch = onSearch,
+                            onOriginalLookup = onOriginalLookup,
+                            target = wanikaniPage,
                             onKanji = {
                                 feedback.haptic(FeedbackHaptic.Tick)
                                 wanikani.add(WaniKaniTarget.Kanji(it))
@@ -468,6 +531,8 @@ fun ResultSheet(
                         CappedContentColumn(sideDock = true) {
                             SheetBody(
                                 result = result,
+                                searchedEntry = searchedEntry,
+                                searchedQuery = searchedQuery,
                                 selected = selected,
                                 onSelect = {
                                     if (selected != it) feedback.haptic(FeedbackHaptic.Tick)
@@ -479,7 +544,9 @@ fun ResultSheet(
                                     wanikani.clear()
                                     onSelectAgain()
                                 },
-                                target = wanikani.lastOrNull(),
+                                onSearch = onSearch,
+                                onOriginalLookup = onOriginalLookup,
+                                target = wanikaniPage,
                                 onKanji = {
                                     feedback.haptic(FeedbackHaptic.Tick)
                                     wanikani.add(WaniKaniTarget.Kanji(it))
@@ -624,8 +691,8 @@ private fun Modifier.sheetEdgeRule(shape: Shape, edge: SheetEdge, color: Color):
     }
 
 /**
- * Everything inside the panel past the grip: the header row, then the one body scroller and the
- * pinned action under it.
+ * Everything inside the panel past the grip: the header row, then the one body area and the pinned
+ * action under it.
  *
  * One implementation for every dock, because a dock changes only the panel around it. [compact]
  * survives for the one thing that is genuinely smaller in a side dock — a WaniKani radical's
@@ -634,10 +701,16 @@ private fun Modifier.sheetEdgeRule(shape: Shape, edge: SheetEdge, color: Color):
 @Composable
 private fun ColumnScope.SheetBody(
     result: LookupResult,
+    /** The entry the reader typed their way to, or null while the captured result is showing. */
+    searchedEntry: DictEntry?,
+    /** The committed query that produced [searchedEntry]. */
+    searchedQuery: String?,
     selected: Int,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
     onSelectAgain: () -> Unit,
+    onSearch: () -> Unit,
+    onOriginalLookup: () -> Unit,
     /** The WaniKani page open over the entry, or null while the entry itself is showing. */
     target: WaniKaniTarget?,
     onKanji: (String) -> Unit,
@@ -649,6 +722,22 @@ private fun ColumnScope.SheetBody(
     val context = LocalContext.current
     val feedback = rememberFeedback()
     val bodyScroll = rememberScrollState()
+    // A chosen search result arrives at the top of the body, where its provenance is, and Original
+    // lookup puts the reader back on the offset the captured result was left at: the two states share
+    // one scroller, so the offset is saved the first time a searched entry replaces the result —
+    // searching again from a searched entry must not overwrite it. Both moves are immediate: a chosen
+    // entry commits beneath the opaque cover, with no travel and nothing animated.
+    val capturedScroll = remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(searchedEntry) {
+        val saved = capturedScroll.value
+        if (searchedEntry != null) {
+            if (saved == null) capturedScroll.value = bodyScroll.value
+            bodyScroll.scrollTo(0)
+        } else if (saved != null) {
+            bodyScroll.scrollTo(saved)
+            capturedScroll.value = null
+        }
+    }
     val copy: () -> Unit = {
         val clipboard =
             context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -659,157 +748,266 @@ private fun ColumnScope.SheetBody(
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val fontScale = LocalDensity.current.fontScale
-        // A scaled source line and three 48 dp targets stop sharing a row once the reader's own text
-        // size leaves too little for the words. The line moves into the body — where it can wrap in
-        // full — rather than the controls shrinking or the words being cut to an ellipsis.
-        val reflowed = maxWidth.value / fontScale < ReflowWidth.value
+        // What this measure can hold: the four 48 dp targets are measured in real dp, the source
+        // line in scaled dp, because only the line is text. What does not fit leaves the row in the
+        // order below rather than a target being shrunk or the words cut to an ellipsis.
+        val fit = headerFit(maxWidth, fontScale)
         // Physically insufficient height: the sheet gives up its pinned action before it gives up
         // readable text, and the action rides at the true end of the one scroller instead.
         val unpinned = maxHeight < HeaderMinHeight + FooterMinHeight + ReadableBodyHeight
-        val showsEntry = target == null && result.error == null &&
-            result.ocrText.isNotBlank() && result.words.isNotEmpty()
+        // A result with nothing to read: the centred empty state replaces the terminal rail it used
+        // to be, and it comes with no word tabs, no export action and no invented OCR line.
+        val empty = searchedEntry == null && result.error == null &&
+            (result.ocrText.isBlank() || result.words.isEmpty())
+        // The action under the body is keyed to the entry on screen: the chosen dictionary entry, or
+        // the selected word's own first match. Absent for a terminal result and for both empty
+        // states, which have nothing to add to Anki.
+        val footerCard = if (target == null && result.error == null && !empty) {
+            searchedEntry?.let { AnkiCard.from(it) }
+                ?: result.words.getOrNull(selected)?.let { AnkiCard.from(it) }
+        } else {
+            null
+        }
 
         Column(modifier = Modifier.fillMaxWidth()) {
             SheetHeader(
                 text = result.ocrText,
-                reflowed = reflowed,
+                fit = fit,
                 onCopy = if (result.ocrText.isBlank()) null else copy,
+                onSearch = onSearch,
                 onSelectAgain = onSelectAgain,
                 onDismiss = onDismiss,
                 type = type
             )
             SectionRule()
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // A floor, not a fixed height: the body is as tall as its content up to what the
-                    // sheet has left, and scrolls past that. A side dock fills its panel instead, so
-                    // the pinned action closes the panel rather than floating mid-height in it.
-                    .weight(1f, fill = compact)
-                    .verticalScroll(bodyScroll)
-            ) {
-                // The whole recognized line, wrapping, when the reader's own text scale leaves the
-                // pinned header no room for it — and it stays here for a terminal result too, which
-                // is the whole point of keeping the source beside the notice about it.
-                if (reflowed && result.ocrText.isNotBlank()) {
-                    Text(
+            if (empty) {
+                // The empty state centres, so it needs a bounded parent rather than the body
+                // scroller: the reflowed source line, when there is one, takes its measured block
+                // first and the illustrated group centres in the height that is left, scrolling
+                // itself if the group still does not fit. The sheet keeps its full dock height here
+                // — an empty shell is not a notice-height sheet.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true)
+                ) {
+                    BodyFallbacks(
                         text = result.ocrText,
-                        style = type.header,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = Spacing.m)
+                        fit = fit,
+                        copy = copy,
+                        onSearch = onSearch,
+                        onSelectAgain = onSelectAgain,
+                        emptyState = true,
+                        failure = false,
+                        type = type
                     )
-                }
-                when {
-                    // A terminal result keeps the header and the recognized text, and says what
-                    // happened in the same rail the overlay uses over the frozen screen. It has no
-                    // word tabs and no export action: there is nothing here to add to Anki.
-                    result.error != null -> InlineStatusRail(
-                        text = stringResource(R.string.lookup_dict_error),
-                        glyph = RailGlyph.Error,
-                        tone = RailTone.Error,
-                        supporting = result.error
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { stringResource(R.string.lookup_dict_error_cause, it) },
-                        action = RailAction(
-                            stringResource(R.string.lookup_select_again),
-                            onSelectAgain
-                        )
-                    )
-
-                    result.ocrText.isBlank() -> InlineStatusRail(
-                        text = stringResource(R.string.lookup_no_text),
-                        glyph = RailGlyph.SearchOff,
-                        tone = RailTone.Neutral,
-                        supporting = null,
-                        action = RailAction(
-                            stringResource(R.string.lookup_select_again),
-                            onSelectAgain
-                        )
-                    )
-
-                    result.words.isEmpty() -> InlineStatusRail(
-                        text = stringResource(R.string.lookup_no_words),
-                        glyph = RailGlyph.SearchOff,
-                        tone = RailTone.Neutral,
-                        supporting = null,
-                        action = RailAction(
-                            stringResource(R.string.lookup_select_again),
-                            onSelectAgain
-                        )
-                    )
-
-                    else -> {
-                        // Header rule to the selectors: 12 dp, which the reflowed source line above
-                        // has already spent.
-                        if (!reflowed) Spacer(Modifier.height(Spacing.m))
-                        // The tabs scroll away with the entry: a permanently pinned strip would take
-                        // its height from the reading at every text scale, and the word being read
-                        // is named by the headword anyway.
-                        if (result.words.size > 1) {
-                            WordTabs(
-                                words = result.words,
-                                selected = selected,
-                                onSelect = onSelect,
-                                type = type
-                            )
-                            Spacer(Modifier.height(Spacing.l))
-                        }
-                        AnimatedContent(
-                            targetState = target,
-                            transitionSpec = {
-                                val backward = targetState == null ||
-                                    (initialState is WaniKaniTarget.Radical &&
-                                        targetState is WaniKaniTarget.Kanji)
-                                pageSlide(forward = !backward) using null
-                            },
-                            label = "lookupReference",
-                            // The slide is clipped to the body's measure, not to the sheet: a page
-                            // arriving moves within the column the reader is reading in.
-                            modifier = Modifier.clipToBounds()
-                        ) { page ->
-                            if (page != null) {
-                                WaniKaniDetailPanel(
-                                    target = page,
-                                    onBack = onWaniKaniBack,
-                                    onRadical = onRadical,
-                                    type = type,
-                                    compact = compact
-                                )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        LookupEmptyState(
+                            // The two facts are told apart by the mark: text that was never read,
+                            // and text that was read and matched nothing.
+                            artwork = if (result.ocrText.isBlank()) {
+                                R.drawable.ic_lookup_no_text
                             } else {
-                                // Word selection is content within one surface; it keeps the short
-                                // crossfade, and the scroller above holds the reader's place.
-                                Crossfade(
-                                    targetState = selected,
-                                    animationSpec = tween(Motion.SHORT, easing = Motion.emphasized),
-                                    label = "entry"
-                                ) { index ->
-                                    EntryColumn(result.words[index], type, onKanji)
+                                R.drawable.ic_lookup_no_matches
+                            },
+                            message = stringResource(
+                                if (result.ocrText.isBlank()) {
+                                    R.string.lookup_no_text
+                                } else {
+                                    R.string.lookup_no_words
+                                }
+                            ),
+                            onSearch = onSearch,
+                            onSelectAgain = onSelectAgain
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // A floor, not a fixed height: the body is as tall as its content up to what
+                        // the sheet has left, and scrolls past that. A side dock fills its panel
+                        // instead, so the pinned action closes the panel rather than floating
+                        // mid-height in it.
+                        .weight(1f, fill = compact)
+                        .verticalScroll(bodyScroll)
+                ) {
+                    BodyFallbacks(
+                        text = result.ocrText,
+                        fit = fit,
+                        copy = copy,
+                        onSearch = onSearch,
+                        onSelectAgain = onSelectAgain,
+                        emptyState = false,
+                        failure = result.error != null,
+                        type = type
+                    )
+                    when {
+                        // A dictionary failure keeps the header and the recognized text, and says
+                        // what happened in the same rail the overlay uses over the frozen screen.
+                        // It is never illustrated as an empty state and never invents a retry: the
+                        // rail's own action is the way back.
+                        result.error != null -> InlineStatusRail(
+                            text = stringResource(R.string.lookup_dict_error),
+                            glyph = RailGlyph.Error,
+                            tone = RailTone.Error,
+                            supporting = result.error
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { stringResource(R.string.lookup_dict_error_cause, it) },
+                            action = RailAction(
+                                stringResource(R.string.lookup_select_again),
+                                onSelectAgain
+                            )
+                        )
+
+                        else -> {
+                            // The chosen entry says where it came from: the committed rectangle and
+                            // the source line above cannot claim a word that was typed. The
+                            // recognized sentence's tabs are hidden rather than rewritten as its
+                            // tokens — a search result is an alternative the reader picked, not a
+                            // word that was read.
+                            if (searchedEntry != null) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.lookup_searched,
+                                        searchedQuery.orEmpty()
+                                    ),
+                                    style = type.small,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(Spacing.s))
+                                BodyTextAction(
+                                    label = R.string.lookup_original_result,
+                                    onClick = onOriginalLookup,
+                                    type = type
+                                )
+                                Spacer(Modifier.height(Spacing.l))
+                            }
+                            // The tabs scroll away with the entry: a permanently pinned strip would
+                            // take its height from the reading at every text scale, and the word
+                            // being read is named by the headword anyway.
+                            if (searchedEntry == null && result.words.size > 1) {
+                                WordTabs(
+                                    words = result.words,
+                                    selected = selected,
+                                    onSelect = onSelect,
+                                    type = type
+                                )
+                                Spacer(Modifier.height(Spacing.l))
+                            }
+                            AnimatedContent(
+                                targetState = target,
+                                transitionSpec = {
+                                    val backward = targetState == null ||
+                                        (initialState is WaniKaniTarget.Radical &&
+                                            targetState is WaniKaniTarget.Kanji)
+                                    pageSlide(forward = !backward) using null
+                                },
+                                label = "lookupReference",
+                                // The slide is clipped to the body's measure, not to the sheet: a
+                                // page arriving moves within the column the reader is reading in.
+                                modifier = Modifier.clipToBounds()
+                            ) { openPage ->
+                                if (openPage != null) {
+                                    WaniKaniDetailPanel(
+                                        target = openPage,
+                                        onBack = onWaniKaniBack,
+                                        onRadical = onRadical,
+                                        type = type,
+                                        compact = compact
+                                    )
+                                } else {
+                                    // Word selection is content within one surface; it keeps the
+                                    // short crossfade, and the scroller above holds the reader's
+                                    // place. A chosen search result is not a word at another index:
+                                    // it arrives with no crossfade at all, in the frame the sheet
+                                    // shows it.
+                                    Crossfade(
+                                        targetState = selected,
+                                        animationSpec = tween(Motion.SHORT, easing = Motion.emphasized),
+                                        label = "entry"
+                                    ) { index ->
+                                        // One entry of a word that may have several is drawn by the
+                                        // same column as a recognized word, with no recognized word
+                                        // behind it when the reader typed their way here.
+                                        val word = result.words.getOrNull(index)
+                                        EntryColumn(
+                                            entry = searchedEntry ?: word?.entries?.firstOrNull(),
+                                            word = if (searchedEntry == null) word else null,
+                                            type = type,
+                                            onKanji = onKanji
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+                    if (unpinned && footerCard != null) AnkiFooter(footerCard, type)
                 }
-                if (unpinned && showsEntry) AnkiFooter(result.words[selected], type)
             }
-            if (!unpinned && showsEntry) AnkiFooter(result.words[selected], type)
+            if (!unpinned && footerCard != null) AnkiFooter(footerCard, type)
         }
     }
 }
 
 /**
- * The recognized line and the three controls that act on the whole sheet. Transparent: the sheet's
- * own paper is the surface, and a second container inside it would be a card drawn around a caption.
+ * What the pinned control band can hold at one content measure, and whether the source line keeps its
+ * place on the row.
  *
- * The line is one line at normal measure, with the complete string still going to the clipboard and
- * to TalkBack. [reflowed] is the reader's own text size asking for the whole line instead: then the
- * line is in the body below and this row is controls only.
+ * The band is measured in real dp — a 48 dp target is 48 dp whatever the reader's text size is — and
+ * the source line, which is text, in scaled dp.
+ */
+private data class HeaderFit(
+    /** The complete source line stays on the pinned row; otherwise it leads the body. */
+    val sourceOnRow: Boolean,
+    val copySlot: Boolean,
+    val searchSlot: Boolean,
+    val selectSlot: Boolean
+)
+
+/**
+ * The physical-fit ladder, in the order the controls yield: Copy first, then Select again, then
+ * Search. Close is never dropped — the escape stays at the band's edge, where it has always been.
+ *
+ * [contentWidth] is the real measure the band has after safe insets, the grip gutter and the column's
+ * own insets. The two empty states carry their own Search and Select again and the failure rail its
+ * own Select again, which is what makes the last two rungs safe: no state loses a way out when a
+ * control leaves the band.
+ */
+private fun headerFit(contentWidth: Dp, fontScale: Float): HeaderFit {
+    val width = contentWidth.value
+    return HeaderFit(
+        // The line keeps its row only with room for the words themselves, not just for the targets.
+        sourceOnRow = width / fontScale >= ReflowWidth.value &&
+            width - FourControlWidth.value >= SourceRowRemainder.value,
+        copySlot = width >= FourControlWidth.value,
+        selectSlot = width >= ThreeControlWidth.value,
+        searchSlot = width >= TwoControlWidth.value
+    )
+}
+
+/**
+ * The recognized line and the controls that act on the whole sheet. Transparent: the sheet's own
+ * paper is the surface, and a second container inside it would be a card drawn around a caption.
+ *
+ * The band is 48 dp high and never grows for a label: [fit] decides which of Copy, Search, Select
+ * again and Close share it, in that order, each a 48 dp target with no backing. The line is one line
+ * at normal measure, with the complete string still going to the clipboard and to TalkBack; when the
+ * reader's own text size — or the panel's own width — leaves it no room, it moves into the body and
+ * this row is controls only.
  */
 @Composable
 private fun SheetHeader(
     text: String,
-    reflowed: Boolean,
+    fit: HeaderFit,
     /** Null when there is no recognized text to copy; the slot stays, visibly out of action. */
     onCopy: (() -> Unit)?,
+    onSearch: () -> Unit,
     onSelectAgain: () -> Unit,
     onDismiss: () -> Unit,
     type: SheetType
@@ -818,7 +1016,7 @@ private fun SheetHeader(
         modifier = Modifier.fillMaxWidth().heightIn(min = HeaderMinHeight),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (!reflowed && text.isNotBlank()) {
+        if (fit.sourceOnRow && text.isNotBlank()) {
             Text(
                 text = text,
                 style = type.header,
@@ -830,16 +1028,21 @@ private fun SheetHeader(
         } else {
             Spacer(Modifier.weight(1f))
         }
-        HeaderAction(Icons.Rounded.ContentCopy, R.string.lookup_cd_copy, onCopy)
-        HeaderAction(Icons.Rounded.Gesture, R.string.lookup_cd_select_again, onSelectAgain)
+        if (fit.copySlot) HeaderAction(Icons.Rounded.ContentCopy, R.string.lookup_cd_copy, onCopy)
+        // Search sits in the top-right cluster with the other controls, but Close keeps the far edge:
+        // the escape does not move because another action arrived beside it.
+        if (fit.searchSlot) HeaderAction(Icons.Rounded.Search, R.string.lookup_search, onSearch)
+        if (fit.selectSlot) {
+            HeaderAction(Icons.Rounded.Gesture, R.string.lookup_cd_select_again, onSelectAgain)
+        }
         HeaderAction(Icons.Rounded.Close, R.string.lookup_cd_close, onDismiss)
     }
 }
 
 /**
- * One of the header's three controls: a bare neutral glyph in a 48 dp target, with no backing of its
- * own. A null [onClick] is the Copy slot with nothing to copy — it keeps its place and its size so
- * the other two do not move, and fades so it is never mistaken for a control that would work.
+ * One of the header's controls: a bare neutral glyph in a 48 dp target, with no backing of its own. A
+ * null [onClick] is the Copy slot with nothing to copy — it keeps its place and its size so the
+ * controls beside it do not move, and fades so it is never mistaken for a control that would work.
  */
 @Composable
 private fun HeaderAction(icon: ImageVector, @StringRes description: Int, onClick: (() -> Unit)?) {
@@ -864,6 +1067,87 @@ private fun HeaderAction(icon: ImageVector, @StringRes description: Int, onClick
             contentDescription = stringResource(description),
             tint = tint,
             modifier = Modifier.size(GlyphSize)
+        )
+    }
+}
+
+/**
+ * The source line and the controls the pinned band could not hold, in the band's own order: the
+ * complete source first, then Copy, Search and Select again, with 12 dp after the block so the body
+ * content starts where it always did.
+ *
+ * [emptyState] and [failure] are the two states that already carry their own way out — the empty
+ * state's Search button and Select again, the failure rail's Select again — so a relocated control is
+ * never a duplicate of one the reader can already reach.
+ */
+@Composable
+private fun BodyFallbacks(
+    text: String,
+    fit: HeaderFit,
+    /** Null when there is nothing to copy — which is also when no Copy action belongs here. */
+    copy: (() -> Unit)?,
+    onSearch: () -> Unit,
+    onSelectAgain: () -> Unit,
+    /** The body is one of the empty states, which carry their own Search and Select again. */
+    emptyState: Boolean,
+    /** The body is the dictionary failure rail, which carries its own Select again. */
+    failure: Boolean,
+    type: SheetType
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
+    ) {
+        // The whole recognized line, wrapping: it is here because the pinned band could not hold it,
+        // and it stays here for a terminal result too, which is the point of keeping the source
+        // beside the notice about it. A blank source never invents a line.
+        if (!fit.sourceOnRow && text.isNotBlank()) {
+            Text(
+                text = text,
+                style = type.header,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // Copy is the first control to leave the band and it leaves it entirely: an absent Copy
+        // reserves no width, and a blank source omits the action rather than leaving a dead one.
+        if (!fit.copySlot && copy != null) {
+            BodyTextAction(R.string.lookup_cd_copy, copy, type)
+        }
+        if (!fit.searchSlot && !emptyState) {
+            BodyTextAction(R.string.lookup_search, onSearch, type)
+        }
+        if (!fit.selectSlot && !emptyState && !failure) {
+            BodyTextAction(R.string.lookup_select_again, onSelectAgain, type)
+        }
+    }
+    Spacer(Modifier.height(Spacing.m))
+}
+
+/**
+ * One control that had to leave the pinned band: the same 48 dp target, now a labelled text action at
+ * the start of the body. It wraps and grows with the reader's text size rather than being clipped —
+ * a relocated control that cannot be read in full is a control that was lost.
+ */
+@Composable
+private fun BodyTextAction(@StringRes label: Int, onClick: () -> Unit, type: SheetType) {
+    val interactions = remember { MutableInteractionSource() }
+    Box(
+        contentAlignment = Alignment.CenterStart,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = MinTarget)
+            .pressOpacity(interactions)
+            .clickable(
+                interactionSource = interactions,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onClick
+            )
+    ) {
+        Text(
+            text = stringResource(label),
+            style = type.label,
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }
@@ -1072,17 +1356,23 @@ private fun WordTab(
 }
 
 /**
- * Dictionary entry for the selected word's first match: the word, its reading and metadata, the
- * numbered meanings, the full part of speech, and the kanji that are one tap from their WaniKani
- * page. Laid out at its natural height — the sheet's one body scroller is what moves it.
+ * One dictionary entry: the word, its reading and metadata, the numbered meanings, the full part of
+ * speech, and the kanji that are one tap from their WaniKani page. Laid out at its natural height —
+ * the sheet's one body scroller is what moves it.
+ *
+ * The same column draws both entries the sheet can show: the first match of the word the reader
+ * recognized ([word]), and the entry they typed their way to ([word] null, so the headword is the
+ * entry's own and there is no recognized sentence to quote a base form from).
  */
 @Composable
 private fun EntryColumn(
-    word: ScannedWord,
+    /** The entry to draw; null only for a recognized word the dictionary has no entry for. */
+    entry: DictEntry?,
+    /** The recognized word this entry matched, or null for an entry the reader searched for. */
+    word: ScannedWord?,
     type: SheetType,
     onKanji: (String) -> Unit
 ) {
-    val entry = word.entries.firstOrNull()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1092,15 +1382,15 @@ private fun EntryColumn(
         if (entry == null) {
             // WordScanner only emits surfaces with real entries; this is a defensive fallback.
             Text(
-                text = word.surface,
+                text = word?.surface.orEmpty(),
                 style = type.reading,
                 color = MaterialTheme.colorScheme.onSurface
             )
             return
         }
 
-        val headword = headwordFor(word, entry)
-        val alsoWritten = notedForm(word, entry)
+        val headword = word?.let { headwordFor(it, entry) } ?: entry.primary
+        val alsoWritten = word?.let { notedForm(it, entry) }
         val reading = entry.kana.joinToString("・")
         // The word keeps its own line at the sheet's largest size: it is what the reader looked up,
         // so nothing shares its line. It is drawn as content, not as a coloured action.
@@ -1139,7 +1429,9 @@ private fun EntryColumn(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        if (word.baseForm != word.surface) {
+        // The dictionary form the recognized surface matched. Neither this line nor "Also written"
+        // above it can exist for an entry the reader typed: there is no surface to have come from.
+        if (word != null && word.baseForm != word.surface) {
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 text = stringResource(R.string.lookup_base_form, word.surface),
@@ -1190,7 +1482,7 @@ private fun EntryColumn(
         // what WaniKani covers is not known before the tap.
         KanjiStrip(headword = headword, onKanji = onKanji, type = type)
 
-        if (word.entries.size > 1) {
+        if (word != null && word.entries.size > 1) {
             OtherMatches(word, type)
         }
     }
@@ -1335,19 +1627,21 @@ private sealed interface AnkiUiState {
 }
 
 /**
- * "Add to Anki" for [word]: the configured note type is checked when this entry opens, then a tap
+ * "Add to Anki" for [card]: the configured note type is checked when this entry opens, then a tap
  * adds the card, or — when AnkiDroid's database permission is not granted, which the overlay cannot
  * ask for — hands the word to AnkiDroid's own add screen instead.
  *
- * The state is keyed on the card and the AnkiDroid status, so selecting another word starts from a
- * fresh button. A finished button keeps its honest label for the rest of the entry: reverting to
- * "Add to Anki" on a disabled control would read as an unfinished action that had silently failed.
+ * The card is the entry on screen, so a chosen search result exports its own readings and meanings
+ * rather than the ones of whichever entry of that word happened to come first. The state is keyed on
+ * the card and the AnkiDroid status, so selecting another word — or another search result — starts
+ * from a fresh button. A finished button keeps its honest label for the rest of the entry: reverting
+ * to "Add to Anki" on a disabled control would read as an unfinished action that had silently failed.
  *
  * A failure is stated above the button and stays there. The action is offered again — a provider can
  * be briefly unavailable — but only a fresh tap on it writes, so nothing here retries by itself.
  */
 @Composable
-private fun AnkiFooter(word: ScannedWord, type: SheetType) {
+private fun AnkiFooter(card: AnkiCard, type: SheetType) {
     val context = LocalContext.current
     val feedback = rememberFeedback()
     val interactions = remember { MutableInteractionSource() }
@@ -1355,7 +1649,6 @@ private fun AnkiFooter(word: ScannedWord, type: SheetType) {
     val status = remember { AnkiExporter.status(context) }
     val settings = AnkiPreferences.load(context)
 
-    val card = AnkiCard.from(word)
     var state by remember(card, status, settings) {
         mutableStateOf<AnkiUiState>(
             if (status == AnkiStatus.Ready) {

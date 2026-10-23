@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+ * Gaten
+ * Copyright (C) 2026 Anurag Raut
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * "Nothing was read here": an empty reading frame with its middle missing. The geometry is the
+ * source of mockups/artwork/empty-no-text.svg (140 x 140 viewBox, integer coordinates, 2 unit main
+ * strokes and 1.5 unit inner lines); the literal colour is a placeholder that the caller replaces
+ * with onSurfaceVariant through the painter's tint, so there is exactly one artwork for both themes.
+ -->
+
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="140dp"
+    android:height="140dp"
+    android:viewportWidth="140"
+    android:viewportHeight="140">
+
+    <path
+        android:pathData="M32 54V36Q32 32 36 32H54"
+        android:strokeColor="#FF6C6C75"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M86 32H104Q108 32 108 36V54"
+        android:strokeColor="#FF6C6C75"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M32 86V104Q32 108 36 108H54"
+        android:strokeColor="#FF6C6C75"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M86 108H104Q108 108 108 104V86"
+        android:strokeColor="#FF6C6C75"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M52 70H62"
+        android:strokeColor="#FF6C6C75"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M78 70H88"
+        android:strokeColor="#FF6C6C75"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+</vector>
