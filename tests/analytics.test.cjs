@@ -49,6 +49,27 @@ function window(days, cardsFor) {
   return Array.from({length: days}, (_, daysAgo) => ({daysAgo, cards: cardsFor(daysAgo)}));
 }
 
+/** One day in milliseconds, the unit a level's duration is measured in. */
+const DAY = 86_400_000;
+
+/** The instant the level tests measure from, so a row's days read at a glance. */
+const NOW = noon(2026, 6, 1);
+
+/**
+ * One level progression row, dated in whole days before [NOW]: a negative offset is a date in the
+ * future, which is one of the records the page refuses to measure.
+ */
+function attempt(id, level, startedDaysAgo, passedDaysAgo, abandonedDaysAgo = null) {
+  const at = (daysAgo) => (daysAgo == null ? null : NOW - daysAgo * DAY);
+  return {
+    id,
+    level,
+    startedAt: at(startedDaysAgo),
+    passedAt: at(passedDaysAgo),
+    abandonedAt: at(abandonedDaysAgo),
+  };
+}
+
 test('formatCount groups thousands and dashes a missing figure', () => {
   assert.equal(model.formatCount(null), '—');
   assert.equal(model.formatCount(0), '0');
@@ -211,33 +232,135 @@ test('freshnessLabel counts up from a read without overstating it', () => {
   assert.equal(model.freshnessLabel(now - 3 * 86_400_000, now), 'Updated on 21 Oct');
 });
 
-test('aheadBuckets tiles the summary hours into eight bars that sum to the total', () => {
-  const hours = Array.from({length: 25}, (_, hour) => ({count: hour}));
-  assert.deepEqual(model.aheadBuckets(hours), [
-    {label: 'Now', value: 0},
-    {label: '2h', value: 3},
-    {label: '4h', value: 7},
-    {label: '8h', value: 26},
-    {label: '12h', value: 42},
-    {label: '16h', value: 58},
-    {label: '20h', value: 74},
-    {label: '24h', value: 90},
-  ]);
-  assert.equal(model.aheadTotal(hours), 300);
-  assert.equal(
-    model.aheadBuckets(hours).reduce((total, bar) => total + bar.value, 0),
-    model.aheadTotal(hours),
-  );
+test('accuracyOf states a side as a percentage and dashes one never asked', () => {
+  assert.deepEqual(model.accuracyOf({correct: 930, total: 1000}), {share: 0.93, label: '93%'});
+  // Nothing answered is a dash rather than a zero percent: there is no accuracy to state.
+  assert.deepEqual(model.accuracyOf({correct: 0, total: 0}), {share: null, label: '—'});
+  assert.deepEqual(model.accuracyOf(null), {share: null, label: '—'});
+});
 
+test('overallAccuracy weights the two sides by the answers behind them', () => {
+  // Meaning: 1000 answers at 99 %. Reading: 100 at 50 %. Averaging the two percentages would say
+  // 75 %, which is not what the account did.
+  const overall = model.overallAccuracy({
+    meaning: {correct: 990, total: 1000},
+    reading: {correct: 50, total: 100},
+  });
+  assert.equal(overall.correct, 1040);
+  assert.equal(overall.total, 1100);
+  assert.equal(overall.wrong, 60);
+  assert.equal(overall.label, '95%');
+  assert.equal(overall.share, 1040 / 1100);
+
+  // One side answered, one never asked: the record is the side that exists.
+  assert.deepEqual(model.overallAccuracy({meaning: null, reading: {correct: 18, total: 20}}), {
+    correct: 18,
+    total: 20,
+    wrong: 2,
+    share: 0.9,
+    label: '90%',
+  });
+
+  // Nothing answered at all is a dash, and no record at all is a third fact, not the same one.
+  assert.deepEqual(model.overallAccuracy({meaning: null, reading: null}), {
+    correct: 0,
+    total: 0,
+    wrong: 0,
+    share: null,
+    label: '—',
+  });
+  assert.equal(model.overallAccuracy(null), null);
+});
+
+test('subjectAccuracies keeps every kind and dashes the ones never asked', () => {
   assert.deepEqual(
-    model.aheadBuckets([]),
-    ['Now', '2h', '4h', '8h', '12h', '16h', '20h', '24h'].map((label) => ({
-      label,
-      value: null,
-    })),
+    model.subjectAccuracies([
+      {key: 'radical', label: 'Radicals', correct: 96, total: 100},
+      {key: 'kanji', label: 'Kanji', correct: 0, total: 0},
+      {key: 'vocabulary', label: 'Vocabulary', correct: 124, total: 140},
+    ]),
+    [
+      {key: 'radical', name: 'Radicals', value: '96%'},
+      {key: 'kanji', name: 'Kanji', value: '—'},
+      {key: 'vocabulary', name: 'Vocabulary', value: '89%'},
+    ],
   );
-  assert.equal(model.aheadTotal([]), null);
-  assert.equal(model.aheadTotal([{count: 0}, {count: 0}]), 0);
+  // A read that did not answer the breakdown leaves the group out rather than drawing it empty.
+  assert.deepEqual(model.subjectAccuracies(null), []);
+  assert.deepEqual(model.subjectAccuracies([]), []);
+});
+
+test('levelDurations measures passed levels and the current run, oldest first', () => {
+  const history = [
+    attempt(1, 15, 40, 33),
+    attempt(2, 16, 33, 28),
+    attempt(3, 17, 28, 20),
+    attempt(4, 18, 20, null),
+  ];
+  assert.deepEqual(model.levelDurations(history, NOW, 18), [
+    {level: 15, days: 7, current: false},
+    {level: 16, days: 5, current: false},
+    {level: 17, days: 8, current: false},
+    {level: 18, days: 20, current: true},
+  ]);
+  assert.equal(model.daysOnLevel(history, NOW, 18), 20);
+  // Only the level the snapshot names is still running: an older unpassed run has no end to measure.
+  assert.equal(model.daysOnLevel([attempt(5, 17, 28, null)], NOW, 18), null);
+  // The run so far is not a finished level, so it is not part of the average.
+  assert.equal(model.averageLevelDays(history, NOW, 18), (7 + 5 + 8) / 3);
+});
+
+test('levelDurations drops abandoned runs and keeps the newest attempt at a level', () => {
+  // Level 12 was reached, reset out of, and reached again: the abandoned stretch is not the level's
+  // duration, and measuring both attempts would say the level took 40 days.
+  const history = [
+    attempt(1, 12, 60, null, 30),
+    attempt(2, 12, 30, 24),
+    attempt(3, 13, 24, null),
+  ];
+  assert.deepEqual(model.levelDurations(history, NOW, 13), [
+    {level: 12, days: 6, current: false},
+    {level: 13, days: 24, current: true},
+  ]);
+  assert.equal(model.averageLevelDays(history, NOW, 13), 6);
+
+  // A level whose only attempt was abandoned has no duration and no row.
+  const reset = [attempt(4, 9, 60, null, 30), attempt(5, 10, 30, null)];
+  assert.deepEqual(model.levelDurations(reset, NOW, 10), [{level: 10, days: 30, current: true}]);
+  assert.equal(model.averageLevelDays(reset, NOW, 10), null);
+});
+
+test('levelDurations refuses ranges it cannot trust and windows to the newest five', () => {
+  const history = [
+    attempt(1, 5, null, 4),
+    attempt(2, 6, 30, 40),
+    attempt(3, 7, -10, -5),
+    attempt(4, 8, 60, 50),
+    attempt(5, 9, 50, 44),
+    attempt(6, 10, 44, 38),
+    attempt(7, 11, 38, 32),
+    attempt(8, 12, 32, 26),
+    attempt(9, 13, 26, null),
+    // Above the level the snapshot names: a snapshot's level is the frontier, not the newest row.
+    attempt(10, 14, 26, 20),
+  ];
+  assert.deepEqual(model.levelDurations(history, NOW, 13), [
+    {level: 9, days: 6, current: false},
+    {level: 10, days: 6, current: false},
+    {level: 11, days: 6, current: false},
+    {level: 12, days: 6, current: false},
+    {level: 13, days: 26, current: true},
+  ]);
+  // The average is over the finished levels that could be measured: the never-started, the inverted
+  // and the future-dated rows are left out, and so is the level the account is standing on.
+  assert.equal(model.averageLevelDays(history, NOW, 13), (10 + 6 + 6 + 6 + 6) / 5);
+});
+
+test('daysOnLevelLabel states whole days, and a level started today honestly', () => {
+  assert.equal(model.daysOnLevelLabel(5.9), '5 days on this level');
+  assert.equal(model.daysOnLevelLabel(1), '1 day on this level');
+  assert.equal(model.daysOnLevelLabel(0.4), 'Less than a day on this level');
+  assert.equal(model.daysOnLevelLabel(null), null);
 });
 
 test('ankiStatsQueries pins the four collection-wide card-state searches', () => {

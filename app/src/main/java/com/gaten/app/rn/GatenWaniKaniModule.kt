@@ -401,9 +401,10 @@ class GatenWaniKaniModule(
 
     /**
      * The account's own numbers for the dashboard: the level, what is due now, the next review time,
-     * the next 24 hours by the hour, the SRS spread of everything the account has started, and the
-     * cumulative accuracy of its reviews. That last section is the one part that may be `null` while
-     * everything else is there: it is optional data, and its absence says nothing about the rest.
+     * the next 24 hours by the hour, the SRS spread of everything the account has started, the
+     * cumulative accuracy of its reviews, and the account's own level history. The last two are the
+     * parts that may be `null` while everything else is there: they are optional data, and the absence
+     * of either says nothing about the rest.
      *
      * Resolves the cached snapshot while it is younger than five minutes and a fresh read otherwise.
      * [refreshStats] is the same read with the cache ignored — the dashboard's refresh action — and a
@@ -490,21 +491,69 @@ class GatenWaniKaniModule(
                 )
                 val recall = snapshot.recall
                 if (recall == null) putNull("recall") else putMap("recall", recall.toJsMap())
+                val levelHistory = snapshot.levelHistory
+                if (levelHistory == null) {
+                    putNull("levelHistory")
+                } else {
+                    putArray(
+                        "levelHistory",
+                        Arguments.createArray().apply {
+                            levelHistory.forEach { progression ->
+                                pushMap(
+                                    Arguments.createMap().apply {
+                                        putInt("id", progression.id)
+                                        putInt("level", progression.level)
+                                        progression.startedAt?.let { putDouble("startedAt", it.toDouble()) }
+                                            ?: putNull("startedAt")
+                                        progression.passedAt?.let { putDouble("passedAt", it.toDouble()) }
+                                            ?: putNull("passedAt")
+                                        progression.abandonedAt?.let {
+                                            putDouble("abandonedAt", it.toDouble())
+                                        } ?: putNull("abandonedAt")
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
                 putDouble("fetchedAt", snapshot.fetchedAt.toDouble())
             }
         )
     }
 
     /**
-     * The recall section: the account's cumulative reading and meaning accuracy, and the subjects it
-     * gets wrong most often. Every percentage here is over every answer the account has ever given —
-     * WaniKani keeps running totals rather than a log — and each row's `attempts` is the sample its
-     * percentage came from, so a subject answered five times is never read like one answered five
-     * hundred.
+     * The recall section: the account's cumulative reading and meaning accuracy, the same accuracy
+     * per kind of subject, and the subjects it gets wrong most often. Every percentage here is over
+     * every answer the account has ever given — WaniKani keeps running totals rather than a log — and
+     * each row's `attempts` is the sample its percentage came from, so a subject answered five times
+     * is never read like one answered five hundred. `bySubject` is one row per kind of subject —
+     * `radical`, `kanji`, `vocabulary`, with kana vocabulary folded into the last — always all three
+     * and always in that order, so a kind the account has never answered reads as a zero row; it is
+     * null only when the stored section carries no such rows.
      */
     private fun WaniKaniRecall.toJsMap(): WritableMap = Arguments.createMap().apply {
         putRecallSide("reading", reading)
         putRecallSide("meaning", meaning)
+        val bySubject = bySubject
+        if (bySubject == null) {
+            putNull("bySubject")
+        } else {
+            putArray(
+                "bySubject",
+                Arguments.createArray().apply {
+                    bySubject.forEach { row ->
+                        pushMap(
+                            Arguments.createMap().apply {
+                                putString("key", row.key)
+                                putString("label", row.label)
+                                putInt("correct", row.correct)
+                                putInt("total", row.total)
+                            }
+                        )
+                    }
+                }
+            )
+        }
         putArray(
             "difficult",
             Arguments.createArray().apply {

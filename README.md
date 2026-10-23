@@ -315,9 +315,12 @@ button on either page opens the real page on `wanikani.com` in the browser.
 for the subscription's entitlement, so content above the account's levels is marked as such rather
 than shown (a free account covers levels 1–3). And with a token connected, the **Analytics** tab reads
 the account's study progress: the level, the reviews available now and over the next 24 hours
-(`GET /summary`), and how many items sit in each of WaniKani's review stages — six count-only
-`GET /assignments` requests that ask for the count of a filtered scope and throw the page away. The
-**Review** page reads the review queue itself — `GET /assignments?immediately_available_for_review=true`
+(`GET /summary`), how many items sit in each of WaniKani's review stages — six count-only
+`GET /assignments` requests that ask for the count of a filtered scope and throw the page away — the
+account's cumulative reading and meaning accuracy and the subjects it gets wrong most often
+(`GET /review_statistics`), and the level history its levels were passed through
+(`GET /level_progressions`). That one snapshot is also what Home's due figure and the review page's
+next-hour count are drawn from. The **Review** page reads the review queue itself — `GET /assignments?immediately_available_for_review=true`
 and the `GET /subjects` behind its ids — and sends each finished subject back with one `POST /reviews`.
 It also reads the lesson queue (`GET /assignments?immediately_available_for_lessons=true`) and starts
 a finished lesson with `PUT /assignments/<id>/start` — the only documented way to complete one, since
@@ -357,9 +360,11 @@ subject id, with a kanji's composition adding its own radicals' ids. All of it g
 `api.wanikani.com` over HTTPS, plus `cdn.wanikani.com` for the SVG of a radical that has no
 character. Redirects are refused outright and the token is never logged. The scanned sentence, the
 other words of the lookup and the screenshot are never sent. The account's own study progress — the
-level, the review availability and the per-stage counts the Analytics tab shows — is requested only
-for that tab, from `api.wanikani.com` alone, and kept on this device; the queues the **Review** page
-opens are requested only for that page and kept nowhere. Nothing else about the account is read, and
+level, the review availability, the per-stage counts, the cumulative accuracy and the level history
+the Analytics tab shows — is requested only by the screens that show it — the Analytics tab, Home's
+WaniKani card and the review page — from `api.wanikani.com` alone, and kept on this device; the queues
+the **Review** page opens are requested only for that page and kept nowhere. Nothing else about the
+account is read, and
 the only writes are the review or lesson the reader has just finished — see *Reviewing WaniKani
 subjects in Gaten*.
 
@@ -494,14 +499,16 @@ them started by the reader and neither of them in the background:
   the ids of its own radicals — in the request for that one page. `cdn.wanikani.com` is asked only
   for the SVG of a radical that has no character. All over HTTPS, with redirects refused. The scanned
   sentence, the other words, the screenshot and everything else looked up stay on the device. The other
-  account data read is the study progress the Analytics tab shows — the level, the reviews available
-  now and over the next 24 hours, and the counts per review stage — and, when the reader reviews,
-  what is due now: `GET /assignments?immediately_available_for_review=true` and the `GET /subjects`
-  behind its ids. All of it is from `api.wanikani.com` and all of it is kept on this device. The one
-  thing ever written back is a review the reader has just finished, sent as `POST /reviews` with the
-  subject's id and the number of wrong meaning and reading answers; no lesson is submitted and nothing
-  else about the account is read. Nothing is
-  prefetched: with the network gone the saved pages still answer, and nothing else happens.
+  account data read is the study progress the Analytics tab shows — the level, the counts per review
+  stage, the cumulative reading and meaning accuracy with the subjects the account gets wrong most
+  often, and its level history — together with the review availability that same read carries: the
+  reviews available now and over the next 24 hours. And when the reader reviews, what is due now:
+  `GET /assignments?immediately_available_for_review=true` and the `GET /subjects` behind its ids.
+  All of it is from `api.wanikani.com`; all of it but the review queue — which is read fresh every
+  time and kept nowhere — is kept on this device. The one thing ever written back is a review the
+  reader has just finished, sent as `POST /reviews` with the subject's id and the number of wrong
+  meaning and reading answers; no lesson is submitted and nothing else about the account is read.
+  Nothing is prefetched: with the network gone the saved pages still answer, and nothing else happens.
 
 The WaniKani personal access token lives in app-private storage outside the backup set
 (`noBackupFilesDir`), encrypted with an Android Keystore key: it is not in a cloud backup and not in
@@ -510,15 +517,19 @@ deletes it along with every cached page — reporting it if any of that could no
 
 Of the account itself Gaten reads three things. One is the subscription's level entitlement — plan,
 level and expiry — used only to refuse a subject above the account's levels. Another is the study
-progress the **Analytics** tab shows: the level, the review availability over the next 24 hours and
-the counts per review stage, as described above. The third is the review queue, read only when the
-reader opens it. The cache holds the first two: the entitlement, and one small snapshot per connected
-account (keyed by a digest of that account's token, never the token). The queue is never cached at
-all. What the Analytics tab reads of them is only the aggregate — the count of a filtered scope, from
-six `GET /assignments` requests whose rows are read past and discarded, plus the review availability
-above. The only write is a review the reader has just answered: one `POST /reviews` carrying the
-subject's id and how many times its meaning and reading were answered wrongly. No lesson is
-submitted, and no assignment is changed in any other way.
+progress the **Analytics** tab shows: the level, the counts per review stage, the cumulative reading
+and meaning accuracy with the subjects it gets wrong most often, and its level history, together with
+the review availability that same read carries — all of it as described above. The third is the
+review queue, read only when the reader opens it. The cache holds the first two: the entitlement, and
+one small snapshot per connected account (keyed by a digest of that account's token, never the
+token). The queue is never cached at all. What the Analytics tab reads of them is aggregate or
+count-only, never a card or a subject row it keeps: the count of a filtered scope, from six
+`GET /assignments` requests whose rows are read past and discarded; the review availability above;
+one running correct/total pair per subject from `GET /review_statistics`, paged to the end; and one
+row per attempt at a level from `GET /level_progressions`, read the same way — the last two kept only
+inside that small on-device snapshot. The only write is a review the reader has just answered: one
+`POST /reviews` carrying the subject's id and how many times its meaning and reading were answered
+wrongly. No lesson is submitted, and no assignment is changed in any other way.
 
 Nothing else is fetched, and the screenshot never leaves the device: it stays in memory, is never
 uploaded, never shared and never written to disk. Reviewing Anki cards changes nothing here either:

@@ -7,8 +7,9 @@
 /**
  * Analytics: one page over the two services the reader studies with, in the order the questions come
  * — how consistent am I (Study activity), is the collection maturing (Anki), where is the curriculum
- * (WaniKani), what am I weak at (Recall), what is coming (Ahead). There is no source switcher: the
- * sections are the page, and each one names its own source and scope in its meta line.
+ * (WaniKani), how are my answers going (Accuracy), how long is a level taking (Level progress). There
+ * is no source switcher: the sections are the page, and each one names its own source and scope in
+ * its meta line.
  *
  * The page is deliberately near-monochrome. Every analytical hue is the reader's own accent at one of
  * a few strengths, so the whole page repaints when the accent changes and no chart carries a colour
@@ -37,7 +38,6 @@ import {useTheme} from "../theme";
 import {
   AnalyticsSection,
   BarRow,
-  ColumnBars,
   CountLegend,
   Heatmap,
   InlineUnavailable,
@@ -46,17 +46,21 @@ import {
   Ring,
   SkeletonLines,
   StackedBar,
+  type DistributionPart,
 } from "./ink";
 import {
+  accuracyOf,
   activeStages,
-  aheadBuckets,
-  aheadTotal,
+  averageLevelDays,
   collectionTotal,
+  daysOnLevel,
+  daysOnLevelLabel,
   formatCount,
   freshnessLabel,
   heatmap,
-  notStartedCount,
-  stageShares,
+  levelDurations,
+  overallAccuracy,
+  subjectAccuracies,
   type HeatmapCell,
 } from "./model";
 import {
@@ -67,15 +71,12 @@ import {
   type AnkiStatsState,
 } from "./useAnkiStats";
 import {useWaniKaniStats, type WaniKaniStatsState} from "./useWaniKaniStats";
-import type {WaniKaniRecall, WaniKaniStatsSnapshot} from "../../native/GatenWaniKani";
+import type {WaniKaniStatsSnapshot} from "../../native/GatenWaniKani";
 import type {SettingsPageName} from "../navigation";
 
 /** The ring both summary sections lead with, at the size the design fixes. */
 const RING_SIZE = 84;
 const RING_STROKE = 9;
-
-/** The Ahead bars are short by design: eight bars beside a number, not a chart that owns the row. */
-const AHEAD_BAR_HEIGHT = 56;
 
 /**
  * How often the freshness line is recomputed. It reads "Updated 4m ago", which is only true while
@@ -248,14 +249,6 @@ function share(part: number | null, whole: number | null): number | null {
   return Math.min(1, part / whole);
 }
 
-/** A cumulative accuracy as a percentage, or an em dash when there were no answers to divide by. */
-function accuracy(part: {correct: number; total: number} | null): {share: number | null; label: string} {
-  if (part == null || part.total <= 0) {
-    return {share: null, label: "—"};
-  }
-  return {share: part.correct / part.total, label: `${Math.round((part.correct / part.total) * 100)}%`};
-}
-
 /**
  * The page. `onOpenSettingsPage` is the shell's own way to a settings page: the actions on the
  * unavailable lines hand the reader to the page that owns the token or the grant, and coming back
@@ -346,23 +339,54 @@ export function AnalyticsScreen({
     collection ?? {new: null, learning: null, young: null, mature: null}
   );
   const matureShare = share(collectionCounts?.mature ?? null, totalCards);
+  // One array of parts for the bar and its key: both read the same counts and the same tones, so a
+  // swatch can never name a colour the bar above it did not draw.
+  const ankiParts: DistributionPart[] =
+    collectionCounts == null
+      ? []
+      : [
+          {key: "new", label: "New", count: collectionCounts.new, color: colors.accent, opacity: ANKI_INTENSITY[0]},
+          {key: "learning", label: "Learn.", spoken: "Learning", count: collectionCounts.learning, color: colors.accent, opacity: ANKI_INTENSITY[1]},
+          {key: "young", label: "Young", count: collectionCounts.young, color: colors.accent, opacity: ANKI_INTENSITY[2]},
+          {key: "mature", label: "Mature", count: collectionCounts.mature, color: colors.accent, opacity: ANKI_INTENSITY[3]},
+        ].map((part) => ({...part, value: formatCount(part.count)}));
 
   // --- WaniKani -------------------------------------------------------------
   const stages = wkData?.stages ?? [];
   const active = activeStages(stages);
-  const shares = stageShares(active.map((stage) => stage.count));
   const activeSubjects = active.length > 0 ? active.reduce((sum, stage) => sum + stage.count, 0) : null;
-  const notStarted = notStartedCount(stages);
   const levelShare = share(wkData?.level ?? null, wkData?.maxLevelGranted ?? null);
+  const srsParts: DistributionPart[] = active.map((stage, index) => ({
+    key: stage.key,
+    // WaniKani's own bucket names carry the stage numbers ("Guru 5-6"); the key needs the word alone
+    // to fit five of them on a line, and the bar's spoken summary keeps the full name.
+    label: stage.label.split(" ")[0],
+    spoken: stage.label,
+    count: stage.count,
+    value: formatCount(stage.count),
+    color: colors.accent,
+    opacity: SRS_INTENSITY[index % SRS_INTENSITY.length],
+  }));
 
-  // --- Recall ---------------------------------------------------------------
-  const recall: WaniKaniRecall | null = wkData?.recall ?? null;
-  const reading = accuracy(recall?.reading ?? null);
-  const meaning = accuracy(recall?.meaning ?? null);
+  // --- Accuracy -------------------------------------------------------------
+  // `?? null` on both reads because a cache written by an older build carries neither field: the
+  // sections then say the read is unavailable rather than drawing a zero.
+  const recall = wkData?.recall ?? null;
+  const overall = overallAccuracy(recall);
+  const meaning = accuracyOf(recall?.meaning ?? null);
+  const reading = accuracyOf(recall?.reading ?? null);
+  const subjects = subjectAccuracies(recall?.bySubject ?? null);
 
-  // --- Ahead ----------------------------------------------------------------
-  const buckets = aheadBuckets(wkData?.forecast ?? []);
-  const aheadCount = aheadTotal(wkData?.forecast ?? []);
+  // --- Level progress -------------------------------------------------------
+  const history = wkData?.levelHistory ?? null;
+  const level = wkData?.level ?? null;
+  const measured = history != null && level != null;
+  const levelRows = measured ? levelDurations(history, now, level) : [];
+  const averageDays = measured ? averageLevelDays(history, now, level) : null;
+  const levelDays = measured ? daysOnLevel(history, now, level) : null;
+  // The longest row is the axis every row is drawn against; a list of nothing but zero-length runs
+  // leaves the axis at zero and draws no bars rather than dividing by it.
+  const levelAxis = levelRows.reduce((top, row) => (row.days > top ? row.days : top), 0);
 
   return (
     <View style={[styles.root, {backgroundColor: colors.background}]}>
@@ -407,22 +431,8 @@ export function AnalyticsScreen({
                 />
                 {collectionCounts != null ? (
                   <>
-                    <StackedBar
-                      segments={[
-                        {key: "new", label: "New", count: collectionCounts.new, color: colors.accent, opacity: ANKI_INTENSITY[0]},
-                        {key: "learning", label: "Learning", count: collectionCounts.learning, color: colors.accent, opacity: ANKI_INTENSITY[1]},
-                        {key: "young", label: "Young", count: collectionCounts.young, color: colors.accent, opacity: ANKI_INTENSITY[2]},
-                        {key: "mature", label: "Mature", count: collectionCounts.mature, color: colors.accent, opacity: ANKI_INTENSITY[3]},
-                      ]}
-                    />
-                    <CountLegend
-                      items={[
-                        {key: "new", label: "New", value: formatCount(collectionCounts.new)},
-                        {key: "learning", label: "Learn.", value: formatCount(collectionCounts.learning)},
-                        {key: "young", label: "Young", value: formatCount(collectionCounts.young)},
-                        {key: "mature", label: "Mature", value: formatCount(collectionCounts.mature)},
-                      ]}
-                    />
+                    <StackedBar segments={ankiParts} />
+                    <CountLegend items={ankiParts} />
                   </>
                 ) : (
                   <InlineUnavailable>AnkiDroid would not answer the card-state searches.</InlineUnavailable>
@@ -433,7 +443,8 @@ export function AnalyticsScreen({
         </AnalyticsSection>
 
         {/* WaniKani — where the curriculum is. The population is the assignments this account has,
-            which is not the whole locked curriculum, and the note says so in five words. */}
+            which is not the whole locked curriculum: locked items carry no assignment and so never
+            appear in a stage. */}
         <AnalyticsSection title="WaniKani" meta="Progress">
           {wkData == null ? (
             <SourceFallback read={wkState} />
@@ -455,29 +466,8 @@ export function AnalyticsScreen({
                 />
                 {active.length > 0 ? (
                   <>
-                    <StackedBar
-                      segments={active.map((stage, index) => ({
-                        key: stage.key,
-                        label: stage.label,
-                        count: stage.count,
-                        color: colors.accent,
-                        opacity: SRS_INTENSITY[index % SRS_INTENSITY.length],
-                      }))}
-                    />
-                    <CountLegend
-                      items={active.map((stage) => ({
-                        key: stage.key,
-                        // WaniKani's own bucket names carry the stage numbers ("Guru 5-6"); the legend
-                        // needs the word alone to fit five of them on one line.
-                        label: stage.label.split(" ")[0],
-                        value: formatCount(stage.count),
-                      }))}
-                    />
-                    <Note>
-                      {notStarted != null && notStarted > 0
-                        ? `Excludes ${notStarted} not-started and all locked items.`
-                        : "Locked items are excluded."}
-                    </Note>
+                    <StackedBar segments={srsParts} />
+                    <CountLegend items={srsParts} />
                   </>
                 ) : (
                   <InlineUnavailable>WaniKani answered no SRS stages.</InlineUnavailable>
@@ -520,74 +510,125 @@ export function AnalyticsScreen({
           )}
         </AnalyticsSection>
 
-        {/* Recall — cumulative accuracy over every answer this account has given, which is why it
-            carries no date range: the API has no answer history to scope it to. */}
-        <AnalyticsSection title="Recall" meta="WaniKani">
+        {/* Accuracy — cumulative over every answer WaniKani still counts for this account, which is
+            why it carries no date range: the API keeps a running total per subject, not a log. */}
+        <AnalyticsSection title="Accuracy" meta="WaniKani">
           {wkData == null ? (
             <SourceFallback read={wkState} withAction={false} />
-          ) : recall == null ? (
-            <InlineUnavailable>Recall unavailable.</InlineUnavailable>
+          ) : overall == null ? (
+            <InlineUnavailable>Accuracy unavailable.</InlineUnavailable>
           ) : (
-            <View style={styles.recallRow}>
-              <View style={styles.recallTracks}>
-                <BarRow
-                  label="Reading"
-                  count={reading.label}
-                  share={reading.share ?? 0}
-                  color={colors.accent}
-                />
+            <>
+              <Metric
+                value={overall.label}
+                caption="overall accuracy"
+                muted={overall.share == null}
+                hero={false}
+              />
+              <Note>
+                {formatCount(overall.total)} answers · {formatCount(overall.wrong)} wrong
+              </Note>
+              <View style={styles.accuracyBars}>
                 <BarRow
                   label="Meaning"
                   count={meaning.label}
                   share={meaning.share ?? 0}
                   color={colors.accent}
                 />
+                <BarRow
+                  label="Reading"
+                  count={reading.label}
+                  share={reading.share ?? 0}
+                  color={colors.accent}
+                />
               </View>
-              <View style={[styles.recallDivider, {backgroundColor: colors.outlineVariant}]} />
-              <View style={styles.recallNeedsWork}>
-                <Text style={[styles.needsWorkLabel, {color: colors.onSurfaceVariant}]}>
-                  Needs work
-                </Text>
-                {recall.difficult.length > 0 ? (
-                  <View style={styles.needsWorkRow}>
-                    {recall.difficult.map((item) => (
+              {subjects.length > 0 && (
+                <View style={styles.subjectBlock}>
+                  <Text style={[styles.subjectHeading, {color: colors.onSurfaceVariant}]}>
+                    By subject
+                  </Text>
+                  <View style={styles.subjectRow}>
+                    {subjects.map((subject) => (
                       <View
-                        key={item.subjectId}
+                        key={subject.key}
                         accessible
-                        accessibilityLabel={`${item.characters ?? "Subject"} ${item.percentage}% over ${item.attempts} answers`}
-                        style={styles.needsWorkItem}
+                        accessibilityLabel={`${subject.name} ${subject.value}`}
+                        style={styles.subjectItem}
                       >
-                        <Text style={[styles.needsWorkGlyph, {color: colors.onSurface}]}>
-                          {item.characters ?? "—"}
+                        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+                          {subject.value}
                         </Text>
-                        <Text style={[styles.needsWorkScore, {color: colors.onSurfaceVariant}]}>
-                          {item.percentage}%
+                        <Text
+                          numberOfLines={2}
+                          style={[
+                            typeScale.labelSmall,
+                            styles.subjectName,
+                            {color: colors.onSurfaceVariant},
+                          ]}
+                        >
+                          {subject.name}
                         </Text>
                       </View>
                     ))}
                   </View>
-                ) : (
-                  <Text style={[styles.needsWorkScore, {color: colors.onSurfaceVariant}]}>
-                    Not enough answers yet.
-                  </Text>
-                )}
-              </View>
-            </View>
+                </View>
+              )}
+            </>
           )}
         </AnalyticsSection>
 
-        {/* Ahead — the schedule WaniKani already holds, not a promise: failures and new lessons will
-            change it, and the label says "Next 24h", not "tomorrow". */}
-        <AnalyticsSection title="Ahead" meta="Next 24h · WaniKani">
+        {/* Level progress — how long a level is taking, from WaniKani's own level progressions. A
+            level's duration is its start to its pass, not its completion time, which is when the last
+            item on it was finished rather than when the level was left behind. */}
+        <AnalyticsSection title="Level progress" meta="WaniKani">
           {wkData == null ? (
             <SourceFallback read={wkState} withAction={false} />
+          ) : history == null ? (
+            <InlineUnavailable>Level history unavailable.</InlineUnavailable>
+          ) : history.length === 0 ? (
+            <InlineUnavailable>WaniKani has no level history for this account.</InlineUnavailable>
           ) : (
-            <View style={styles.aheadRow}>
-              <Metric value={formatCount(aheadCount)} caption="reviews" muted={aheadCount == null} hero={false} />
-              <View style={styles.aheadBars}>
-                <ColumnBars points={buckets} height={AHEAD_BAR_HEIGHT} />
-              </View>
-            </View>
+            <>
+              <MetricPair
+                left={{
+                  value: formatCount(level),
+                  caption: "level",
+                  note: daysOnLevelLabel(levelDays),
+                  hero: false,
+                }}
+                right={{
+                  value: averageDays == null ? "—" : averageDays.toFixed(1),
+                  caption: "days",
+                  note: "Average / level",
+                  muted: averageDays == null,
+                  hero: false,
+                }}
+              />
+              {levelRows.length > 0 ? (
+                <View style={styles.levelRows}>
+                  {levelRows.map((row) => (
+                    <BarRow
+                      key={row.level}
+                      label={`L${row.level}`}
+                      count={`${row.days.toFixed(1)}d`}
+                      share={levelAxis > 0 ? row.days / levelAxis : 0}
+                      color={colors.accent}
+                      muted={row.current}
+                      // A level row's own column bases: the label is a two-character name, and the
+                      // count has to hold a duration that can run past a hundred days.
+                      labelWidth={34}
+                      countWidth={52}
+                      // Every row reserves the note column, so the current level's "so far" cannot
+                      // shorten its track against the finished levels above it.
+                      note={row.current ? "so far" : ""}
+                      spoken={`Level ${row.level}: ${row.days.toFixed(1)} days${row.current ? ", so far" : ""}`}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Note>No finished levels yet.</Note>
+              )}
+            </>
           )}
         </AnalyticsSection>
 
@@ -632,15 +673,15 @@ const styles = StyleSheet.create({
   stale: {marginTop: spacing.xl},
   ringRow: {flexDirection: "row", alignItems: "flex-start", gap: spacing.l},
   ringBody: {flex: 1, minWidth: 0, gap: spacing.m},
-  recallRow: {flexDirection: "row", alignItems: "flex-start", gap: spacing.l},
-  recallTracks: {flex: 1, minWidth: 0, gap: spacing.s},
-  recallDivider: {width: 1, alignSelf: "stretch"},
-  recallNeedsWork: {flex: 1, minWidth: 0, gap: spacing.s},
-  needsWorkLabel: {...typeScale.bodySmall},
-  needsWorkRow: {flexDirection: "row", gap: spacing.m},
-  needsWorkItem: {flex: 1, alignItems: "center", gap: 2},
-  needsWorkGlyph: {fontSize: 26, lineHeight: 32},
-  needsWorkScore: {...typeScale.bodySmall},
-  aheadRow: {flexDirection: "row", alignItems: "flex-end", gap: spacing.l},
-  aheadBars: {flex: 1, minWidth: 0},
+  accuracyBars: {gap: spacing.s},
+  subjectBlock: {gap: 6},
+  subjectHeading: {...typeScale.bodySmall},
+  // Three kinds across the width the bars above span, each a figure over its name — the same two-step
+  // the legends use, so a percentage is never read as prose.
+  subjectRow: {flexDirection: "row", gap: spacing.m},
+  subjectItem: {flex: 1, minWidth: 0},
+  subjectName: {marginTop: 2},
+  // The level rows are one list of comparisons, so their tracks share a left and a right edge; the
+  // gap is tighter than a section's because the rows are read against each other.
+  levelRows: {gap: spacing.s},
 });
