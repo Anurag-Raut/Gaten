@@ -72,6 +72,7 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -109,6 +110,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -116,6 +118,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -128,11 +131,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import com.gaten.app.R
 import com.gaten.app.anki.AddResult
 import com.gaten.app.anki.AnkiCard
 import com.gaten.app.anki.AnkiExporter
 import com.gaten.app.anki.AnkiPreferences
+import com.gaten.app.anki.AnkiSettings
 import com.gaten.app.anki.AnkiStatus
 import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.ScannedWord
@@ -195,13 +200,21 @@ private val ContentColumnMaxWidth = 560.dp
 /** The pinned header's height, and the floor a body needs before the footer gives up its pin. */
 private val HeaderMinHeight = 48.dp
 
-/** The pinned footer's floor: rule, 12 dp, deck row 24 dp, 8 dp, the 52 dp action, 8 dp. */
-private val FooterMinHeight = 104.dp
+/** The pinned footer's floor: rule, 12 dp, deck row 48 dp, 8 dp, the 52 dp action, 24 dp. */
+private val FooterMinHeight = 144.dp
 private val ReadableBodyHeight = 48.dp
 
-/** The deck row's own floor, and the text scale above which its value takes a line of its own. */
-private val DeckRowMinHeight = 24.dp
+/** The deck row's own floor — the row is a control now, so it carries a full 48 dp target. */
+private val DeckRowMinHeight = 48.dp
 private const val DeckStackFontScale = 1.2f
+
+/**
+ * The air under the footer's action, inside the panel and above the navigation-bar inset: the action
+ * is the last thing the sheet draws, and the 8 dp it used to keep read as pinned to the strip below
+ * it. It is also part of [FooterMinHeight], so a short window gives up the pinned footer before it
+ * gives up this gap and clips the action.
+ */
+private val FooterBottomGap = Spacing.xxl
 
 /** Every target in the sheet keeps this, whatever the glyph inside it measures. */
 private val MinTarget = 48.dp
@@ -316,13 +329,23 @@ fun ResultSheet(
     searchedEntry: DictEntry?,
     /** The committed query that produced [searchedEntry]. */
     searchedQuery: String?,
-    /** Opens the full-screen dictionary search. The sheet never draws that cover itself. */
+    /**
+     * Opens the dictionary search. The sheet never draws the search surface itself: the caller grows
+     * this panel's own bounds into the window.
+     */
     onSearch: () -> Unit,
     /** Puts the captured result, its word and its scroll back. The parent owns that state. */
     onOriginalLookup: () -> Unit,
     onDismiss: () -> Unit,
     onSelectAgain: () -> Unit,
     layout: SheetLayout,
+    /**
+     * The panel's size as it was actually measured in this overlay's own pixels, reported on every
+     * layout. The search surface grows out of exactly this rectangle — the size this content asked
+     * for, on the edge [layout] docked it to — so the reader's query starts on the panel they tapped
+     * Search on, never on a container that was itself never drawn.
+     */
+    onPanelSize: (Size) -> Unit = {},
     /**
      * Applied only to the sheet Surface: the caller's enter/exit slide ([Modifier.animateEnterExit])
      * rides on the measured panel itself. The scrim beside it stays fixed.
@@ -382,6 +405,17 @@ fun ResultSheet(
         label = "sheetDrag"
     )
     val rule = MaterialTheme.colorScheme.outlineVariant
+    // The Anki destination the footer exports with, and the deck chooser that can change it. The
+    // settings live here because the chooser is a layer of this sheet's own window, drawn over
+    // everything else — never a second window, which would take the overlay's focus and dismiss the
+    // lookup. Choosing a deck persists a preference and nothing else: the footer's own action stays
+    // the only thing that writes a card.
+    val context = LocalContext.current
+    var ankiSettings by remember { mutableStateOf(AnkiPreferences.load(context)) }
+    var deckPickerUp by remember { mutableStateOf(false) }
+    // While the chooser is up it is the only thing that can be acted on: the sheet goes on drawing
+    // behind it, but the screen reader's traversal stops at the chooser until it is closed.
+    val sheetTraversal = if (deckPickerUp) Modifier.clearAndSetSemantics {} else Modifier
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim over the rest of the screen: a tap dismisses the overlay.
@@ -436,12 +470,15 @@ fun ResultSheet(
         when (dock) {
             SheetDock.Bottom -> Surface(
                 modifier = modifier
+                    // Only the deck chooser is reachable while it is up; see [sheetTraversal].
+                    .then(sheetTraversal)
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     // Before heightIn: the panel's height tracks its content — the cap still applies
                     // unchanged, and nothing animates the sheet's own height, which used to clip the
                     // entry at a large text scale while the tween was in flight.
                     .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * layout.fraction)
+                    .onGloballyPositioned { onPanelSize(it.size.toSize()) }
                     .sheetEdgeRule(BottomSheetShape, SheetEdge.Top, rule)
                     // Dragged: the sheet rides the finger, past the physical bottom and back.
                     .graphicsLayer { translationY = sheetOffset },
@@ -487,7 +524,9 @@ fun ResultSheet(
                             },
                             onWaniKaniBack = { closeWaniKaniPage() },
                             type = type,
-                            compact = false
+                            compact = false,
+                            settings = ankiSettings,
+                            onChangeDeck = { deckPickerUp = true }
                         )
                     }
                 }
@@ -495,11 +534,14 @@ fun ResultSheet(
 
             SheetDock.Left, SheetDock.Right -> Surface(
                 modifier = modifier
+                    // Only the deck chooser is reachable while it is up; see [sheetTraversal].
+                    .then(sheetTraversal)
                     .align(
                         if (dock == SheetDock.Left) Alignment.CenterStart else Alignment.CenterEnd
                     )
                     .fillMaxHeight()
                     .width(LocalConfiguration.current.screenWidthDp.dp * layout.fraction)
+                    .onGloballyPositioned { onPanelSize(it.size.toSize()) }
                     .sheetEdgeRule(
                         shape = if (dock == SheetDock.Left) LeftSheetShape else RightSheetShape,
                         edge = if (dock == SheetDock.Left) SheetEdge.InnerRight else SheetEdge.InnerLeft,
@@ -557,7 +599,9 @@ fun ResultSheet(
                                 },
                                 onWaniKaniBack = { closeWaniKaniPage() },
                                 type = type,
-                                compact = true
+                                compact = true,
+                                settings = ankiSettings,
+                                onChangeDeck = { deckPickerUp = true }
                             )
                         }
                     }
@@ -565,6 +609,19 @@ fun ResultSheet(
                 }
             }
         }
+
+        // The deck chooser, drawn after the sheet so it is above every part of it — the scrim that
+        // dismisses the overlay and the grip that drags it included. It is a layer of this window,
+        // so opening it neither dismisses the lookup nor outlives it.
+        DeckPicker(
+            visible = deckPickerUp,
+            selected = ankiSettings.deckName,
+            onPick = { deck ->
+                ankiSettings = persistDeckSelection(context, deck)
+                deckPickerUp = false
+            },
+            onDismiss = { deckPickerUp = false }
+        )
     }
 }
 
@@ -717,7 +774,11 @@ private fun ColumnScope.SheetBody(
     onRadical: (Int) -> Unit,
     onWaniKaniBack: () -> Unit,
     type: SheetType,
-    compact: Boolean
+    compact: Boolean,
+    /** The Anki settings the footer exports with; the deck chooser replaces the deck name in them. */
+    settings: AnkiSettings,
+    /** Opens the deck chooser, which the sheet draws over itself. */
+    onChangeDeck: () -> Unit
 ) {
     val context = LocalContext.current
     val feedback = rememberFeedback()
@@ -947,10 +1008,24 @@ private fun ColumnScope.SheetBody(
                             }
                         }
                     }
-                    if (unpinned && footerCard != null) AnkiFooter(footerCard, type)
+                    if (unpinned && footerCard != null) {
+                        AnkiFooter(
+                            card = footerCard,
+                            type = type,
+                            settings = settings,
+                            onChangeDeck = onChangeDeck
+                        )
+                    }
                 }
             }
-            if (!unpinned && footerCard != null) AnkiFooter(footerCard, type)
+            if (!unpinned && footerCard != null) {
+                AnkiFooter(
+                    card = footerCard,
+                    type = type,
+                    settings = settings,
+                    onChangeDeck = onChangeDeck
+                )
+            }
         }
     }
 }
@@ -1639,15 +1714,23 @@ private sealed interface AnkiUiState {
  *
  * A failure is stated above the button and stays there. The action is offered again — a provider can
  * be briefly unavailable — but only a fresh tap on it writes, so nothing here retries by itself.
+ *
+ * The deck row above the button is the destination itself and the way to change it: [onChangeDeck]
+ * opens the sheet's own chooser, and a chosen deck comes back through [settings] — this footer then
+ * re-checks the new deck and exports into it, with no card written until the action is tapped again.
  */
 @Composable
-private fun AnkiFooter(card: AnkiCard, type: SheetType) {
+private fun AnkiFooter(
+    card: AnkiCard,
+    type: SheetType,
+    settings: AnkiSettings,
+    onChangeDeck: () -> Unit
+) {
     val context = LocalContext.current
     val feedback = rememberFeedback()
     val interactions = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
     val status = remember { AnkiExporter.status(context) }
-    val settings = AnkiPreferences.load(context)
 
     var state by remember(card, status, settings) {
         mutableStateOf<AnkiUiState>(
@@ -1695,7 +1778,7 @@ private fun AnkiFooter(card: AnkiCard, type: SheetType) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = Spacing.m, bottom = Spacing.s)
+                .padding(top = Spacing.m, bottom = FooterBottomGap)
         ) {
             if (status == AnkiStatus.NotInstalled) {
                 Text(
@@ -1709,7 +1792,14 @@ private fun AnkiFooter(card: AnkiCard, type: SheetType) {
             // The destination is named only on the direct route. On the share route Gaten hands the
             // word to AnkiDroid's add screen and cannot claim which deck that screen will use.
             if (status == AnkiStatus.Ready) {
-                DeckRow(deck = settings.deckName, type = type)
+                // Changed only while nothing is in flight: a deck picked mid-export would name a
+                // destination the write that is already running was not made for.
+                DeckRow(
+                    deck = settings.deckName,
+                    type = type,
+                    enabled = state !is AnkiUiState.Busy,
+                    onChangeDeck = onChangeDeck
+                )
                 Spacer(Modifier.height(Spacing.s))
             }
 
@@ -1788,27 +1878,47 @@ private fun AnkiFooter(card: AnkiCard, type: SheetType) {
 }
 
 /**
- * Where a direct write would land. The name is AnkiDroid's own, so it is shown as it is; above 1.2
- * text scale it takes a line of its own rather than squeezing the label beside it into an ellipsis.
+ * Where a direct write would land, and the one way to change it: the deck in use over the whole 48 dp
+ * row, with the change named on the glyph that opens the chooser.
+ *
+ * The name is AnkiDroid's own, so it is shown as it is; above 1.2 text scale it takes a line of its
+ * own rather than squeezing the label beside it into an ellipsis. [enabled] is false while a check or
+ * a write is in flight, so the destination cannot move under the note being written.
  */
 @Composable
-private fun DeckRow(deck: String, type: SheetType) {
+private fun DeckRow(
+    deck: String,
+    type: SheetType,
+    enabled: Boolean,
+    onChangeDeck: () -> Unit
+) {
     val label = stringResource(R.string.anki_deck)
+    val change = stringResource(R.string.anki_deck_change)
+    val interactions = remember { MutableInteractionSource() }
+    val target = Modifier
+        .fillMaxWidth()
+        .heightIn(min = DeckRowMinHeight)
+        .pressOpacity(interactions)
+        .clickable(
+            interactionSource = interactions,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            role = Role.Button,
+            onClick = onChangeDeck
+        )
     if (LocalDensity.current.fontScale > DeckStackFontScale) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = DeckRowMinHeight)
-        ) {
-            Text(label, style = type.small, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = target) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = type.small, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(Spacing.s))
+                DeckChangeGlyph(description = change, enabled = enabled)
+            }
             Text(deck, style = type.caption, color = MaterialTheme.colorScheme.onSurface)
         }
         return
     }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = DeckRowMinHeight),
+        modifier = target,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, style = type.small, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1820,7 +1930,27 @@ private fun DeckRow(deck: String, type: SheetType) {
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1f)
         )
+        Spacer(Modifier.width(Spacing.s))
+        DeckChangeGlyph(description = change, enabled = enabled)
     }
+}
+
+/**
+ * The deck row's one glyph: the change it opens, in the accent while it can be used and in the
+ * neutral variant ink while an export is in flight and the destination is fixed.
+ */
+@Composable
+private fun DeckChangeGlyph(description: String, enabled: Boolean) {
+    Icon(
+        imageVector = Icons.Rounded.SwapHoriz,
+        contentDescription = description,
+        tint = if (enabled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = Modifier.size(GlyphSize)
+    )
 }
 
 /**

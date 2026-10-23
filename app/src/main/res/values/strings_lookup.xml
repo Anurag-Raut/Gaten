@@ -46,14 +46,28 @@
 
     <!--
       Lookup search: the reader's own query, typed in the full-screen cover when the captured text
-      was wrong or missing. The label is always painted; the hint is only a hint.
+      was wrong or missing. The field is Home's own search field: the hint is that field's
+      placeholder, and the label is what the field is called for a reader who cannot see the
+      placeholder — the cover paints no label above it. The limit note is Home's own, and says what
+      the limit does — cut a pasted query rather than refusing it.
     -->
     <string name="lookup_search">Search dictionary</string>
     <string name="lookup_search_back">Back to lookup</string>
-    <string name="lookup_search_query_label">Dictionary query</string>
-    <string name="lookup_search_query_hint">Japanese or romaji</string>
-    <string name="lookup_cd_clear_query">Clear query</string>
-    <string name="lookup_search_too_long">Use 32 characters or fewer</string>
+    <string name="lookup_search_query_label">Search Japanese dictionary</string>
+    <string name="lookup_search_query_hint">猫, ねこ, neko...</string>
+    <string name="lookup_search_too_long">Searches look at the first 32 characters.</string>
+    <!-- A count that still answers the query before the one being typed. -->
+    <string name="lookup_search_for_query">%1$s for %2$s</string>
+    <!-- A query the dictionary could not answer, while it still holds that query. -->
+    <string name="lookup_search_retry">Try again</string>
+    <!-- The empty prompt's own words: the heading over the reader's own recent searches, what one of
+         those chips does when it is tapped, and the heading over the terms that merely start with the
+         query. -->
+    <string name="lookup_search_recent">Recent searches</string>
+    <string name="lookup_search_common">common</string>
+    <string name="lookup_search_from">from %1$s</string>
+    <string name="lookup_search_example">Search for %1$s</string>
+    <string name="lookup_search_starts_with">Words starting with %1$s</string>
     <string name="lookup_search_prompt">Enter Japanese or romaji</string>
     <string name="lookup_search_unsupported">English definitions are not searchable</string>
     <!-- What romaji was read as: why "neko" can have an exact ねこ match. -->
@@ -62,11 +76,8 @@
     <string name="lookup_search_results">%1$d results</string>
     <string name="lookup_search_capped">Showing up to 24 results</string>
 
-    <!-- How each hit was reached: exact, folded or deinflected, a loose reading, or a prefix. -->
-    <string name="lookup_match_exact">Exact match</string>
-    <string name="lookup_match_form">Matched form: %1$s</string>
-    <string name="lookup_match_loose">Approximate reading: %1$s</string>
-    <string name="lookup_match_prefix">Starts with: %1$s</string>
+    <!-- How a hit was reached is part of the row itself: the card shows the form it was reached
+         through, and says nothing when the query was the spelling. -->
     <string name="lookup_cd_open_entry">Open dictionary entry</string>
     <string name="lookup_entry_opened">Dictionary entry opened</string>
 

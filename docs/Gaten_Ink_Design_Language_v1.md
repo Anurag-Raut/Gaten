@@ -1,6 +1,6 @@
 # Gaten / Ink — Design Language
 
-**Version 1.5 · 23 October 2026 · Current Home, Analytics, Settings and Screen lookup baseline**
+**Version 1.6 · 23 October 2026 · Current Home, Analytics, Settings and Screen lookup baseline**
 
 ## Summary
 
@@ -12,7 +12,7 @@
 | Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
 | Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
 | Navigation | Three bottom tabs: Home, Analytics and Settings. Review is a pushed flow, not a fourth tab. |
-| Screen lookup | Over foreign content: a 40 % black freeze veil, a two-pass paired selection mark, a 13 dp rounded neutral status rail with no accent rule, a full-screen dictionary-search cover, and one flat result sheet (grip → header → one body scroller → pinned footer). No screen-edge ring, no gradient or bloom, no nested cards. |
+| Screen lookup | Over foreign content: an animated screen-edge outline, a 40 % black freeze veil, a two-pass selection mark, a rounded neutral status rail with an accent gesture glyph, and a flat result sheet that expands into full-screen search. Its query control matches Home and searches as the reader types. |
 | Exceptions | Neutral input fills, brand-mark holders, dialogs and approved sparse empty-state artwork have specific treatments below. |
 | Source of truth | This document consolidates the current Home/Analytics/Settings implementation and shared tokens. Historical previews do not override it. |
 | Audit scope | Checked against source code on 22 October 2026, and against a debug build on an Android 14 emulator at 392 dp in all seven accents, light and dark, plus 320/340/430 dp and 130/160 % text. |
@@ -437,7 +437,8 @@ non-destructive tap miss.
 
 - Resolve the reader's theme and accent exactly as the app does (`ThemePreferences` → `accentRoles`
   → `GatenTheme`); never infer the overlay's theme from the brightness of the screenshot.
-- Opaque surfaces are alpha 1.00, elevation 0, no shadow, blur, glow or gradient.
+- Opaque surfaces are alpha 1.00, elevation 0, no shadow, blur, glow or gradient. The restored
+  screen-edge outline retains its original drifting accent gradient.
 - The capture is never animated, tinted, moved or scaled. A missing region stays opaque black and
   never reveals the live app.
 
@@ -448,8 +449,9 @@ non-destructive tap miss.
   animation may delay capture, media pause or OCR.
 - The dim is fixed black at **0.40** in both modes, fading 0 → 0.40 over `SHORT` on `emphasized`. It
   is context separation, not a contrast guarantee for whatever is underneath.
-- There is **no screen-edge ring**: no reveal, no drift, no retraction. The tool does not own the
-  screen edge, and an idle instrument has nothing to say.
+- Restore the **screen-edge outline**: two strokes reveal from the bottom midpoint, travel up the
+  sides and meet at the top. It follows the display corners, drifts while reading, and retracts
+  when the result appears. It draws above the selection without receiving touches or delaying OCR.
 - **The lookup ends when the reader leaves.** A window-focus loss still closes it after the 200 ms
   bounce, with the media left paused for whatever took the screen; but an overlay window above every
   app keeps that focus when the launcher or another app comes forward, so the same case is also read
@@ -491,7 +493,8 @@ The opaque paper, neutral hairline and readable ink identify the rail over forei
 existing 40 % black veil separates context but is not a universal contrast guarantee. Text is
 `bodyMedium` in `onSurface`; a failure title and its 18 dp glyph use `error`, with an optional
 `bodySmall` cause in `onSurfaceVariant` 4 dp below. A real foreground task uses a 16 dp, 2 dp-stroke
-`primary` spinner with an 8 dp text gap; otherwise use an 18 dp neutral outline glyph. An inline
+`primary` spinner with an 8 dp text gap. The 18 dp **gesture glyph uses `primary`**; other neutral
+outline glyphs use `onSurfaceVariant`. An inline
 action sits 8 dp below the message, uses `labelLarge` in `primary`, and has a wrapping 48 dp-minimum
 target. Enter, exit and text replacement are opacity only over `SHORT` on `emphasized`; relayout
 height immediately and announce each changed status once, politely.
@@ -545,8 +548,8 @@ Inside, there is no intermediate filled card: **grip → header → one body scr
   `Also written:` / `From {}` lines in `bodySmall`, then a 1 dp rule and a **Meaning** caption with
   numbered glosses in `bodyLarge` and **neutral** numbering, then the full part-of-speech line, then
   the kanji strip as **bare `primary` glyph actions** (no tiles, borders or radii).
-- **Footer**: a deck row plus one full-width **52 dp / 13 dp radius** accent action above the bottom
-  inset, with a 1 dp rule above it. Completion labels stay honest (`Added`, `Already in Anki`), the
+- **Footer**: a tappable deck row with a change glyph plus one full-width **52 dp / 13 dp radius** accent action above the bottom
+  inset, with 24 dp breathing room below the action and a 1 dp rule above the footer. Completion labels stay honest (`Added`, `Already in Anki`), the
   permissionless route is named for what it does (`Send to AnkiDroid`), and only an explicit
   activation ever writes to Anki.
 - **WaniKani reference pages** are another depth in the same sheet — same grip, header and selector,
@@ -558,13 +561,19 @@ controls shrink; Copy, then Select again, relocate into the body when physical w
 Search remains beside Close unless even two 48 dp targets cannot fit, when its labelled body action
 remains available. Empty states also offer the prominent **Search dictionary** recovery.
 
-Search opens a **full-screen opaque `surface` cover inside the same accessibility overlay** — not an
-inline field, an activity, a second window or an expansion of a side dock. Its **Back to lookup**
-chevron restores the saved sheet; **Close lookup** ends the overlay. A labelled **Dictionary query**
-field uses the house 49 dp minimum, 14 dp radius, 1 dp neutral outline, opaque surface fill and 2 dp
-accent focus outline with 2 dp offset. The first query starts blank, Japanese and romaji are both
-accepted, and the existing offline `DictionarySearch` helper and the already-open repository are used
-verbatim. Flat, wrapping rows preserve that helper's bounded order and expose their exact,
+Search **expands the result modal to full screen inside the same accessibility overlay**, starting
+from the actual bottom or side-dock bounds. The search field appears smoothly during the transition;
+the keyboard waits until expansion settles. Back reverses the transition to the saved sheet;
+**Close lookup** ends the overlay. The field matches Home’s compact search control: **52 dp minimum,
+14 dp corners, neutral `surfaceVariant` fill, inset search glyph and a 2 dp accent border on focus**.
+There is no visible **Dictionary query** heading; the field keeps its accessible name. The first
+query starts blank. Typing searches automatically after the same **250 ms** debounce as Home,
+including ordinary edits and IME composing text; the keyboard Search action searches immediately.
+The idle prompt offers the same example words or saved recent searches; tapping a chip searches
+immediately. Submit and opening a result remember the query, while typing alone does not.
+Japanese and romaji are both accepted, and the existing offline `DictionarySearch` helper and the
+already-open repository are used verbatim. Result cards and the prefix section follow Home’s
+search layout, preserving that helper’s bounded order and exposing their exact,
 matched-form, approximate-reading or prefix provenance — never a distinction the result data do not
 provide.
 
@@ -622,11 +631,12 @@ the app did not observe.
 Overlay timings use the shared tokens only: dim and rail `SHORT` (150 ms), sheet entrance `MEDIUM`
 (300 ms), sheet exit and full dismissal `SHORT`, all on `emphasized`; finger-driven geometry is
 immediate; state changes (commit, edge weight, expand/collapse, action label) are 0 ms layout changes;
-a sub-threshold drag returns on the `overshoot` spring. The full-screen search cover enters and leaves
-by `SHORT` opacity on `emphasized`; query and result changes are immediate, and keyboard geometry
-follows the native IME insets. Functional spinners keep the platform's own timing. Reduced motion is
+a sub-threshold drag returns on the `overshoot` spring. Search animates the modal bounds to full
+screen and back with the shared motion tokens, revealing the query controls smoothly. The keyboard
+appears after expansion and its geometry follows the native IME insets. The restored screen-edge
+outline retains its bottom-to-top reveal and result-time retraction. Functional spinners keep the platform's own timing. Reduced motion is
 the platform's animation scale — every one of these is a Compose animation and scales with it, and no
-custom loop is added that would defeat it.
+custom timing loop bypasses that scale.
 
 ### 8.10 Amendments this workflow makes
 
@@ -645,7 +655,8 @@ These are component recipes, not new shared tokens: they use existing roles, the
 control radius value and shared spacing without adding a colour, typography, shape or motion rung.
 Centred lookup artwork and the full-screen dictionary-search cover reuse the app's sparse-artwork,
 field and focus grammar; they do not authorize translucent fields, tinted content cards or extra
-windows.
+windows. The screen-edge outline restores the original 900 ms reveal, 420 ms retraction and
+2400 ms busy drift; these are the restored component’s existing timings.
 
 ## 9. Floating bottom navigation
 
@@ -822,3 +833,15 @@ capture froze** (nor the active keyboard), leaving the media paused for whatever
 Verified on the emulator: Home ends the lookup both when the service has seen the app come forward and
 when it has not, an idle overlay survives twelve seconds untouched, Back still closes it, the keyboard
 opening while searching does **not** close it, and Home while searching does.
+
+### Version 1.6 — Lookup review follow-up
+
+Restored the animated screen-edge outline and applied the selected accent to the instruction’s
+gesture glyph. Matched the overlay query field to Home’s compact search control, removed the
+visible Dictionary query heading, and restored automatic search while typing. Search now expands
+from the result modal’s measured bounds to full screen rather than switching surfaces with a fade.
+The native Compose field mirrors Home’s React Native control because the overlay uses a separate
+native window. The Anki action keeps 24 dp of bottom breathing room above the system inset. Tapping
+the deck name opens an in-overlay picker; choosing an existing deck updates the saved export deck
+for future cards while preserving tags, templates and field mapping. Picking a deck never writes a
+card, and the destination remains editable after a duplicate is found.

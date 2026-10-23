@@ -18,6 +18,11 @@
     <string name="anki_checking">Checking Anki…</string>
     <string name="anki_adding">Adding…</string>
     <string name="anki_deck">Anki deck</string>
+    <!-- The deck row in the sheet's footer is a control: it names the change it opens. -->
+    <string name="anki_deck_change">Change deck</string>
+    <string name="anki_deck_cancel">Close the deck list</string>
+    <string name="anki_deck_empty">AnkiDroid has no decks to choose</string>
+    <string name="anki_deck_retry">Try again</string>
     <string name="anki_not_installed">Install AnkiDroid to add cards</string>
     <string name="anki_error_permission">AnkiDroid denied access</string>
     <string name="anki_error_deck">Could not create the deck</string>

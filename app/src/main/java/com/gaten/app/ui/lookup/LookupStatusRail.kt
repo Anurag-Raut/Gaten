@@ -50,7 +50,8 @@ import com.gaten.app.ui.theme.Spacing
  * on the sheet's paper. Both are the same object: an opaque neutral rail, 13 dp on every corner, with
  * a 1 dp hairline and 12 dp of padding. Nothing decorates it: there is no accent leading rule and no
  * substitute for one, because the paper, the hairline and the ink are what identify the tool over
- * somebody else's screen. The only accent it may show is the spinner of real work.
+ * somebody else's screen. The accent appears only where the tool is asking rather than reporting —
+ * the spinner of real work, and the gesture glyph that asks for a selection.
  *
  * Deliberately not a Material card: the overlay is drawn over arbitrary foreign pixels, so the rail
  * carries its own opaque backing and a hairline rather than borrowing an elevation it cannot have,
@@ -118,7 +119,14 @@ private fun RailBody(
                 Icon(
                     imageVector = glyph.icon(),
                     contentDescription = null,
-                    tint = if (tone == RailTone.Error) colors.error else colors.onSurfaceVariant,
+                    // The gesture glyph is the tool asking the reader for a selection, so it is the
+                    // one status mark in the accent; a report about the world — nothing found, an
+                    // error — stays neutral ink or error, and never borrows the accent.
+                    tint = when {
+                        tone == RailTone.Error -> colors.error
+                        glyph == RailGlyph.Gesture -> colors.primary
+                        else -> colors.onSurfaceVariant
+                    },
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(Spacing.s))
