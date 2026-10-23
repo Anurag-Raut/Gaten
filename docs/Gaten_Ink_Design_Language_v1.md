@@ -450,6 +450,15 @@ non-destructive tap miss.
   is context separation, not a contrast guarantee for whatever is underneath.
 - There is **no screen-edge ring**: no reveal, no drift, no retraction. The tool does not own the
   screen edge, and an idle instrument has nothing to say.
+- **The lookup ends when the reader leaves.** A window-focus loss still closes it after the 200 ms
+  bounce, with the media left paused for whatever took the screen; but an overlay window above every
+  app keeps that focus when the launcher or another app comes forward, so the same case is also read
+  from the foreground app: while the frozen frame is up, a **full-screen window from a package that
+  is neither ours nor the app the capture froze** ends the lookup, without resuming media. The app
+  beneath is excluded because its own window events are the screen already frozen, and the active
+  **input method is excluded by name** because a keyboard reports itself as full screen and arrives
+  exactly when the reader starts typing. Leaving the frozen frame on top of whatever the reader
+  switched to is the failure this prevents.
 
 ### 8.3 The selection mark
 
@@ -804,3 +813,12 @@ up, romaji input (`neko` → ねこ, 9 results, exact and prefix provenance), ch
 which is what lets the reader type at all; the existing 200 ms focus bounce is otherwise unchanged. Not
 exercised: the WaniKani reference page inside a searched entry (needs a token) and the reduced-motion
 path (every transition is a Compose animation and follows the platform's animation scale).
+
+The same revision closed a hole found while testing it: with the overlay up, an accessibility overlay
+window keeps the window focus, so Home — or another app coming forward — never produced the focus loss
+the dismissal was built on, and the frozen frame stayed on top of whatever the reader switched to. The
+lookup now also ends on a **full-screen window from a package that is neither Gaten's nor the app the
+capture froze** (nor the active keyboard), leaving the media paused for whatever took the screen.
+Verified on the emulator: Home ends the lookup both when the service has seen the app come forward and
+when it has not, an idle overlay survives twelve seconds untouched, Back still closes it, the keyboard
+opening while searching does **not** close it, and Home while searching does.
