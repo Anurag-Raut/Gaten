@@ -144,7 +144,7 @@ function WordAppBar({onBack}: {onBack: () => void}) {
   );
 }
 
-function HeadwordSection({hit}: {hit: SearchResult}) {
+export function HeadwordSection({hit}: {hit: SearchResult}) {
   const {colors} = useTheme();
   const readings = hit.kana.filter((reading) => reading !== hit.primary);
   const posSummary = hit.pos[0]
@@ -171,7 +171,7 @@ function HeadwordSection({hit}: {hit: SearchResult}) {
   );
 }
 
-function MeaningSection({glosses, partsOfSpeech}: {
+export function MeaningSection({glosses, partsOfSpeech}: {
   glosses: string[];
   partsOfSpeech: string[];
 }) {
@@ -220,7 +220,7 @@ function compactPartOfSpeech(label: string): string {
   return /^expressions?$/i.test(shortLabel) ? "Expression / phrase" : shortLabel;
 }
 
-function OtherSpellingsRow({primary, spellings}: {primary: string; spellings: string[]}) {
+export function OtherSpellingsRow({primary, spellings}: {primary: string; spellings: string[]}) {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   const alternatives = [...new Set(spellings.filter((spelling) => spelling !== primary))];
@@ -272,7 +272,7 @@ function OtherSpellingsRow({primary, spellings}: {primary: string; spellings: st
   );
 }
 
-function WordKanjiSection({
+export function WordKanjiSection({
   characters,
   onOpenKanji,
 }: {
@@ -316,7 +316,7 @@ function WordKanjiSection({
   );
 }
 
-function AddToAnkiBar({
+export function AddToAnkiBar({
   entry,
   anki,
   exportState,
