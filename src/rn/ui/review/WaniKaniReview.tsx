@@ -142,15 +142,12 @@ export function WaniKaniReview({
   const [activeTab, setActiveTab] = useState<DetailTab>("meaning");
   const inputRef = useRef<TextInput>(null);
 
-  // A new part or a new subject starts closed on its meaning; a wrong answer opens the details on its
-  // own, because that is where the answer the reader has to retype lives.
+  // A new part or a new subject starts with the answer hidden; the reader opens `Show answer` when
+  // they want it, and a wrong answer never opens it for them.
   useEffect(() => {
-    setRevealed(session.phase === "reviewed");
+    setRevealed(false);
     setActiveTab("meaning");
   }, [session.index, session.part]);
-  useEffect(() => {
-    if (session.phase === "reviewed") setRevealed(true);
-  }, [session.phase]);
   // Continue re-arms the same card; the field it cleared is the one the reader now needs.
   useEffect(() => {
     if (session.phase === "answering" && session.retrying) inputRef.current?.focus();
@@ -258,9 +255,6 @@ export function WaniKaniReview({
                 }}
               />
             </View>
-            <Text style={[styles.answerLabel, {color: colors.onSurfaceVariant}]}>
-              {reading ? "Reading · Japanese (kana or romaji)" : "Meaning"}
-            </Text>
             {session.feedback != null && (
               <Feedback tone={session.feedback.tone} text={session.feedback.text} />
             )}
@@ -384,7 +378,6 @@ const styles = StyleSheet.create({
     marginStart: 7,
   },
   answerField: {position: "relative", width: "100%", marginTop: spacing.s},
-  answerLabel: {fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   revealRow: {
     flexDirection: "row",
     alignItems: "center",

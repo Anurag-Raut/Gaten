@@ -905,10 +905,6 @@ class ReviewStore {
         if (current.kind !== "wkReview") return;
         const live = current.session;
         if (!correct) {
-          const answer =
-            session.part === "reading"
-              ? item.primaryReading ?? ""
-              : item.primaryMeaning;
           const counted =
             session.part === "reading"
               ? { incorrectReading: live.incorrectReading + 1 }
@@ -921,11 +917,12 @@ class ReviewStore {
                 ...counted,
                 // The wrong attempt stays on screen, in red, behind its own `reviewed` stop. The card
                 // does not change and nothing is submitted: `wkContinue` only clears the field for the
-                // retry this rule requires.
+                // retry this rule requires. The feedback names no correct answer - that stays behind
+                // the reader's own Show answer disclosure.
                 entry: live.entry,
                 retrying: true,
                 phase: "reviewed",
-                feedback: { tone: "wrong", text: `Incorrect — the answer is ${answer}` },
+                feedback: { tone: "wrong", text: "Incorrect" },
               },
             },
           });
@@ -1161,8 +1158,6 @@ class ReviewStore {
         if (current.kind !== "wkLesson") return;
         const live = current.session;
         if (!correct) {
-          const answer =
-            session.part === "reading" ? item.primaryReading ?? "" : item.primaryMeaning;
           const counted =
             session.part === "reading"
               ? { incorrectReading: live.incorrectReading + 1 }
@@ -1175,7 +1170,7 @@ class ReviewStore {
                 ...counted,
                 entry: "",
                 retrying: true,
-                feedback: { tone: "wrong", text: `Incorrect — the answer is ${answer}` },
+                feedback: { tone: "wrong", text: "Incorrect" },
               },
             },
           });

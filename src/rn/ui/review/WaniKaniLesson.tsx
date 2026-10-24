@@ -229,9 +229,6 @@ export function WaniKaniLesson({
                     }}
                   />
                 </View>
-                <Text style={[styles.answerLabel, {color: colors.onSurfaceVariant}]}>
-                  {reading ? "Reading · Japanese (kana or romaji)" : "Meaning"}
-                </Text>
                 {session.feedback != null && (
                   <Feedback tone={session.feedback.tone} text={session.feedback.text} />
                 )}
@@ -307,7 +304,6 @@ const styles = StyleSheet.create({
   example: {marginTop: spacing.m},
   exampleEnglish: {marginTop: 2},
   answerField: {position: "relative", width: "100%"},
-  answerLabel: {fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},
   // The approved WaniKani footer geometry; Anki keeps the shared 52/13 defaults.
