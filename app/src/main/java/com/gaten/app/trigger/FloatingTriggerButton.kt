@@ -8,13 +8,13 @@ package com.gaten.app.trigger
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
-import android.animation.ArgbEvaluator
 import android.animation.TimeInterpolator
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
@@ -24,8 +24,10 @@ import android.view.Choreographer
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.compose.animation.core.Easing
 import androidx.compose.ui.graphics.toArgb
@@ -36,6 +38,7 @@ import com.gaten.app.ui.theme.NeutralRoles
 import com.gaten.app.ui.theme.ThemePreferences
 import com.gaten.app.ui.theme.accentRoles
 import com.gaten.app.ui.theme.gatenNeutrals
+import kotlin.math.ceil
 import kotlin.math.hypot
 
 private const val TAG = "Gaten"
@@ -61,36 +64,45 @@ private const val TOUCH_SLOP_DP = 8f
 private const val DEFAULT_HEIGHT_FRACTION = 0.45f
 
 /**
- * Where the drop target sits vertically, as a fraction of the usable display: in the lower half but
- * clear of the very bottom, so the navigation bar and the system's own bottom gesture stay out of
- * the way.
+ * The gap kept between the enlarged drop target and the bottom of the usable display, on top of the
+ * system-bar inset the usable bounds already exclude. The target grows into this gap, so the finger
+ * never has to reach into the navigation bar or the system's own bottom gesture.
  */
-private const val DISMISS_BOTTOM_FRACTION = 0.75f
+private const val DISMISS_BOTTOM_MARGIN_DP = 32
 
 /** Extra room around the drop target, so a bubble dragged near it still counts as a drop. */
 private const val DISMISS_SLOP_DP = 20
 
-/** How far the drop target grows while a dragged bubble is over it. */
+/** How much the drop target grows while a dragged bubble is over it; it never changes colour. */
 private const val DISMISS_HOT_SCALE = 1.15f
 
 /** Longest [FloatingTriggerButton.hideThen] waits for the cleared control to reach the screen. */
 private const val GONE_TIMEOUT_MS = 150L
 
 /**
- * The floating lookup trigger: a small bubble in its own accessibility-overlay window, and — while
- * the reader is dragging it — a remove target in a second window, centred horizontally in the lower
- * part of the usable display.
+ * The floating lookup trigger: a small bubble in its own accessibility-overlay window, and a remove
+ * target in a second window, centred horizontally near the bottom of the usable display, above the
+ * system bars. The target is drawn only while the reader is dragging; its window is built and added
+ * with the bubble's and hidden between drags.
  *
- * The bubble is the only thing that is always on screen. A press that becomes a drag brings the
- * target up, and a release or cancellation takes it down again; a release over the target writes the
- * floating-button preference off and removes the bubble, while a release anywhere else only keeps
- * the bubble's new position. The target is still a control with its own description, so an
- * accessibility service can activate the one action it names.
+ * The bubble is the only thing always drawn. A press that becomes a drag brings the target up, and a
+ * release or cancellation takes it down again; a release over the target writes the floating-button
+ * preference off and removes the bubble, while a release anywhere else only keeps the bubble's new
+ * position. The target is still a control with its own description, so an accessibility service can
+ * activate the one action it names.
+ *
+ * The target's window is added before the bubble's, and is never removed and re-added: two
+ * accessibility-overlay windows of the same type stack in the order they were added, the last one
+ * added drawing on top. The bubble must stay in front of the target when a drag brings the two
+ * together, and a bubble removed and added back mid-drag would cancel the very gesture that is
+ * moving it, so the target is added first and stays under the bubble, hidden by its own view
+ * between drags rather than by taking its window down.
  *
  * Both windows are `WRAP_CONTENT` and `FLAG_NOT_TOUCH_MODAL`, so a touch anywhere else falls
- * through to the app behind instead of being swallowed by an invisible full-screen window. Both are
- * plain Android views because these windows are added from the accessibility service — there is no
- * composition to host Compose.
+ * through to the app behind instead of being swallowed by an invisible full-screen window. The
+ * target's view is `GONE` between drags, so its window measures to nothing and cannot take a touch
+ * there either. Both are plain Android views because these windows are added from the accessibility
+ * service — there is no composition to host Compose.
  *
  * Neither window fits the system bars ([WindowManager.LayoutParams.setFitInsetsTypes] cleared,
  * `FLAG_LAYOUT_IN_SCREEN` below API 30), so their `x`/`y` are display coordinates: the position
@@ -100,16 +112,18 @@ private const val GONE_TIMEOUT_MS = 150L
  * reported one status-bar height away from the display position it was given, which is what a tap
  * aimed with those numbers misses. Every bubble position this class takes in — restored, dragged,
  * re-clamped — is clamped into the display area its own context reports, so the bubble can never be
- * stored outside the area it can be touched in. The target is placed by the display's own centre and
- * the same box, so a rotation re-centres it too.
+ * stored outside the area it can be touched in. The target is placed from the same usable bounds the
+ * system reports (the display less the system-bar insets), so it keeps its distance from the bottom
+ * in both orientations and moves with a rotation.
  *
  * [show]/[hide] are idempotent and hop to the main thread themselves, since adding or removing a
  * window anywhere else throws.
  *
  * The bubble's motion is its opacity: it fades in where it was left, and fades out when the reader
- * switches it off or a drag drops it on the target. The target has its own short fade of its own.
- * The bubble also changes colour under a finger, and the target changes colour while the dragged
- * finger is over it; neither is a geometry animation — the drag and the clamp answer a finger, and
+ * switches it off or a drag drops it on the target. The target has a short fade of its own, and grows
+ * while the dragged finger is over it and shrinks back on the way out; its colours, keyline and round
+ * silhouette never change, so a finger on it says only "bigger", never "different". The bubble still
+ * changes colour under a finger; the drag and the clamp are not animations — they answer a finger — and
  * the service takes the windows down outright before a capture.
  */
 class FloatingTriggerButton(
@@ -122,7 +136,17 @@ class FloatingTriggerButton(
     private val density = context.resources.displayMetrics.density
     private val bubblePx = (BUBBLE_DP * density).toInt()
     private val dismissPx = (DISMISS_DP * density).toInt()
+
+    /**
+     * The drop target's window is larger than the circle it draws, by [DISMISS_HOT_SCALE]. The
+     * transparent ring left over is what the circle grows into: a scaled view is clipped to its
+     * window, so a window the size of the circle would shear the enlarged circle into a rounded
+     * square. The window — and so the forgiving hit area — is this wide; the circle inside stays
+     * [dismissPx] at rest.
+     */
+    private val dismissWindowPx = ceil(dismissPx * DISMISS_HOT_SCALE).toInt()
     private val dismissSlopPx = (DISMISS_SLOP_DP * density).toInt()
+    private val dismissBottomMarginPx = (DISMISS_BOTTOM_MARGIN_DP * density).toInt()
     private val touchSlopPx = TOUCH_SLOP_DP * density
     private val edgeMarginPx = (EDGE_MARGIN_DP * density).toInt()
     private val strokePx = (PERIMETER_DP * density).toInt()
@@ -131,8 +155,9 @@ class FloatingTriggerButton(
     private var view: ImageView? = null
     private var params: WindowManager.LayoutParams? = null
 
-    /** The remove target, up only for the length of a drag. */
-    private var dismissView: ImageView? = null
+    /** The remove target's window, up only for the length of a drag, and the circle inside it. */
+    private var dismissView: FrameLayout? = null
+    private var dismissCircle: ImageView? = null
     private var dismissParams: WindowManager.LayoutParams? = null
 
     /**
@@ -148,14 +173,6 @@ class FloatingTriggerButton(
     private var bubbleInkNormal = 0
     private var bubbleInkPressed = 0
 
-    /** The target's own two states, so a drag over it can say so without rebuilding the view. */
-    private var dismissBackground: GradientDrawable? = null
-    private var dismissFillNormal = 0
-    private var dismissInkNormal = 0
-    private var dismissStrokeNormal = 0
-    private var dismissFillHot = 0
-    private var dismissInkHot = 0
-
     /**
      * Whatever is writing the bubble's opacity: an entrance, or the fade out of a bubble the reader
      * switched off. One at a time, so two of them can never fight over it.
@@ -169,9 +186,9 @@ class FloatingTriggerButton(
      */
     private var dismissAlphaAnimator: ValueAnimator? = null
 
-    /** Whatever is writing the target's over-it highlight, and how hot it currently is (0..1). */
-    private var dismissHotAnimator: ValueAnimator? = null
-    private var dismissHot = 0f
+    /** Whatever is writing the target circle's over-it scale, and the scale it is at now. */
+    private var dismissScaleAnimator: ValueAnimator? = null
+    private var dismissScale = 1f
 
     /** True from the start of a bubble fade out until the control is gone or asked for again. */
     private var fadingOut = false
@@ -219,7 +236,19 @@ class FloatingTriggerButton(
             // Invisible until the entrance's first frame lands, so a bubble returning from a
             // capture cannot flash back at full strength.
             bubble.alpha = 0f
-            windowManager.addView(bubble, layoutParams)
+            // The target's window goes up first and stays under the bubble: same-type overlay
+            // windows stack in the order they are added, and the bubble must stay in front of the
+            // target when a drag brings the two together. Its own failure is contained — the bubble
+            // still shows, and showDismiss falls back to adding a target of its own.
+            addDismissWindow()
+            try {
+                windowManager.addView(bubble, layoutParams)
+            } catch (e: RuntimeException) {
+                // The bubble never came up; take the target's already-added window back down rather
+                // than leave a window the reader never asked for.
+                removeNow()
+                throw e
+            }
             // Only now is the window really on screen; isShowing derives from these.
             view = bubble
             params = layoutParams
@@ -270,7 +299,7 @@ class FloatingTriggerButton(
     private fun removeNow() {
         stopAlpha()
         stopDismissAlpha()
-        stopDismissHot()
+        stopDismissScale()
         fadingOut = false
         val bubble = view
         val target = dismissView
@@ -280,7 +309,7 @@ class FloatingTriggerButton(
         dismissParams = null
         bubbleView = null
         bubbleBackground = null
-        dismissBackground = null
+        dismissCircle = null
         bubble?.let { removeWindow(it) }
         target?.let { removeWindow(it) }
     }
@@ -355,30 +384,24 @@ class FloatingTriggerButton(
     )
 
     /**
-     * Builds the remove target and fades it in. Called once a press has become a drag; a no-op when
-     * the target is already up, which is what a re-entry inside its own fade out looks like.
+     * Builds the remove target and adds its window, hidden. Added with the bubble's, so the bubble —
+     * added after — stays in front of it, never the other way round. A failure is logged and
+     * swallowed: a bubble without a target is still a working bubble.
      */
-    private fun showDismiss() {
-        if (view == null) return
-        if (dismissView != null) {
-            // A target still fading out from the last release is this drag's target coming back:
-            // take the fade over and raise it where it was left standing.
-            stopDismissAlpha()
-            resetDismissHighlight()
-            dismissView?.let { animateDismissAlpha(it, 1f, Motion.emphasized) }
-            return
-        }
+    private fun addDismissWindow() {
+        if (dismissView != null) return
         try {
-            val tone = accentRoles(ThemePreferences.accent(context), isDark())
             val neutral = gatenNeutrals(isDark())
-            val target = buildDismiss(neutral, tone)
+            val target = buildDismiss(neutral)
             val layoutParams = overlayParams(dismissPosition())
             target.alpha = 0f
+            // Gone between drags: a nothing-sized window cannot take a touch, and the target is
+            // not in the tree for a reader either until the drag that shows it.
+            target.visibility = View.GONE
             windowManager.addView(target, layoutParams)
             dismissView = target
             dismissParams = layoutParams
-            resetDismissHighlight()
-            animateDismissAlpha(target, 1f, Motion.emphasized)
+            resetDismissScale()
         } catch (e: WindowManager.BadTokenException) {
             logWindowNotAdded("add", e)
         } catch (e: WindowManager.InvalidDisplayException) {
@@ -392,16 +415,40 @@ class FloatingTriggerButton(
         }
     }
 
-    /** Fades the target out and drops its window; a no-op when it is already down. */
+    /**
+     * Brings the remove target up for a drag. Called once a press has become a drag; its window was
+     * added with the bubble's and is only shown here, never added, so it stays under the bubble — see
+     * the class comment. A no-op when the target is already up, which is what a re-entry inside its
+     * own fade out looks like.
+     */
+    private fun showDismiss() {
+        if (view == null) return
+        if (dismissView == null) addDismissWindow()
+        val target = dismissView ?: return
+        val targetParams = dismissParams ?: return
+        // Reposition and re-measure: the display may have turned since the target was built, and the
+        // view is going from GONE back to VISIBLE.
+        val (x, y) = dismissPosition()
+        targetParams.x = x
+        targetParams.y = y
+        if (target.visibility != View.VISIBLE) target.alpha = 0f
+        target.visibility = View.VISIBLE
+        windowManager.updateViewLayout(target, targetParams)
+        stopDismissAlpha()
+        resetDismissScale()
+        animateDismissAlpha(target, 1f, Motion.emphasized)
+    }
+
+    /** Fades the target out and leaves its window in place, hidden; a no-op when already down. */
     private fun hideDismiss() {
         val target = dismissView ?: return
-        stopDismissHot()
         animateDismissAlpha(target, 0f, Motion.emphasized) {
             if (dismissView === target) {
-                dismissView = null
-                dismissParams = null
-                dismissBackground = null
-                removeWindow(target)
+                // Hidden, not removed: taking the window down would leave the next drag to add it
+                // back above the bubble, which is the stacking this class works to avoid.
+                target.visibility = View.GONE
+                stopDismissScale()
+                resetDismissScale()
             }
         }
     }
@@ -469,39 +516,35 @@ class FloatingTriggerButton(
     }
 
     /**
-     * The remove target: the neutral surface disk with a hairline and the paired ink, so it reads on
-     * any page it floats over, and the app's close glyph. It carries its own description and hint so
-     * an accessibility service can perform the one action it names.
+     * The remove target: a round, neutral disk with a hairline and the paired ink, so it reads on
+     * any page it floats over, holding the app's close glyph. It carries its own description and hint
+     * so an accessibility service can perform the one action it names.
      *
-     * While a dragged bubble is over it the disk switches to the accent with the paired ink and grows
-     * a little, so the drop the release is about to perform is visible before the finger lifts.
+     * The disk lives in a window one [DISMISS_HOT_SCALE] larger than itself. A dragged bubble over it
+     * grows the disk to fill that window, so the drop the release is about to perform is visible
+     * before the finger lifts. Only the scale moves: the fill, keyline, glyph and round silhouette are
+     * the same before, during and after. An accent of its own would read as a change of state and,
+     * because the bubble is the same accent, the two overlapping disks would merge into one blob.
      */
-    private fun buildDismiss(neutral: NeutralRoles, tone: AccentRoles): ImageView {
-        val fillNormal = neutral.surface.toArgb()
-        val inkNormal = neutral.onSurface.toArgb()
-        val strokeNormal = neutral.outline.toArgb()
+    private fun buildDismiss(neutral: NeutralRoles): FrameLayout {
+        val fill = neutral.surface.toArgb()
+        val ink = neutral.onSurface.toArgb()
+        val stroke = neutral.outline.toArgb()
         val disk = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(fillNormal)
-            setStroke(strokePx, strokeNormal)
+            setColor(fill)
+            setStroke(strokePx, stroke)
         }
-        dismissBackground = disk
-        dismissFillNormal = fillNormal
-        dismissInkNormal = inkNormal
-        dismissStrokeNormal = strokeNormal
-        dismissFillHot = tone.primary.toArgb()
-        dismissInkHot = tone.onPrimary.toArgb()
-
         val inset = ((DISMISS_DP - DISMISS_ICON_DP) / 2f * density).toInt()
         val hint = context.getString(R.string.bubble_lookup_close_hint)
-        return ImageView(context).apply {
+        val circle = ImageView(context).apply {
             setImageResource(R.drawable.ic_bubble_close)
-            imageTintList = ColorStateList.valueOf(inkNormal)
+            imageTintList = ColorStateList.valueOf(ink)
             scaleType = ImageView.ScaleType.CENTER
             setBackground(disk)
             setPadding(inset, inset, inset, inset)
-            minimumWidth = dismissPx
-            minimumHeight = dismissPx
+            // The circle is the disk; it is centred in the window and only ever scaled.
+            layoutParams = FrameLayout.LayoutParams(dismissPx, dismissPx, Gravity.CENTER)
             contentDescription = context.getString(R.string.bubble_lookup_close_label)
             accessibilityDelegate = object : View.AccessibilityDelegate() {
                 override fun onInitializeAccessibilityNodeInfo(
@@ -513,6 +556,13 @@ class FloatingTriggerButton(
                 }
             }
             setOnClickListener { dismissByReader() }
+        }
+        dismissCircle = circle
+        return FrameLayout(context).apply {
+            // Transparent, and exactly the grown circle's size: the ring the disk grows into.
+            minimumWidth = dismissWindowPx
+            minimumHeight = dismissWindowPx
+            addView(circle)
         }
     }
 
@@ -553,15 +603,50 @@ class FloatingTriggerButton(
     }
 
     /**
-     * The target's own position: horizontally centred, and [DISMISS_BOTTOM_FRACTION] down the usable
-     * display, clamped so a very short display still keeps it whole and above the very bottom.
+     * The target's own position: horizontally centred in the usable display, its whole grown circle
+     * one [DISMISS_BOTTOM_MARGIN_DP] above the bottom of that display and so clear of the system
+     * bars. The usable bounds are the display less the system-bar insets, read fresh each time, so a
+     * rotation or a resize places it correctly in the new orientation; a very short display collapses
+     * the box rather than pushing the target off it.
      */
     private fun dismissPosition(): Pair<Int, Int> {
-        val metrics = context.resources.displayMetrics
-        val x = ((metrics.widthPixels - dismissPx) / 2).coerceAtLeast(0)
-        val y = (metrics.heightPixels * DISMISS_BOTTOM_FRACTION).toInt()
-            .coerceIn(0, (metrics.heightPixels - dismissPx).coerceAtLeast(0))
+        val bounds = usableDisplayBounds()
+        val maxX = (bounds.right - dismissWindowPx).coerceAtLeast(bounds.left)
+        val minY = bounds.top
+        val maxY = (bounds.bottom - dismissWindowPx).coerceAtLeast(minY)
+        val x = (bounds.left + (bounds.width() - dismissWindowPx) / 2).coerceIn(bounds.left, maxX)
+        val y = (bounds.bottom - dismissBottomMarginPx - dismissWindowPx).coerceIn(minY, maxY)
         return x to y
+    }
+
+    /**
+     * The display area the app can actually use, in display coordinates: the display bounds less the
+     * system-bar insets, so the bottom edge sits above the navigation bar or gesture inset. Read from
+     * the window manager's current metrics on API 30+, the same display origin the overlay windows
+     * are positioned in. Below 30 the metrics' own usable size is used; its origin is 0 rather than
+     * inset-shifted, which only ever leaves extra margin at the bottom.
+     */
+    private fun usableDisplayBounds(): Rect {
+        val metrics = context.resources.displayMetrics
+        val fallback = Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return fallback
+        return try {
+            val current = windowManager.currentWindowMetrics
+            val insets = current.windowInsets.getInsetsIgnoringVisibility(
+                WindowInsets.Type.systemBars()
+            )
+            val bounds = current.bounds
+            Rect(
+                bounds.left + insets.left,
+                bounds.top + insets.top,
+                bounds.right - insets.right,
+                bounds.bottom - insets.bottom
+            )
+        } catch (e: RuntimeException) {
+            // No display attached, or a window manager that will not answer: the metrics' own
+            // usable size is still a valid, if slightly more conservative, box.
+            fallback
+        }
     }
 
     /**
@@ -652,7 +737,7 @@ class FloatingTriggerButton(
                     val over = isOverDismiss(event.rawX, event.rawY)
                     if (over != overDismiss) {
                         overDismiss = over
-                        animateDismissHighlight(over)
+                        animateDismissScale(over)
                     }
                 }
             }
@@ -668,7 +753,7 @@ class FloatingTriggerButton(
                         // settings-page notification all take the one path.
                         dismissByReader()
                     } else {
-                        animateDismissHighlight(false)
+                        animateDismissScale(false)
                         TriggerPreferences.setFloatingButtonPosition(
                             context, layoutParams.x, layoutParams.y
                         )
@@ -683,7 +768,7 @@ class FloatingTriggerButton(
                 pressColor(false)
                 overDismiss = false
                 if (dragging) {
-                    animateDismissHighlight(false)
+                    animateDismissScale(false)
                     TriggerPreferences.setFloatingButtonPosition(
                         context, layoutParams.x, layoutParams.y
                     )
@@ -698,9 +783,9 @@ class FloatingTriggerButton(
     private fun isOverDismiss(rawX: Float, rawY: Float): Boolean {
         val target = dismissParams ?: return false
         return rawX >= target.x - dismissSlopPx &&
-            rawX <= target.x + dismissPx + dismissSlopPx &&
+            rawX <= target.x + dismissWindowPx + dismissSlopPx &&
             rawY >= target.y - dismissSlopPx &&
-            rawY <= target.y + dismissPx + dismissSlopPx
+            rawY <= target.y + dismissWindowPx + dismissSlopPx
     }
 
     /**
@@ -732,51 +817,37 @@ class FloatingTriggerButton(
     }
 
     /**
-     * Eases the remove target between its resting and over-it states: the accent disk with the
-     * paired ink, grown a little. The fraction is animated over [Motion.SHORT] with the theme's press
-     * easing, so the highlight arrives with the finger instead of snapping; at a zero animator
-     * duration scale it lands on its end value at once.
+     * Eases the remove target's circle between its resting size and its grown size. Only the scale
+     * moves: the fill, keyline, glyph and round silhouette are untouched, so a finger over it reads
+     * the same control, larger. The scale is animated over [Motion.SHORT] with the theme's press
+     * easing, so it arrives with the finger instead of snapping and returns the same way on the way
+     * out; at a zero animator duration scale it lands on its end value at once.
      */
-    private fun animateDismissHighlight(highlighted: Boolean) {
-        val background = dismissBackground ?: return
-        val target = dismissView ?: return
-        val to = if (highlighted) 1f else 0f
-        stopDismissHot()
-        val animator = ValueAnimator.ofFloat(dismissHot, to).apply {
+    private fun animateDismissScale(enlarged: Boolean) {
+        val circle = dismissCircle ?: return
+        val to = if (enlarged) DISMISS_HOT_SCALE else 1f
+        stopDismissScale()
+        val animator = ValueAnimator.ofFloat(dismissScale, to).apply {
             duration = Motion.SHORT.toLong()
             setInterpolator(TimeInterpolator { Motion.pressEasing.transform(it) })
             addUpdateListener { animation ->
-                val fraction = animation.animatedValue as Float
-                dismissHot = fraction
-                applyDismissHot(background, target, fraction)
+                val scale = animation.animatedValue as Float
+                dismissScale = scale
+                circle.scaleX = scale
+                circle.scaleY = scale
             }
         }
-        dismissHotAnimator = animator
+        dismissScaleAnimator = animator
         animator.start()
     }
 
-    /** Writes the over-it fraction onto the target's disk, glyph and scale in one pass. */
-    private fun applyDismissHot(background: GradientDrawable, target: ImageView, fraction: Float) {
-        val evaluator = ArgbEvaluator()
-        val ink = evaluator.evaluate(fraction, dismissInkNormal, dismissInkHot) as Int
-        background.setColor(evaluator.evaluate(fraction, dismissFillNormal, dismissFillHot) as Int)
-        background.setStroke(
-            strokePx,
-            evaluator.evaluate(fraction, dismissStrokeNormal, dismissInkHot) as Int
-        )
-        target.imageTintList = ColorStateList.valueOf(ink)
-        val scale = 1f + (DISMISS_HOT_SCALE - 1f) * fraction
-        target.scaleX = scale
-        target.scaleY = scale
-    }
-
-    /** Writes the resting state directly, for a target that has just been built. */
-    private fun resetDismissHighlight() {
-        val background = dismissBackground ?: return
-        val target = dismissView ?: return
-        stopDismissHot()
-        dismissHot = 0f
-        applyDismissHot(background, target, 0f)
+    /** Writes the resting scale directly, for a circle that has just been built. */
+    private fun resetDismissScale() {
+        val circle = dismissCircle ?: return
+        stopDismissScale()
+        dismissScale = 1f
+        circle.scaleX = 1f
+        circle.scaleY = 1f
     }
 
     /**
@@ -846,10 +917,10 @@ class FloatingTriggerButton(
         running.cancel()
     }
 
-    /** Stops whatever is writing the target's over-it highlight. */
-    private fun stopDismissHot() {
-        val running = dismissHotAnimator ?: return
-        dismissHotAnimator = null
+    /** Stops whatever is writing the target circle's over-it scale. */
+    private fun stopDismissScale() {
+        val running = dismissScaleAnimator ?: return
+        dismissScaleAnimator = null
         running.cancel()
     }
 
