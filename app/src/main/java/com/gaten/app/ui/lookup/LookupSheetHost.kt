@@ -57,6 +57,7 @@ object LookupSheetHost {
     const val MODULE_NAME = "GatenLookupSheet"
 
     /** The state key names the RN root reads. Kept together so both sides agree. */
+    const val KEY_SESSION = "sessionId"
     const val KEY_MODE = "mode"
     const val KEY_SOURCE = "source"
     const val KEY_WORDS = "words"
@@ -66,6 +67,7 @@ object LookupSheetHost {
     const val MODE_SHEET = "sheet"
     const val MODE_SEARCH = "search"
     const val MODE_EMPTY = "empty"
+    const val MODE_HIDDEN = "hidden"
     const val EMPTY_NO_TEXT = "noText"
     const val EMPTY_NO_MATCHES = "noMatches"
 
@@ -99,6 +101,7 @@ object LookupSheetHost {
      * RN side never re-searches a surface or guesses which entry the reader's selection meant.
      */
     fun publish(
+        sessionId: String,
         mode: String,
         source: String,
         words: List<ScannedWord> = emptyList(),
@@ -107,6 +110,7 @@ object LookupSheetHost {
         emptyKind: String? = null
     ) {
         val state = Arguments.createMap().apply {
+            putString(KEY_SESSION, sessionId)
             putString(KEY_MODE, mode)
             putString(KEY_SOURCE, source)
             putInt(KEY_SELECTED, selected)
@@ -119,6 +123,7 @@ object LookupSheetHost {
 
     /** The initial props for a fresh surface: the same map [publish] emits, as a Bundle. */
     fun initialState(
+        sessionId: String,
         mode: String,
         source: String,
         words: List<ScannedWord> = emptyList(),
@@ -126,6 +131,7 @@ object LookupSheetHost {
         searchQuery: String = "",
         emptyKind: String? = null
     ): Bundle = Bundle().apply {
+        putString(KEY_SESSION, sessionId)
         putString(KEY_MODE, mode)
         putString(KEY_SOURCE, source)
         putInt(KEY_SELECTED, selected)

@@ -9,8 +9,8 @@
 import {DeviceEventEmitter, NativeModules} from "react-native";
 import type {SearchResult} from "./GatenDict";
 
-/** Which surface the sheet is showing. */
-export type LookupSheetMode = "sheet" | "search" | "empty";
+/** Which surface the sheet is showing. `hidden` keeps the surface mounted while the panel exits. */
+export type LookupSheetMode = "sheet" | "search" | "empty" | "hidden";
 
 /** One resolved scanned word and the dictionary entries the overlay found for it. */
 export interface LookupSheetWord {
@@ -22,6 +22,8 @@ export interface LookupSheetWord {
 
 /** One complete sheet state, rebuilt by native on every change. */
 export interface LookupSheetState {
+  /** The lookup session this state belongs to; the mount ignores states from other sessions. */
+  sessionId: string;
   mode: LookupSheetMode;
   source: string;
   words: LookupSheetWord[];
@@ -46,8 +48,14 @@ export const LOOKUP_SHEET_STATE_EVENT = "gaten.lookupSheetState";
 
 /** Parses one raw native map into the typed state; a malformed map is an empty sheet, never a crash. */
 export function parseState(raw: Record<string, unknown>): LookupSheetState {
+  // No mode at all is the pre-first-publish mount: stay out of the way until native says what to
+  // draw, so a surface that mounts a frame early never flashes an empty shell.
   const mode =
-    raw.mode === "search" || raw.mode === "empty" ? raw.mode : "sheet";
+    raw.mode === "search" || raw.mode === "empty" || raw.mode === "hidden"
+      ? raw.mode
+      : raw.mode === "sheet"
+        ? "sheet"
+        : "hidden";
   let words: LookupSheetWord[] = [];
   if (typeof raw.words === "string" && raw.words.length > 0) {
     try {
@@ -59,6 +67,7 @@ export function parseState(raw: Record<string, unknown>): LookupSheetState {
   const emptyKind =
     raw.emptyKind === "noText" || raw.emptyKind === "noMatches" ? raw.emptyKind : null;
   return {
+    sessionId: typeof raw.sessionId === "string" ? raw.sessionId : "",
     mode,
     source: typeof raw.source === "string" ? raw.source : "",
     words,

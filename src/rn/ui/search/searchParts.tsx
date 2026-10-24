@@ -197,6 +197,7 @@ export function SearchField({
   onChangeQuery,
   onSearch,
   onFocus,
+  onBlur,
   style,
   compact = false,
 }: {
@@ -206,6 +207,7 @@ export function SearchField({
   onChangeQuery: (text: string) => void;
   onSearch: () => void;
   onFocus?: () => void;
+  onBlur?: () => void;
   style?: React.ComponentProps<typeof View>["style"];
   compact?: boolean;
 }) {
@@ -244,7 +246,10 @@ export function SearchField({
             settle(1);
             onFocus?.();
           }}
-          onBlur={() => settle(0)}
+          onBlur={() => {
+            settle(0);
+            onBlur?.();
+          }}
           accessibilityLabel="Search Japanese dictionary"
           placeholder="猫, ねこ, neko..."
           placeholderTextColor={colors.onSurfaceVariant}

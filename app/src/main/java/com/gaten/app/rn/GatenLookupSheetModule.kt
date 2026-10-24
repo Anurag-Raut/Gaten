@@ -59,10 +59,11 @@ class GatenLookupSheetModule(reactContext: ReactApplicationContext) :
         actions?.onTextEntryActive(active)
     }
 
-    /** The sheet has drawn its first frame. */
+    /** The sheet is listening: the latest state is flushed to it now. */
     @ReactMethod
     fun ready() {
         actions?.onReady()
+        markReady()
     }
 
     /** Open the app's WaniKani settings page from the sheet's kanji panel. */
@@ -71,39 +72,46 @@ class GatenLookupSheetModule(reactContext: ReactApplicationContext) :
         actions?.onOpenSettingsPage(page)
     }
 
-    /** The current state, for the sheet's first read on mount. */
+    /**
+     * The current state, for a read that arrives out of band. The publish/ready handshake in
+     * [LookupSheetStateGate] is the sheet's normal path; this remains for a caller that explicitly
+     * asks for the latest map.
+     */
     @ReactMethod
     fun getState(promise: Promise) {
-        promise.resolve(lastState ?: Arguments.createMap())
+        promise.resolve(gate.current() as? WritableMap ?: Arguments.createMap())
     }
 
     companion object {
         const val NAME = "GatenLookupSheet"
 
-        /** The last state native published, so a late mount still gets it. */
-        @Volatile
-        private var lastState: WritableMap? = null
+        /** The open session's state and readiness, in one testable place. */
+        private val gate = LookupSheetStateGate()
 
         /** The open session's actions, if any. */
         @Volatile
         private var actions: LookupSheetHost.Actions? = null
 
-        /** Binds the open session's actions. */
+        /** Binds the open session's actions and starts a fresh handshake. */
         fun attach(sessionActions: LookupSheetHost.Actions) {
             actions = sessionActions
-            lastState = null
+            gate.attach()
         }
 
         /** Forgets the closed session's actions, so a late call cannot reach the next lookup. */
         fun detach() {
             actions = null
-            lastState = null
+            gate.detach()
         }
 
-        /** Publishes one sheet state to JS and remembers it for the next [getState]. */
+        /** Publishes one sheet state to JS once it is listening, and remembers it until then. */
         fun publish(state: WritableMap) {
-            lastState = state
-            GatenBridgeEmitter.emitLookupSheetState(state)
+            (gate.publish(state) as? WritableMap)?.let { GatenBridgeEmitter.emitLookupSheetState(it) }
+        }
+
+        /** The RN root is listening: flush the latest state it may have missed while loading. */
+        fun markReady() {
+            (gate.ready() as? WritableMap)?.let { GatenBridgeEmitter.emitLookupSheetState(it) }
         }
     }
 }

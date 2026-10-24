@@ -113,6 +113,12 @@ private val TapTolerance = 24.dp
 private const val MAX_GESTURE_LINES = 3
 
 /**
+ * How long the RN sheet surface stays mounted after it is told to hide, so the panel's own
+ * Reanimated exit can play before the touch-consuming root view is taken down.
+ */
+private const val EXIT_WINDOW_MS = 320L
+
+/**
  * How long a settled rail message stays up before the next one replaces it, or the rail goes. The
  * first message takes the longer dwell: an instruction that vanishes after two seconds is not
  * enough time to read it and act on it.
@@ -147,97 +153,6 @@ private enum class Phase { Selecting, Scanning, Result }
  * it really found before naming the one path that can still recover text.
  */
 private data class RailNotice(val text: Int, val glyph: RailGlyph? = null, val then: RailNotice? = null)
-
-/**
- * The sheet slides in from its own docked edge and back out that way. The transitions travel the
- * measured panel's own size — they are applied to the sheet Surface via [Modifier.animateEnterExit],
- * so the portrait panel moves its own height and a side panel its own width, never the whole
- * screen — over the house steps: MEDIUM to arrive, SHORT to leave, both on the emphasized curve.
- */
-private fun sheetEnter(dock: SheetDock): EnterTransition = when (dock) {
-    SheetDock.Bottom -> slideInVertically(tween(Motion.MEDIUM, easing = Motion.emphasized)) { it }
-    SheetDock.Left -> slideInHorizontally(tween(Motion.MEDIUM, easing = Motion.emphasized)) { -it }
-    SheetDock.Right -> slideInHorizontally(tween(Motion.MEDIUM, easing = Motion.emphasized)) { it }
-}
-
-/** @see sheetEnter */
-private fun sheetExit(dock: SheetDock): ExitTransition = when (dock) {
-    SheetDock.Bottom -> slideOutVertically(tween(Motion.SHORT, easing = Motion.emphasized)) { it }
-    SheetDock.Left -> slideOutHorizontally(tween(Motion.SHORT, easing = Motion.emphasized)) { -it }
-    SheetDock.Right -> slideOutHorizontally(tween(Motion.SHORT, easing = Motion.emphasized)) { it }
-}
-
-/**
- * The rectangle a [dock]-ed panel of [panel]'s measured size occupies in a window of [window]'s
- * size: flush to the screen edge its dock hangs it on, which is where the sheet's own alignment
- * puts it.
- */
-private fun dockedPanelRect(dock: SheetDock, panel: Size, window: Size): Rect = when (dock) {
-    SheetDock.Bottom -> Rect(0f, window.height - panel.height, window.width, window.height)
-    SheetDock.Left -> Rect(0f, 0f, panel.width, window.height)
-    SheetDock.Right -> Rect(window.width - panel.width, 0f, window.width, window.height)
-}
-
-/**
- * The window the search surface is drawn through: the docked panel's own rectangle at rest — the
- * size its content asked for, flush to the edge its dock chose, rounded on the sides that panel
- * rounds — opening out to the whole window as the surface takes it.
- *
- * It is a [Shape] and not a positioning layout on purpose. The outline is worked out in the draw
- * phase from the morph's own value, so [progress] is never read in composition: the search surface
- * keeps the one full-window layout it will need at rest for the whole move, and nothing inside it is
- * measured or recomposed while the window grows.
- */
-private class SearchMorphShape(
-    private val dock: SheetDock,
-    private val cornerPx: Float,
-    private val panel: () -> Size?,
-    private val progress: () -> Float
-) : Shape {
-    override fun createOutline(
-        size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density
-    ): Outline {
-        val full = Rect(0f, 0f, size.width, size.height)
-        // Unmeasured — the sheet has not been laid out yet, which cannot happen by the time its own
-        // Search control is reachable — the surface is simply the window already.
-        val from = panel()?.let { dockedPanelRect(dock, it, size) } ?: full
-        val t = progress().coerceIn(0f, 1f)
-        val rect = Rect(
-            from.left + (full.left - from.left) * t,
-            from.top + (full.top - from.top) * t,
-            from.right + (full.right - from.right) * t,
-            from.bottom + (full.bottom - from.bottom) * t
-        )
-        // The panel's rounding squares out along with its rectangle: a corner belongs to the panel,
-        // and the edge the panel was docked to never had one.
-        val round = CornerRadius(cornerPx * (1f - t))
-        return when (dock) {
-            SheetDock.Bottom -> Outline.Rounded(RoundRect(rect, round, round))
-            SheetDock.Left -> Outline.Rounded(
-                RoundRect(rect, CornerRadius.Zero, round, round, CornerRadius.Zero)
-            )
-            SheetDock.Right -> Outline.Rounded(
-                RoundRect(rect, round, CornerRadius.Zero, CornerRadius.Zero, round)
-            )
-        }
-    }
-}
-
-/**
- * Swallows every pointer that lands on this node. While the search surface is up it owns the whole
- * window — the frames it is still growing in as much as the ones it rests in — so a touch can never
- * reach what it covers; the surface's own controls are drawn above this node and take their touches
- * first.
- */
-private fun Modifier.consumeAllPointers(): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            awaitPointerEvent().changes.forEach { it.consume() }
-        }
-    }
-}
 
 /**
  * Full-screen lasso selector plus the result sheet, shown over a frozen screenshot.
@@ -294,6 +209,21 @@ fun LookupOverlay(
     // survives the primary->final publication of one lookup.
     var displayedResultSession by remember { mutableStateOf<Any?>(null) }
     var feedbackSession by remember { mutableStateOf<Any?>(null) }
+    // Whether the RN sheet surface is in the composition. The RN root consumes every touch while
+    // it is attached, so it is present only while a result is showing — plus a short window so the
+    // panel can play its slide out — and never during selection or a running crop, where the lasso
+    // must keep the screen. A fresh lookup opens its own surface on its own result session.
+    var sheetPresent by remember { mutableStateOf(false) }
+    LaunchedEffect(displayedResultSession, phase) {
+        if (displayedResultSession == null) {
+            sheetPresent = false
+        } else if (phase == Phase.Result) {
+            sheetPresent = true
+        } else {
+            delay(EXIT_WINDOW_MS)
+            sheetPresent = false
+        }
+    }
     LaunchedEffect(displayedResultSession, result?.words?.isNotEmpty()) {
         val session = displayedResultSession
         if (session != null && result?.words?.isNotEmpty() == true && feedbackSession !== session) {
@@ -345,68 +275,14 @@ fun LookupOverlay(
     }
     val railUp = busyText != null || noticeUp
 
-    // The reader's own query, typed in the search surface when the captured text was wrong or
-    // missing. The draft outlives closing search inside one lookup; a chosen entry then replaces
-    // what the sheet shows until the reader asks for the captured result back.
-    var searchOpen by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    // The search surface is this modal grown, not a second one layered over it: it opens as the sheet
-    // panel's own measured rectangle — the dock it is already sitting on, the size its content asked
-    // for — and takes the window over MEDIUM, the step the sheet itself arrives on, its content
-    // fading in over the last of the move. [searchSettled] is that expansion landing, and it is the
-    // only thing that lets the reader's field take focus and the keyboard: an IME arriving while the
-    // surface it sits in is still being resized jolts it. Leaving plays that one move backwards, over
-    // the same step, and the surface is dropped only once it has landed on the panel — which has been
-    // composed underneath, untouched, the whole time.
-    val searchMorph = remember { Animatable(0f) }
-    var searchExpanded by remember { mutableStateOf(false) }
-    var searchSettled by remember { mutableStateOf(false) }
-    // The docked panel's measured size (overlay pixels), reported by the sheet on every layout: the
-    // rectangle the search surface grows out of. Null until the sheet has been laid out once, which
-    // is long before its Search control can be reached.
-    var panelSize by remember { mutableStateOf<Size?>(null) }
-    var searchedEntry by remember { mutableStateOf<DictEntry?>(null) }
-    var searchedQuery by remember { mutableStateOf<String?>(null) }
     // A confirmed zero-line index opens the no-text sheet once per lookup: asking for another
     // selection must not immediately put the same empty shell back in front of the reader.
     var zeroShellSpent by remember { mutableStateOf(false) }
 
-    // The keyboard takes the window focus while the reader types; the controller attributes the loss
-    // through this flag so a lookup being typed into is never dismissed by its own IME.
-    LaunchedEffect(searchOpen) { onTextEntryActive(searchOpen) }
+    // The keyboard takes the window focus while the RN sheet's own field is editing; the controller
+    // attributes the loss through this flag so a lookup being typed into is never dismissed by its
+    // own IME.
     DisposableEffect(Unit) { onDispose { onTextEntryActive(false) } }
-
-    // The move itself, and the two facts that hang off it. Re-keyed on both flags so a reversal —
-    // search closed before it finished opening, or opened again before it finished closing — is
-    // simply the same value heading the other way from wherever it got to: an interruption cannot
-    // strand the surface halfway or leave the panel unmeasured.
-    LaunchedEffect(searchExpanded, searchOpen) {
-        // Search did not close, the whole lookup did: land the value back on the panel without
-        // playing anything, so the next lookup opens from the panel and not from a stale window.
-        if (!searchOpen) {
-            searchSettled = false
-            searchMorph.snapTo(0f)
-            return@LaunchedEffect
-        }
-        // Settled comes and goes with the move: the field gives up focus and the keyboard with the
-        // first frame of the return, while the surface is still as big as it was.
-        searchSettled = false
-        searchMorph.animateTo(
-            targetValue = if (searchExpanded) 1f else 0f,
-            // One move, played both ways: a container transform travels the same distance home as it
-            // did out, so it takes the same step back — MEDIUM, the step the sheet itself arrives on.
-            // The sheet's own slide leaves on SHORT because it travels the panel's own height; this
-            // one travels the window.
-            animationSpec = tween(Motion.MEDIUM, easing = Motion.emphasized)
-        )
-        if (searchExpanded) {
-            searchSettled = true
-        } else {
-            // Landed on the panel: drop the surface and let the sheet through, which is exactly what
-            // the reader left behind it.
-            searchOpen = false
-        }
-    }
 
     fun showNotice(next: RailNotice) {
         notice = next
@@ -422,7 +298,7 @@ fun LookupOverlay(
      * portrait, the reading edge in landscape).
      */
     fun openZeroShell() {
-        if (zeroShellSpent || closing || result != null || searchOpen) return
+        if (zeroShellSpent || closing || result != null) return
         if (phase != Phase.Selecting || frozenBox != null || points.isNotEmpty()) return
         zeroShellSpent = true
         val session = Any()
@@ -586,46 +462,7 @@ fun LookupOverlay(
         return (settled as? RepoState.Ready)?.repo
     }
 
-    // Search: the sheet's own panel grown into the window, inside this same window, above the frozen
-    // capture and the sheet. The sheet stays composed underneath — and keeps its size, since this
-    // surface is the one that moves — so its entry, selection, scroll and reference-page stack are
-    // exactly as the reader left them when search closes.
-    fun openSearch() {
-        if (closing) return
-        searchOpen = true
-        searchExpanded = true
-    }
-
-    /**
-     * Back to the result: the surface plays its expansion back onto the panel's rectangle — the
-     * reader sees the modal they were in, not a surface blinking out over it — and gives way to the
-     * sheet once it has landed.
-     */
-    fun closeSearch() {
-        searchExpanded = false
-    }
-
-    /** A row the reader chose: it becomes what the sheet shows, labelled with the query it came from. */
-    fun pickSearched(entry: DictEntry, committedQuery: String) {
-        searchedEntry = entry
-        searchedQuery = committedQuery
-        // The sheet is already holding the chosen entry under the surface: the return reveals it.
-        closeSearch()
-    }
-
-    /** Back to what the capture actually said — no rescan, no new dock, no reopened shell. */
-    fun originalLookup() {
-        searchedEntry = null
-        searchedQuery = null
-    }
-
     BackHandler { close() }
-
-    // System Back while the reader is searching leaves search first — the keyboard, while it is up,
-    // has already taken the first Back for itself — and never dismisses the lookup or picks a row.
-    // The return is a move, not a cut, and the surface is up for all of it: a Back that arrives while
-    // it plays changes nothing, and the one after it dismisses the lookup the reader is really in.
-    BackHandler(enabled = searchOpen) { closeSearch() }
 
     /**
      * The index with [lineIndices] read by manga-ocr: waits for those lines (bounded by the
@@ -796,11 +633,6 @@ fun LookupOverlay(
         // its provenance, the draft the reader left in search, and the shell a zero index opened. The
         // search surface goes with it and without its move — there is no panel to land it back on,
         // because the sheet it was covering is on its way out.
-        searchOpen = false
-        searchExpanded = false
-        searchQuery = ""
-        searchedEntry = null
-        searchedQuery = null
         // The instruction comes back with the state it belongs to, over the outgoing sheet: the
         // reader who just asked for another selection should not have to guess the gesture again.
         showNotice(instruction(scanState))
@@ -872,142 +704,26 @@ fun LookupOverlay(
                 )
             }
 
-            // Chosen from the anchor the displayed result was published with, not the live frozen
-            // selection: selectAgain clears the latter, and the exiting sheet must keep its dock
-            // until a new result publishes its own anchor.
-            val sheetLayout = remember(
-                resultAnchor,
-                constraints.maxWidth,
-                constraints.maxHeight
-            ) {
-                chooseSheetLayout(
-                    anchor = resultAnchor,
-                    screenWidth = constraints.maxWidth.toFloat(),
-                    screenHeight = constraints.maxHeight.toFloat()
-                )
-            }
-
-            // The sheet's AnimatedVisibility animates nothing itself (None on both sides): the
-            // Surface carries the actual slide via Modifier.animateEnterExit — sized to the measured
-            // panel — and this container only holds the composition until that exit is done. The
-            // last result keeps composing through the exit: selectAgain and a fresh gesture slide
-            // the old sheet out instead of blanking it mid-animation. Keyed on the lookup session
-            // — not the result object — so the primary->final publications of one lookup keep the
-            // same sheet (selection, scroll and drag state intact), while every new session,
-            // equal-data ones included, starts fresh.
-            AnimatedVisibility(
-                visibleState = sheetState,
-                enter = EnterTransition.None,
-                exit = ExitTransition.None,
-                // While the search surface is up it is the whole window and opaque, and the sheet
-                // under it is only waiting to take the reader back: out of traversal for as long as
-                // that lasts, so the reader walks the search — a pane of its own — and never the
-                // panel neither they nor the screen reader can reach through the paper.
-                modifier = if (searchOpen) Modifier.semantics { hideFromAccessibility() } else Modifier
-            ) {
-                result?.let { state ->
-                    key(displayedResultSession) {
-                        ResultSheet(
-                            result = state,
-                            searchedEntry = searchedEntry,
-                            searchedQuery = searchedQuery,
-                            onSearch = { openSearch() },
-                            onOriginalLookup = { originalLookup() },
-                            modifier = Modifier.animateEnterExit(
-                                enter = sheetEnter(sheetLayout.dock),
-                                exit = sheetExit(sheetLayout.dock)
-                            ),
-                            onDismiss = { close() },
-                            onSelectAgain = { selectAgain() },
-                            layout = sheetLayout,
-                            // What the search surface grows out of: the panel as it is really
-                            // laid out, its content's own height and its dock's own width.
-                            onPanelSize = { panelSize = it }
-                        )
-                    }
-                }
-            }
-
-            // The reader's own query, on the sheet's own panel grown into the window: one modal, one
-            // move. The sheet stays composed underneath — the surface starts on exactly the rectangle
-            // the panel occupies and ends on the whole window, so nothing has to be drawn twice and
-            // nothing is ever exposed through it.
-            if (searchOpen) {
-                // The window the surface is drawn through, and how much of its content is in. Both
-                // are read in the draw phase by the layers below, never in composition: the surface
-                // is laid out once, at the size it will keep, and the move costs no layout at all.
-                val density = LocalDensity.current
-                val morphShape = remember(sheetLayout.dock, density) {
-                    SearchMorphShape(
-                        dock = sheetLayout.dock,
-                        // The panel's own rounding, in the same pixels: the surface's first frame is
-                        // the panel's last one, corners included.
-                        cornerPx = with(density) { SheetShape.toPx() },
-                        panel = { panelSize },
-                        progress = { searchMorph.value }
-                    )
-                }
-
-                // Nothing behind the surface takes a touch, in the first frame of the move as much as
-                // in the last: the sheet's scrim, its drag-to-dismiss and the lasso stay out of reach
-                // while it is up, and a touch that is not one of the surface's own controls is
-                // swallowed here instead of dismissing the lookup the reader is searching in.
-                Spacer(modifier = Modifier.fillMaxSize().consumeAllPointers())
-
-                // The paper: the surface's own colour, clipped to the window, so what the growing
-                // window uncovers is paper rather than the app behind the sheet. It is drawn under
-                // the content, which fades in over it.
-                //
-                // Its opacity is the one thing that must not start opaque: the paper's first frame is
-                // the panel's own rectangle, and an opaque paper there would blank the entry the
-                // reader tapped Search on in a single frame. Over the first quarter of the move it
-                // comes up under the panel and the sheet blends out under it, which is also the way
-                // back — by the time the window has collapsed back onto the panel the paper is gone
-                // and the sheet's own reading is there again, so nothing pops at either end.
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            clip = true
-                            shape = morphShape
-                            alpha = (searchMorph.value * 4f).coerceIn(0f, 1f)
-                        }
-                        .background(MaterialTheme.colorScheme.surface)
-                        .zIndex(1f)
-                )
-
-                LookupSearchCover(
-                    repo = readyRepo,
-                    failure = (repoState as? RepoState.Failed)?.message,
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onBack = { closeSearch() },
+            // The sheet body itself is React Native. One surface per displayed result session is
+            // mounted on the application's shared React host and driven by published state; the
+            // native overlay keeps the frozen frame, the lasso, the rail and the accessibility
+            // window. Nothing mounts RN while the reader is still selecting or a crop is being
+            // read — the surface appears with the first resolved result and stays through the
+            // sheet's own exit so the panel can slide away instead of blinking out.
+            if (sheetPresent) {
+                LookupSheetView(
+                    sessionKey = displayedResultSession,
+                    result = result,
+                    phaseVisible = phase == Phase.Result,
+                    modifier = Modifier.fillMaxSize(),
                     onClose = { close() },
-                    onPick = { entry, committed -> pickSearched(entry, committed) },
-                    // The field takes the focus, the keyboard and the reader's edits only once the
-                    // expansion has landed: an IME arriving mid-resize jolts the surface it sits in.
-                    inputActive = searchSettled,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            clip = true
-                            shape = morphShape
-                            // The content arrives over the last half of the move, so no field is ever
-                            // drawn against a window edge it has not reached yet. It is fully in
-                            // exactly as the surface lands, which is also the frame it may be typed
-                            // in; on the way back it is gone before the panel is.
-                            alpha = ((searchMorph.value - 0.5f) * 2f).coerceIn(0f, 1f)
-                        }
-                        .zIndex(1f)
+                    onSelectAgain = { selectAgain() },
+                    onTextEntryActive = onTextEntryActive,
+                    onReady = {},
+                    // The overlay never offered WaniKani settings navigation; the reused reference
+                    // pages hide that affordance, so this is never called from the sheet.
+                    onOpenSettingsPage = {}
                 )
-
-                // And while it is still moving, the content takes no touches either: half of a row
-                // is not a control, and an invisible one is not a control at all. Everything the
-                // surface holds — the field, the rows, the two ways out — is live from the frame it
-                // has landed in.
-                if (!searchSettled) {
-                    Spacer(modifier = Modifier.fillMaxSize().zIndex(2f).consumeAllPointers())
-                }
             }
         }
     }

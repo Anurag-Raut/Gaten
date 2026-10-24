@@ -17,15 +17,34 @@
  * transparent backdrop is `box-none` so the lasso/selection underneath the sheet is never blocked.
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {BackHandler, FlatList, ScrollView, StyleSheet, Text, TextInput, View} from "react-native";
+import {
+  BackHandler,
+  Dimensions,
+  FlatList,
+  KeyboardAvoidingView,
+  type GestureResponderEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import {GestureHandlerRootView} from "react-native-gesture-handler";
 import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
   SlideInDown,
   SlideOutDown,
+  useAnimatedStyle,
   useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import {SafeAreaProvider, useSafeAreaInsets} from "react-native-safe-area-context";
 import {IconButton} from "../components";
+import {PressableScale} from "../PressableScale";
 import {useTheme, ThemeProvider} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import {
@@ -60,14 +79,15 @@ type ReferenceTarget =
   | {kind: "kanji"; character: string}
   | {kind: "radical"; id: number};
 
-function LookupSheetRoot() {
+function LookupSheetRoot({sessionId}: {sessionId?: string}) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const anki = useAnkiExport();
 
   const [state, setState] = useState<bridge.LookupSheetState>({
-    mode: "sheet",
+    sessionId: sessionId ?? "",
+    mode: "hidden",
     source: "",
     words: [],
     selected: 0,
@@ -76,28 +96,74 @@ function LookupSheetRoot() {
   });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchedEntry, setSearchedEntry] = useState<SearchResult | null>(null);
+  const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
   const [references, setReferences] = useState<ReferenceTarget[]>([]);
   const [wanikaniConfigured, setWanikaniConfigured] = useState(false);
   const input = useRef<TextInput>(null);
 
-  // One state from native rebuilds the whole sheet; the first read covers a missed event.
+  // The two snap heights are taken from the physical screen once, not from the live window: the
+  // overlay is a service window, so the IME must not be able to resize the shell and make the
+  // field jump a second time. The landing snap is the same for the entry and every WaniKani page
+  // opened over it, so navigating never changes the sheet's height; only search expands it.
+  const screenHeight = useRef(Dimensions.get("screen").height).current;
+  const collapsedHeight = Math.round(screenHeight * 0.7);
+  const expandedHeight = Math.round(screenHeight * 0.92);
+  // One value drives the whole search transition: the shell height, the landing content's fade and
+  // the search content's reveal. Reassigning a timing interrupts the running one, so a rapid
+  // open/back reverses from wherever it is.
+  const searchProgress = useSharedValue(0);
+
+  // The move itself, and its one authority: the shell animates, the field focuses on open and
+  // gives up native text entry on close, and the accessibility tree follows the visible layer.
   useEffect(() => {
-    let cancelled = false;
-    void bridge.getState().then((raw) => {
-      if (!cancelled) setState(bridge.parseState(raw));
+    searchProgress.value = withTiming(searchOpen ? 1 : 0, {
+      duration: reducedMotion ? 0 : 240,
+      easing: Easing.bezier(0.2, 0, 0, 1),
     });
+    if (searchOpen) {
+      input.current?.focus();
+    } else {
+      input.current?.blur();
+      bridge.setTextEntryActive(false);
+    }
+  }, [searchOpen, reducedMotion, searchProgress]);
+
+  // The shell's own height: the landing snap at rest and the expanded snap while searching.
+  const shellStyle = useAnimatedStyle(() => ({
+    height: collapsedHeight + (expandedHeight - collapsedHeight) * searchProgress.value,
+  }));
+  // The landing content is pushed out of the way and the search content arrives below the field.
+  const landingStyle = useAnimatedStyle(() => ({
+    opacity: 1 - searchProgress.value,
+    transform: [{translateY: -16 * searchProgress.value}],
+  }));
+  const searchLayerStyle = useAnimatedStyle(() => ({
+    opacity: searchProgress.value,
+    transform: [{translateY: 20 * (1 - searchProgress.value)}],
+  }));
+
+  // One state from native rebuilds the whole sheet. The listener is registered first, then the
+  // mount reports itself ready: native holds the latest state until that handshake and flushes it
+  // then, so a state built while the surface was still loading is never emitted into a runtime
+  // with no listener. States from another lookup session are dropped, so a stale surface can never
+  // apply a newer lookup's state.
+  useEffect(() => {
+    const belongs = (parsed: bridge.LookupSheetState) =>
+      sessionId == null || parsed.sessionId === sessionId;
     const subscription = bridge.addLookupSheetStateListener((raw) => {
-      setState(bridge.parseState(raw));
+      const parsed = bridge.parseState(raw);
+      if (!belongs(parsed)) return;
+      setState(parsed);
       setSearchOpen(false);
       setSearchedEntry(null);
+      setSearchedQuery(null);
       setReferences([]);
     });
     bridge.ready();
     return () => {
-      cancelled = true;
       subscription.remove();
     };
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     return () => bridge.setTextEntryActive(false);
@@ -185,8 +251,10 @@ function LookupSheetRoot() {
     (entryId: number) => {
       const hit = store.hitFor(entryId);
       if (hit != null) {
-        store.rememberSearchedQuery(store.getSearchState().hitsQuery);
+        const committedQuery = store.getSearchState().hitsQuery;
+        store.rememberSearchedQuery(committedQuery);
         setSearchedEntry(hit);
+        setSearchedQuery(committedQuery);
       }
       input.current?.blur();
       setSearchOpen(false);
@@ -195,114 +263,161 @@ function LookupSheetRoot() {
     [],
   );
 
-  // A WaniKani page opened over the entry owns the sheet for as long as it is up.
+  // A WaniKani page opened over the entry is a nested layer of the same shell: the shell's height
+  // and the landing content's own scroll state are untouched, and the page crossfades in.
   const reference = references[references.length - 1];
-  if (reference != null) {
-    return (
-      <View style={styles.backdrop} pointerEvents="box-none">
-        <Animated.View
-          entering={reducedMotion ? undefined : SlideInDown}
-          exiting={reducedMotion ? undefined : SlideOutDown}
-          style={[
-            styles.panel,
-            styles.referencePanel,
-            {backgroundColor: colors.surface, maxHeight: "90%"},
-          ]}
-        >
-          {reference.kind === "kanji" ? (
-            <SearchKanjiScreen
-              character={reference.character}
-              onBack={closeReference}
-              onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
-              onOpenSettingsPage={() => bridge.openSettingsPage("wanikani")}
-            />
-          ) : (
-            <SearchRadicalScreen
-              id={reference.id}
-              onBack={closeReference}
-              onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
-              onOpenSettingsPage={() => bridge.openSettingsPage("wanikani")}
-            />
-          )}
-        </Animated.View>
-      </View>
-    );
-  }
+  const referenceKey =
+    reference == null
+      ? "entry"
+      : reference.kind === "kanji"
+        ? `kanji:${reference.character}`
+        : `radical:${reference.id}`;
 
-  // Search is the same field, history, rows and notices the Home tab uses.
-  if (searchOpen) {
-    return (
-      <View style={[styles.backdrop, styles.searchCover, {backgroundColor: colors.surface}]}>
-        <View style={[styles.toolbar, {borderBottomColor: colors.outlineVariant}]}>
-          <IconButton name="arrow_back" accessibilityLabel="Back to lookup" onPress={() => setSearchOpen(false)} />
-          <Text style={[typeScale.titleLarge, styles.toolbarTitle, {color: colors.onSurface}]}>
-            Search dictionary
-          </Text>
-          <IconButton name="close" accessibilityLabel="Close lookup" onPress={() => bridge.close()} />
-        </View>
-        <View style={styles.fieldWrap}>
-          <SearchField
-            inputRef={input}
-            query={searchState.query}
-            queryLimited={searchState.queryLimited}
-            onChangeQuery={store.onQueryChange}
-            onFocus={() => bridge.setTextEntryActive(true)}
-            onSearch={() => {
-              input.current?.blur();
-              store.searchNow();
-            }}
-          />
-        </View>
-        <FlatList<SearchRow>
-          data={searchRowsData}
-          keyExtractor={(row) => row.key}
-          renderItem={({item}) => <SearchRowItem row={item} onOpen={pickSearched} />}
-          ItemSeparatorComponent={SearchRowSeparator}
-          contentContainerStyle={[SEARCH_LIST_CONTENT, {paddingBottom: spacing.xxl + insets.bottom}]}
-          ListHeaderComponent={searchState.query.length === 0 ? <SearchIdlePrompt /> : null}
-          ListEmptyComponent={
-            searchState.query.length > 0 && searchNotice != null ? searchNotice : null
-          }
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        />
-      </View>
-    );
-  }
+  // The dimmed area above the sheet is the way out. It only dismisses when the tap really landed
+  // above the panel's current top — a tap on the panel's own empty space is inside the sheet and
+  // must not close it — and a search that is up collapses back to the landing before anything
+  // else. Covering the whole screen also keeps the touch from falling through to the app below.
+  const onBackdropPress = useCallback(
+    (event: GestureResponderEvent) => {
+      const top = screenHeight - (searchOpen ? expandedHeight : collapsedHeight);
+      if (event.nativeEvent.pageY >= top) return;
+      if (searchOpen) setSearchOpen(false);
+      else bridge.close();
+    },
+    [searchOpen, screenHeight, expandedHeight, collapsedHeight],
+  );
+
+  // A hidden mode is the surface waiting for its first result, or the panel's own exit: rendering
+  // nothing here lets Reanimated play the exit instead of the surface blinking out.
+  if (state.mode === "hidden") return null;
 
   return (
     <View style={styles.backdrop} pointerEvents="box-none">
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        accessible={false}
+        importantForAccessibility="no"
+        onPress={onBackdropPress}
+      />
       <Animated.View
         entering={reducedMotion ? undefined : SlideInDown}
         exiting={reducedMotion ? undefined : SlideOutDown}
-        style={[styles.panel, {backgroundColor: colors.surface, maxHeight: "70%"}]}
+        style={[styles.panel, {backgroundColor: colors.surface}, shellStyle]}
       >
-        {displayedEntry == null ? (
-          <EmptyState
-            kind={state.emptyKind}
-            source={state.source}
-            onSearch={() => setSearchOpen(true)}
-          />
-        ) : (
-          <EntryDetail
-            entry={displayedEntry}
-            words={state.words}
-            selected={state.selected}
-            searched={searchedEntry != null}
-            source={state.source}
-            anki={anki}
-            wanikaniConfigured={wanikaniConfigured}
-            onSelectWord={(index) => {
-              setSearchedEntry(null);
-              setState((s) => ({...s, selected: index}));
-            }}
-            onOpenKanji={(character) => setReferences((s) => [...s, {kind: "kanji", character}])}
-            onSearch={() => setSearchOpen(true)}
-            onSelectAgain={() => bridge.selectAgain()}
-            onClose={() => bridge.close()}
-          />
-        )}
+        <Animated.View
+          style={[styles.layer, landingStyle]}
+          pointerEvents={searchOpen ? "none" : "auto"}
+          accessibilityElementsHidden={searchOpen}
+          importantForAccessibility={searchOpen ? "no-hide-descendants" : "auto"}
+        >
+          {reference != null ? (
+            <Animated.View
+              key={referenceKey}
+              entering={reducedMotion ? undefined : FadeIn.duration(170)}
+              exiting={reducedMotion ? undefined : FadeOut.duration(120)}
+              style={styles.flex}
+            >
+              {reference.kind === "kanji" ? (
+                <SearchKanjiScreen
+                  character={reference.character}
+                  onBack={closeReference}
+                  onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
+                  showSettings={false}
+                  overlay
+                />
+              ) : (
+                <SearchRadicalScreen
+                  id={reference.id}
+                  onBack={closeReference}
+                  onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
+                  showSettings={false}
+                  overlay
+                />
+              )}
+            </Animated.View>
+          ) : displayedEntry == null ? (
+            <EmptyState
+              kind={state.emptyKind}
+              source={state.source}
+              onSearch={() => setSearchOpen(true)}
+            />
+          ) : (
+            <EntryDetail
+              entry={displayedEntry}
+              words={state.words}
+              selected={state.selected}
+              searched={searchedEntry != null}
+              searchedQuery={searchedQuery}
+              source={state.source}
+              anki={anki}
+              wanikaniConfigured={wanikaniConfigured}
+              onSelectWord={(index) => {
+                setSearchedEntry(null);
+                setState((s) => ({...s, selected: index}));
+              }}
+              onOpenKanji={(character) => setReferences((s) => [...s, {kind: "kanji", character}])}
+              onSearch={() => setSearchOpen(true)}
+              onSelectAgain={() => bridge.selectAgain()}
+              onClose={() => bridge.close()}
+            />
+          )}
+        </Animated.View>
+
+        <Animated.View
+          style={[StyleSheet.absoluteFill, searchLayerStyle]}
+          pointerEvents={searchOpen ? "auto" : "none"}
+          accessibilityElementsHidden={!searchOpen}
+          importantForAccessibility={searchOpen ? "auto" : "no-hide-descendants"}
+        >
+          <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+            <View style={[styles.toolbar, {borderBottomColor: colors.outlineVariant}]}>
+              <IconButton
+                name="arrow_back"
+                accessibilityLabel="Back to lookup"
+                onPress={() => setSearchOpen(false)}
+              />
+              <Text style={[typeScale.titleLarge, styles.toolbarTitle, {color: colors.onSurface}]}>
+                Search dictionary
+              </Text>
+              <IconButton
+                name="close"
+                accessibilityLabel="Close lookup"
+                onPress={() => bridge.close()}
+              />
+            </View>
+            <View style={styles.fieldWrap}>
+              <SearchField
+                inputRef={input}
+                query={searchState.query}
+                queryLimited={searchState.queryLimited}
+                onChangeQuery={store.onQueryChange}
+                onFocus={() => bridge.setTextEntryActive(true)}
+                onBlur={() => bridge.setTextEntryActive(false)}
+                onSearch={() => {
+                  input.current?.blur();
+                  store.searchNow();
+                }}
+              />
+            </View>
+            <FlatList<SearchRow>
+              data={searchRowsData}
+              keyExtractor={(row) => row.key}
+              renderItem={({item}) => <SearchRowItem row={item} onOpen={pickSearched} />}
+              ItemSeparatorComponent={SearchRowSeparator}
+              contentContainerStyle={[
+                SEARCH_LIST_CONTENT,
+                {paddingBottom: spacing.xxl + insets.bottom},
+              ]}
+              ListHeaderComponent={searchState.query.length === 0 ? <SearchIdlePrompt /> : null}
+              ListEmptyComponent={
+                searchState.query.length > 0 && searchNotice != null ? searchNotice : null
+              }
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+            />
+          </KeyboardAvoidingView>
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -326,7 +441,6 @@ function EmptyState({
       <View style={styles.toolbarInner}>
         <IconButton name="search" accessibilityLabel="Search dictionary" onPress={onSearch} />
         <View style={styles.spacer} />
-        <IconButton name="refresh" accessibilityLabel="Select again" onPress={() => bridge.selectAgain()} />
         <IconButton name="close" accessibilityLabel="Close lookup" onPress={() => bridge.close()} />
       </View>
       <View style={styles.emptyGroup}>
@@ -339,6 +453,16 @@ function EmptyState({
             {source}
           </Text>
         )}
+        {/* The same reselect the toolbar used to carry, as accent text under the caption: the
+            circular arrow leaves the toolbar, and the action it stood for stays reachable. */}
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Search again"
+          onPress={() => bridge.selectAgain()}
+          style={styles.emptyAction}
+        >
+          <Text style={[typeScale.labelLarge, {color: colors.accent}]}>Search again</Text>
+        </PressableScale>
       </View>
     </View>
   );
@@ -351,6 +475,7 @@ function EntryDetail({
   words,
   selected,
   searched,
+  searchedQuery,
   source,
   anki,
   wanikaniConfigured,
@@ -364,6 +489,7 @@ function EntryDetail({
   words: bridge.LookupSheetWord[];
   selected: number;
   searched: boolean;
+  searchedQuery: string | null;
   source: string;
   anki: ReturnType<typeof useAnkiExport>;
   wanikaniConfigured: boolean;
@@ -377,7 +503,7 @@ function EntryDetail({
   const insets = useSafeAreaInsets();
   const exportState = anki.exportFor(entry.id);
   return (
-    <View style={styles.flex}>
+    <View style={styles.entryRoot}>
       <View style={[styles.toolbarInner, {borderBottomColor: colors.outlineVariant}]}>
         <IconButton name="search" accessibilityLabel="Search dictionary" onPress={onSearch} />
         <View style={styles.spacer} />
@@ -388,33 +514,39 @@ function EntryDetail({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.tabsScroll}
           contentContainerStyle={styles.tabs}
         >
           {words.map((word, index) => (
-            <Text
+            <Pressable
               key={`${word.surface}-${index}`}
+              accessibilityRole="button"
+              accessibilityState={{selected: index === selected}}
               onPress={() => onSelectWord(index)}
               style={[
-                typeScale.titleMedium,
                 styles.tab,
-                {
-                  backgroundColor: index === selected ? colors.primaryContainer : colors.surfaceVariant,
-                  color: index === selected ? colors.onPrimaryContainer : colors.onSurface,
-                },
+                {backgroundColor: index === selected ? colors.primaryContainer : colors.surfaceVariant},
               ]}
             >
-              {word.entries[0]?.primary ?? word.surface}
-            </Text>
+              <Text
+                style={[
+                  typeScale.titleMedium,
+                  {color: index === selected ? colors.onPrimaryContainer : colors.onSurface},
+                ]}
+              >
+                {word.entries[0]?.primary ?? word.surface}
+              </Text>
+            </Pressable>
           ))}
         </ScrollView>
       )}
-      {searched && source.length > 0 && (
+      {searched && searchedQuery != null && searchedQuery.length > 0 && (
         <Text style={[typeScale.bodySmall, styles.searchedFrom, {color: colors.onSurfaceVariant}]}>
-          Searched: {source}
+          Searched: {searchedQuery}
         </Text>
       )}
       <ScrollView
-        style={styles.flex}
+        style={styles.entryScroll}
         contentContainerStyle={styles.entryContent}
         showsVerticalScrollIndicator={false}
       >
@@ -434,12 +566,12 @@ function EntryDetail({
 }
 
 /** Wraps the root in the providers the Home tab already assumes. */
-export function LookupSheetApp() {
+export function LookupSheetApp({sessionId}: {sessionId?: string} = {}) {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <LookupSheetRoot />
+          <LookupSheetRoot sessionId={sessionId} />
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -449,7 +581,6 @@ export function LookupSheetApp() {
 const styles = StyleSheet.create({
   flex: {flex: 1},
   backdrop: {flex: 1, justifyContent: "flex-end"},
-  searchCover: {justifyContent: "flex-start"},
   panel: {
     width: "100%",
     maxWidth: MAX_CONTENT_WIDTH,
@@ -458,7 +589,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: shape.medium,
     overflow: "hidden",
   },
-  referencePanel: {maxWidth: "100%"},
+  // The shell now has a definite animated height, so its layers can fill it: the landing layer is
+  // the entry and the WaniKani page opened over it, and the body scrolls inside.
+  layer: {flex: 1},
+  entryRoot: {flex: 1},
+  entryScroll: {flex: 1},
+
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -475,12 +611,26 @@ const styles = StyleSheet.create({
   toolbarTitle: {flex: 1, marginHorizontal: spacing.s},
   spacer: {flex: 1},
   fieldWrap: {paddingTop: spacing.s},
+  // The tab rail holds its content's own height: without this it is the one flexible row in the
+  // capped, content-sized panel, so the body's shrink pulled it down to its padding and the labels
+  // collapsed with it.
+  tabsScroll: {flexGrow: 0, flexShrink: 0},
   tabs: {paddingHorizontal: spacing.l, paddingVertical: spacing.m, gap: spacing.s},
-  tab: {paddingHorizontal: spacing.l, paddingVertical: spacing.s, borderRadius: shape.small, overflow: "hidden"},
+  // The pill is the Pressable and the label is a plain Text inside it, the same shape as the
+  // shared WaniKani kanji chip: the background and its rounding belong to the container, and the
+  // CJK label is never clipped by a Text box shorter than the glyph's own metrics.
+  tab: {paddingHorizontal: spacing.l, paddingVertical: spacing.s, borderRadius: shape.small},
   entryContent: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.xl, paddingBottom: spacing.xxl},
   searchedFrom: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.m},
-  emptyBody: {paddingBottom: spacing.xxl},
-  emptyGroup: {alignItems: "center", paddingHorizontal: spacing.l, paddingTop: spacing.xxl},
+  emptyBody: {flex: 1, paddingBottom: spacing.xxl},
+  emptyGroup: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.l,
+  },
   emptyMessage: {marginTop: spacing.l, textAlign: "center"},
   emptySource: {marginTop: spacing.xs, textAlign: "center"},
+  // Accent text, not a button: a comfortable hit area without a filled or outlined shape.
+  emptyAction: {marginTop: spacing.m, paddingVertical: spacing.s, paddingHorizontal: spacing.m},
 });
