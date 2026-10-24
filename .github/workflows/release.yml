@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  android-release:
+    if: github.event.release.prerelease == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check release commit is on dev
+        run: |
+          git fetch origin dev:refs/remotes/origin/dev
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/dev; then
+            echo "::error::The pre-release tag must point to a commit on dev."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install the JS dependencies
+        run: npm ci
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache the generated JMdict database
+        id: jmdict-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/db/jmdict.sqlite
+          key: jmdict-${{ hashFiles('tools/build_jmdict_db.py') }}
+
+      - name: Build the JMdict database
+        if: steps.jmdict-cache.outputs.cache-hit != 'true'
+        run: python3 tools/build_jmdict_db.py
+
+      - name: Cache the generated example-sentence database
+        id: examples-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/db/examples.sqlite
+          key: examples-${{ hashFiles('tools/build_examples_db.py') }}
+
+      - name: Build the example-sentence database
+        if: steps.examples-cache.outputs.cache-hit != 'true'
+        run: python3 tools/build_examples_db.py
+
+      - name: Cache the bundled manga-ocr model
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/manga-ocr
+          key: manga-ocr-int8-v1
+          restore-keys: manga-ocr-int8-
+
+      - name: Build signed APKs and Play bundle
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/upload-key.jks
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          trap 'rm -f "$KEYSTORE_FILE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          # The old CI used its own run counter; start above those existing Play codes.
+          version_code=$((1000 + GITHUB_RUN_NUMBER))
+          echo "Building internal test with versionCode=$version_code"
+          ./gradlew :app:assembleRelease -PversionCode="$version_code"
+          ./gradlew :app:bundleRelease -PplayBundle=true -PversionCode="$version_code"
+
+      - name: Save signed APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: gaten-apks-${{ github.run_id }}
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Save signed bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: gaten-play-${{ github.run_id }}
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      - name: Upload to Google Play internal testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.gaten
+          releaseFiles: app/build/outputs/bundle/release/app-release.aab
+          tracks: internal
+          releaseName: ${{ github.event.release.tag_name }}
+          status: completed

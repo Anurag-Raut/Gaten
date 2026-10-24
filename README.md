@@ -236,6 +236,9 @@ Both database assets (`app/src/main/assets/db/jmdict.sqlite` and
 `app/src/main/assets/db/examples.sqlite`) are generated and gitignored, so the build fails early with
 a clear message if either builder was skipped.
 
+For publishing a build from `dev` to Google Play internal testers, follow the
+[internal testing release instructions](.github/DEPLOYMENT.md).
+
 ## Stylized-text model (manga-ocr)
 
 ML Kit finds the lines for selection. **Manga OCR is the default reader**; Google ML Kit can be
