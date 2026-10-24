@@ -12,9 +12,6 @@
     <string name="anki_add">Add to Anki</string>
     <string name="anki_added">Added</string>
     <string name="anki_duplicate">Already in Anki</string>
-    <!-- The permissionless route: the word goes to AnkiDroid's own add screen, so the action names
-         the handoff instead of claiming a direct write Gaten cannot make. -->
-    <string name="anki_send">Send to AnkiDroid</string>
     <string name="anki_checking">Checking Anki…</string>
     <string name="anki_adding">Adding…</string>
     <string name="anki_deck">Anki deck</string>
@@ -28,7 +25,6 @@
     <string name="anki_error_deck">Could not create the deck</string>
     <string name="anki_error_model">Could not create the note type</string>
     <string name="anki_error_failed">Could not add the word</string>
-    <string name="anki_error_share">Could not open AnkiDroid</string>
     <string name="anki_error_configuration">Check the note type in Anki cards</string>
     <string name="anki_error_empty_first_field">The first Anki field is empty. Check field mappings in Anki cards.</string>
     <string name="anki_settings_title">Anki</string>
@@ -38,7 +34,7 @@
     <string name="anki_settings_save">Save</string>
     <string name="anki_settings_saved">Anki settings saved</string>
     <string name="anki_settings_not_installed">Install AnkiDroid to add cards. You can configure Gaten cards here first.</string>
-    <string name="anki_settings_permission">Allow AnkiDroid access to choose existing decks and note types and add cards directly. Without access, Add to Anki opens AnkiDroid’s add screen, where you choose the destination and card layout.</string>
+    <string name="anki_settings_permission">Allow AnkiDroid access to choose existing decks and note types and add cards directly. Without access, Add to Anki is unavailable; grant access here.</string>
     <string name="anki_settings_connect">Allow AnkiDroid access</string>
     <string name="anki_settings_refresh">Refresh from AnkiDroid</string>
     <string name="anki_settings_load_failed">Could not read AnkiDroid. Open AnkiDroid, then try Refresh.</string>
