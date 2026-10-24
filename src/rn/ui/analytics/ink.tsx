@@ -30,13 +30,17 @@ import React, {useEffect, useRef, useState} from "react";
 import {
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
   type DimensionValue,
+  type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import Svg, {Circle, type CircleProps} from "react-native-svg";
 import Animated, {
+  Easing,
   FadeIn,
   FadeOut,
   interpolateColor,
@@ -45,6 +49,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import {PressableScale} from "../PressableScale";
 import {useTheme, type ThemeColors} from "../theme";
@@ -108,12 +113,23 @@ const DISTRIBUTION_TOUCH_HEIGHT = 48;
  */
 const DISTRIBUTION_DIM_OPACITY = 0.35;
 
+/** The height of the whole stacked bar, in dp: the pill both layers and the outer clip share. */
+const DISTRIBUTION_BAR_HEIGHT = 9;
+
 /**
- * The corner of one segment, in dp: a two-step radius on the 9 dp capsule, enough that each part
- * reads as its own rounded mark where it meets the next, while the width that carries the count is
- * untouched. The outer capsule still clips the two end segments to the bar's own 9 dp radius.
+ * Every painted stage layer is a full pill at its own cumulative width, so both ends of every layer
+ * are round; the layers above cover the left caps of the layers below, and the outer pill clips the
+ * one right cap that should show.
  */
-const DISTRIBUTION_SEGMENT_RADIUS = 2;
+const DISTRIBUTION_LAYER_RADIUS = DISTRIBUTION_BAR_HEIGHT / 2;
+
+/**
+ * The analytics entrance: one short, decelerating sweep shared by every figure and fill on a screen
+ * that has just come into view with data ready. Reduced motion sets the same value straight to its
+ * final state.
+ */
+const ANALYTICS_ENTRANCE_MS = 420;
+const ANALYTICS_ENTRANCE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 
 /** How long a selected/dimmed state takes to settle, in ms: short enough to feel immediate. */
 const DISTRIBUTION_SELECT_MS = 160;
@@ -165,6 +181,161 @@ const RING_CENTRE_RATIO = 0.24;
  * a refreshed figure sweeps to its new length instead of jumping there.
  */
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+/** The text field that carries the count-up figure: a read-only, non-focusable animated TextInput. */
+type CountTextInputProps = React.ComponentProps<typeof TextInput> & {
+  /** The native text Reanimated drives on the UI thread; not part of TextInput's public typings. */
+  text?: string;
+  animatedProps?: object;
+};
+const AnimatedTextInput = Animated.createAnimatedComponent(
+  TextInput
+) as unknown as React.ComponentType<CountTextInputProps>;
+
+/**
+ * One entrance shared value per data source. The animation starts once, when the screen is focused
+ * and that source has answered; a refresh, a legend tap, the freshness clock or a text-size change
+ * never restarts it. A component that mounts after the sweep is already at 1 renders its final state.
+ */
+export function useAnalyticsEntrance(ready: boolean): SharedValue<number> {
+  const reducedMotion = useReducedMotion();
+  const entrance = useSharedValue(reducedMotion ? 1 : 0);
+  const started = useRef(false);
+  useEffect(() => {
+    if (!ready || started.current) {
+      return;
+    }
+    started.current = true;
+    entrance.value = reducedMotion
+      ? 1
+      : withTiming(1, {duration: ANALYTICS_ENTRANCE_MS, easing: ANALYTICS_ENTRANCE_EASING});
+  }, [ready, reducedMotion, entrance]);
+  return entrance;
+}
+
+/**
+ * A colour that is already composited onto the page's own background, so a bar layer or a legend
+ * swatch is fully opaque and no two layers can bleed through one another. Only the `#RGB` and
+ * `#RRGGBB` forms the theme bridge resolves are composited; any other string is returned unchanged
+ * rather than guessed at.
+ */
+function opaqueOnBackground(foreground: string, background: string, alpha: number): string {
+  const fg = parseHex(foreground);
+  const bg = parseHex(background);
+  if (fg == null || bg == null || alpha >= 1) {
+    return foreground;
+  }
+  const a = Math.min(1, Math.max(0, alpha));
+  const mix = (front: number, back: number) => Math.round(front * a + back * (1 - a));
+  return `rgb(${mix(fg.r, bg.r)}, ${mix(fg.g, bg.g)}, ${mix(fg.b, bg.b)})`;
+}
+
+/** The RGB of a `#RGB` or `#RRGGBB` string, or null for anything the bridge did not promise. */
+function parseHex(color: string): {r: number; g: number; b: number} | null {
+  const hex = color.trim();
+  if (!hex.startsWith("#")) {
+    return null;
+  }
+  const value = hex.slice(1);
+  if (value.length === 3) {
+    return {
+      r: Number.parseInt(`${value[0]}${value[0]}`, 16),
+      g: Number.parseInt(`${value[1]}${value[1]}`, 16),
+      b: Number.parseInt(`${value[2]}${value[2]}`, 16),
+    };
+  }
+  if (value.length === 6) {
+    return {
+      r: Number.parseInt(value.slice(0, 2), 16),
+      g: Number.parseInt(value.slice(2, 4), 16),
+      b: Number.parseInt(value.slice(4, 6), 16),
+    };
+  }
+  return null;
+}
+
+/**
+ * The count-up formatter, kept worklet-safe: no locale database, no display-string parsing, just the
+ * same comma grouping `formatCount` draws and the same fixed decimal the screen states. The fallback
+ * for a null figure is the exact string the screen already formatted, so unknown and empty values
+ * never count up from zero.
+ */
+function countText(value: number, decimals: number, suffix: string): string {
+  "worklet";
+  const safe = Number.isFinite(value) ? value : 0;
+  if (decimals > 0) {
+    return `${safe.toFixed(decimals)}${suffix}`;
+  }
+  const rounded = Math.round(safe);
+  const sign = rounded < 0 ? "-" : "";
+  const digits = String(Math.abs(rounded));
+  let grouped = "";
+  for (let index = 0; index < digits.length; index += 1) {
+    if (index > 0 && (digits.length - index) % 3 === 0) {
+      grouped += ",";
+    }
+    grouped += digits[index];
+  }
+  return `${sign}${grouped}${suffix}`;
+}
+
+/**
+ * A figure that sweeps from zero to its real value on the shared entrance. It draws through a
+ * read-only TextInput because only a native text prop can be driven from the UI thread; the field
+ * takes no touch and no accessibility of its own, and the final value in the surrounding label
+ * remains the one a screen reader hears.
+ */
+export function AnimatedValueText({
+  value,
+  count,
+  entrance,
+  style,
+}: {
+  /** The finished string, the fallback when there is nothing to count up. */
+  value: string;
+  /** The raw figure and its formatting, or null for a dash or a word that must not count. */
+  count?: {value: number | null; decimals?: number; suffix?: string} | null;
+  entrance: SharedValue<number>;
+  style: StyleProp<TextStyle>;
+}): React.JSX.Element {
+  const decimals = count?.decimals ?? 0;
+  const suffix = count?.suffix ?? "";
+  const raw = count?.value ?? null;
+  const animatedProps = useAnimatedProps(() => {
+    const text = raw == null ? value : countText(raw * entrance.value, decimals, suffix);
+    return {text, defaultValue: text};
+  });
+  if (raw == null) {
+    return <Text style={style}>{value}</Text>;
+  }
+  return (
+    <View
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
+      pointerEvents="none"
+      style={styles.animatedCountWrap}
+    >
+      <AnimatedTextInput
+        accessible={false}
+        editable={false}
+        caretHidden
+        pointerEvents="none"
+        aria-hidden={true}
+        focusable={false}
+        importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
+        underlineColorAndroid="transparent"
+        autoCorrect={false}
+        spellCheck={false}
+        multiline={false}
+        scrollEnabled={false}
+        style={[styles.animatedCount, style]}
+        animatedProps={animatedProps}
+      />
+    </View>
+  );
+}
 
 /**
  * One titled group of numbers. The hairline over the group and the whitespace around it are what
@@ -241,6 +412,11 @@ export interface MetricBlock {
   eyebrow?: string | null;
   /** The figure itself, already formatted by the screen. */
   value: string;
+  /**
+   * The raw figure behind [value], when the figure is a count that should sweep in from zero. The
+   * screen keeps formatting; a null value means the entry shows [value] as-is, with no count-up.
+   */
+  count?: {value: number | null; decimals?: number; suffix?: string} | null;
   /** What the figure counts, directly under it. */
   caption: string;
   /** A second line of context, a step below the caption. */
@@ -262,11 +438,13 @@ export interface MetricBlock {
 export function Metric({
   eyebrow,
   value,
+  count,
   caption,
   note,
   muted = false,
   hero = true,
-}: MetricBlock): React.JSX.Element {
+  entrance,
+}: MetricBlock & {entrance: SharedValue<number>}): React.JSX.Element {
   const {colors} = useTheme();
   const figureColor = muted ? colors.onSurfaceVariant : colors.onSurface;
   // The eyebrow is named first, then the figure with its caption, then the note — the order the eye
@@ -279,9 +457,12 @@ export function Metric({
       {eyebrow != null && eyebrow !== "" ? (
         <Text style={[styles.metricEyebrow, {color: colors.onSurfaceVariant}]}>{eyebrow}</Text>
       ) : null}
-      <Text style={[hero ? styles.metricHero : typeScale.metric, {color: figureColor}]}>
-        {value}
-      </Text>
+      <AnimatedValueText
+        value={value}
+        count={count}
+        entrance={entrance}
+        style={[hero ? styles.metricHero : typeScale.metric, {color: figureColor}]}
+      />
       <Text style={[typeScale.bodySmall, styles.metricCaption, {color: colors.onSurfaceVariant}]}>
         {caption}
       </Text>
@@ -302,15 +483,17 @@ export function Metric({
 export function MetricPair({
   left,
   right,
+  entrance,
 }: {
   left: MetricBlock;
   right: MetricBlock;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
   return (
     <View style={styles.metricPair}>
       <View style={[styles.metricPairSide, styles.metricPairLeft]}>
-        <Metric {...left} />
+        <Metric {...left} entrance={entrance} />
       </View>
       <View
         style={[
@@ -319,7 +502,7 @@ export function MetricPair({
           {borderLeftWidth: 1, borderLeftColor: colors.outlineVariant},
         ]}
       >
-        <Metric {...right} />
+        <Metric {...right} entrance={entrance} />
       </View>
     </View>
   );
@@ -357,18 +540,30 @@ export function InlineBar({
   share,
   color,
   height = 7,
+  entrance,
 }: {
   share: number;
   color: string;
   height?: number;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
   const clamped = Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0;
+  // The fill is an absolutely sized child of the track, so a width animation is a single layer's own
+  // property and the rounded ends of the track survive the sweep; its own measured width is all the
+  // geometry the fill needs.
+  const trackWidth = useSharedValue(0);
+  const fillStyle = useAnimatedStyle(() => ({
+    width: trackWidth.value * clamped * entrance.value,
+  }));
   return (
-    <View style={[styles.inlineBar, {height, backgroundColor: colors.outlineVariant}]}>
-      <View
-        style={[styles.inlineBarFill, {width: `${clamped * 100}%` as DimensionValue, backgroundColor: color}]}
-      />
+    <View
+      style={[styles.inlineBar, {height, backgroundColor: colors.outlineVariant}]}
+      onLayout={(event) => {
+        trackWidth.value = event.nativeEvent.layout.width;
+      }}
+    >
+      <Animated.View style={[styles.inlineBarFill, {backgroundColor: color}, fillStyle]} />
     </View>
   );
 }
@@ -399,6 +594,7 @@ const BAR_ROW_NOTE_WIDTH = 56;
 export function BarRow({
   label,
   count,
+  countValue,
   share,
   color,
   muted = false,
@@ -406,9 +602,11 @@ export function BarRow({
   spoken,
   labelWidth = BAR_ROW_LABEL_WIDTH,
   countWidth = BAR_ROW_COUNT_WIDTH,
+  entrance,
 }: {
   label: string;
   count: string;
+  countValue?: {value: number | null; decimals?: number; suffix?: string} | null;
   share: number;
   color: string;
   muted?: boolean;
@@ -416,6 +614,7 @@ export function BarRow({
   spoken?: string;
   labelWidth?: number;
   countWidth?: number;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
   // The three fixed columns grow with the reader's text size: their contents are text, so a column
@@ -434,10 +633,12 @@ export function BarRow({
         {label}
       </Text>
       <View style={styles.barRowTrack}>
-        <InlineBar share={share} color={color} height={5} />
+        <InlineBar share={share} color={color} height={5} entrance={entrance} />
       </View>
-      <Text
-        numberOfLines={1}
+      <AnimatedValueText
+        value={count}
+        count={countValue}
+        entrance={entrance}
         style={[
           typeScale.labelSmall,
           styles.barRowCount,
@@ -446,9 +647,7 @@ export function BarRow({
             color: muted ? colors.onSurfaceVariant : colors.onSurface,
           },
         ]}
-      >
-        {count}
-      </Text>
+      />
       {note == null ? null : (
         <Text
           numberOfLines={1}
@@ -483,15 +682,19 @@ export function BarRow({
 export function Ring({
   share,
   centre,
+  centreCount,
   caption = null,
   size = RING_SIZE,
   stroke = RING_STROKE,
+  entrance,
 }: {
   share: number | null;
   centre: string;
+  centreCount?: {value: number | null; decimals?: number; suffix?: string} | null;
   caption?: string | null;
   size?: number;
   stroke?: number;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
@@ -517,7 +720,10 @@ export function Ring({
   // is the animated value rather than the dash array, which keeps the animation to one numeric SVG
   // prop the renderer already treats as a path-length offset.
   const arcProps = useAnimatedProps<CircleProps>(() => {
-    const length = Math.max(0, Math.min(circumference, arcProgress.value * circumference));
+    const length = Math.max(
+      0,
+      Math.min(circumference, arcProgress.value * circumference * entrance.value)
+    );
     return {
       strokeDashoffset: circumference - length,
       strokeOpacity: length > 0.01 ? 1 : 0,
@@ -566,15 +772,21 @@ export function Ring({
       {/* The figure sits over the arc's opening rather than under it, and the overlay never takes a
           touch: the ring reports itself, and nothing inside it is a control. */}
       <View style={styles.ringCentre} pointerEvents="none">
-        <Text
-          numberOfLines={1}
+        <AnimatedValueText
+          value={centre}
+          count={centreCount}
+          entrance={entrance}
           style={[
             styles.ringValue,
-            {fontSize: centreSize, lineHeight: Math.round(centreSize * 1.2), color: colors.onSurface},
+            {
+              width: "100%",
+              textAlign: "center",
+              fontSize: centreSize,
+              lineHeight: Math.round(centreSize * 1.2),
+              color: colors.onSurface,
+            },
           ]}
-        >
-          {centre}
-        </Text>
+        />
         {caption != null && caption !== "" ? (
           <Text
             numberOfLines={1}
@@ -985,15 +1197,23 @@ export function CountLegend({
   items,
   selectedKey,
   onSelect,
+  entrance,
 }: {
   items: DistributionPart[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   return (
     <View style={styles.countLegend}>
       {items.map((item) => (
-        <CountLegendButton key={item.key} item={item} selectedKey={selectedKey} onSelect={onSelect} />
+        <CountLegendButton
+          key={item.key}
+          item={item}
+          selectedKey={selectedKey}
+          onSelect={onSelect}
+          entrance={entrance}
+        />
       ))}
     </View>
   );
@@ -1008,31 +1228,47 @@ function CountLegendButton({
   item,
   selectedKey,
   onSelect,
+  entrance,
 }: {
   item: DistributionPart;
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const selected = item.key === selectedKey;
-  const targetFill = distributionOpacity(item, selectedKey) ?? 1;
-  const fillOpacity = useSharedValue(targetFill);
+  const alpha = item.opacity ?? 1;
+  const normalColor = opaqueOnBackground(item.color, colors.background, alpha);
+  const dimColor = opaqueOnBackground(
+    item.color,
+    colors.background,
+    alpha * DISTRIBUTION_DIM_OPACITY
+  );
+  // 0 is the untouched stage, 1 is dimmed by another choice, 2 is the chosen stage at full accent.
+  const target = selectedKey == null ? 0 : selected ? 2 : 1;
+  const swatch = useSharedValue(target);
   const emphasis = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
-    fillOpacity.value = reducedMotion
-      ? targetFill
-      : withTiming(targetFill, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
-  }, [targetFill, reducedMotion, fillOpacity]);
-  useEffect(() => {
-    const target = selected ? 1 : 0;
-    emphasis.value = reducedMotion
+    swatch.value = reducedMotion
       ? target
       : withTiming(target, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [target, reducedMotion, swatch]);
+  useEffect(() => {
+    const next = selected ? 1 : 0;
+    emphasis.value = reducedMotion
+      ? next
+      : withTiming(next, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
   }, [selected, reducedMotion, emphasis]);
 
-  const fillStyle = useAnimatedStyle(() => ({opacity: fillOpacity.value}));
+  const swatchStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      swatch.value,
+      [0, 1, 2],
+      [normalColor, dimColor, item.color]
+    ),
+  }));
   const ringStyle = useAnimatedStyle(() => ({opacity: emphasis.value}));
   const labelStyle = useAnimatedStyle(() => ({
     color: interpolateColor(
@@ -1050,24 +1286,18 @@ function CountLegendButton({
       onPress={() => onSelect(item.key)}
       style={styles.countLegendItem}
     >
-      <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{item.value}</Text>
+      <AnimatedValueText
+        value={item.value}
+        count={{value: item.count, decimals: 0}}
+        entrance={entrance}
+        style={[typeScale.titleMedium, {color: colors.onSurface}]}
+      />
       <View style={styles.countLegendKey}>
-        {/* The swatch repeats the segment's fill on the segment's own backing — the bar draws its
-            accent over the hairline track — so the two composite the same shade, black accents
-            included. The ring lives outside the clipped swatch so the accent can sit at its edge
+        {/* The swatch is the same opaque composite the bar paints for this stage, so a dimmed bar
+            and its key always show one shade; the chosen key adds an accent ring outside the swatch
             without changing the 8 dp key's size. */}
         <View style={styles.countLegendSwatchWrap}>
-          <View style={[styles.countLegendSwatch, {backgroundColor: colors.outlineVariant}]}>
-            <Animated.View
-              style={[
-                styles.countLegendSwatchFill,
-                {backgroundColor: item.color},
-                // The same opacity the bar just painted that segment at, so a dimmed bar still shows
-                // the exact shade its key claims.
-                fillStyle,
-              ]}
-            />
-          </View>
+          <Animated.View style={[styles.countLegendSwatch, swatchStyle]} />
           <Animated.View
             pointerEvents="none"
             style={[styles.countLegendSwatchRing, {borderColor: colors.accent}, ringStyle]}
@@ -1085,42 +1315,39 @@ function CountLegendButton({
 }
 
 /**
- * The opacity one distribution segment is painted at. With no selection the part keeps the strength
- * the screen gave it; once a category is chosen it and only it is drawn at full accent, and the rest
- * are faded, so the choice reads at a glance. The width — the count the segment carries — never
- * changes, so the bar still states the proportion it always did.
- */
-function distributionOpacity(part: DistributionPart, selectedKey: string | null): number | undefined {
-  if (selectedKey == null) {
-    return part.opacity;
-  }
-  return part.key === selectedKey ? 1 : (part.opacity ?? 1) * DISTRIBUTION_DIM_OPACITY;
-}
-
-/**
- * One proportional bar for parts of a whole: the segments take width by their counts and the
- * hairline-coloured remainder shows what is left, all in a single 9 dp capsule. The bar carries the
- * whole statement for a screen reader — every segment named and counted — and the visible key belongs
- * to the caller, which hands the same parts to [CountLegend] so the bar and its key are one array
- * read twice. Zero-count segments are dropped from the bar: they would be invisible anyway, and the
- * legend beside it still says "Guru 0".
+ * One proportional bar for parts of a whole: every stage is painted as its own fully rounded pill at
+ * its cumulative width, and the layers are drawn darkest/last-stage first so each lighter stage lies
+ * over the beginning of the next. That leaves no gap, notch or border between stages — each lighter
+ * cap simply overlaps the darker one below — while the outer pill clips the one right cap that should
+ * show. The bar carries the whole statement for a screen reader, and the key belongs to the caller,
+ * which hands the same parts to [CountLegend] so the bar and its key are one array read twice.
  *
  * The bar is also a way to choose: the wrapper is a real 48 dp touch row with the capsule centred
- * inside it, each drawn segment gets an equal share of that row, and the chosen one is painted at
- * full accent while the others fade. A zero-count category has no segment to press, so it is chosen
- * from its legend like any other.
+ * inside it, and the hit layer below still divides that row by each stage's own count — the
+ * cumulative paint layers never replace the non-cumulative hit regions. A zero-count category has no
+ * segment to press, so it is chosen from its legend like any other.
  */
 export function StackedBar({
   segments,
   selectedKey,
   onSelect,
+  entrance,
 }: {
   segments: DistributionPart[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
   const drawn = segments.filter((segment) => segment.count > 0);
+  const total = drawn.reduce((sum, segment) => sum + segment.count, 0);
+  const layers: {segment: DistributionPart; cumulative: number}[] = [];
+  let running = 0;
+  for (const segment of drawn) {
+    running += segment.count;
+    layers.push({segment, cumulative: total > 0 ? running / total : 0});
+  }
+  const barWidth = useSharedValue(0);
   const summary = segments
     .map((segment) => `${segment.spoken ?? segment.label} ${segment.count}`)
     .join(", ");
@@ -1130,15 +1357,32 @@ export function StackedBar({
         accessible
         accessibilityRole="image"
         accessibilityLabel={summary}
+        onLayout={(event) => {
+          barWidth.value = event.nativeEvent.layout.width;
+        }}
         style={[styles.stackedBar, {backgroundColor: colors.outlineVariant}]}
       >
-        {drawn.map((segment) => (
-          <StackedSegment key={segment.key} segment={segment} selectedKey={selectedKey} />
-        ))}
+        {/* Reverse stage order: the full/darkest layer is laid down first, then each lighter stage
+            over it, so the visible region for a stage is its own layer and its rounded right cap
+            overlaps the next darker stage's beginning. */}
+        {layers
+          .slice()
+          .reverse()
+          .map(({segment, cumulative}) => (
+            <StackedPaintLayer
+              key={segment.key}
+              segment={segment}
+              cumulative={cumulative}
+              selectedKey={selectedKey}
+              entrance={entrance}
+              barWidth={barWidth}
+            />
+          ))}
       </View>
-      {/* The bar's touch layer, a normal child of the 48 dp wrapper: the same proportional columns
-          as the segments it covers. It carries no ink and no accessibility of its own — the visible
-          key is the spoken control, and this is only the sighted reader's quicker way to it. */}
+      {/* The bar's touch layer, a normal child of the 48 dp wrapper: the same non-cumulative
+          proportional columns as the counts, independent of the cumulative paint layers above. It
+          carries no ink and no accessibility of its own — the visible key is the spoken control, and
+          this is only the sighted reader's quicker way to it. */}
       <View style={styles.stackedHitLayer} pointerEvents="box-none">
         {drawn.map((segment) => (
           <PressableScale
@@ -1155,40 +1399,51 @@ export function StackedBar({
 }
 
 /**
- * One drawn segment: width and position come only from `flexGrow` on the count, so the proportions
- * are untouched, while the rounded corner and the dim/full accent fade are state, not geometry. The
- * parent capsule still clips the two end segments to the bar's own radius.
+ * One cumulative paint layer. Its width is the running share of the drawn total, so the rounded right
+ * cap always sits where that stage ends; its colour is an opaque composite of the stage's accent
+ * strength on the page background, so no layer opacity can bleed through the next. Selection moves
+ * the colour between the untouched, dimmed and full-accent composites on the existing interaction
+ * timing.
  */
-function StackedSegment({
+function StackedPaintLayer({
   segment,
+  cumulative,
   selectedKey,
+  entrance,
+  barWidth,
 }: {
   segment: DistributionPart;
+  cumulative: number;
   selectedKey: string | null;
+  entrance: SharedValue<number>;
+  barWidth: SharedValue<number>;
 }): React.JSX.Element {
+  const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
-  const target = distributionOpacity(segment, selectedKey) ?? 1;
-  const opacity = useSharedValue(target);
+  const alpha = segment.opacity ?? 1;
+  const normalColor = opaqueOnBackground(segment.color, colors.background, alpha);
+  const dimColor = opaqueOnBackground(
+    segment.color,
+    colors.background,
+    alpha * DISTRIBUTION_DIM_OPACITY
+  );
+  // 0 is the untouched stage, 1 is dimmed by another choice, 2 is the chosen stage at full accent.
+  const target = selectedKey == null ? 0 : segment.key === selectedKey ? 2 : 1;
+  const emphasis = useSharedValue(target);
   useEffect(() => {
-    opacity.value = reducedMotion
+    emphasis.value = reducedMotion
       ? target
       : withTiming(target, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
-  }, [target, reducedMotion, opacity]);
-  const motion = useAnimatedStyle(() => ({opacity: opacity.value}));
-  return (
-    <Animated.View
-      style={[
-        styles.stackedSegment,
-        {flexGrow: segment.count, backgroundColor: segment.color},
-        // The ramp between the parts of one bar is carried by opacity rather than by three
-        // different hues: the reader's accent is the only hue the page is allowed to spend, and a
-        // tint built here in JS would drift from the tones the theme resolved. While a category is
-        // selected the ramp gives way to the choice: that segment is full accent and the rest fade,
-        // so the two rules never fight.
-        motion,
-      ]}
-    />
-  );
+  }, [target, reducedMotion, emphasis]);
+  const layerStyle = useAnimatedStyle(() => ({
+    width: barWidth.value * cumulative * entrance.value,
+    backgroundColor: interpolateColor(
+      emphasis.value,
+      [0, 1, 2],
+      [normalColor, dimColor, segment.color]
+    ),
+  }));
+  return <Animated.View pointerEvents="none" style={[styles.stackedPaintLayer, layerStyle]} />;
 }
 
 /**
@@ -1268,6 +1523,11 @@ const styles = StyleSheet.create({
   sectionBody: {gap: spacing.m},
   thinRule: {width: "100%", height: 1, marginVertical: 17},
   metric: {minWidth: 0},
+  // The count-up figures are read-only TextInputs so their text can be driven from the UI thread;
+  // this strips the field chrome so they sit exactly where a Text did, and the wrapper keeps the
+  // native field out of the accessibility tree without changing the horizontal geometry.
+  animatedCountWrap: {alignSelf: "stretch"},
+  animatedCount: {padding: 0, margin: 0, includeFontPadding: false, textAlignVertical: "center"},
   // An 11 sp label tracked 1.2 px and set uppercase: small enough to stay quiet beside a 34 sp figure,
   // open enough to read as a label rather than as squeezed body text.
   metricEyebrow: {
@@ -1398,13 +1658,9 @@ const styles = StyleSheet.create({
   countLegendSwatch: {
     flex: 1,
     borderRadius: 2,
-    // The backing is the bar's own track tone and the fill inside is clipped to it, so the two draw
-    // the same composite rather than one over paper and one over a track.
-    overflow: "hidden",
   },
-  countLegendSwatchFill: {flex: 1},
-  // The ring sits outside the clipped swatch, so a selected key wears the accent without changing
-  // the 8 dp key's footprint. It fades in and out with the choice.
+  // The ring sits outside the swatch, so a selected key wears the accent without changing the 8 dp
+  // key's footprint. It fades in and out with the choice.
   countLegendSwatchRing: {
     position: "absolute",
     top: -3,
@@ -1420,16 +1676,28 @@ const styles = StyleSheet.create({
   // The chart's own 48 dp touch row: the 9 dp capsule is centred in it and the invisible hit layer
   // fills it, so the whole row is a real Android touch target rather than an overflowed one.
   stackedBarWrap: {height: DISTRIBUTION_TOUCH_HEIGHT, justifyContent: "center"},
-  stackedBar: {height: 9, flexDirection: "row", borderRadius: 9, overflow: "hidden"},
-  stackedSegment: {height: "100%", borderRadius: DISTRIBUTION_SEGMENT_RADIUS},
-  // The transparent layer over the capsule: the same proportional columns as the segments beneath it,
+  stackedBar: {
+    height: DISTRIBUTION_BAR_HEIGHT,
+    borderRadius: DISTRIBUTION_LAYER_RADIUS,
+    overflow: "hidden",
+  },
+  // Each cumulative stage is a full pill at its own width; the outer pill clips the one right cap
+  // that should show and the layers above cover the left caps of the layers below.
+  stackedPaintLayer: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: DISTRIBUTION_LAYER_RADIUS,
+  },
+  // The transparent layer over the capsule: the same proportional columns as the counts beneath it,
   // filling the wrapper's own height.
   stackedHitLayer: {
     position: "absolute",
     top: 0,
-    bottom: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     flexDirection: "row",
   },
   unavailable: {borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10},
