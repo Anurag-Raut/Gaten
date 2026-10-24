@@ -28,9 +28,9 @@
  */
 import React, {useEffect, useRef, useState} from "react";
 import {
+  InteractionManager,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
   type DimensionValue,
@@ -39,6 +39,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import Svg, {Circle, type CircleProps} from "react-native-svg";
+import {useIsFocused} from "@react-navigation/native";
 import Animated, {
   Easing,
   FadeIn,
@@ -131,6 +132,9 @@ const DISTRIBUTION_LAYER_RADIUS = DISTRIBUTION_BAR_HEIGHT / 2;
 const ANALYTICS_ENTRANCE_MS = 420;
 const ANALYTICS_ENTRANCE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 
+/** The count-up text is a normal Text, driven from JS at a bounded rate; 33 ms is about 30 Hz. */
+const COUNT_UPDATE_MS = 33;
+
 /** How long a selected/dimmed state takes to settle, in ms: short enough to feel immediate. */
 const DISTRIBUTION_SELECT_MS = 160;
 
@@ -182,16 +186,6 @@ const RING_CENTRE_RATIO = 0.24;
  */
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-/** The text field that carries the count-up figure: a read-only, non-focusable animated TextInput. */
-type CountTextInputProps = React.ComponentProps<typeof TextInput> & {
-  /** The native text Reanimated drives on the UI thread; not part of TextInput's public typings. */
-  text?: string;
-  animatedProps?: object;
-};
-const AnimatedTextInput = Animated.createAnimatedComponent(
-  TextInput
-) as unknown as React.ComponentType<CountTextInputProps>;
-
 /**
  * One entrance shared value per data source. The animation starts once, when the screen is focused
  * and that source has answered; a refresh, a legend tap, the freshness clock or a text-size change
@@ -206,9 +200,28 @@ export function useAnalyticsEntrance(ready: boolean): SharedValue<number> {
       return;
     }
     started.current = true;
-    entrance.value = reducedMotion
-      ? 1
-      : withTiming(1, {duration: ANALYTICS_ENTRANCE_MS, easing: ANALYTICS_ENTRANCE_EASING});
+    if (reducedMotion) {
+      entrance.value = 1;
+      return;
+    }
+    // The tab transition and the first layout of the screen are the expensive frames; the sweep
+    // starts after those interactions finish, so it is not competing with them for the UI thread.
+    let ran = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      ran = true;
+      entrance.value = withTiming(1, {
+        duration: ANALYTICS_ENTRANCE_MS,
+        easing: ANALYTICS_ENTRANCE_EASING,
+      });
+    });
+    return () => {
+      task.cancel();
+      // A cancelled-before-running task must not burn the one shot: a later ready transition is
+      // allowed to schedule again. Once it has run, the sweep is not replayed.
+      if (!ran) {
+        started.current = false;
+      }
+    };
   }, [ready, reducedMotion, entrance]);
   return entrance;
 }
@@ -280,10 +293,10 @@ function countText(value: number, decimals: number, suffix: string): string {
 }
 
 /**
- * A figure that sweeps from zero to its real value on the shared entrance. It draws through a
- * read-only TextInput because only a native text prop can be driven from the UI thread; the field
- * takes no touch and no accessibility of its own, and the final value in the surrounding label
- * remains the one a screen reader hears.
+ * A figure that sweeps from zero to its real value on the shared entrance. It is a normal Text: the
+ * shared entrance still runs on the UI thread, and this component samples it at a bounded rate so a
+ * page of figures does not mount a native TextInput per number. The final string is the exact value
+ * the surrounding label already announces to a screen reader.
  */
 export function AnimatedValueText({
   value,
@@ -298,43 +311,62 @@ export function AnimatedValueText({
   entrance: SharedValue<number>;
   style: StyleProp<TextStyle>;
 }): React.JSX.Element {
+  const reducedMotion = useReducedMotion();
+  const focused = useIsFocused();
   const decimals = count?.decimals ?? 0;
   const suffix = count?.suffix ?? "";
   const raw = count?.value ?? null;
-  const animatedProps = useAnimatedProps(() => {
-    const text = raw == null ? value : countText(raw * entrance.value, decimals, suffix);
-    return {text, defaultValue: text};
-  });
+  // A normal Text is far cheaper to mount than a native TextInput. The count is sampled from the
+  // UI-thread entrance at a bounded rate, and only a changed string is sent through React; the ring
+  // and bar still move entirely on the UI thread.
+  const [display, setDisplay] = useState(() =>
+    reducedMotion ? value : countText(0, decimals, suffix)
+  );
+  const displayRef = useRef(display);
+
+  useEffect(() => {
+    if (!focused || raw == null) {
+      return;
+    }
+    if (reducedMotion || entrance.value >= 1) {
+      if (displayRef.current !== value) {
+        displayRef.current = value;
+        setDisplay(value);
+      }
+      return;
+    }
+    let frame = 0;
+    let lastUpdate = 0;
+    let cancelled = false;
+    const tick = (now: number) => {
+      if (cancelled) {
+        return;
+      }
+      if (now - lastUpdate >= COUNT_UPDATE_MS) {
+        lastUpdate = now;
+        const progress = entrance.value;
+        const next = progress >= 1 ? value : countText(raw * progress, decimals, suffix);
+        if (next !== displayRef.current) {
+          displayRef.current = next;
+          setDisplay(next);
+        }
+        if (progress >= 1) {
+          return;
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [raw, decimals, suffix, entrance, reducedMotion, value, focused]);
+
   if (raw == null) {
     return <Text style={style}>{value}</Text>;
   }
-  return (
-    <View
-      accessible={false}
-      importantForAccessibility="no-hide-descendants"
-      accessibilityElementsHidden
-      pointerEvents="none"
-      style={styles.animatedCountWrap}
-    >
-      <AnimatedTextInput
-        accessible={false}
-        editable={false}
-        caretHidden
-        pointerEvents="none"
-        aria-hidden={true}
-        focusable={false}
-        importantForAccessibility="no-hide-descendants"
-        accessibilityElementsHidden
-        underlineColorAndroid="transparent"
-        autoCorrect={false}
-        spellCheck={false}
-        multiline={false}
-        scrollEnabled={false}
-        style={[styles.animatedCount, style]}
-        animatedProps={animatedProps}
-      />
-    </View>
-  );
+  return <Text style={style}>{display}</Text>;
 }
 
 /**
@@ -1348,6 +1380,12 @@ export function StackedBar({
     layers.push({segment, cumulative: total > 0 ? running / total : 0});
   }
   const barWidth = useSharedValue(0);
+  // One reveal mask animates the bar's left-to-right entrance instead of every layer animating its
+  // own width. The mask is the only node whose width changes per frame; the layers keep their final
+  // cumulative widths and only their selection colour animates.
+  const revealStyle = useAnimatedStyle(() => ({
+    width: barWidth.value * entrance.value,
+  }));
   const summary = segments
     .map((segment) => `${segment.spoken ?? segment.label} ${segment.count}`)
     .join(", ");
@@ -1362,22 +1400,23 @@ export function StackedBar({
         }}
         style={[styles.stackedBar, {backgroundColor: colors.outlineVariant}]}
       >
-        {/* Reverse stage order: the full/darkest layer is laid down first, then each lighter stage
-            over it, so the visible region for a stage is its own layer and its rounded right cap
-            overlaps the next darker stage's beginning. */}
-        {layers
-          .slice()
-          .reverse()
-          .map(({segment, cumulative}) => (
-            <StackedPaintLayer
-              key={segment.key}
-              segment={segment}
-              cumulative={cumulative}
-              selectedKey={selectedKey}
-              entrance={entrance}
-              barWidth={barWidth}
-            />
-          ))}
+        <Animated.View pointerEvents="none" style={[styles.stackedBarReveal, revealStyle]}>
+          {/* Reverse stage order: the full/darkest layer is laid down first, then each lighter
+              stage over it, so the visible region for a stage is its own layer and its rounded
+              right cap overlaps the next darker stage's beginning. */}
+          {layers
+            .slice()
+            .reverse()
+            .map(({segment, cumulative}) => (
+              <StackedPaintLayer
+                key={segment.key}
+                segment={segment}
+                cumulative={cumulative}
+                selectedKey={selectedKey}
+                barWidth={barWidth}
+              />
+            ))}
+        </Animated.View>
       </View>
       {/* The bar's touch layer, a normal child of the 48 dp wrapper: the same non-cumulative
           proportional columns as the counts, independent of the cumulative paint layers above. It
@@ -1409,13 +1448,11 @@ function StackedPaintLayer({
   segment,
   cumulative,
   selectedKey,
-  entrance,
   barWidth,
 }: {
   segment: DistributionPart;
   cumulative: number;
   selectedKey: string | null;
-  entrance: SharedValue<number>;
   barWidth: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
@@ -1436,7 +1473,7 @@ function StackedPaintLayer({
       : withTiming(target, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
   }, [target, reducedMotion, emphasis]);
   const layerStyle = useAnimatedStyle(() => ({
-    width: barWidth.value * cumulative * entrance.value,
+    width: barWidth.value * cumulative,
     backgroundColor: interpolateColor(
       emphasis.value,
       [0, 1, 2],
@@ -1523,11 +1560,6 @@ const styles = StyleSheet.create({
   sectionBody: {gap: spacing.m},
   thinRule: {width: "100%", height: 1, marginVertical: 17},
   metric: {minWidth: 0},
-  // The count-up figures are read-only TextInputs so their text can be driven from the UI thread;
-  // this strips the field chrome so they sit exactly where a Text did, and the wrapper keeps the
-  // native field out of the accessibility tree without changing the horizontal geometry.
-  animatedCountWrap: {alignSelf: "stretch"},
-  animatedCount: {padding: 0, margin: 0, includeFontPadding: false, textAlignVertical: "center"},
   // An 11 sp label tracked 1.2 px and set uppercase: small enough to stay quiet beside a 34 sp figure,
   // open enough to read as a label rather than as squeezed body text.
   metricEyebrow: {
@@ -1678,6 +1710,16 @@ const styles = StyleSheet.create({
   stackedBarWrap: {height: DISTRIBUTION_TOUCH_HEIGHT, justifyContent: "center"},
   stackedBar: {
     height: DISTRIBUTION_BAR_HEIGHT,
+    borderRadius: DISTRIBUTION_LAYER_RADIUS,
+    overflow: "hidden",
+  },
+  // The reveal mask owns the entrance sweep: one width animation clips the final cumulative
+  // layers left to right, so the per-frame layout work is one node instead of one per stage.
+  stackedBarReveal: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
     borderRadius: DISTRIBUTION_LAYER_RADIUS,
     overflow: "hidden",
   },
