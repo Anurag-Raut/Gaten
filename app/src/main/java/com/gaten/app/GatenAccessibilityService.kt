@@ -41,6 +41,7 @@ import com.gaten.app.lifecycle.displayChanged
 import com.gaten.app.lifecycle.lookupAdmitted
 import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.OcrModels
+import com.gaten.app.rn.GatenBridgeEmitter
 import com.gaten.app.trigger.FloatingTriggerButton
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.overlay.OverlayWindowController
@@ -455,7 +456,13 @@ class GatenAccessibilityService : AccessibilityService() {
         if (TriggerPreferences.floatingButtonEnabled(this)) {
             if (floatingButton?.isShowing == true) return
             val button = floatingButton
-                ?: FloatingTriggerButton(this) { triggerCapture() }.also { floatingButton = it }
+                ?: FloatingTriggerButton(
+                    context = this,
+                    onTrigger = { triggerCapture() },
+                    // The remove button writes the preference off itself; this is only the bridge
+                    // announcement, so an open Screen lookup page re-reads its switch.
+                    onDismissed = { GatenBridgeEmitter.emitFloatingButtonChanged() }
+                ).also { floatingButton = it }
             try {
                 button.show()
             } catch (e: Exception) {

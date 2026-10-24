@@ -7,15 +7,15 @@
 
 package com.gaten.app
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.PendingIntent
-import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import android.text.TextUtils
 import android.util.Log
-import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import com.gaten.app.trigger.TriggerPreferences
 
@@ -122,14 +122,26 @@ class LookupTileService : TileService() {
         tile.updateTile()
     }
 
+    /**
+     * True when [GatenAccessibilityService] is one of the platform's enabled accessibility
+     * services, read from the platform's own list of enabled components.
+     *
+     * [android.view.accessibility.AccessibilityManager.getEnabledAccessibilityServiceList] is
+     * deliberately not used: on Android 14 it can return an empty list for a service that is
+     * enabled and bound (observed on an API 34 emulator), which left the tile saying "Setup needed"
+     * and ignoring taps. The enabled-component setting is the same answer the app's own lookup-mode
+     * check reads, so the tile and the Screen lookup page cannot disagree.
+     */
     private fun isAccessibilityServiceEnabled(): Boolean {
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        for (service in enabledServices) {
-            if (service.resolveInfo.serviceInfo.packageName == packageName &&
-                service.resolveInfo.serviceInfo.name == GatenAccessibilityService::class.java.name) {
-                return true
-            }
+        val expected = ComponentName(this, GatenAccessibilityService::class.java)
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val services = TextUtils.SimpleStringSplitter(':')
+        services.setString(enabled)
+        while (services.hasNext()) {
+            if (ComponentName.unflattenFromString(services.next()) == expected) return true
         }
         return false
     }
