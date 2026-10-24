@@ -55,7 +55,15 @@ data class WaniKaniReviewItem(
      */
     val readings: List<String>,
     /** The first of [readings], or null when there are no readings. */
-    val primaryReading: String?
+    val primaryReading: String?,
+    /** WaniKani's level for the subject, shown beside its type; 0 when the payload omitted it. */
+    val level: Int,
+    /** The subject's meaning mnemonic, or empty when WaniKani gives none. */
+    val meaningMnemonic: String,
+    /** The subject's reading mnemonic, or empty when WaniKani gives none. */
+    val readingMnemonic: String,
+    /** Example sentences for a vocabulary subject; empty for the kinds WaniKani gives none. */
+    val contextSentences: List<WaniKaniContextSentence>
 )
 
 /**

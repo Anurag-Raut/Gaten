@@ -142,7 +142,11 @@ private fun decodeReviewSubject(resource: JSONObject): WaniKaniReviewItem? {
         meanings = accepted,
         primaryMeaning = accepted.first(),
         readings = readings,
-        primaryReading = readings.firstOrNull()
+        primaryReading = readings.firstOrNull(),
+        level = data.optInt("level", 0),
+        meaningMnemonic = plainWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
+        readingMnemonic = plainWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
+        contextSentences = decodeContextSentences(data.optJSONArray("context_sentences"))
     )
 }
 
@@ -199,6 +203,59 @@ private fun decodeReviewReadings(array: JSONArray?): List<String> {
     }
     return (primary + rest).distinct()
 }
+
+/**
+ * Every study material in a `GET /study_materials?subject_ids=…` collection. A collection is always
+ * a collection: an empty one is an empty list, and null is reserved for a body that is not one, so
+ * "the reader has no note yet" stays distinct from "the answer could not be read".
+ */
+internal fun decodeStudyMaterialCollection(text: String): List<WaniKaniStudyMaterial>? {
+    val items = jsonObject(text)?.optJSONArray("data") ?: return null
+    val materials = ArrayList<WaniKaniStudyMaterial>(items.length())
+    for (index in 0 until items.length()) {
+        val resource = items.optJSONObject(index) ?: continue
+        decodeStudyMaterial(resource)?.let { materials.add(it) }
+    }
+    return materials
+}
+
+/** One `study_material` resource body, for the record a create or update just answered with. */
+internal fun decodeStudyMaterialResource(text: String): WaniKaniStudyMaterial? =
+    jsonObject(text)?.let { decodeStudyMaterial(it) }
+
+/**
+ * One study material resource, or null when it carries no usable subject. The notes default to empty
+ * when WaniKani omits them, and the synonyms keep their own order; nothing here is trimmed, because a
+ * reader's whitespace is theirs.
+ */
+private fun decodeStudyMaterial(resource: JSONObject): WaniKaniStudyMaterial? {
+    val id = resource.optInt("id", 0)
+    if (id <= 0) return null
+    val data = resource.optJSONObject("data") ?: return null
+    val subjectId = data.optInt("subject_id", 0)
+    if (subjectId <= 0) return null
+    val synonyms = data.optJSONArray("meaning_synonyms")
+    val meaningSynonyms = ArrayList<String>(synonyms?.length() ?: 0)
+    if (synonyms != null) {
+        for (index in 0 until synonyms.length()) {
+            optionalTextAt(synonyms, index)?.let { meaningSynonyms.add(it) }
+        }
+    }
+    return WaniKaniStudyMaterial(
+        id = id,
+        subjectId = subjectId,
+        meaningNote = data.optionalText("meaning_note") ?: "",
+        readingNote = data.optionalText("reading_note") ?: "",
+        meaningSynonyms = meaningSynonyms
+    )
+}
+
+/**
+ * A string at [index], or null: a non-string entry is left out rather than coerced, the same rule the
+ * other array decoders follow.
+ */
+private fun optionalTextAt(array: JSONArray, index: Int): String? =
+    if (array.isNull(index)) null else (array.opt(index) as? String)?.takeIf { it.isNotEmpty() }
 
 /**
  * Every subject in a `GET /subjects?ids=…` collection as a lesson item, for all four kinds WaniKani

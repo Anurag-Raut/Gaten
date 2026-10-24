@@ -22,7 +22,7 @@
  * the press feedback every control in the app already answers with (`PressableScale`). All of it is
  * skipped when the system asks for reduced motion.
  */
-import React, {useEffect, useRef, useState} from "react";
+import React, {useEffect, useRef} from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -287,7 +287,7 @@ export function SubHeader({
  * animates to its new value and never bounces, and it is the only thing on the screen that moves
  * while a card is being answered.
  */
-export function ProgressLine({value}: {value: number}) {
+export function ProgressLine({value, height = 2}: {value: number; height?: number}) {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(value);
@@ -303,8 +303,8 @@ export function ProgressLine({value}: {value: number}) {
 
   return (
     <View style={styles.progressArea} accessible accessibilityRole="progressbar" accessibilityValue={{min: 0, max: 100, now: Math.round(clamped * 100)}}>
-      <View style={[styles.progressTrack, {backgroundColor: colors.outlineVariant}]}>
-        <Animated.View style={[styles.progressFill, {backgroundColor: colors.accent}, fill]} />
+      <View style={[styles.progressTrack, {height, backgroundColor: colors.outlineVariant}]}>
+        <Animated.View style={[styles.progressFill, {height, backgroundColor: colors.accent}, fill]} />
       </View>
     </View>
   );
@@ -498,10 +498,13 @@ export function FilledAction({
   label,
   onPress,
   disabled,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** A lane's own geometry - WaniKani's taller 54 dp button, at its own radius. */
+  style?: StyleProp<ViewStyle>;
 }) {
   const {colors} = useTheme();
   return (
@@ -514,6 +517,7 @@ export function FilledAction({
       style={[
         styles.action,
         {backgroundColor: disabled ? colors.disabled : colors.actionPrimary},
+        style,
       ]}
     >
       <Text
@@ -650,34 +654,26 @@ export function RatingBar({
 }
 
 /**
- * The field a WaniKani answer is typed into: the design's own line rather than a box, centred, in the
- * reader's ink. Its underline takes the accent while it has focus, which is the one focus indicator
- * this screen draws.
+ * The field a WaniKani answer is typed into: the design's own line rather than a box. It carries only
+ * a bottom stroke - no top, side or rounded border, no focus ring or background - and that stroke is
+ * the accent at every state, focused or not, right or wrong. The answer's own text takes the outcome
+ * colour; the line stays an action accent.
  */
-export function AnswerInput(props: TextInputProps) {
+export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function AnswerInput(
+  props,
+  ref,
+) {
   const {colors} = useTheme();
-  const [focused, setFocused] = useState(false);
   return (
     <TextInput
+      ref={ref}
       {...props}
-      onFocus={(event) => {
-        setFocused(true);
-        props.onFocus?.(event);
-      }}
-      onBlur={(event) => {
-        setFocused(false);
-        props.onBlur?.(event);
-      }}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
       underlineColorAndroid="transparent"
-      style={[
-        styles.input,
-        {color: colors.onSurface, borderBottomColor: focused ? colors.accent : colors.outlineVariant},
-        props.style,
-      ]}
+      style={[styles.input, {color: colors.onSurface, borderBottomColor: colors.accent}, props.style]}
     />
   );
-}
+});
 
 /**
  * The one line of feedback an answer gets: what happened, and — when the answer was wrong — what the
@@ -903,12 +899,20 @@ const styles = StyleSheet.create({
   ratingName: {fontSize: 12, fontWeight: "600"},
   ratingInterval: {fontSize: 10, lineHeight: 13, marginTop: 2},
   input: {
-    fontSize: 17,
-    textAlign: "center",
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: "700",
+    textAlign: "left",
     width: "100%",
-    paddingVertical: 13,
-    paddingHorizontal: spacing.s,
-    borderBottomWidth: 1,
+    minHeight: 62,
+    paddingTop: 9,
+    paddingBottom: 7,
+    paddingHorizontal: 1,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 2,
+    borderRadius: 0,
   },
   feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},

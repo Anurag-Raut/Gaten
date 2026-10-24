@@ -35,9 +35,10 @@ import {
   ProgressLine,
   SubHeader,
 } from "./review-ui";
+import {NoteEditor, SubjectBadge, TaskPill} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
-import {WANIKANI_FAILURE_LABELS, WANIKANI_TYPE_LABELS} from "./wanikani-labels";
-import type {WaniKaniLessonSession} from "./review-store";
+import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
+import type {WaniKaniLessonSession, WaniKaniNoteState} from "./review-store";
 import type {WaniKaniLessonItem} from "../../native/GatenWaniKani";
 
 /** One titled block of the teach card: a caption and whatever it introduces. */
@@ -61,18 +62,25 @@ function LessonSection({title, children}: {title: string; children: React.ReactN
  * a couple of example sentences when WaniKani gives them. Nothing here is a question; the reader is
  * only being introduced.
  */
-function TeachingCard({item}: {item: WaniKaniLessonItem}) {
+function TeachingCard({
+  item,
+  note,
+  onToggleNote,
+  onNoteEntry,
+  onSaveNote,
+}: {
+  item: WaniKaniLessonItem;
+  note: WaniKaniNoteState;
+  onToggleNote: () => void;
+  onNoteEntry: (field: "meaning" | "reading", text: string) => void;
+  onSaveNote: () => void;
+}) {
   const {colors} = useTheme();
   const characters = item.characters;
   const single = characters != null && [...characters].length === 1;
   return (
     <>
-      <Text
-        accessibilityRole="header"
-        style={[typeScale.labelMedium, styles.topic, {color: colors.onSurfaceVariant}]}
-      >
-        {WANIKANI_TYPE_LABELS[item.type]} · Level {item.level}
-      </Text>
+      <SubjectBadge type={item.type} level={item.level} />
       <View style={styles.hero}>
         {characters == null ? (
           <RadicalDrawing subjectId={item.subjectId} />
@@ -128,6 +136,14 @@ function TeachingCard({item}: {item: WaniKaniLessonItem}) {
           ))}
         </LessonSection>
       )}
+      <LessonSection title="Note">
+        <NoteEditor
+          note={note}
+          onToggle={onToggleNote}
+          onEntry={onNoteEntry}
+          onSave={onSaveNote}
+        />
+      </LessonSection>
     </>
   );
 }
@@ -139,6 +155,9 @@ export function WaniKaniLesson({
   onNext,
   onEntry,
   onCheck,
+  onToggleNote,
+  onNoteEntry,
+  onSaveNote,
   onRetrySubmit,
 }: {
   session: WaniKaniLessonSession;
@@ -147,6 +166,9 @@ export function WaniKaniLesson({
   onNext: () => void;
   onEntry: (text: string) => void;
   onCheck: () => void;
+  onToggleNote: () => void;
+  onNoteEntry: (field: "meaning" | "reading", text: string) => void;
+  onSaveNote: () => void;
   onRetrySubmit: () => void;
 }) {
   const {colors} = useTheme();
@@ -160,6 +182,8 @@ export function WaniKaniLesson({
   const reading = session.part === "reading";
   const starting = session.phase === "starting";
   const failed = session.phase === "startFailed";
+  // A correct quiz answer is shown in green while it is sent, matching the review's own result.
+  const answerColor = session.feedback?.tone === "right" ? colors.success : colors.onSurface;
   const characters = item.characters;
   const single = characters != null && [...characters].length === 1;
   const progress = session.doneParts / Math.max(1, session.totalParts);
@@ -175,7 +199,7 @@ export function WaniKaniLesson({
             right={`${position + 1} of ${session.batch.length}`}
             onBack={onBack}
           />
-          <ProgressLine value={progress} />
+          <ProgressLine value={progress} height={3} />
         </View>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -186,22 +210,17 @@ export function WaniKaniLesson({
         >
           <View style={[styles.content, {paddingHorizontal: contentInset}]}>
             {teaching ? (
-              <TeachingCard item={item} />
+              <TeachingCard
+                item={item}
+                note={session.note}
+                onToggleNote={onToggleNote}
+                onNoteEntry={onNoteEntry}
+                onSaveNote={onSaveNote}
+              />
             ) : (
               <>
+                <SubjectBadge type={item.type} level={item.level} />
                 <View style={styles.hero}>
-                  <Text
-                    accessibilityRole="header"
-                    accessibilityLabel={`${WANIKANI_TYPE_LABELS[item.type]} · ${reading ? "Reading" : "Meaning"}`}
-                    style={[typeScale.labelMedium, styles.topic]}
-                  >
-                    <Text style={{color: colors.onSurfaceVariant}}>
-                      {WANIKANI_TYPE_LABELS[item.type]} ·{" "}
-                    </Text>
-                    <Text style={{color: reading ? colors.reviewReading : colors.reviewMeaning}}>
-                      {reading ? "Reading" : "Meaning"}
-                    </Text>
-                  </Text>
                   {characters == null ? (
                     <RadicalDrawing subjectId={item.subjectId} />
                   ) : (
@@ -217,13 +236,16 @@ export function WaniKaniLesson({
                       {characters}
                     </Text>
                   )}
+                  <View style={styles.taskPillWrap}>
+                    <TaskPill task={reading ? "reading" : "meaning"} />
+                  </View>
                 </View>
                 <View style={styles.answerField}>
                   <AnswerInput
                     key={`${session.quizIndex}:${session.part}`}
                     value={session.entry}
                     onChangeText={onEntry}
-                    placeholder=""
+                    placeholder={reading ? "Type the reading" : "Type the meaning"}
                     selectionColor={colors.accent}
                     editable={!busy && !starting && !failed}
                     autoFocus
@@ -232,27 +254,15 @@ export function WaniKaniLesson({
                     spellCheck={false}
                     returnKeyType="done"
                     submitBehavior="submit"
-                    accessibilityLabel={reading ? "Reading" : "Meaning"}
+                    accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
+                    style={{color: answerColor}}
                     onSubmitEditing={() => {
                       if (session.entry.trim() !== "") onCheck();
                     }}
                   />
-                  {session.entry === "" && (
-                    <View
-                      pointerEvents="none"
-                      accessible={false}
-                      accessibilityElementsHidden
-                      importantForAccessibility="no"
-                      style={styles.answerPlaceholderOverlay}
-                    >
-                      <Text style={[styles.answerPlaceholder, {color: colors.onSurfaceVariant}]}>
-                        {reading ? "Type the reading" : "Type the meaning"}
-                      </Text>
-                    </View>
-                  )}
                 </View>
-                <Text style={[styles.microNote, {color: colors.onSurfaceVariant}]}>
-                  {reading ? "Japanese reading · kana or romaji" : "Answer in English"}
+                <Text style={[styles.answerLabel, {color: colors.onSurfaceVariant}]}>
+                  {reading ? "Reading · Japanese (kana or romaji)" : "Meaning"}
                 </Text>
                 {session.feedback != null && (
                   <Feedback tone={session.feedback.tone} text={session.feedback.text} />
@@ -275,24 +285,27 @@ export function WaniKaniLesson({
             )}
           </View>
         </ScrollView>
-        <ActionFooter bottomInset={insets.bottom}>
+        <ActionFooter bottomInset={insets.bottom} style={[styles.footer, {paddingBottom: 15 + insets.bottom}]}>
           {teaching ? (
             <FilledAction
               label={lastCard ? "Start quiz" : "Next"}
               disabled={busy}
               onPress={onNext}
+              style={styles.primaryAction}
             />
           ) : failed ? (
             <FilledAction
               label={session.authRejected ? "Reconnect" : "Send again"}
               disabled={busy}
               onPress={session.authRejected ? onBack : onRetrySubmit}
+              style={styles.primaryAction}
             />
           ) : (
             <FilledAction
               label="Check answer"
               disabled={busy || starting || session.entry.trim() === ""}
               onPress={onCheck}
+              style={styles.primaryAction}
             />
           )}
           {starting && (
@@ -314,11 +327,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   content: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
-  topic: {textAlign: "center", marginTop: spacing.s},
   hero: {alignItems: "center", marginTop: spacing.l, marginBottom: spacing.xl},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
   promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},
   promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500"},
+  taskPillWrap: {marginTop: spacing.m},
   section: {marginTop: spacing.xl},
   sectionTitle: {marginBottom: spacing.s},
   answerLine: {fontSize: 20, lineHeight: 28, fontWeight: "600"},
@@ -326,17 +339,10 @@ const styles = StyleSheet.create({
   example: {marginTop: spacing.m},
   exampleEnglish: {marginTop: 2},
   answerField: {position: "relative", width: "100%"},
-  answerPlaceholderOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  answerPlaceholder: {fontSize: 17, lineHeight: 20, textAlign: "center"},
-  microNote: {fontSize: 12, lineHeight: 17, marginTop: spacing.s, textAlign: "center"},
+  answerLabel: {fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},
+  // The approved WaniKani footer geometry; Anki keeps the shared 52/13 defaults.
+  footer: {paddingHorizontal: spacing.l, paddingTop: spacing.m},
+  primaryAction: {minHeight: 54, borderRadius: 15},
 });

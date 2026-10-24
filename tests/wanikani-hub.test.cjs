@@ -860,6 +860,126 @@ test('successful queue retry clears the earlier queue failure when returning to 
   assert.equal(store.getState().step.reviewFailure, null);
 });
 
+function reviewItem(id, patch = {}) {
+  return {
+    subjectId: id, type: 'radical', characters: '山', level: 1,
+    meanings: ['mountain'], primaryMeaning: 'mountain', readings: [], primaryReading: null,
+    meaningMnemonic: '', readingMnemonic: '', contextSentences: [], ...patch,
+  };
+}
+
+test('a wrong meaning answer holds the same card until the retry is right', async () => {
+  const submissions = [];
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => availableStats(),
+    reviewQueue: async () => ({status: 'available', items: [reviewItem(91)]}),
+    submitReview: async (subjectId, incorrectMeaning, incorrectReading) => {
+      submissions.push({subjectId, incorrectMeaning, incorrectReading});
+      return {status: 'accepted'};
+    },
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  store.startReviews();
+  await until(() => store.getState().step.kind === 'wkReview' && !store.getState().busy, 'review session');
+
+  // The wrong answer keeps the typed text, counts the miss once, and stops on the same card.
+  store.wkEntry('wrong');
+  store.wkCheck();
+  await until(() => store.getState().step.session.phase === 'reviewed', 'wrong answer stop');
+  let session = store.getState().step.session;
+  assert.equal(session.index, 0);
+  assert.equal(session.part, 'meaning');
+  assert.equal(session.entry, 'wrong');
+  assert.equal(session.incorrectMeaning, 1);
+  assert.equal(session.retrying, true);
+  assert.equal(session.feedback.tone, 'wrong');
+  assert.equal(submissions.length, 0);
+
+  // A second check while the wrong answer is still shown is inert: no extra miss, no submission.
+  store.wkCheck();
+  await until(() => !store.getState().busy, 'ignored re-check');
+  assert.equal(store.getState().step.session.incorrectMeaning, 1);
+  assert.equal(submissions.length, 0);
+
+  // Continue clears the field for the retry, on the same index and part, keeping the miss.
+  store.wkContinue();
+  session = store.getState().step.session;
+  assert.equal(session.phase, 'answering');
+  assert.equal(session.entry, '');
+  assert.equal(session.index, 0);
+  assert.equal(session.part, 'meaning');
+  assert.equal(session.incorrectMeaning, 1);
+  assert.equal(session.retrying, true);
+
+  // Continue is inert outside a wrong stop, and a second Continue changes nothing.
+  store.wkContinue();
+  assert.equal(store.getState().step.session.phase, 'answering');
+  assert.equal(store.getState().step.session.entry, '');
+
+  // The retry submits exactly once, with the original miss still recorded.
+  store.wkEntry('mountain');
+  store.wkCheck();
+  await until(() => submissions.length === 1, 'single retry submission');
+  assert.deepEqual(submissions[0], {subjectId: 91, incorrectMeaning: 1, incorrectReading: 0});
+});
+
+test('a wrong reading answer retries on the same reading part before submitting', async () => {
+  const submissions = [];
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => availableStats(),
+    reviewQueue: async () => ({
+      status: 'available',
+      items: [reviewItem(92, {
+        type: 'kanji', characters: '山', readings: ['やま'], primaryReading: 'やま',
+      })],
+    }),
+    readingAnswer: async (typed) => (typed === 'yama' ? 'やま' : typed),
+    submitReview: async (subjectId, incorrectMeaning, incorrectReading) => {
+      submissions.push({subjectId, incorrectMeaning, incorrectReading});
+      return {status: 'accepted'};
+    },
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  store.startReviews();
+  await until(() => store.getState().step.kind === 'wkReview' && !store.getState().busy, 'review session');
+
+  // A correct meaning moves straight to the reading without submitting.
+  store.wkEntry('mountain');
+  store.wkCheck();
+  await until(() => store.getState().step.session.part === 'reading', 'reading part');
+  assert.equal(store.getState().step.session.phase, 'answering');
+  assert.equal(store.getState().step.session.index, 0);
+  assert.equal(submissions.length, 0);
+
+  // A wrong reading stops on the same reading part with the miss recorded.
+  store.wkEntry('nope');
+  store.wkCheck();
+  await until(() => store.getState().step.session.phase === 'reviewed', 'wrong reading stop');
+  let session = store.getState().step.session;
+  assert.equal(session.part, 'reading');
+  assert.equal(session.entry, 'nope');
+  assert.equal(session.incorrectReading, 1);
+  assert.equal(submissions.length, 0);
+
+  // Continue keeps the part and index, clearing only the field.
+  store.wkContinue();
+  session = store.getState().step.session;
+  assert.equal(session.part, 'reading');
+  assert.equal(session.index, 0);
+  assert.equal(session.entry, '');
+  assert.equal(session.incorrectReading, 1);
+
+  // The right reading submits once, carrying the original reading miss.
+  store.wkEntry('yama');
+  store.wkCheck();
+  await until(() => submissions.length === 1, 'single reading retry submission');
+  assert.deepEqual(submissions[0], {subjectId: 92, incorrectMeaning: 0, incorrectReading: 1});
+});
+
 function deck(id, name = `Deck ${id}`) {
   return {id, name, newCount: id, learnCount: 0, reviewCount: 0, filtered: false};
 }

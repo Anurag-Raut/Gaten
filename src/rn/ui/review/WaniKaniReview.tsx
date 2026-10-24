@@ -11,26 +11,31 @@
  * The screen is the queue's own shape. A subject asks for its meaning, and for its reading too when
  * WaniKani quizzes one — radicals and kana vocabulary are asked for their meaning alone, because
  * that is all WaniKani records for them. A part is finished when the right answer has been typed: a
- * wrong one is counted against that part, shows the answer, and asks for it to be typed before the
- * subject moves on, which is WaniKani's own rule. The review is submitted when every part of the
- * subject is done, never when a field is merely typed into.
+ * wrong one is counted against that part, shows the answer in red, and asks for it to be typed before
+ * the subject moves on, which is WaniKani's own rule; a right one shows in green and moves straight
+ * on, as WaniKani's own flow does. That is why a wrong answer stops on its own card behind a Continue:
+ * the button only clears the field for the retry, and the next check — not the button — finishes the
+ * part. The review is submitted when every part of the subject is done, never when a field is typed.
  *
  * A radical that has no character is drawn from WaniKani's own image of it, fetched through the same
  * reference lookup the kanji pages use and cached on the device. That is the only way such a subject
  * can be asked about at all — its name is the answer, so the name cannot be the prompt.
  */
-import React from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {MAX_CONTENT_WIDTH, spacing} from "../tokens";
 import {useTheme} from "../theme";
+import {Icon} from "../components";
 import {
   ActionFooter,
   AnswerInput,
@@ -40,9 +45,71 @@ import {
   ProgressLine,
   SubHeader,
 } from "./review-ui";
+import {NoteEditor, SubjectBadge, TaskPill} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
-import {WANIKANI_FAILURE_LABELS, WANIKANI_TYPE_LABELS} from "./wanikani-labels";
+import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
+import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
 import type {WaniKaniSession} from "./review-store";
+
+/** The answer details a review can show, in the order WaniKani itself teaches them. */
+type DetailTab = "meaning" | "reading" | "context";
+
+const DETAIL_TAB_LABELS: Record<DetailTab, string> = {
+  meaning: "Meaning",
+  reading: "Reading",
+  context: "Context",
+};
+
+/**
+ * The expanded answer behind "Show answer": the meaning or reading the subject carries, its mnemonic,
+ * or its example sentences. Only what the subject actually has is offered, so a radical never grows a
+ * fabricated reading and a subject without examples never grows a context tab.
+ */
+function ReviewDetails({item, tab}: {item: WaniKaniReviewItem; tab: DetailTab}) {
+  const {colors} = useTheme();
+  if (tab === "reading") {
+    return (
+      <View style={styles.detailBlock}>
+        <Text style={[styles.detailLabel, {color: colors.onSurfaceVariant}]}>Primary reading</Text>
+        <Text style={[styles.detailJapanese, {color: colors.onSurface}]}>{item.primaryReading ?? ""}</Text>
+        {item.readingMnemonic !== "" && (
+          <>
+            <Text style={[styles.detailLabel, styles.detailLabelSpaced, {color: colors.onSurfaceVariant}]}>
+              Mnemonic
+            </Text>
+            <Text style={[styles.detailText, {color: colors.onSurface}]}>{item.readingMnemonic}</Text>
+          </>
+        )}
+      </View>
+    );
+  }
+  if (tab === "context") {
+    return (
+      <View style={styles.detailBlock}>
+        {item.contextSentences.map((sentence, index) => (
+          <View key={index} style={index > 0 ? styles.contextSpaced : undefined}>
+            <Text style={[styles.detailText, {color: colors.onSurface}]}>{sentence.japanese}</Text>
+            <Text style={[styles.contextEnglish, {color: colors.onSurfaceVariant}]}>{sentence.english}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.detailBlock}>
+      <Text style={[styles.detailLabel, {color: colors.onSurfaceVariant}]}>Meaning</Text>
+      <Text style={[styles.detailText, {color: colors.onSurface}]}>{item.meanings.join(", ")}</Text>
+      {item.meaningMnemonic !== "" && (
+        <>
+          <Text style={[styles.detailLabel, styles.detailLabelSpaced, {color: colors.onSurfaceVariant}]}>
+            Mnemonic
+          </Text>
+          <Text style={[styles.detailText, {color: colors.onSurface}]}>{item.meaningMnemonic}</Text>
+        </>
+      )}
+    </View>
+  );
+}
 
 export function WaniKaniReview({
   session,
@@ -50,6 +117,10 @@ export function WaniKaniReview({
   onBack,
   onEntry,
   onCheck,
+  onContinue,
+  onToggleNote,
+  onNoteEntry,
+  onSaveNote,
   onRetrySubmit,
 }: {
   session: WaniKaniSession;
@@ -57,6 +128,10 @@ export function WaniKaniReview({
   onBack: () => void;
   onEntry: (text: string) => void;
   onCheck: () => void;
+  onContinue: () => void;
+  onToggleNote: () => void;
+  onNoteEntry: (field: "meaning" | "reading", text: string) => void;
+  onSaveNote: () => void;
   onRetrySubmit: () => void;
 }) {
   const {colors} = useTheme();
@@ -66,7 +141,33 @@ export function WaniKaniReview({
   const item = session.items[session.index];
   const reading = session.part === "reading";
   const submitting = session.phase === "submitting";
+  const reviewed = session.phase === "reviewed";
   const failed = session.phase === "submitFailed";
+
+  const [revealed, setRevealed] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetailTab>("meaning");
+  const inputRef = useRef<TextInput>(null);
+
+  // A new part or a new subject starts closed on its meaning; a wrong answer opens the details on its
+  // own, because that is where the answer the reader has to retype lives.
+  useEffect(() => {
+    setRevealed(session.phase === "reviewed");
+    setActiveTab("meaning");
+  }, [session.index, session.part]);
+  useEffect(() => {
+    if (session.phase === "reviewed") setRevealed(true);
+  }, [session.phase]);
+  // Continue re-arms the same card; the field it cleared is the one the reader now needs.
+  useEffect(() => {
+    if (session.phase === "answering" && session.retrying) inputRef.current?.focus();
+  }, [session.phase, session.retrying]);
+
+  const tabs = useMemo<DetailTab[]>(() => {
+    const list: DetailTab[] = ["meaning"];
+    if (item != null && item.readings.length > 0) list.push("reading");
+    if (item != null && item.contextSentences.length > 0) list.push("context");
+    return list;
+  }, [item]);
 
   if (item == null) return null;
 
@@ -75,19 +176,23 @@ export function WaniKaniReview({
   // for longer vocabulary on narrow screens.
   const single = characters != null && [...characters].length === 1;
   const progress = session.doneParts / Math.max(1, session.totalParts);
+  // The typed answer wears the outcome: red on the wrong answer held for its retry, green on a
+  // correct one while it is sent. The underline beneath it stays the action accent either way.
+  const answerColor = reviewed
+    ? colors.error
+    : session.feedback?.tone === "right"
+      ? colors.success
+      : colors.onSurface;
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <KeyboardAvoidingView
-        style={styles.screen}
-        behavior="padding"
-      >
+      <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <View style={{paddingHorizontal: contentInset}}>
           <SubHeader
             title="WaniKani"
             right={`${session.index + 1} of ${session.items.length}`}
             onBack={onBack}
           />
-          <ProgressLine value={progress} />
+          <ProgressLine value={progress} height={3} />
         </View>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -97,17 +202,8 @@ export function WaniKaniReview({
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.reviewContent, {paddingHorizontal: contentInset}]}>
+            <SubjectBadge type={item.type} level={item.level} />
             <View style={styles.hero}>
-              <Text
-                accessibilityRole="header"
-                accessibilityLabel={`${WANIKANI_TYPE_LABELS[item.type]} · ${reading ? "Reading" : "Meaning"}`}
-                style={typeScale.labelMedium}
-              >
-                <Text style={{color: colors.onSurfaceVariant}}>{WANIKANI_TYPE_LABELS[item.type]} · </Text>
-                <Text style={{color: reading ? colors.reviewReading : colors.reviewMeaning}}>
-                  {reading ? "Reading" : "Meaning"}
-                </Text>
-              </Text>
               {characters == null ? (
                 <RadicalDrawing subjectId={item.subjectId} />
               ) : (
@@ -123,51 +219,117 @@ export function WaniKaniReview({
                   {characters}
                 </Text>
               )}
+              <View style={styles.taskPillWrap}>
+                <TaskPill task={reading ? "reading" : "meaning"} />
+              </View>
             </View>
+            {session.items.length > 1 && session.items.length <= 10 && (
+              <View style={[styles.batchRow, {borderTopColor: colors.outlineVariant}]}>
+                <Text style={[styles.batchLabel, {color: colors.onSurfaceVariant}]}>Review this batch</Text>
+                <View style={styles.batchDots}>
+                  {session.items.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.batchDot,
+                        {
+                          borderColor: index <= session.index ? colors.accent : colors.outlineVariant,
+                          backgroundColor: index < session.index ? colors.accent : "transparent",
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
             <View style={styles.answerField}>
               <AnswerInput
+                ref={inputRef}
                 key={`${session.index}:${session.part}`}
                 value={session.entry}
                 onChangeText={onEntry}
-                placeholder=""
+                placeholder={reading ? "Type the reading" : "Type the meaning"}
                 selectionColor={colors.accent}
-                editable={!busy && !submitting && !failed}
+                editable={!busy && session.phase === "answering"}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
                 returnKeyType="done"
                 submitBehavior="submit"
-                accessibilityLabel={reading ? "Reading" : "Meaning"}
+                accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
+                style={{color: answerColor}}
                 onSubmitEditing={() => {
-                  if (session.entry.trim() !== "") onCheck();
+                  if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
                 }}
               />
-              {session.entry === "" && (
-                <View
-                  pointerEvents="none"
-                  accessible={false}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no"
-                  style={styles.answerPlaceholderOverlay}
-                >
-                  <Text style={[styles.answerPlaceholder, {color: colors.onSurfaceVariant}]}>
-                    {reading ? "Type the reading" : "Type the meaning"}
-                  </Text>
-                </View>
-              )}
             </View>
-            <Text style={[styles.microNote, {color: colors.onSurfaceVariant}]}>
-              {reading ? "Japanese reading · kana or romaji" : "Answer in English"}
+            <Text style={[styles.answerLabel, {color: colors.onSurfaceVariant}]}>
+              {reading ? "Reading · Japanese (kana or romaji)" : "Meaning"}
             </Text>
             {session.feedback != null && (
               <Feedback tone={session.feedback.tone} text={session.feedback.text} />
             )}
+            {session.feedback != null && (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{expanded: revealed}}
+                  accessibilityLabel={revealed ? "Hide answer" : "Show answer"}
+                  onPress={() => setRevealed((open) => !open)}
+                  style={[styles.revealRow, {borderTopColor: colors.outlineVariant}]}
+                >
+                  <Text style={[styles.revealLabel, {color: colors.onSurface}]}>
+                    {revealed ? "Hide answer" : "Show answer"}
+                  </Text>
+                  <Icon
+                    name={revealed ? "keyboard_arrow_up" : "keyboard_arrow_down"}
+                    size={20}
+                    color={colors.onSurfaceVariant}
+                  />
+                </Pressable>
+                {revealed && tabs.length > 1 && (
+                  <View style={[styles.tabRow, {borderBottomColor: colors.outlineVariant}]}>
+                    {tabs.map((tab) => {
+                      const selected = tab === activeTab;
+                      return (
+                        <Pressable
+                          key={tab}
+                          accessibilityRole="tab"
+                          accessibilityState={{selected}}
+                          onPress={() => setActiveTab(tab)}
+                          style={styles.tabCell}
+                        >
+                          <Text
+                            style={[
+                              styles.tabLabel,
+                              {
+                                color: selected ? colors.onSurface : colors.onSurfaceVariant,
+                                fontWeight: selected ? "700" : "500",
+                              },
+                            ]}
+                          >
+                            {DETAIL_TAB_LABELS[tab]}
+                          </Text>
+                          {selected && <View style={[styles.tabUnderline, {backgroundColor: colors.accent}]} />}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+                {revealed && <ReviewDetails item={item} tab={activeTab} />}
+                {revealed && (
+                  <NoteEditor
+                    note={session.note}
+                    onToggle={onToggleNote}
+                    onEntry={onNoteEntry}
+                    onSave={onSaveNote}
+                  />
+                )}
+              </>
+            )}
             {failed && (
-              <Text
-                accessibilityLiveRegion="polite"
-                style={[styles.failure, {color: colors.error}]}
-              >
+              <Text accessibilityLiveRegion="polite" style={[styles.failure, {color: colors.error}]}>
                 {session.authRejected
                   ? "WaniKani refused the saved token, so this review was not saved. Reconnect and start the queue again."
                   : `This review was not saved: ${
@@ -177,18 +339,22 @@ export function WaniKaniReview({
             )}
           </View>
         </ScrollView>
-        <ActionFooter bottomInset={insets.bottom}>
+        <ActionFooter bottomInset={insets.bottom} style={[styles.footer, {paddingBottom: 15 + insets.bottom}]}>
           {failed ? (
             <FilledAction
               label={session.authRejected ? "Reconnect" : "Send again"}
               disabled={busy}
               onPress={session.authRejected ? onBack : onRetrySubmit}
+              style={styles.primaryAction}
             />
+          ) : reviewed ? (
+            <FilledAction label="Continue" onPress={onContinue} style={styles.primaryAction} />
           ) : (
             <FilledAction
               label="Check answer"
               disabled={busy || submitting || session.entry.trim() === ""}
               onPress={onCheck}
+              style={styles.primaryAction}
             />
           )}
           {submitting && (
@@ -210,22 +376,52 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   reviewContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
-  hero: {alignItems: "center", marginTop: spacing.xl, marginBottom: spacing.xl},
+  hero: {alignItems: "center", marginTop: spacing.m, marginBottom: spacing.m},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
   promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},
   promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500"},
-  answerField: {position: "relative", width: "100%"},
-  answerPlaceholderOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 1,
+  taskPillWrap: {marginTop: spacing.m},
+  batchRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+    borderTopWidth: 1,
   },
-  answerPlaceholder: {fontSize: 17, lineHeight: 20, textAlign: "center"},
-  microNote: {fontSize: 12, lineHeight: 17, marginTop: spacing.s, textAlign: "center"},
+  batchLabel: {fontSize: 12, lineHeight: 16},
+  batchDots: {flexDirection: "row", alignItems: "center"},
+  batchDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    marginStart: 7,
+  },
+  answerField: {position: "relative", width: "100%", marginTop: spacing.s},
+  answerLabel: {fontSize: 12, lineHeight: 17, marginTop: spacing.s},
+  revealRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 52,
+    borderTopWidth: 1,
+  },
+  revealLabel: {fontSize: 13, lineHeight: 18, fontWeight: "700"},
+  tabRow: {flexDirection: "row", alignItems: "stretch", minHeight: 50, borderBottomWidth: 1},
+  tabCell: {flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center"},
+  tabLabel: {fontSize: 12, lineHeight: 16},
+  tabUnderline: {position: "absolute", bottom: 0, width: "70%", height: 3, borderRadius: 2},
+  detailBlock: {paddingVertical: spacing.l},
+  detailLabel: {fontSize: 12, lineHeight: 16, fontWeight: "700"},
+  detailLabelSpaced: {marginTop: spacing.l},
+  detailText: {fontSize: 14, lineHeight: 23, marginTop: spacing.xs},
+  detailJapanese: {fontSize: 27, lineHeight: 34, marginTop: spacing.xs},
+  contextSpaced: {marginTop: spacing.l},
+  contextEnglish: {fontSize: 12, lineHeight: 17, marginTop: spacing.xs},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},
+  // The approved WaniKani footer: 16 dp sides, 12 dp top, 15 dp above the safe area, and a 54 dp
+  // button at radius 15. Lane-specific so the Anki review keeps the shared 52/13 defaults.
+  footer: {paddingHorizontal: spacing.l, paddingTop: spacing.m},
+  primaryAction: {minHeight: 54, borderRadius: 15},
 });

@@ -289,6 +289,10 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onBack={leave}
             onEntry={(text) => reviewActions.wkEntry(text)}
             onCheck={() => reviewActions.wkCheck()}
+            onContinue={() => reviewActions.wkContinue()}
+            onToggleNote={() => reviewActions.wkToggleNote()}
+            onNoteEntry={(field, text) => reviewActions.wkNoteEntry(field, text)}
+            onSaveNote={() => reviewActions.wkSaveNote()}
             onRetrySubmit={() => reviewActions.wkRetrySubmit()}
           />
         ) : step.kind === "wkLesson" ? (
@@ -299,6 +303,9 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onNext={() => reviewActions.lessonNext()}
             onEntry={(text) => reviewActions.lessonEntry(text)}
             onCheck={() => reviewActions.lessonCheck()}
+            onToggleNote={() => reviewActions.lessonToggleNote()}
+            onNoteEntry={(field, text) => reviewActions.lessonNoteEntry(field, text)}
+            onSaveNote={() => reviewActions.lessonSaveNote()}
             onRetrySubmit={() => reviewActions.lessonRetrySubmit()}
           />
         ) : step.kind === "wkFailed" ? (

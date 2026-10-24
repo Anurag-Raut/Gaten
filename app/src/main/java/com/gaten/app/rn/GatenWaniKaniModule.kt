@@ -10,6 +10,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.WritableMap
 import com.gaten.app.wanikani.WaniKaniConnection
 import com.gaten.app.wanikani.WaniKaniFailure
@@ -25,6 +26,9 @@ import com.gaten.app.wanikani.WaniKaniReviewItem
 import com.gaten.app.wanikani.WaniKaniReviewQueue
 import com.gaten.app.wanikani.WaniKaniReviewSubmission
 import com.gaten.app.wanikani.WaniKaniStatsResult
+import com.gaten.app.wanikani.WaniKaniStudyMaterial
+import com.gaten.app.wanikani.WaniKaniStudyMaterialRead
+import com.gaten.app.wanikani.WaniKaniStudyMaterialWrite
 import com.gaten.app.wanikani.WaniKaniSubject
 import com.gaten.app.wanikani.WaniKaniTarget
 import com.gaten.app.wanikani.readingAnswerHiragana
@@ -308,6 +312,129 @@ class GatenWaniKaniModule(
                 promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
             }
         }
+    }
+
+    /**
+     * One subject's own study material: the notes and personal synonyms WaniKani holds for the reader.
+     * Resolves `{ status: "found", material }`, with `material` null when the reader has none yet;
+     * `{ status: "needsToken" }` and `{ status: "authRejected" }` are answers, and a read that failed
+     * resolves as `{ status: "failed", failure }` exactly as the queues do.
+     */
+    @ReactMethod
+    fun getStudyMaterial(subjectId: Double, promise: Promise) {
+        if (!subjectId.isFinite() || subjectId % 1.0 != 0.0 ||
+            subjectId !in 1.0..Int.MAX_VALUE.toDouble()
+        ) {
+            promise.reject("WK_INVALID_SUBJECT_ID", "Subject id must be a positive whole number.")
+            return
+        }
+        val id = subjectId.toInt()
+        scope.launch {
+            try {
+                when (val read = WaniKaniRepository.studyMaterial(reactApplicationContext, id)) {
+                    is WaniKaniStudyMaterialRead.Found -> promise.resolve(
+                        Arguments.createMap().apply {
+                            putString("status", "found")
+                            val material = read.material
+                            if (material == null) putNull("material")
+                            else putMap("material", material.toJsMap())
+                        }
+                    )
+
+                    WaniKaniStudyMaterialRead.NeedsToken -> promise.resolve(status("needsToken"))
+                    WaniKaniStudyMaterialRead.AuthRejected -> promise.resolve(status("authRejected"))
+                    is WaniKaniStudyMaterialRead.Unreachable -> promise.resolve(
+                        unreachable(read.failure, read.retryAfterSeconds)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
+            }
+        }
+    }
+
+    /**
+     * Writes a subject's notes back: `materialId` of 0 creates the record, a positive id updates the
+     * one it names. The reader's synonyms are passed through unchanged so an update cannot erase
+     * them. Resolves `{ status: "saved", material }`, `needsToken`, `authRejected`, or
+     * `{ status: "failed", failure }`.
+     */
+    @ReactMethod
+    fun saveStudyMaterial(
+        subjectId: Double,
+        materialId: Double,
+        meaningNote: String,
+        readingNote: String,
+        meaningSynonyms: ReadableArray,
+        promise: Promise
+    ) {
+        if (!subjectId.isFinite() || subjectId % 1.0 != 0.0 ||
+            subjectId !in 1.0..Int.MAX_VALUE.toDouble()
+        ) {
+            promise.reject("WK_INVALID_SUBJECT_ID", "Subject id must be a positive whole number.")
+            return
+        }
+        val id = subjectId.toInt()
+        val existing = when {
+            !materialId.isFinite() || materialId % 1.0 != 0.0 -> {
+                promise.reject("WK_INVALID_MATERIAL_ID", "Study material id must be a whole number.")
+                return
+            }
+
+            materialId <= 0.0 -> null
+            materialId <= Int.MAX_VALUE.toDouble() -> materialId.toInt()
+            else -> {
+                promise.reject(
+                    "WK_INVALID_MATERIAL_ID",
+                    "Study material id is out of range."
+                )
+                return
+            }
+        }
+        val synonyms = ArrayList<String>(meaningSynonyms.size())
+        for (index in 0 until meaningSynonyms.size()) {
+            meaningSynonyms.getString(index)?.let { synonyms.add(it) }
+        }
+        scope.launch {
+            try {
+                val write = WaniKaniRepository.saveStudyMaterial(
+                    reactApplicationContext,
+                    id,
+                    existing,
+                    meaningNote,
+                    readingNote,
+                    synonyms
+                )
+                when (write) {
+                    is WaniKaniStudyMaterialWrite.Saved -> promise.resolve(
+                        Arguments.createMap().apply {
+                            putString("status", "saved")
+                            putMap("material", write.material.toJsMap())
+                        }
+                    )
+
+                    WaniKaniStudyMaterialWrite.NeedsToken -> promise.resolve(status("needsToken"))
+                    WaniKaniStudyMaterialWrite.AuthRejected -> promise.resolve(status("authRejected"))
+                    is WaniKaniStudyMaterialWrite.Unreachable -> promise.resolve(
+                        unreachable(write.failure, write.retryAfterSeconds)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_REPOSITORY, e.message ?: "WaniKani failed", e)
+            }
+        }
+    }
+
+    private fun WaniKaniStudyMaterial.toJsMap(): WritableMap = Arguments.createMap().apply {
+        putInt("id", id)
+        putInt("subjectId", subjectId)
+        putString("meaningNote", meaningNote)
+        putString("readingNote", readingNote)
+        putArray("meaningSynonyms", meaningSynonyms.toJsArray())
     }
 
     /**
@@ -623,6 +750,22 @@ class GatenWaniKaniModule(
         putString("primaryMeaning", primaryMeaning)
         putArray("readings", readings.toJsArray())
         putString("primaryReading", primaryReading)
+        putInt("level", level)
+        putString("meaningMnemonic", meaningMnemonic)
+        putString("readingMnemonic", readingMnemonic)
+        putArray(
+            "contextSentences",
+            Arguments.createArray().apply {
+                contextSentences.forEach { sentence ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putString("japanese", sentence.japanese)
+                            putString("english", sentence.english)
+                        }
+                    )
+                }
+            }
+        )
     }
 
     private fun WaniKaniLessonItem.toJsMap(): WritableMap = Arguments.createMap().apply {

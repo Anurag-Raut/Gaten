@@ -7,7 +7,9 @@
 package com.gaten.app.wanikani
 
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -67,6 +69,111 @@ class WaniKaniReviewTest {
         // request, by the ids the queue is about.
         assertEquals("assignments?immediately_available_for_review=true&hidden=false", api.requests[0])
         assertEquals("subjects?ids=1,917", api.requests[1])
+    }
+
+    @Test
+    fun `a subject's study material decodes its notes and synonyms, and none is not a failure`() = runBlocking {
+        val api = FakeReviewApi().apply {
+            studyMaterialHandler = {
+                WaniKaniFetch.Body(
+                    """{"object":"collection","data":[{"id":65231,"object":"study_material","data":{"subject_id":241,"subject_type":"radical","meaning_note":"I like turtles","reading_note":"I like durtles","meaning_synonyms":["burn","sizzle"]}}]}"""
+                )
+            }
+        }
+        val found = client(api).studyMaterial(241) as WaniKaniStudyMaterialRead.Found
+        assertEquals(65231, found.material?.id)
+        assertEquals(241, found.material?.subjectId)
+        assertEquals("I like turtles", found.material?.meaningNote)
+        assertEquals("I like durtles", found.material?.readingNote)
+        assertEquals(listOf("burn", "sizzle"), found.material?.meaningSynonyms)
+        // The read is filtered by subject id, which is what keeps it to the reader's own record.
+        assertEquals("study_materials?subject_ids=241", api.requests.single())
+
+        val empty = FakeReviewApi().apply {
+            studyMaterialHandler = { WaniKaniFetch.Body("""{"object":"collection","data":[]}""") }
+        }
+        assertEquals(
+            WaniKaniStudyMaterialRead.Found(null),
+            client(empty).studyMaterial(9)
+        )
+
+        val broken = FakeReviewApi().apply {
+            studyMaterialHandler = { WaniKaniFetch.Body("<html>captive portal</html>") }
+        }
+        assertEquals(
+            WaniKaniStudyMaterialRead.Unreachable(WaniKaniFailure.MALFORMED),
+            client(broken).studyMaterial(9)
+        )
+    }
+
+    @Test
+    fun `a new note is created with the subject id, and an existing note is updated without one`() = runBlocking {
+        val api = FakeReviewApi().apply {
+            postHandler = {
+                WaniKaniFetch.Body(
+                    """{"id":234,"object":"study_material","data":{"subject_id":2,"meaning_note":"a note","reading_note":"","meaning_synonyms":["double"]}}"""
+                )
+            }
+            putHandler = {
+                WaniKaniFetch.Body(
+                    """{"id":234,"object":"study_material","data":{"subject_id":2,"meaning_note":"a note","reading_note":"","meaning_synonyms":["double"]}}"""
+                )
+            }
+        }
+        val created = client(api).saveStudyMaterial(2, null, "a note", "", listOf("double"))
+        assertEquals(234, (created as WaniKaniStudyMaterialWrite.Saved).material.id)
+        val createBody = JSONObject(api.posts.single())
+        val createMaterial = createBody.getJSONObject("study_material")
+        assertEquals(2, createMaterial.getInt("subject_id"))
+        assertEquals("a note", createMaterial.getString("meaning_note"))
+        assertEquals("", createMaterial.getString("reading_note"))
+        assertEquals("double", createMaterial.getJSONArray("meaning_synonyms").getString(0))
+
+        val updated = client(api).saveStudyMaterial(2, 234, "changed", "read", listOf("double"))
+        assertEquals(234, (updated as WaniKaniStudyMaterialWrite.Saved).material.id)
+        assertEquals("study_materials/234", api.putPaths.single())
+        val updateMaterial = JSONObject(api.puts.single()).getJSONObject("study_material")
+        assertEquals("changed", updateMaterial.getString("meaning_note"))
+        // An update is a full write, so the reader's existing synonyms ride along unchanged.
+        assertEquals("double", updateMaterial.getJSONArray("meaning_synonyms").getString(0))
+        assertFalse(updateMaterial.has("subject_id"))
+    }
+
+    @Test
+    fun `a study material write with nothing to send is refused without a request`() = runBlocking {
+        val api = FakeReviewApi()
+        assertEquals(
+            WaniKaniStudyMaterialWrite.Unreachable(WaniKaniFailure.MALFORMED),
+            client(api).saveStudyMaterial(0, null, "note", "", emptyList())
+        )
+        assertEquals(emptyList<String>(), api.posts)
+        assertEquals(emptyList<String>(), api.puts)
+    }
+
+    @Test
+    fun `a queued vocabulary carries the level, mnemonics and examples its details show`() = runBlocking {
+        val api = queueApi(
+            assignments = WaniKaniJson.collection(
+                WaniKaniJson.assignment(id = 10, subjectId = 2467, subjectType = "vocabulary", availableAt = EARLY)
+            ),
+            subjects = WaniKaniJson.collection(
+                WaniKaniJson.vocabulary(
+                    id = 2467,
+                    level = 27,
+                    contextSentences = listOf("靴屋" to "shoe store"),
+                    meaningMnemonic = "A single <radical>ground</radical> stroke.",
+                    readingMnemonic = "It is read <reading>いち</reading>."
+                )
+            )
+        )
+
+        val item = (client(api).reviewQueue() as WaniKaniReviewQueue.Available).items.single()
+        assertEquals(27, item.level)
+        // The mnemonics are the plain text the details render: WaniKani's markup is stripped, not
+        // shown, exactly as the lesson decoder already does.
+        assertEquals("A single ground stroke.", item.meaningMnemonic)
+        assertEquals("It is read いち.", item.readingMnemonic)
+        assertEquals(listOf(WaniKaniContextSentence("靴屋", "shoe store")), item.contextSentences)
     }
 
     @Test
@@ -295,9 +402,14 @@ private class FakeReviewApi : WaniKaniApi() {
     val requests = mutableListOf<String>()
     val posts = mutableListOf<String>()
 
+    val puts = mutableListOf<String>()
+    val putPaths = mutableListOf<String>()
+
     var assignmentHandler: () -> WaniKaniFetch = { WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE) }
     var subjectHandler: () -> WaniKaniFetch = { WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE) }
+    var studyMaterialHandler: () -> WaniKaniFetch = { WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE) }
     var postHandler: (String) -> WaniKaniFetch = { WaniKaniFetch.Body("""{"id":1}""") }
+    var putHandler: (String) -> WaniKaniFetch = { WaniKaniFetch.Body("""{"id":1}""") }
 
     override suspend fun get(path: String, query: List<Pair<String, String>>, token: String): WaniKaniFetch {
         requests += if (query.isEmpty()) {
@@ -308,6 +420,7 @@ private class FakeReviewApi : WaniKaniApi() {
         return when (path) {
             "assignments" -> assignmentHandler()
             "subjects" -> subjectHandler()
+            "study_materials" -> studyMaterialHandler()
             else -> WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE)
         }
     }
@@ -315,6 +428,12 @@ private class FakeReviewApi : WaniKaniApi() {
     override suspend fun post(path: String, body: String, token: String): WaniKaniFetch {
         posts += body
         return postHandler(body)
+    }
+
+    override suspend fun put(path: String, body: String, token: String): WaniKaniFetch {
+        putPaths += path
+        puts += body
+        return putHandler(body)
     }
 }
 
