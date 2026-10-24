@@ -87,7 +87,7 @@ function TeachingCard({item}: {item: WaniKaniLessonItem}) {
         )}
       </View>
       <LessonSection title="Meaning">
-        <Text style={[styles.answerLine, {color: colors.reviewMeaning}]}>
+        <Text style={[styles.answerLine, {color: colors.reviewReading}]}>
           {item.meanings.join(", ")}
         </Text>
         {item.meaningMnemonic !== "" && (
