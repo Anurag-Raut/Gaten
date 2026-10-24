@@ -172,11 +172,16 @@
             </intent-filter>
         </service>
 
+        <!-- While lookup mode is on, the trigger is answered by the accessibility service's
+             context-registered receiver: a custom, action-only broadcast is not delivered to a
+             manifest receiver on apps targeting Android 8.0+. This receiver stays exported for a
+             sender that names it explicitly, and keeps the floating-button-changed action below.
+             The trigger actions are deliberately not in this filter, so a package-scoped send is
+             delivered exactly once — to the context-registered receiver, not also here. -->
         <receiver
             android:name=".LookupTriggerReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.gaten.app.action.TRIGGER_LOOKUP" />
                 <!-- Sent by the home screen after the floating-button switch is toggled. -->
                 <action android:name="com.gaten.app.action.FLOATING_BUTTON_CHANGED" />
             </intent-filter>

@@ -31,8 +31,15 @@ import {
   useLookupModeRequest,
 } from "./settings-components";
 
-/** The broadcast a key remapper sends to start a lookup (LookupTriggerReceiver). */
-const TRIGGER_LOOKUP_ACTION = "com.gaten.app.action.TRIGGER_LOOKUP";
+/**
+ * The broadcast a key remapper sends to start a lookup (LookupTriggerReceiver). The older
+ * `com.gaten.app.action.TRIGGER_LOOKUP` is still accepted, so an existing Key Mapper map keeps
+ * working, but this canonical name matches the installed `com.gaten` package.
+ */
+const TRIGGER_LOOKUP_ACTION = "com.gaten.action.TRIGGER_LOOKUP";
+
+/** The installed package a key remapper scopes the trigger broadcast to. */
+const TRIGGER_LOOKUP_PACKAGE = "com.gaten";
 
 /** The API that can be asked to put the tile in Quick Settings in place (requestAddTileService). */
 const ADD_TILE_API = 33;
@@ -289,7 +296,8 @@ function tileSummary(added: boolean, enabled: boolean, addTileAvailable: boolean
 
 /**
  * Optional hardware-key instructions: the row itself expands — its value says what a tap does — into
- * the broadcast action a key remapper sends, in monospace with a copy button beside it.
+ * the broadcast action and package a key remapper sends, each in monospace with a copy button, plus
+ * the target mode Key Mapper expects.
  */
 function KeyMapperRow() {
   const {colors} = useTheme();
@@ -322,6 +330,27 @@ function KeyMapperRow() {
               }}
             />
           </View>
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
+            Package name
+          </Text>
+          <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
+            <Text
+              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
+            >
+              {TRIGGER_LOOKUP_PACKAGE}
+            </Text>
+            <IconButton
+              name="content_copy"
+              accessibilityLabel="Copy the app package name"
+              compact
+              onPress={() => {
+                void GatenPlatform.copyToClipboard(TRIGGER_LOOKUP_PACKAGE);
+              }}
+            />
+          </View>
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
+            In Key Mapper use Send intent with Broadcast receiver as the target.
+          </Text>
         </View>
       )}
     </View>

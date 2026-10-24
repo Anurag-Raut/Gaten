@@ -89,6 +89,10 @@ class GatenAccessibilityService : AccessibilityService() {
     private var serviceConnected = false
     /** True while the screen receiver is registered, so it is unregistered exactly once. */
     private var receiverRegistered = false
+    /** The service's receiver for external trigger broadcasts; see [LookupTriggerReceiver]. */
+    private val lookupTriggerReceiver = LookupTriggerReceiver()
+    /** True while that receiver is registered, so it is unregistered exactly once. */
+    private var triggerReceiverRegistered = false
     private var displayListenerRegistered = false
     /** The capture in flight and its single-flight flag, moved on by a dismissal or a new trigger. */
     private val captureToken = CaptureToken()
@@ -188,6 +192,7 @@ class GatenAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         serviceConnected = true
         registerScreenReceiver()
+        registerTriggerReceiver()
         if (!displayListenerRegistered) {
             displayManager.registerDisplayListener(displayListener, mainHandler)
             displayListenerRegistered = true
@@ -205,6 +210,7 @@ class GatenAccessibilityService : AccessibilityService() {
         // a service that is on its way out can never re-show the button.
         serviceConnected = false
         unregisterScreenReceiver()
+        unregisterTriggerReceiver()
         unregisterDisplayListener()
         cancelLookup()
         floatingButton?.hide()
@@ -221,6 +227,7 @@ class GatenAccessibilityService : AccessibilityService() {
         // No window may be added after this point, so the flag goes first.
         serviceConnected = false
         unregisterScreenReceiver()
+        unregisterTriggerReceiver()
         unregisterDisplayListener()
         cancelLookup()
         // The screenshot executor is stopped before the overlay goes: a queued or late callback must
@@ -671,6 +678,38 @@ class GatenAccessibilityService : AccessibilityService() {
             unregisterReceiver(screenReceiver)
         } catch (e: IllegalArgumentException) {
             Log.w(TAG, "Screen receiver was not registered", e)
+        }
+    }
+
+    /**
+     * Registers the external trigger broadcast for as long as the service is connected, so a
+     * custom, action-only broadcast — which a manifest receiver cannot receive on apps targeting
+     * Android 8.0+ — reaches [LookupTriggerReceiver]. Both the canonical and the legacy action are
+     * handled exactly once; an explicit component send is answered by the manifest receiver.
+     */
+    private fun registerTriggerReceiver() {
+        if (triggerReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP)
+            addAction(LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP_LEGACY)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Exported: the broadcast comes from another app (the key remapper).
+            registerReceiver(lookupTriggerReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(lookupTriggerReceiver, filter)
+        }
+        triggerReceiverRegistered = true
+    }
+
+    private fun unregisterTriggerReceiver() {
+        if (!triggerReceiverRegistered) return
+        triggerReceiverRegistered = false
+        try {
+            unregisterReceiver(lookupTriggerReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Trigger receiver was not registered", e)
         }
     }
 
