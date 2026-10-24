@@ -246,7 +246,7 @@ export function WaniKaniPanel({
         <Text
           numberOfLines={1}
           style={[
-            headingIsCharacter ? typeScale.displaySmall : typeScale.titleLarge,
+            headingIsCharacter ? styles.heroGlyph : typeScale.titleLarge,
             {
               color: headingIsCharacter ? colors.onSurface : colors.onSurfaceVariant,
               flexShrink: 1,
@@ -322,17 +322,17 @@ function AvailableContent({
               size={compact ? 56 : 72}
             />
           ) : (
-            <Text style={[typeScale.displaySmall, {color: colors.onSurface}]}>
+            <Text style={[styles.heroGlyph, {color: colors.onSurface}]}>
               {radical.character ?? radical.primaryMeaning}
             </Text>
           )}
         </View>
       )}
       <View style={[styles.sectionBlock, styles.sectionRule, {borderBottomColor: colors.outlineVariant}]}>
-        <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
+        <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
           Meaning
         </Text>
-        <Text style={[typeScale.bodyLarge, styles.gloss, {color: colors.onSurface}]}>
+        <Text style={[styles.meaningGloss, {color: colors.onSurface}]}>
           {primaryMeaning}
         </Text>
         {alternates.length > 0 && (
@@ -353,11 +353,11 @@ function AvailableContent({
           {kanji.onyomi.length > 0 && (
             <>
               <Text
-                style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}
+                style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}
               >
                 On’yomi
               </Text>
-              <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>
+              <Text style={[styles.readingValue, {color: colors.onSurface}]}>
                 {kanji.onyomi.join("・")}
               </Text>
             </>
@@ -365,11 +365,11 @@ function AvailableContent({
           {kanji.kunyomi.length > 0 && (
             <View style={kanji.onyomi.length > 0 ? styles.readingRow : undefined}>
               <Text
-                style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}
+                style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}
               >
                 Kun’yomi
               </Text>
-              <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>
+              <Text style={[styles.readingValue, {color: colors.onSurface}]}>
                 {kanji.kunyomi.join("・")}
               </Text>
             </View>
@@ -385,7 +385,7 @@ function AvailableContent({
             {borderBottomColor: colors.outlineVariant},
           ]}
         >
-          <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
+          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
             Radicals
           </Text>
           <ScrollView
@@ -404,7 +404,7 @@ function AvailableContent({
                   onPress={() => onRadical(component.id)}
                   style={[styles.componentChip, {backgroundColor: colors.surfaceVariant}]}
                 >
-                  <Text style={[typeScale.labelLarge, {color: colors.onSurface}]}>{label}</Text>
+                  <Text style={[styles.componentGlyph, {color: colors.onSurface}]}>{label}</Text>
                 </PressableScale>
               );
             })}
@@ -419,7 +419,7 @@ function AvailableContent({
           {borderBottomColor: colors.outlineVariant},
         ]}
       >
-        <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
+        <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
           WaniKani’s meaning mnemonic
         </Text>
         <Text selectable style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
@@ -435,7 +435,7 @@ function AvailableContent({
             {borderBottomColor: colors.outlineVariant},
           ]}
         >
-          <Text style={[typeScale.labelMedium, styles.caption, {color: colors.onSurfaceVariant}]}>
+          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
             WaniKani’s reading mnemonic
           </Text>
           <Text selectable style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
@@ -609,8 +609,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   scrollContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
-  // Keep the meaning at the shared body size so longer glosses remain easy to scan.
-  gloss: {fontSize: 14, lineHeight: 20},
+  // Match the landing lookup modal's hierarchy: the hero glyph and the gloss use the same roles
+  // the shared entry sections do, so a WaniKani page reads as the same sheet.
+  heroGlyph: {fontSize: 36, fontWeight: "700"},
+  meaningGloss: {fontSize: 29, fontWeight: "700"},
+  readingValue: {fontSize: 18},
+  componentGlyph: {fontSize: 24, fontWeight: "600"},
   hero: {
     alignSelf: "center",
     borderRadius: shape.medium,

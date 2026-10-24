@@ -32,6 +32,13 @@ object GatenBridgeEmitter {
     const val SETTINGS_PAGE_REQUEST = "gaten.settingsPageRequest"
 
     /**
+     * One lookup-sheet state, as a map the RN sheet renders: the mode, the selected words, the
+     * source line and the Anki state. Emitted by [GatenLookupSheetModule] whenever the overlay's
+     * session changes; the sheet also reads the current map once on mount through the module.
+     */
+    const val LOOKUP_SHEET_STATE = "gaten.lookupSheetState"
+
+    /**
      * The floating-button preference changed, from the on-screen remove button or from a settings
      * write. The payload carries nothing; the Screen lookup page re-reads the preference, which is
      * what keeps its switch in step with a dismissal it did not perform.
@@ -67,6 +74,13 @@ object GatenBridgeEmitter {
         val payload = Arguments.createMap()
         if (page != null) payload.putString("page", page)
         emit(SETTINGS_PAGE_REQUEST, payload)
+    }
+
+    /** Sends one lookup-sheet state to the RN sheet. */
+    fun emitLookupSheetState(
+        payload: com.facebook.react.bridge.WritableMap
+    ) {
+        emit(LOOKUP_SHEET_STATE, payload)
     }
 
     /** Sends one event through the shared context; quiet when JS is not listening yet. */

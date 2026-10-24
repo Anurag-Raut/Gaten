@@ -23,14 +23,29 @@ export interface SearchKanjiScreenProps {
   character: string;
   onBack: () => void;
   onOpenRadical: (id: number) => void;
-  onOpenSettingsPage: (page: "wanikani") => void;
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  /**
+   * Whether the page offers the WaniKani settings shortcut. The lookup overlay leaves it off: it is
+   * a window over somebody else's screen and never offered a route into app settings.
+   */
+  showSettings?: boolean;
+  /**
+   * The lookup overlay hosts the page inside its own bottom sheet rather than as a full screen:
+   * the sheet is not under the status bar and already paints the surface, so the page drops the
+   * status-bar inset and the top padding and matches the sheet's own background.
+   */
+  overlay?: boolean;
 }
 
 export interface SearchRadicalScreenProps {
   id: number;
   onBack: () => void;
   onOpenRadical: (id: number) => void;
-  onOpenSettingsPage: (page: "wanikani") => void;
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  /** @see SearchKanjiScreenProps.showSettings */
+  showSettings?: boolean;
+  /** @see SearchKanjiScreenProps.overlay */
+  overlay?: boolean;
 }
 
 function ReferencePage({
@@ -38,20 +53,28 @@ function ReferencePage({
   onBack,
   onOpenRadical,
   onOpenSettingsPage,
+  showSettings = true,
+  overlay = false,
 }: {
   target: WaniKaniTarget;
   onBack: () => void;
   onOpenRadical: (id: number) => void;
-  onOpenSettingsPage: (page: "wanikani") => void;
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  showSettings?: boolean;
+  overlay?: boolean;
 }) {
+  const onSettings =
+    showSettings && onOpenSettingsPage != null
+      ? () => onOpenSettingsPage("wanikani")
+      : undefined;
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.background,
-        paddingTop: insets.top,
+        backgroundColor: overlay ? colors.surface : colors.background,
+        paddingTop: overlay ? 0 : insets.top,
         paddingBottom: insets.bottom,
       }}
     >
@@ -61,7 +84,7 @@ function ReferencePage({
         onBack={onBack}
         scrollable
         onRadical={onOpenRadical}
-        onSettings={() => onOpenSettingsPage("wanikani")}
+        onSettings={onSettings}
       />
     </View>
   );
@@ -72,6 +95,8 @@ export function SearchKanjiScreen({
   onBack,
   onOpenRadical,
   onOpenSettingsPage,
+  showSettings,
+  overlay,
 }: SearchKanjiScreenProps) {
   return (
     <ReferencePage
@@ -79,6 +104,8 @@ export function SearchKanjiScreen({
       onBack={onBack}
       onOpenRadical={onOpenRadical}
       onOpenSettingsPage={onOpenSettingsPage}
+      showSettings={showSettings}
+      overlay={overlay}
     />
   );
 }
@@ -88,6 +115,8 @@ export function SearchRadicalScreen({
   onBack,
   onOpenRadical,
   onOpenSettingsPage,
+  showSettings,
+  overlay,
 }: SearchRadicalScreenProps) {
   return (
     <ReferencePage
@@ -95,6 +124,8 @@ export function SearchRadicalScreen({
       onBack={onBack}
       onOpenRadical={onOpenRadical}
       onOpenSettingsPage={onOpenSettingsPage}
+      showSettings={showSettings}
+      overlay={overlay}
     />
   );
 }
