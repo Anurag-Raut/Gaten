@@ -29,14 +29,16 @@
  * outlined cell, never an empty one; and one source's failure never blanks another source's sections.
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
+import {useIsFocused} from "@react-navigation/native";
 import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {
   AnalyticsSection,
+  AnimatedValueText,
   BarRow,
   CountLegend,
   Heatmap,
@@ -46,6 +48,7 @@ import {
   Ring,
   SkeletonLines,
   StackedBar,
+  useAnalyticsEntrance,
   type DistributionPart,
 } from "./ink";
 import {
@@ -262,11 +265,19 @@ export function AnalyticsScreen({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
+  const focused = useIsFocused();
   const anki = useAnkiStats();
   const wanikani = useWaniKaniStats();
   const scroll = useRef<ScrollView | null>(null);
   // Only the freshness line depends on this: it is a clock, not a read.
   const [, tick] = useState(0);
+  // The highlighted category of each distribution chart, by its stable key. The two are separate
+  // pieces of state, so the Anki and WaniKani bars can never highlight each other.
+  const [selectedAnki, setSelectedAnki] = useState<string | null>(null);
+  const [selectedSrs, setSelectedSrs] = useState<string | null>(null);
+  // The heatmap's open day, by the day's own offset, so a refresh that redraws the same day keeps
+  // the detail open on the fresh count and a day that disappears closes it on its own.
+  const [selectedDayAgo, setSelectedDayAgo] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => tick((count) => count + 1), FRESHNESS_TICK_MS);
@@ -280,6 +291,28 @@ export function AnalyticsScreen({
     [onOpenSettingsPage]
   );
 
+  // A tap selects a category, and a second tap on the same category clears it; the bar and the key
+  // both call the same toggle, so the two always agree.
+  const toggleAnki = useCallback((key: string) => {
+    setSelectedAnki((current) => (current === key ? null : key));
+  }, []);
+  const toggleSrs = useCallback((key: string) => {
+    setSelectedSrs((current) => (current === key ? null : key));
+  }, []);
+  // A tap on a day opens its detail; a second tap on the same day closes it. The popover itself is
+  // rendered by the grid from the day's current counts, so a refresh never leaves a stale figure.
+  const toggleDay = useCallback((cell: HeatmapCell) => {
+    setSelectedDayAgo((current) => (current === cell.daysAgo ? null : cell.daysAgo));
+  }, []);
+  // A tap on the page outside the charts and the grid is the other way to clear everything: both
+  // chart highlights and the open day. It is a plain press on the content, so a scroll, a button or
+  // a chart pressed inside it still handles its own touch first.
+  const dismiss = useCallback(() => {
+    setSelectedAnki(null);
+    setSelectedSrs(null);
+    setSelectedDayAgo(null);
+  }, []);
+
   const ankiState = ankiRead(anki, openSettings);
   const wkState = waniKaniRead(wanikani, wanikani.refresh, openSettings);
 
@@ -292,6 +325,11 @@ export function AnalyticsScreen({
 
   const ankiData = ankiState.state === "ready" ? ankiState.data : null;
   const wkData = wkState.state === "ready" ? wkState.data : null;
+  // The entry sweep starts once per source, when the page is actually in view and that source has
+  // answered. A refresh, a tap, the freshness clock or a text-size change never restarts it, and a
+  // section that mounts after the sweep is already at its final value.
+  const ankiEntrance = useAnalyticsEntrance(focused && ankiData != null);
+  const wkEntrance = useAnalyticsEntrance(focused && wkData != null);
   const now = Date.now();
 
   // The freshest of the two reads, as an age. No timer sits behind the numbers themselves: this says
@@ -368,6 +406,19 @@ export function AnalyticsScreen({
     opacity: SRS_INTENSITY[index % SRS_INTENSITY.length],
   }));
 
+  // A refresh can stop drawing a category the reader had chosen — a WaniKani stage the payload no
+  // longer names. Drop that choice so no chart highlights a key that is not on screen. The joined key
+  // list is the real dependency: the arrays are rebuilt every render, but a refresh that draws the
+  // same categories joins to the same string and does not re-run the effect.
+  const ankiKeys = ankiParts.map((part) => part.key);
+  const srsKeys = srsParts.map((part) => part.key);
+  useEffect(() => {
+    setSelectedAnki((current) => (current != null && !ankiKeys.includes(current) ? null : current));
+  }, [ankiKeys.join(",")]);
+  useEffect(() => {
+    setSelectedSrs((current) => (current != null && !srsKeys.includes(current) ? null : current));
+  }, [srsKeys.join(",")]);
+
   // --- Accuracy -------------------------------------------------------------
   // `?? null` on both reads because a cache written by an older build carries neither field: the
   // sections then say the read is unavailable rather than drawing a zero.
@@ -376,6 +427,12 @@ export function AnalyticsScreen({
   const meaning = accuracyOf(recall?.meaning ?? null);
   const reading = accuracyOf(recall?.reading ?? null);
   const subjects = subjectAccuracies(recall?.bySubject ?? null);
+  // The subject line's raw shares, kept beside the formatted labels so its percentages can count up
+  // from zero without parsing the display string or changing the model's public shape.
+  const subjectShares = new Map<string, number | null>();
+  for (const subject of recall?.bySubject ?? []) {
+    subjectShares.set(subject.key, subject.total > 0 ? subject.correct / subject.total : null);
+  }
 
   // --- Level progress -------------------------------------------------------
   const history = wkData?.levelHistory ?? null;
@@ -404,6 +461,16 @@ export function AnalyticsScreen({
         ]}
         keyboardShouldPersistTaps="handled"
       >
+        {/* The whole page is one quiet press target so a tap on blank content clears the chart
+            highlights and the open day. It is not a control: it adds no accessibility node and no ink,
+            and a tap on a chart, a legend key, a day or the refresh button handles its own press
+            first — the scroll cancels this press as soon as the finger moves. */}
+        <Pressable
+          accessible={false}
+          importantForAccessibility="no"
+          onPress={dismiss}
+          style={styles.contentDismiss}
+        >
         <Header updated={freshnessLabel(updatedAt, now)} busy={busy} onRefresh={refresh} />
 
         {/* Anki — collection maturity. The ring and the bar are one hue at several strengths; the
@@ -418,21 +485,39 @@ export function AnalyticsScreen({
               <Ring
                 share={matureShare}
                 centre={matureShare == null ? "—" : `${Math.round(matureShare * 100)}%`}
+                centreCount={
+                  matureShare == null
+                    ? null
+                    : {value: matureShare * 100, decimals: 0, suffix: "%"}
+                }
                 caption="mature"
                 size={RING_SIZE}
                 stroke={RING_STROKE}
+                entrance={ankiEntrance}
               />
               <View style={styles.ringBody}>
                 <Metric
                   value={formatCount(totalCards)}
+                  count={{value: totalCards, decimals: 0}}
                   caption="cards"
                   muted={totalCards == null}
                   hero={false}
+                  entrance={ankiEntrance}
                 />
                 {collectionCounts != null ? (
                   <>
-                    <StackedBar segments={ankiParts} />
-                    <CountLegend items={ankiParts} />
+                    <StackedBar
+                      segments={ankiParts}
+                      selectedKey={selectedAnki}
+                      onSelect={toggleAnki}
+                      entrance={ankiEntrance}
+                    />
+                    <CountLegend
+                      items={ankiParts}
+                      selectedKey={selectedAnki}
+                      onSelect={toggleAnki}
+                      entrance={ankiEntrance}
+                    />
                   </>
                 ) : (
                   <InlineUnavailable>AnkiDroid would not answer the card-state searches.</InlineUnavailable>
@@ -453,21 +538,35 @@ export function AnalyticsScreen({
               <Ring
                 share={levelShare}
                 centre={formatCount(wkData.level)}
+                centreCount={{value: wkData.level, decimals: 0}}
                 caption={wkData.maxLevelGranted > 0 ? `of ${wkData.maxLevelGranted}` : "level"}
                 size={RING_SIZE}
                 stroke={RING_STROKE}
+                entrance={wkEntrance}
               />
               <View style={styles.ringBody}>
                 <Metric
                   value={formatCount(activeSubjects)}
+                  count={{value: activeSubjects, decimals: 0}}
                   caption="active subjects"
                   muted={activeSubjects == null}
                   hero={false}
+                  entrance={wkEntrance}
                 />
                 {active.length > 0 ? (
                   <>
-                    <StackedBar segments={srsParts} />
-                    <CountLegend items={srsParts} />
+                    <StackedBar
+                      segments={srsParts}
+                      selectedKey={selectedSrs}
+                      onSelect={toggleSrs}
+                      entrance={wkEntrance}
+                    />
+                    <CountLegend
+                      items={srsParts}
+                      selectedKey={selectedSrs}
+                      onSelect={toggleSrs}
+                      entrance={wkEntrance}
+                    />
                   </>
                 ) : (
                   <InlineUnavailable>WaniKani answered no SRS stages.</InlineUnavailable>
@@ -486,25 +585,34 @@ export function AnalyticsScreen({
           {grid == null ? (
             <>
               <SourceFallback read={ankiState} withAction={false} />
-              {ankiState.state === "loading" && <Heatmap columns={unknownGrid(now)} />}
+              {ankiState.state === "loading" && (
+                <Heatmap columns={unknownGrid(now)} selectedDayAgo={null} onSelectDay={toggleDay} />
+              )}
             </>
           ) : (
             <>
               <MetricPair
                 left={{
                   value: formatCount(grid.activeDays),
+                  count: {value: grid.activeDays, decimals: 0},
                   caption: "active days",
                   muted: grid.activeDays == null,
                   hero: false,
                 }}
                 right={{
                   value: formatCount(grid.cards),
+                  count: {value: grid.cards, decimals: 0},
                   caption: "cards",
                   muted: grid.cards == null,
                   hero: false,
                 }}
+                entrance={ankiEntrance}
               />
-              <Heatmap columns={grid.columns} />
+              <Heatmap
+                columns={grid.columns}
+                selectedDayAgo={selectedDayAgo}
+                onSelectDay={toggleDay}
+              />
               {grid.partial && <Note>Some days unknown.</Note>}
             </>
           )}
@@ -521,9 +629,15 @@ export function AnalyticsScreen({
             <>
               <Metric
                 value={overall.label}
+                count={
+                  overall.share == null
+                    ? null
+                    : {value: overall.share * 100, decimals: 0, suffix: "%"}
+                }
                 caption="overall accuracy"
                 muted={overall.share == null}
                 hero={false}
+                entrance={wkEntrance}
               />
               <Note>
                 {formatCount(overall.total)} answers · {formatCount(overall.wrong)} wrong
@@ -532,14 +646,26 @@ export function AnalyticsScreen({
                 <BarRow
                   label="Meaning"
                   count={meaning.label}
+                  countValue={
+                    meaning.share == null
+                      ? null
+                      : {value: meaning.share * 100, decimals: 0, suffix: "%"}
+                  }
                   share={meaning.share ?? 0}
                   color={colors.accent}
+                  entrance={wkEntrance}
                 />
                 <BarRow
                   label="Reading"
                   count={reading.label}
+                  countValue={
+                    reading.share == null
+                      ? null
+                      : {value: reading.share * 100, decimals: 0, suffix: "%"}
+                  }
                   share={reading.share ?? 0}
                   color={colors.accent}
+                  entrance={wkEntrance}
                 />
               </View>
               {subjects.length > 0 && (
@@ -548,28 +674,38 @@ export function AnalyticsScreen({
                     By subject
                   </Text>
                   <View style={styles.subjectRow}>
-                    {subjects.map((subject) => (
-                      <View
-                        key={subject.key}
-                        accessible
-                        accessibilityLabel={`${subject.name} ${subject.value}`}
-                        style={styles.subjectItem}
-                      >
-                        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-                          {subject.value}
-                        </Text>
-                        <Text
-                          numberOfLines={2}
-                          style={[
-                            typeScale.labelSmall,
-                            styles.subjectName,
-                            {color: colors.onSurfaceVariant},
-                          ]}
+                    {subjects.map((subject) => {
+                      const share = subjectShares.get(subject.key) ?? null;
+                      return (
+                        <View
+                          key={subject.key}
+                          accessible
+                          accessibilityLabel={`${subject.name} ${subject.value}`}
+                          style={styles.subjectItem}
                         >
-                          {subject.name}
-                        </Text>
-                      </View>
-                    ))}
+                          <AnimatedValueText
+                            value={subject.value}
+                            count={
+                              share == null
+                                ? null
+                                : {value: share * 100, decimals: 0, suffix: "%"}
+                            }
+                            entrance={wkEntrance}
+                            style={[typeScale.titleMedium, {color: colors.onSurface}]}
+                          />
+                          <Text
+                            numberOfLines={2}
+                            style={[
+                              typeScale.labelSmall,
+                              styles.subjectName,
+                              {color: colors.onSurfaceVariant},
+                            ]}
+                          >
+                            {subject.name}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -592,17 +728,20 @@ export function AnalyticsScreen({
               <MetricPair
                 left={{
                   value: formatCount(level),
+                  count: {value: level, decimals: 0},
                   caption: "level",
                   note: daysOnLevelLabel(levelDays),
                   hero: false,
                 }}
                 right={{
                   value: averageDays == null ? "—" : averageDays.toFixed(1),
+                  count: {value: averageDays, decimals: 1},
                   caption: "days",
                   note: "Average / level",
                   muted: averageDays == null,
                   hero: false,
                 }}
+                entrance={wkEntrance}
               />
               {levelRows.length > 0 ? (
                 <View style={styles.levelRows}>
@@ -611,9 +750,11 @@ export function AnalyticsScreen({
                       key={row.level}
                       label={`L${row.level}`}
                       count={`${row.days.toFixed(1)}d`}
+                      countValue={{value: row.days, decimals: 1, suffix: "d"}}
                       share={levelAxis > 0 ? row.days / levelAxis : 0}
                       color={colors.accent}
                       muted={row.current}
+                      entrance={wkEntrance}
                       // A level row's own column bases: the label is a two-character name, and the
                       // count has to hold a duration that can run past a hundred days.
                       labelWidth={34}
@@ -637,6 +778,7 @@ export function AnalyticsScreen({
             {stale.join(" ")}
           </Text>
         )}
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -650,6 +792,9 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: spacing.contentInset,
   },
+  // The dismiss target is exactly the content's own box: it adds no height or width of its own, so a
+  // tap in the page's empty space still reaches it while every child control keeps its own touch.
+  contentDismiss: {width: "100%"},
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
