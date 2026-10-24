@@ -22,6 +22,7 @@ account; **no real review was submitted, no lesson was started, and no note was 
 | `10-lesson-quiz-input.png` | Lesson quiz: same bottom-only input + full-width Check answer. |
 | `11-lesson-quiz-wrong.png` | Lesson quiz wrong answer: red "Incorrect — the answer is …"; the field clears for retyping (the existing quiz keeps its real behavior, per the kit state matrix). |
 | `wrong-continue-no-advance.mp4` | Short recording of the review wrong → Continue → same-card sequence. |
+| `wrong-continue-no-advance.gif` | The same sequence as an inline animated GIF (sped up ~3×): typed answer → Check → red wrong feedback + Continue → Continue pressed → same card 人格, still "1 of 19", input cleared. |
 
 ## Not exercised on device
 
