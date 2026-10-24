@@ -234,32 +234,6 @@ export type WaniKaniReviewSubmissionResult =
   | { status: "authRejected" }
   | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
 
-/**
- * A reader's own study material for one subject: the notes WaniKani keeps on the account and the
- * personal synonyms it accepts as answers. One record per subject; `id` is what an update addresses.
- */
-export interface WaniKaniStudyMaterial {
-  id: number;
-  subjectId: number;
-  meaningNote: string;
-  readingNote: string;
-  meaningSynonyms: string[];
-}
-
-/** What reading a subject's study material answered. `material` is null when the reader has none. */
-export type WaniKaniStudyMaterialReadResult =
-  | { status: "found"; material: WaniKaniStudyMaterial | null }
-  | { status: "needsToken" }
-  | { status: "authRejected" }
-  | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
-
-/** What saving a subject's study material answered. */
-export type WaniKaniStudyMaterialWriteResult =
-  | { status: "saved"; material: WaniKaniStudyMaterial }
-  | { status: "needsToken" }
-  | { status: "authRejected" }
-  | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
-
 /** One sentence a vocabulary lesson is taught with: the Japanese, and its English. */
 export interface WaniKaniContextSentence {
   japanese: string;
@@ -344,14 +318,6 @@ interface GatenWaniKaniNative {
     incorrectReadingAnswers: number
   ): Promise<WaniKaniReviewSubmissionResult>;
   startLesson(assignmentId: number): Promise<WaniKaniLessonStartResult>;
-  getStudyMaterial(subjectId: number): Promise<WaniKaniStudyMaterialReadResult>;
-  saveStudyMaterial(
-    subjectId: number,
-    materialId: number,
-    meaningNote: string,
-    readingNote: string,
-    meaningSynonyms: string[]
-  ): Promise<WaniKaniStudyMaterialWriteResult>;
 }
 
 const GatenWaniKani = NativeModules.GatenWaniKani as GatenWaniKaniNative;
@@ -447,38 +413,6 @@ export function submitReview(
     subjectId,
     incorrectMeaningAnswers,
     incorrectReadingAnswers
-  );
-}
-
-/**
- * The reader's own study material for [subjectId], read fresh from WaniKani. The endpoint returns a
- * collection, and WaniKani keeps at most one record per subject, so the screen is handed the one
- * record or null - the reader simply not having written a note yet.
- */
-export function getStudyMaterial(
-  subjectId: number
-): Promise<WaniKaniStudyMaterialReadResult> {
-  return GatenWaniKani.getStudyMaterial(subjectId);
-}
-
-/**
- * Writes a subject's notes. `materialId` of 0 creates the record; a positive id updates the one it
- * names. `meaningSynonyms` are the reader's existing synonyms, sent back unchanged so an update
- * cannot erase them.
- */
-export function saveStudyMaterial(
-  subjectId: number,
-  materialId: number,
-  meaningNote: string,
-  readingNote: string,
-  meaningSynonyms: string[]
-): Promise<WaniKaniStudyMaterialWriteResult> {
-  return GatenWaniKani.saveStudyMaterial(
-    subjectId,
-    materialId,
-    meaningNote,
-    readingNote,
-    meaningSynonyms
   );
 }
 

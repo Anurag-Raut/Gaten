@@ -95,32 +95,6 @@ object WaniKaniRepository {
     suspend fun startLesson(context: Context, assignmentId: Int): WaniKaniLessonStart =
         client(context).startLesson(assignmentId)
 
-    /**
-     * One subject's own study material - the notes and synonyms WaniKani holds for the reader. Read
-     * fresh, because it is the reader's own record and may have changed on another device.
-     */
-    suspend fun studyMaterial(context: Context, subjectId: Int): WaniKaniStudyMaterialRead =
-        client(context).studyMaterial(subjectId)
-
-    /**
-     * Writes a subject's notes back to WaniKani: a create for a subject with no record yet, an update
-     * for one that already has a record. The reader's synonyms ride along unchanged.
-     */
-    suspend fun saveStudyMaterial(
-        context: Context,
-        subjectId: Int,
-        materialId: Int?,
-        meaningNote: String,
-        readingNote: String,
-        meaningSynonyms: List<String>
-    ): WaniKaniStudyMaterialWrite = client(context).saveStudyMaterial(
-        subjectId,
-        materialId,
-        meaningNote,
-        readingNote,
-        meaningSynonyms
-    )
-
     /** A client over the app's own directories, cheap enough to build per call. */
     private fun client(context: Context): WaniKaniClient {
         val app = context.applicationContext

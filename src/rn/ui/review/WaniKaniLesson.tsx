@@ -35,10 +35,10 @@ import {
   ProgressLine,
   SubHeader,
 } from "./review-ui";
-import {NoteEditor, SubjectBadge, TaskPill} from "./wanikani-card-ui";
+import {SubjectBadge, TaskLabel} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
-import type {WaniKaniLessonSession, WaniKaniNoteState} from "./review-store";
+import type {WaniKaniLessonSession} from "./review-store";
 import type {WaniKaniLessonItem} from "../../native/GatenWaniKani";
 
 /** One titled block of the teach card: a caption and whatever it introduces. */
@@ -62,19 +62,7 @@ function LessonSection({title, children}: {title: string; children: React.ReactN
  * a couple of example sentences when WaniKani gives them. Nothing here is a question; the reader is
  * only being introduced.
  */
-function TeachingCard({
-  item,
-  note,
-  onToggleNote,
-  onNoteEntry,
-  onSaveNote,
-}: {
-  item: WaniKaniLessonItem;
-  note: WaniKaniNoteState;
-  onToggleNote: () => void;
-  onNoteEntry: (field: "meaning" | "reading", text: string) => void;
-  onSaveNote: () => void;
-}) {
+function TeachingCard({item}: {item: WaniKaniLessonItem}) {
   const {colors} = useTheme();
   const characters = item.characters;
   const single = characters != null && [...characters].length === 1;
@@ -136,14 +124,6 @@ function TeachingCard({
           ))}
         </LessonSection>
       )}
-      <LessonSection title="Note">
-        <NoteEditor
-          note={note}
-          onToggle={onToggleNote}
-          onEntry={onNoteEntry}
-          onSave={onSaveNote}
-        />
-      </LessonSection>
     </>
   );
 }
@@ -155,9 +135,6 @@ export function WaniKaniLesson({
   onNext,
   onEntry,
   onCheck,
-  onToggleNote,
-  onNoteEntry,
-  onSaveNote,
   onRetrySubmit,
 }: {
   session: WaniKaniLessonSession;
@@ -166,9 +143,6 @@ export function WaniKaniLesson({
   onNext: () => void;
   onEntry: (text: string) => void;
   onCheck: () => void;
-  onToggleNote: () => void;
-  onNoteEntry: (field: "meaning" | "reading", text: string) => void;
-  onSaveNote: () => void;
   onRetrySubmit: () => void;
 }) {
   const {colors} = useTheme();
@@ -210,13 +184,7 @@ export function WaniKaniLesson({
         >
           <View style={[styles.content, {paddingHorizontal: contentInset}]}>
             {teaching ? (
-              <TeachingCard
-                item={item}
-                note={session.note}
-                onToggleNote={onToggleNote}
-                onNoteEntry={onNoteEntry}
-                onSaveNote={onSaveNote}
-              />
+              <TeachingCard item={item} />
             ) : (
               <>
                 <SubjectBadge type={item.type} level={item.level} />
@@ -237,7 +205,7 @@ export function WaniKaniLesson({
                     </Text>
                   )}
                   <View style={styles.taskPillWrap}>
-                    <TaskPill task={reading ? "reading" : "meaning"} />
+                    <TaskLabel task={reading ? "reading" : "meaning"} />
                   </View>
                 </View>
                 <View style={styles.answerField}>

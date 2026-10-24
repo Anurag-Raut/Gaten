@@ -45,7 +45,7 @@ import {
   ProgressLine,
   SubHeader,
 } from "./review-ui";
-import {NoteEditor, SubjectBadge, TaskPill} from "./wanikani-card-ui";
+import {SubjectBadge, TaskLabel} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
 import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
@@ -118,9 +118,6 @@ export function WaniKaniReview({
   onEntry,
   onCheck,
   onContinue,
-  onToggleNote,
-  onNoteEntry,
-  onSaveNote,
   onRetrySubmit,
 }: {
   session: WaniKaniSession;
@@ -129,9 +126,6 @@ export function WaniKaniReview({
   onEntry: (text: string) => void;
   onCheck: () => void;
   onContinue: () => void;
-  onToggleNote: () => void;
-  onNoteEntry: (field: "meaning" | "reading", text: string) => void;
-  onSaveNote: () => void;
   onRetrySubmit: () => void;
 }) {
   const {colors} = useTheme();
@@ -220,7 +214,7 @@ export function WaniKaniReview({
                 </Text>
               )}
               <View style={styles.taskPillWrap}>
-                <TaskPill task={reading ? "reading" : "meaning"} />
+                <TaskLabel task={reading ? "reading" : "meaning"} />
               </View>
             </View>
             {session.items.length > 1 && session.items.length <= 10 && (
@@ -318,14 +312,6 @@ export function WaniKaniReview({
                   </View>
                 )}
                 {revealed && <ReviewDetails item={item} tab={activeTab} />}
-                {revealed && (
-                  <NoteEditor
-                    note={session.note}
-                    onToggle={onToggleNote}
-                    onEntry={onNoteEntry}
-                    onSave={onSaveNote}
-                  />
-                )}
               </>
             )}
             {failed && (

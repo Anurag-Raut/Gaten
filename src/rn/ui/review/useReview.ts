@@ -36,10 +36,6 @@ export const reviewActions = {
   lessonNext: () => reviewStore.lessonNext(),
   lessonEntry: (text: string) => reviewStore.lessonEntry(text),
   lessonCheck: () => reviewStore.lessonCheck(),
-  lessonToggleNote: () => reviewStore.lessonToggleNote(),
-  lessonNoteEntry: (field: "meaning" | "reading", text: string) =>
-    reviewStore.lessonNoteEntry(field, text),
-  lessonSaveNote: () => reviewStore.lessonSaveNote(),
   lessonRetrySubmit: () => reviewStore.lessonRetrySubmit(),
   permissionDenied: () => reviewStore.permissionDenied(),
   startDeck: (deck: Parameters<typeof reviewStore.startDeck>[0]) =>
@@ -57,10 +53,6 @@ export const reviewActions = {
   wkEntry: (text: string) => reviewStore.wkEntry(text),
   wkCheck: () => reviewStore.wkCheck(),
   wkContinue: () => reviewStore.wkContinue(),
-  wkToggleNote: () => reviewStore.wkToggleNote(),
-  wkNoteEntry: (field: "meaning" | "reading", text: string) =>
-    reviewStore.wkNoteEntry(field, text),
-  wkSaveNote: () => reviewStore.wkSaveNote(),
   wkRetrySubmit: () => reviewStore.wkRetrySubmit(),
   retryWaniKani: () => reviewStore.retryWaniKani(),
   onPaused: () => reviewStore.onPaused(),

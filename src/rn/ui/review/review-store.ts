@@ -40,7 +40,6 @@ import type {
   WaniKaniLessonItem,
   WaniKaniLearningPreferences,
   WaniKaniReviewItem,
-  WaniKaniStudyMaterial,
 } from "../../native/GatenWaniKani";
 
 /** Why an Anki review cannot go on — the Kotlin AnkiReviewFailure's own names. */
@@ -67,38 +66,6 @@ export interface ReviewCard {
   /** The sentence the note itself carries, readable offline; null when it has none. */
   exampleSentence: string | null;
   typedAnswer: boolean;
-}
-
-/**
- * One subject's note editor, when the answer details are open. The drafts hold what is typed; the
- * material holds what WaniKani last answered with, so a save can address the reader's existing record
- * and send its synonyms back unchanged rather than erasing them.
- */
-export interface WaniKaniNoteState {
-  /** The saved study material, or null when the reader has none for this subject yet. */
-  material: WaniKaniStudyMaterial | null;
-  /** `idle` before the first read, then loading / ready / failed. */
-  status: "idle" | "loading" | "ready" | "failed";
-  /** True while the editor itself is open. */
-  open: boolean;
-  meaningDraft: string;
-  readingDraft: string;
-  /** True while a save is in flight, and whether the last save failed. */
-  saving: boolean;
-  saveFailed: boolean;
-}
-
-/** The editor before it has read or written anything for a subject. */
-function emptyNoteState(): WaniKaniNoteState {
-  return {
-    material: null,
-    status: "idle",
-    open: false,
-    meaningDraft: "",
-    readingDraft: "",
-    saving: false,
-    saveFailed: false,
-  };
 }
 
 /**
@@ -136,8 +103,6 @@ export interface WaniKaniSession {
   failure: WaniKaniFailure | null;
   /** True when the submission was refused for the token rather than for the network. */
   authRejected: boolean;
-  /** This subject's own note editor and the study material behind it. */
-  note: WaniKaniNoteState;
 }
 
 /**
@@ -172,8 +137,6 @@ export interface WaniKaniLessonSession {
   doneParts: number;
   /** Teach cards plus quiz parts, the denominator the progress line moves against. */
   totalParts: number;
-  /** The teaching card's own note editor and the study material behind it. */
-  note: WaniKaniNoteState;
 }
 
 /** How fresh the hub's numbers are, so the page can say what it is showing. */
@@ -372,7 +335,6 @@ function startWaniKaniSession(items: WaniKaniReviewItem[]): WaniKaniSession {
     phase: "answering",
     failure: null,
     authRejected: false,
-    note: emptyNoteState(),
   };
 }
 
@@ -397,7 +359,6 @@ function startWaniKaniLessonSession(
     authRejected: false,
     doneParts: 0,
     totalParts: batch.length + batch.reduce((total, item) => total + partsOf(item), 0),
-    note: emptyNoteState(),
   };
 }
 
@@ -1012,184 +973,6 @@ class ReviewStore {
   }
 
   /**
-   * Opens or closes the note editor for the subject on screen. Opening reads the reader's study
-   * material the first time (and retries after a failed read); closing on Cancel drops the drafts and
-   * restores the last successfully loaded note.
-   */
-  wkToggleNote() {
-    const step = this.state.step;
-    if (step.kind !== "wkReview") return;
-    const session = step.session;
-    const note = session.note;
-    const opening = !note.open;
-    this.set({
-      step: {
-        kind: "wkReview",
-        session: {
-          ...session,
-          note: opening
-            ? {...note, open: true}
-            : {
-                ...note,
-                open: false,
-                saveFailed: false,
-                meaningDraft: note.material?.meaningNote ?? "",
-                readingDraft: note.material?.readingNote ?? "",
-              },
-        },
-      },
-    });
-    if (opening && (note.status === "idle" || note.status === "failed")) this.readStudyMaterial();
-  }
-
-  /** One keystroke in a note field. */
-  wkNoteEntry(field: "meaning" | "reading", text: string) {
-    const step = this.state.step;
-    if (step.kind !== "wkReview") return;
-    const note = step.session.note;
-    if (note.saving) return;
-    this.set({
-      step: {
-        kind: "wkReview",
-        session: {
-          ...step.session,
-          note: {
-            ...note,
-            meaningDraft: field === "meaning" ? text : note.meaningDraft,
-            readingDraft: field === "reading" ? text : note.readingDraft,
-          },
-        },
-      },
-    });
-  }
-
-  /**
-   * Reads the subject's own study material, once, when its editor is first opened. The read is tied to
-   * the subject it was made for: a late answer for a subject already left is dropped rather than
-   * written onto the next one's editor.
-   */
-  private readStudyMaterial() {
-    const step = this.state.step;
-    if (step.kind !== "wkReview") return;
-    const session = step.session;
-    const item = session.items[session.index];
-    if (item == null || session.note.saving) return;
-    const index = session.index;
-    const request = this.hubRequest;
-    this.set({
-      step: { kind: "wkReview", session: { ...session, note: { ...session.note, status: "loading" } } },
-    });
-    void (async () => {
-      try {
-        const result = await WaniKani.getStudyMaterial(item.subjectId);
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkReview" || current.session.index !== index) return;
-        const failed = result.status !== "found";
-        const material = result.status === "found" ? result.material : null;
-        const note = current.session.note;
-        this.set({
-          step: {
-            kind: "wkReview",
-            session: {
-              ...current.session,
-              note: {
-                ...note,
-                status: failed ? "failed" : "ready",
-                material: failed ? note.material : material,
-                meaningDraft: failed ? note.meaningDraft : material?.meaningNote ?? "",
-                readingDraft: failed ? note.readingDraft : material?.readingNote ?? "",
-              },
-            },
-          },
-        });
-      } catch (error) {
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkReview" || current.session.index !== index) return;
-        this.set({
-          step: {
-            kind: "wkReview",
-            session: { ...current.session, note: { ...current.session.note, status: "failed" } },
-          },
-        });
-      }
-    })();
-  }
-
-  /**
-   * Saves the note editor's drafts, creating the reader's study material or updating their own. The
-   * material id and synonyms come from the earlier read, so an update keeps the synonyms the editor
-   * does not touch.
-   */
-  wkSaveNote() {
-    const step = this.state.step;
-    if (step.kind !== "wkReview") return;
-    const session = step.session;
-    const note = session.note;
-    const item = session.items[session.index];
-    if (item == null || note.saving || note.status !== "ready") return;
-    const index = session.index;
-    const request = this.hubRequest;
-    this.set({
-      step: {
-        kind: "wkReview",
-        session: { ...session, note: { ...note, saving: true, saveFailed: false } },
-      },
-    });
-    void (async () => {
-      try {
-        const result = await WaniKani.saveStudyMaterial(
-          item.subjectId,
-          note.material?.id ?? 0,
-          note.meaningDraft,
-          note.readingDraft,
-          note.material?.meaningSynonyms ?? []
-        );
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkReview" || current.session.index !== index) return;
-        if (result.status === "saved") {
-          this.set({
-            step: {
-              kind: "wkReview",
-              session: {
-                ...current.session,
-                note: {
-                  ...current.session.note,
-                  status: "ready",
-                  saving: false,
-                  saveFailed: false,
-                  material: result.material,
-                  meaningDraft: result.material.meaningNote,
-                  readingDraft: result.material.readingNote,
-                },
-              },
-            },
-          });
-        } else {
-          this.set({
-            step: {
-              kind: "wkReview",
-              session: { ...current.session, note: { ...current.session.note, saving: false, saveFailed: true } },
-            },
-          });
-        }
-      } catch (error) {
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkReview" || current.session.index !== index) return;
-        this.set({
-          step: {
-            kind: "wkReview",
-            session: { ...current.session, note: { ...current.session.note, saving: false, saveFailed: true } },
-          },
-        });
-      }
-    })();
-  }
-
-  /**
    * Sends the subject's completed review. The counters are the ones WaniKani asks for, taken from the
    * session as they were counted; a subject that was answered wrongly is still submitted, because that
    * is how WaniKani learns the answer was wrong.
@@ -1301,7 +1084,6 @@ class ReviewStore {
           phase: "answering",
           failure: null,
           authRejected: false,
-          note: emptyNoteState(),
         },
       },
     });
@@ -1329,7 +1111,6 @@ class ReviewStore {
             feedback: null,
             retrying: false,
             doneParts: session.batch.length,
-            note: emptyNoteState(),
           },
         },
       });
@@ -1338,215 +1119,9 @@ class ReviewStore {
     this.set({
       step: {
         kind: "wkLesson",
-        session: { ...session, teachIndex: next, doneParts: next, note: emptyNoteState() },
+        session: { ...session, teachIndex: next, doneParts: next },
       },
     });
-  }
-
-  /**
-   * Opens or closes the note editor on the teaching card. Opening reads the reader's study material
-   * the first time; closing keeps the saved note and discards the drafts.
-   */
-  /**
-   * Opens or closes the teaching card's note editor. Opening reads the study material the first time
-   * (and retries after a failed read); closing on Cancel drops the drafts and restores the last
-   * successfully loaded note.
-   */
-  lessonToggleNote() {
-    const step = this.state.step;
-    if (step.kind !== "wkLesson" || step.session.phase !== "teaching") return;
-    const session = step.session;
-    const note = session.note;
-    const opening = !note.open;
-    this.set({
-      step: {
-        kind: "wkLesson",
-        session: {
-          ...session,
-          note: opening
-            ? {...note, open: true}
-            : {
-                ...note,
-                open: false,
-                saveFailed: false,
-                meaningDraft: note.material?.meaningNote ?? "",
-                readingDraft: note.material?.readingNote ?? "",
-              },
-        },
-      },
-    });
-    if (opening && (note.status === "idle" || note.status === "failed")) this.readLessonStudyMaterial();
-  }
-
-  /** One keystroke in a teaching card's note field. */
-  lessonNoteEntry(field: "meaning" | "reading", text: string) {
-    const step = this.state.step;
-    if (step.kind !== "wkLesson") return;
-    const note = step.session.note;
-    if (note.saving) return;
-    this.set({
-      step: {
-        kind: "wkLesson",
-        session: {
-          ...step.session,
-          note: {
-            ...note,
-            meaningDraft: field === "meaning" ? text : note.meaningDraft,
-            readingDraft: field === "reading" ? text : note.readingDraft,
-          },
-        },
-      },
-    });
-  }
-
-  /**
-   * Reads the teaching card's own study material, once, when its editor is first opened. Tied to the
-   * card it was made for, so a late answer for a card already left is dropped rather than written onto
-   * the next one's editor.
-   */
-  private readLessonStudyMaterial() {
-    const step = this.state.step;
-    if (step.kind !== "wkLesson" || step.session.phase !== "teaching") return;
-    const session = step.session;
-    const item = session.batch[session.teachIndex];
-    if (item == null || session.note.saving) return;
-    const index = session.teachIndex;
-    const request = this.hubRequest;
-    this.set({
-      step: { kind: "wkLesson", session: { ...session, note: { ...session.note, status: "loading" } } },
-    });
-    void (async () => {
-      try {
-        const result = await WaniKani.getStudyMaterial(item.subjectId);
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (
-          current.kind !== "wkLesson" ||
-          current.session.phase !== "teaching" ||
-          current.session.teachIndex !== index
-        ) {
-          return;
-        }
-        const failed = result.status !== "found";
-        const material = result.status === "found" ? result.material : null;
-        const note = current.session.note;
-        this.set({
-          step: {
-            kind: "wkLesson",
-            session: {
-              ...current.session,
-              note: {
-                ...note,
-                status: failed ? "failed" : "ready",
-                material: failed ? note.material : material,
-                meaningDraft: failed ? note.meaningDraft : material?.meaningNote ?? "",
-                readingDraft: failed ? note.readingDraft : material?.readingNote ?? "",
-              },
-            },
-          },
-        });
-      } catch (error) {
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (
-          current.kind !== "wkLesson" ||
-          current.session.phase !== "teaching" ||
-          current.session.teachIndex !== index
-        ) {
-          return;
-        }
-        this.set({
-          step: {
-            kind: "wkLesson",
-            session: { ...current.session, note: { ...current.session.note, status: "failed" } },
-          },
-        });
-      }
-    })();
-  }
-
-  /**
-   * Saves the teaching card's note drafts, creating the reader's study material or updating their
-   * own. The material id and synonyms come from the earlier read, so an update keeps the synonyms the
-   * editor does not touch.
-   */
-  lessonSaveNote() {
-    const step = this.state.step;
-    if (step.kind !== "wkLesson" || step.session.phase !== "teaching") return;
-    const session = step.session;
-    const note = session.note;
-    const item = session.batch[session.teachIndex];
-    if (item == null || note.saving || note.status !== "ready") return;
-    const index = session.teachIndex;
-    const request = this.hubRequest;
-    this.set({
-      step: {
-        kind: "wkLesson",
-        session: { ...session, note: { ...note, saving: true, saveFailed: false } },
-      },
-    });
-    void (async () => {
-      try {
-        const result = await WaniKani.saveStudyMaterial(
-          item.subjectId,
-          note.material?.id ?? 0,
-          note.meaningDraft,
-          note.readingDraft,
-          note.material?.meaningSynonyms ?? []
-        );
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (
-          current.kind !== "wkLesson" ||
-          current.session.phase !== "teaching" ||
-          current.session.teachIndex !== index
-        ) {
-          return;
-        }
-        if (result.status === "saved") {
-          this.set({
-            step: {
-              kind: "wkLesson",
-              session: {
-                ...current.session,
-                note: {
-                  ...current.session.note,
-                  status: "ready",
-                  saving: false,
-                  saveFailed: false,
-                  material: result.material,
-                  meaningDraft: result.material.meaningNote,
-                  readingDraft: result.material.readingNote,
-                },
-              },
-            },
-          });
-        } else {
-          this.set({
-            step: {
-              kind: "wkLesson",
-              session: { ...current.session, note: { ...current.session.note, saving: false, saveFailed: true } },
-            },
-          });
-        }
-      } catch (error) {
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (
-          current.kind !== "wkLesson" ||
-          current.session.phase !== "teaching" ||
-          current.session.teachIndex !== index
-        ) {
-          return;
-        }
-        this.set({
-          step: {
-            kind: "wkLesson",
-            session: { ...current.session, note: { ...current.session.note, saving: false, saveFailed: true } },
-          },
-        });
-      }
-    })();
   }
 
   /** One keystroke in the lesson quiz's answer field. */
