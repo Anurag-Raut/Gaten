@@ -142,7 +142,11 @@ private fun decodeReviewSubject(resource: JSONObject): WaniKaniReviewItem? {
         meanings = accepted,
         primaryMeaning = accepted.first(),
         readings = readings,
-        primaryReading = readings.firstOrNull()
+        primaryReading = readings.firstOrNull(),
+        level = data.optInt("level", 0),
+        meaningMnemonic = plainWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
+        readingMnemonic = plainWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
+        contextSentences = decodeContextSentences(data.optJSONArray("context_sentences"))
     )
 }
 

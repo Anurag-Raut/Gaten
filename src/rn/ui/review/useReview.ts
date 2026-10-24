@@ -52,6 +52,7 @@ export const reviewActions = {
   closeDetails: () => reviewStore.closeDetails(),
   wkEntry: (text: string) => reviewStore.wkEntry(text),
   wkCheck: () => reviewStore.wkCheck(),
+  wkContinue: () => reviewStore.wkContinue(),
   wkRetrySubmit: () => reviewStore.wkRetrySubmit(),
   retryWaniKani: () => reviewStore.retryWaniKani(),
   onPaused: () => reviewStore.onPaused(),

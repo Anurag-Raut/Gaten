@@ -93,7 +93,12 @@ export interface WaniKaniSession {
    * the wrong one opened.
    */
   retrying: boolean;
-  phase: "answering" | "submitting" | "submitFailed";
+  /**
+   * `reviewed` is the wrong answer's own stop: the right answer is on screen and the reader must
+   * continue (then type it) before the part can finish. `submitting` and `submitFailed` are the
+   * review being sent; a right answer goes straight there, as WaniKani's own flow does.
+   */
+  phase: "answering" | "reviewed" | "submitting" | "submitFailed";
   /** Why the last submission failed, or null when it has not failed — or the token was refused. */
   failure: WaniKaniFailure | null;
   /** True when the submission was refused for the token rather than for the network. */
@@ -900,10 +905,6 @@ class ReviewStore {
         if (current.kind !== "wkReview") return;
         const live = current.session;
         if (!correct) {
-          const answer =
-            session.part === "reading"
-              ? item.primaryReading ?? ""
-              : item.primaryMeaning;
           const counted =
             session.part === "reading"
               ? { incorrectReading: live.incorrectReading + 1 }
@@ -914,14 +915,21 @@ class ReviewStore {
               session: {
                 ...live,
                 ...counted,
-                entry: "",
+                // The wrong attempt stays on screen, in red, behind its own `reviewed` stop. The card
+                // does not change and nothing is submitted: `wkContinue` only clears the field for the
+                // retry this rule requires. The feedback names no correct answer - that stays behind
+                // the reader's own Show answer disclosure.
+                entry: live.entry,
                 retrying: true,
-                feedback: { tone: "wrong", text: `Incorrect — the answer is ${answer}` },
+                phase: "reviewed",
+                feedback: { tone: "wrong", text: "Incorrect" },
               },
             },
           });
           return;
         }
+        // A right answer needs no stop of its own: it moves straight on, exactly as WaniKani's own
+        // flow does - to the reading when one is still to come, or to the review's one submission.
         if (session.part === "meaning" && item.readings.length > 0) {
           this.set({
             step: {
@@ -946,6 +954,22 @@ class ReviewStore {
   }
 
   /**
+   * Continue after a wrong answer. WaniKani makes the reader type the right answer before the subject
+   * moves on, so this keeps the same card and prompt: it only clears the field for the retry, leaving
+   * the recorded wrong count and the answer hint in place. It never advances the queue - the next
+   * check decides that.
+   */
+  wkContinue() {
+    const step = this.state.step;
+    if (step.kind !== "wkReview") return;
+    const session = step.session;
+    if (session.phase !== "reviewed" || !session.retrying) return;
+    this.set({
+      step: { kind: "wkReview", session: { ...session, phase: "answering", entry: "" } },
+    });
+  }
+
+  /**
    * Sends the subject's completed review. The counters are the ones WaniKani asks for, taken from the
    * session as they were counted; a subject that was answered wrongly is still submitted, because that
    * is how WaniKani learns the answer was wrong.
@@ -958,7 +982,18 @@ class ReviewStore {
     const item = session.items[session.index];
     if (item == null) return;
     this.set({
-      step: { kind: "wkReview", session: { ...session, phase: "submitting", failure: null, authRejected: false } },
+      step: {
+        kind: "wkReview",
+        // The answer that earned the submission is correct, so the field shows it in green with the
+        // kit's explicit mark while the request is in flight - never a wrong answer's feedback.
+        session: {
+          ...session,
+          phase: "submitting",
+          feedback: { tone: "right", text: "✓ Correct" },
+          failure: null,
+          authRejected: false,
+        },
+      },
     });
     const request = this.hubRequest;
     void (async () => {
@@ -1079,7 +1114,10 @@ class ReviewStore {
       return;
     }
     this.set({
-      step: { kind: "wkLesson", session: { ...session, teachIndex: next, doneParts: next } },
+      step: {
+        kind: "wkLesson",
+        session: { ...session, teachIndex: next, doneParts: next },
+      },
     });
   }
 
@@ -1120,8 +1158,6 @@ class ReviewStore {
         if (current.kind !== "wkLesson") return;
         const live = current.session;
         if (!correct) {
-          const answer =
-            session.part === "reading" ? item.primaryReading ?? "" : item.primaryMeaning;
           const counted =
             session.part === "reading"
               ? { incorrectReading: live.incorrectReading + 1 }
@@ -1134,7 +1170,7 @@ class ReviewStore {
                 ...counted,
                 entry: "",
                 retrying: true,
-                feedback: { tone: "wrong", text: `Incorrect — the answer is ${answer}` },
+                feedback: { tone: "wrong", text: "Incorrect" },
               },
             },
           });
@@ -1174,7 +1210,13 @@ class ReviewStore {
     this.set({
       step: {
         kind: "wkLesson",
-        session: { ...session, phase: "starting", failure: null, authRejected: false },
+        session: {
+          ...session,
+          phase: "starting",
+          feedback: { tone: "right", text: "✓ Correct" },
+          failure: null,
+          authRejected: false,
+        },
       },
     });
     const request = this.hubRequest;

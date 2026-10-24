@@ -623,6 +623,22 @@ class GatenWaniKaniModule(
         putString("primaryMeaning", primaryMeaning)
         putArray("readings", readings.toJsArray())
         putString("primaryReading", primaryReading)
+        putInt("level", level)
+        putString("meaningMnemonic", meaningMnemonic)
+        putString("readingMnemonic", readingMnemonic)
+        putArray(
+            "contextSentences",
+            Arguments.createArray().apply {
+                contextSentences.forEach { sentence ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putString("japanese", sentence.japanese)
+                            putString("english", sentence.english)
+                        }
+                    )
+                }
+            }
+        )
     }
 
     private fun WaniKaniLessonItem.toJsMap(): WritableMap = Arguments.createMap().apply {

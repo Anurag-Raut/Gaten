@@ -209,6 +209,14 @@ export interface WaniKaniReviewItem {
   readings: string[];
   /** The primary reading, or null when the subject is not quizzed on one. */
   primaryReading: string | null;
+  /** WaniKani's level for the subject, shown beside its type; 0 when the payload omitted it. */
+  level: number;
+  /** The subject's meaning mnemonic, or empty when WaniKani gives none. */
+  meaningMnemonic: string;
+  /** The subject's reading mnemonic, or empty when WaniKani gives none. */
+  readingMnemonic: string;
+  /** Example sentences for a vocabulary subject; empty for the kinds WaniKani gives none. */
+  contextSentences: WaniKaniContextSentence[];
 }
 
 /** What the queue answered: the subjects due now, or the one thing that is missing. */

@@ -289,6 +289,7 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onBack={leave}
             onEntry={(text) => reviewActions.wkEntry(text)}
             onCheck={() => reviewActions.wkCheck()}
+            onContinue={() => reviewActions.wkContinue()}
             onRetrySubmit={() => reviewActions.wkRetrySubmit()}
           />
         ) : step.kind === "wkLesson" ? (

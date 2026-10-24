@@ -7,7 +7,9 @@
 package com.gaten.app.wanikani
 
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -67,6 +69,32 @@ class WaniKaniReviewTest {
         // request, by the ids the queue is about.
         assertEquals("assignments?immediately_available_for_review=true&hidden=false", api.requests[0])
         assertEquals("subjects?ids=1,917", api.requests[1])
+    }
+
+    @Test
+    fun `a queued vocabulary carries the level, mnemonics and examples its details show`() = runBlocking {
+        val api = queueApi(
+            assignments = WaniKaniJson.collection(
+                WaniKaniJson.assignment(id = 10, subjectId = 2467, subjectType = "vocabulary", availableAt = EARLY)
+            ),
+            subjects = WaniKaniJson.collection(
+                WaniKaniJson.vocabulary(
+                    id = 2467,
+                    level = 27,
+                    contextSentences = listOf("靴屋" to "shoe store"),
+                    meaningMnemonic = "A single <radical>ground</radical> stroke.",
+                    readingMnemonic = "It is read <reading>いち</reading>."
+                )
+            )
+        )
+
+        val item = (client(api).reviewQueue() as WaniKaniReviewQueue.Available).items.single()
+        assertEquals(27, item.level)
+        // The mnemonics are the plain text the details render: WaniKani's markup is stripped, not
+        // shown, exactly as the lesson decoder already does.
+        assertEquals("A single ground stroke.", item.meaningMnemonic)
+        assertEquals("It is read いち.", item.readingMnemonic)
+        assertEquals(listOf(WaniKaniContextSentence("靴屋", "shoe store")), item.contextSentences)
     }
 
     @Test
@@ -295,9 +323,13 @@ private class FakeReviewApi : WaniKaniApi() {
     val requests = mutableListOf<String>()
     val posts = mutableListOf<String>()
 
+    val puts = mutableListOf<String>()
+    val putPaths = mutableListOf<String>()
+
     var assignmentHandler: () -> WaniKaniFetch = { WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE) }
     var subjectHandler: () -> WaniKaniFetch = { WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE) }
     var postHandler: (String) -> WaniKaniFetch = { WaniKaniFetch.Body("""{"id":1}""") }
+    var putHandler: (String) -> WaniKaniFetch = { WaniKaniFetch.Body("""{"id":1}""") }
 
     override suspend fun get(path: String, query: List<Pair<String, String>>, token: String): WaniKaniFetch {
         requests += if (query.isEmpty()) {
@@ -315,6 +347,12 @@ private class FakeReviewApi : WaniKaniApi() {
     override suspend fun post(path: String, body: String, token: String): WaniKaniFetch {
         posts += body
         return postHandler(body)
+    }
+
+    override suspend fun put(path: String, body: String, token: String): WaniKaniFetch {
+        putPaths += path
+        puts += body
+        return putHandler(body)
     }
 }
 
