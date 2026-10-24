@@ -8,6 +8,7 @@ package com.gaten.app.trigger
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.ArgbEvaluator
 import android.animation.TimeInterpolator
 import android.animation.ValueAnimator
 import android.content.Context
@@ -23,11 +24,9 @@ import android.view.Choreographer
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
-import android.widget.LinearLayout
 import androidx.compose.animation.core.Easing
 import androidx.compose.ui.graphics.toArgb
 import com.gaten.app.R
@@ -45,17 +44,14 @@ private const val TAG = "Gaten"
 private const val BUBBLE_DP = 48
 private const val ICON_DP = 24
 
-/** The remove button beside the bubble: its own touch target, the same height as the bubble. */
-private const val CLOSE_DP = 48
-private const val CLOSE_ICON_DP = 24
-
-/** Gap between the bubble and the remove button. */
-private const val GROUP_GAP_DP = 8
+/** The drop target's diameter and glyph. */
+private const val DISMISS_DP = 48
+private const val DISMISS_ICON_DP = 24
 
 /** The hard keyline inside the circle's edge, drawn in the glyph's own colour. */
 private const val PERIMETER_DP = 2
 
-/** Gap kept between the control group and the screen's right edge on first show. */
+/** Gap kept between the bubble and the screen's right edge on first show. */
 private const val EDGE_MARGIN_DP = 8
 
 /** Distance the finger must travel before a press becomes a drag instead of a tap. */
@@ -64,42 +60,57 @@ private const val TOUCH_SLOP_DP = 8f
 /** Where the bubble starts vertically: a little above the middle, clear of both screen edges. */
 private const val DEFAULT_HEIGHT_FRACTION = 0.45f
 
-/** Longest [FloatingTriggerButton.hideThen] waits for the cleared bubble to reach the screen. */
+/**
+ * Where the drop target sits vertically, as a fraction of the usable display: in the lower half but
+ * clear of the very bottom, so the navigation bar and the system's own bottom gesture stay out of
+ * the way.
+ */
+private const val DISMISS_BOTTOM_FRACTION = 0.75f
+
+/** Extra room around the drop target, so a bubble dragged near it still counts as a drop. */
+private const val DISMISS_SLOP_DP = 20
+
+/** How far the drop target grows while a dragged bubble is over it. */
+private const val DISMISS_HOT_SCALE = 1.15f
+
+/** Longest [FloatingTriggerButton.hideThen] waits for the cleared control to reach the screen. */
 private const val GONE_TIMEOUT_MS = 150L
 
 /**
- * The floating lookup trigger: a small bubble in its own accessibility-overlay window, with a
- * remove button beside it.
+ * The floating lookup trigger: a small bubble in its own accessibility-overlay window, and — while
+ * the reader is dragging it — a remove target in a second window, centred horizontally in the lower
+ * part of the usable display.
  *
- * The window is sized to the whole control group ([WindowManager.LayoutParams.WRAP_CONTENT]) and is
- * `FLAG_NOT_TOUCH_MODAL`, so a touch anywhere else falls through to the app behind instead of being
- * swallowed by an invisible full-screen window. Both controls are plain Android views because this
- * window is added from the accessibility service — there is no composition to host Compose.
+ * The bubble is the only thing that is always on screen. A press that becomes a drag brings the
+ * target up, and a release or cancellation takes it down again; a release over the target writes the
+ * floating-button preference off and removes the bubble, while a release anywhere else only keeps
+ * the bubble's new position. The target is still a control with its own description, so an
+ * accessibility service can activate the one action it names.
  *
- * The window does not fit the system bars ([WindowManager.LayoutParams.setFitInsetsTypes] cleared,
- * `FLAG_LAYOUT_IN_SCREEN` below API 30), so its `x`/`y` are display coordinates: the position asked
- * for, the one persisted, the one a drag moves on from and the one the window reports all mean the
- * same place on screen. Left at the default, such a window is laid out inside the inset-adjusted
- * parent frame, whose origin sits under the status bar — the group then draws, is stored and is
+ * Both windows are `WRAP_CONTENT` and `FLAG_NOT_TOUCH_MODAL`, so a touch anywhere else falls
+ * through to the app behind instead of being swallowed by an invisible full-screen window. Both are
+ * plain Android views because these windows are added from the accessibility service — there is no
+ * composition to host Compose.
+ *
+ * Neither window fits the system bars ([WindowManager.LayoutParams.setFitInsetsTypes] cleared,
+ * `FLAG_LAYOUT_IN_SCREEN` below API 30), so their `x`/`y` are display coordinates: the position
+ * asked for, the one persisted, the one a drag moves on from and the one the window reports all mean
+ * the same place on screen. Left at the default, such a window is laid out inside the inset-adjusted
+ * parent frame, whose origin sits under the status bar — the bubble then draws, is stored and is
  * reported one status-bar height away from the display position it was given, which is what a tap
- * aimed with those numbers misses. Every position this class takes in — restored, dragged,
- * re-clamped — is clamped against the whole group, so it can never be stored outside the area it can
- * be touched in.
+ * aimed with those numbers misses. Every bubble position this class takes in — restored, dragged,
+ * re-clamped — is clamped into the display area its own context reports, so the bubble can never be
+ * stored outside the area it can be touched in. The target is placed by the display's own centre and
+ * the same box, so a rotation re-centres it too.
  *
  * [show]/[hide] are idempotent and hop to the main thread themselves, since adding or removing a
  * window anywhere else throws.
  *
- * The group's motion is its opacity: it fades in where it was left, and fades out when the reader
- * switches it off with the remove button or in settings. The bubble itself also changes colour under
- * a finger, which is the press feedback; its geometry is never animated — the drag and the clamp
- * answer a finger, and the service takes the window down outright before a capture.
- *
- * The remove button carries its own accessible touch target. It is a sibling of the bubble, never a
- * child of it, so a press on either one is unambiguous: the bubble's touch listener only ever sees
- * presses on the bubble, and the button's click listener only ever sees presses on the button. The
- * button writes the floating-button preference off and lets the ordinary fade take the group down;
- * the Screen lookup settings switch it back on, which shows the group again. Lookup mode and the
- * Quick Settings tile are untouched by it.
+ * The bubble's motion is its opacity: it fades in where it was left, and fades out when the reader
+ * switches it off or a drag drops it on the target. The target has its own short fade of its own.
+ * The bubble also changes colour under a finger, and the target changes colour while the dragged
+ * finger is over it; neither is a geometry animation — the drag and the clamp answer a finger, and
+ * the service takes the windows down outright before a capture.
  */
 class FloatingTriggerButton(
     private val context: Context,
@@ -110,20 +121,23 @@ class FloatingTriggerButton(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val density = context.resources.displayMetrics.density
     private val bubblePx = (BUBBLE_DP * density).toInt()
-    private val closePx = (CLOSE_DP * density).toInt()
-    private val groupGapPx = (GROUP_GAP_DP * density).toInt()
-    private val groupWidthPx = bubblePx + groupGapPx + closePx
-    private val groupHeightPx = maxOf(bubblePx, closePx)
+    private val dismissPx = (DISMISS_DP * density).toInt()
+    private val dismissSlopPx = (DISMISS_SLOP_DP * density).toInt()
     private val touchSlopPx = TOUCH_SLOP_DP * density
     private val edgeMarginPx = (EDGE_MARGIN_DP * density).toInt()
+    private val strokePx = (PERIMETER_DP * density).toInt()
 
-    /** The group on screen, if any; also the source of truth behind [isShowing]. */
-    private var view: ViewGroup? = null
+    /** The bubble on screen, if any; also the source of truth behind [isShowing]. */
+    private var view: ImageView? = null
     private var params: WindowManager.LayoutParams? = null
 
+    /** The remove target, up only for the length of a drag. */
+    private var dismissView: ImageView? = null
+    private var dismissParams: WindowManager.LayoutParams? = null
+
     /**
-     * The bubble inside [view]. Kept separately because the press feedback repaints this one view,
-     * while the window operations — move, remove, fade — always address the group.
+     * The bubble itself, kept separately because the press feedback repaints this one view, while
+     * the window operations always address [view].
      */
     private var bubbleView: ImageView? = null
 
@@ -134,13 +148,32 @@ class FloatingTriggerButton(
     private var bubbleInkNormal = 0
     private var bubbleInkPressed = 0
 
+    /** The target's own two states, so a drag over it can say so without rebuilding the view. */
+    private var dismissBackground: GradientDrawable? = null
+    private var dismissFillNormal = 0
+    private var dismissInkNormal = 0
+    private var dismissStrokeNormal = 0
+    private var dismissFillHot = 0
+    private var dismissInkHot = 0
+
     /**
-     * Whatever is writing the group's opacity: an entrance, or the fade out of a group the reader
+     * Whatever is writing the bubble's opacity: an entrance, or the fade out of a bubble the reader
      * switched off. One at a time, so two of them can never fight over it.
      */
     private var alphaAnimator: ValueAnimator? = null
 
-    /** True from the start of a fade out until the group is gone or is asked for again. */
+    /**
+     * Whatever is writing the target's opacity: the fade in of a drag's target, or its fade out on
+     * release or cancellation. Separate from the bubble's, which never runs at the same time as
+     * these in a way that matters.
+     */
+    private var dismissAlphaAnimator: ValueAnimator? = null
+
+    /** Whatever is writing the target's over-it highlight, and how hot it currently is (0..1). */
+    private var dismissHotAnimator: ValueAnimator? = null
+    private var dismissHot = 0f
+
+    /** True from the start of a bubble fade out until the control is gone or asked for again. */
     private var fadingOut = false
 
     // Press bookkeeping for the drag/tap split, reset on every DOWN.
@@ -149,46 +182,48 @@ class FloatingTriggerButton(
     private var downX = 0
     private var downY = 0
     private var dragging = false
+    private var overDismiss = false
 
     /**
-     * True while the group is up and staying up. A group fading out is on its way down and says so,
+     * True while the bubble is up and staying up. A bubble fading out is on its way down and says so,
      * which is what has the service ask for it again if the reader switches it back on inside that
      * fade.
      */
     val isShowing: Boolean
         get() = view != null && !fadingOut
 
-    /** Puts the group up at its restored (or default) position; a no-op when already up. */
+    /** Puts the bubble up at its restored (or default) position; a no-op when already up. */
     fun show() = onMain {
         val existing = view
         if (existing != null) {
-            // A group still fading out — switched back on inside that fade — is this group coming
+            // A bubble still fading out — switched back on inside that fade — is this bubble coming
             // back, not a second one: take the fade over and raise the opacity where it was left
             // standing.
             if (fadingOut) {
                 fadingOut = false
                 pressColor(false)
-                animateAlpha(existing, 1f, Motion.emphasized)
+                animateBubbleAlpha(1f, Motion.emphasized)
             }
             return@onMain
         }
         // The build/position work sits inside the guard too: reading the persisted position and
         // measuring the views touch the same resources addView does, and any of it failing must
-        // leave the control down rather than propagate. A service has no valid overlay window token
+        // leave the bubble down rather than propagate. A service has no valid overlay window token
         // until it is connected to the system, so addView can throw (BadTokenException being the
         // common case) if this runs too early, or if the display is being torn down. Swallowing
         // that keeps the whole service process alive.
         try {
-            val group = buildGroup()
-            val layoutParams = buildParams(restoredOrDefaultPosition())
-            // Invisible until the entrance's first frame lands, so a group returning from a
+            val tone = accentRoles(ThemePreferences.accent(context), isDark())
+            val bubble = buildBubble(tone)
+            val layoutParams = overlayParams(restoredOrDefaultPosition())
+            // Invisible until the entrance's first frame lands, so a bubble returning from a
             // capture cannot flash back at full strength.
-            group.alpha = 0f
-            windowManager.addView(group, layoutParams)
+            bubble.alpha = 0f
+            windowManager.addView(bubble, layoutParams)
             // Only now is the window really on screen; isShowing derives from these.
-            view = group
+            view = bubble
             params = layoutParams
-            animateAlpha(group, 1f, Motion.emphasized)
+            animateBubbleAlpha(1f, Motion.emphasized)
         } catch (e: WindowManager.BadTokenException) {
             logWindowNotAdded("add", e)
         } catch (e: WindowManager.InvalidDisplayException) {
@@ -202,24 +237,26 @@ class FloatingTriggerButton(
         }
     }
 
-    /** Takes the group down; a no-op when it is already down. Drops the window references. */
+    /** Takes the bubble, and any target still up, down; a no-op when already down. */
     fun hide() = onMain {
         val current = view ?: return@onMain
         if (fadesOut(current)) {
             fadingOut = true
-            animateAlpha(current, 0f, Motion.emphasized) {
+            stopDismissAlpha()
+            dismissView?.let { animateDismissAlpha(it, 0f, Motion.emphasized) }
+            animateBubbleAlpha(0f, Motion.emphasized) {
                 fadingOut = false
-                if (view === current) removeNow(current)
+                if (view === current) removeNow()
             }
         } else {
-            removeNow(current)
+            removeNow()
         }
     }
 
     /**
      * Whether this hide may be seen going. Exactly one hide may: the reader switched the control
-     * off — with the remove button or in settings, both of which leave the preference false while
-     * the group is still on screen and opaque. Every other hide — a lock, a teardown, the overlay
+     * off — with the drop target or in settings, both of which leave the preference false while the
+     * bubble is still on screen and opaque. Every other hide — a lock, a teardown, the overlay
      * coming up — is about not being on screen a frame longer than needed, and one of them
      * ([hideThen]) is waited on frame by frame before a screenshot.
      */
@@ -227,18 +264,31 @@ class FloatingTriggerButton(
         current.alpha > 0f && !TriggerPreferences.floatingButtonEnabled(context)
 
     /**
-     * Drops the window. The state goes first: whatever removeViewImmediate does, no view is
-     * retained and isShowing ends false, so a failed removal cannot strand a half-gone group.
+     * Drops both windows. The state goes first: whatever removeViewImmediate does, no view is
+     * retained and isShowing ends false, so a failed removal cannot strand a half-gone control.
      */
-    private fun removeNow(current: View) {
+    private fun removeNow() {
         stopAlpha()
+        stopDismissAlpha()
+        stopDismissHot()
         fadingOut = false
+        val bubble = view
+        val target = dismissView
         view = null
         params = null
+        dismissView = null
+        dismissParams = null
         bubbleView = null
         bubbleBackground = null
+        dismissBackground = null
+        bubble?.let { removeWindow(it) }
+        target?.let { removeWindow(it) }
+    }
+
+    /** One window's own removal, so a failure on one never blocks the other. */
+    private fun removeWindow(target: View) {
         try {
-            windowManager.removeViewImmediate(current)
+            windowManager.removeViewImmediate(target)
         } catch (e: WindowManager.BadTokenException) {
             logWindowNotAdded("remove", e)
         } catch (e: WindowManager.InvalidDisplayException) {
@@ -253,14 +303,14 @@ class FloatingTriggerButton(
     }
 
     /**
-     * Takes the group down and runs [onGone] on the main thread once the display no longer shows
-     * it, so a screenshot taken then cannot contain either control; at once when it is already
-     * down.
+     * Takes the control down and runs [onGone] on the main thread once the display no longer shows
+     * it, so a screenshot taken then cannot contain either window; at once when it is already down.
      *
      * A removed window leaves the screen whenever the window manager gets to it, which can take
-     * several frames. Clearing the group to transparent instead goes out as an ordinary frame:
-     * once that frame is committed to the compositor and one more vsync has passed, it is on
-     * screen. [GONE_TIMEOUT_MS] caps the wait in case no frame is ever drawn (screen off).
+     * several frames. Clearing the control to transparent instead goes out as an ordinary frame:
+     * once that frame is committed to the compositor and one more vsync has passed, it is on screen.
+     * Both windows are cleared in the same main-thread pass, so one frame commit covers them both;
+     * [GONE_TIMEOUT_MS] caps the wait in case no frame is ever drawn (screen off).
      */
     fun hideThen(onGone: () -> Unit) = onMain {
         val current = view
@@ -274,7 +324,7 @@ class FloatingTriggerButton(
                 if (finished) return
                 finished = true
                 mainHandler.removeCallbacks(this)
-                // Only this group: a newer one shown meanwhile is not ours to take down.
+                // Only this bubble: a newer one shown meanwhile is not ours to take down.
                 if (view === current) hide()
                 onGone()
             }
@@ -283,11 +333,13 @@ class FloatingTriggerButton(
             mainHandler.post { Choreographer.getInstance().postFrameCallback { finish.run() } }
         }
         // The opacity is written here and now, so nothing else may be writing it: an entrance or a
-        // fade out still running would put the group back on screen inside this wait. Any fade is
-        // over with it — from here this group only has one way left to go.
+        // fade still running would put the control back on screen inside this wait. Any fade is over
+        // with it — from here these windows only have one way left to go.
         stopAlpha()
+        stopDismissAlpha()
         fadingOut = false
         current.alpha = 0f
+        dismissView?.alpha = 0f
         mainHandler.postDelayed(finish, GONE_TIMEOUT_MS)
     }
 
@@ -296,28 +348,61 @@ class FloatingTriggerButton(
         Log.w(TAG, "Floating trigger: could not $operation the overlay window (not shown)", cause)
     }
 
+    /** The app's own light/dark choice resolved against the system setting, as the theme does. */
+    private fun isDark(): Boolean = ThemePreferences.themeMode(context).isDark(
+        (context.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    )
+
     /**
-     * The horizontal control group: the lookup bubble, a gap, and the remove button. A [LinearLayout]
-     * because the window has no composition, and because each control must keep its own touch
-     * bounds — the group only positions them.
+     * Builds the remove target and fades it in. Called once a press has become a drag; a no-op when
+     * the target is already up, which is what a re-entry inside its own fade out looks like.
      */
-    private fun buildGroup(): ViewGroup {
-        val dark = ThemePreferences.themeMode(context).isDark(
-            (context.resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        )
-        val tone = accentRoles(ThemePreferences.accent(context), dark)
-        val neutral = gatenNeutrals(dark)
-        val bubble = buildBubble(tone)
-        val close = buildCloseButton(neutral)
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(
-                bubble,
-                LinearLayout.LayoutParams(bubblePx, bubblePx).apply { rightMargin = groupGapPx }
-            )
-            addView(close, LinearLayout.LayoutParams(closePx, closePx))
+    private fun showDismiss() {
+        if (view == null) return
+        if (dismissView != null) {
+            // A target still fading out from the last release is this drag's target coming back:
+            // take the fade over and raise it where it was left standing.
+            stopDismissAlpha()
+            resetDismissHighlight()
+            dismissView?.let { animateDismissAlpha(it, 1f, Motion.emphasized) }
+            return
+        }
+        try {
+            val tone = accentRoles(ThemePreferences.accent(context), isDark())
+            val neutral = gatenNeutrals(isDark())
+            val target = buildDismiss(neutral, tone)
+            val layoutParams = overlayParams(dismissPosition())
+            target.alpha = 0f
+            windowManager.addView(target, layoutParams)
+            dismissView = target
+            dismissParams = layoutParams
+            resetDismissHighlight()
+            animateDismissAlpha(target, 1f, Motion.emphasized)
+        } catch (e: WindowManager.BadTokenException) {
+            logWindowNotAdded("add", e)
+        } catch (e: WindowManager.InvalidDisplayException) {
+            logWindowNotAdded("add", e)
+        } catch (e: IllegalStateException) {
+            logWindowNotAdded("add", e)
+        } catch (e: SecurityException) {
+            logWindowNotAdded("add", e)
+        } catch (e: RuntimeException) {
+            logWindowNotAdded("add", e)
+        }
+    }
+
+    /** Fades the target out and drops its window; a no-op when it is already down. */
+    private fun hideDismiss() {
+        val target = dismissView ?: return
+        stopDismissHot()
+        animateDismissAlpha(target, 0f, Motion.emphasized) {
+            if (dismissView === target) {
+                dismissView = null
+                dismissParams = null
+                dismissBackground = null
+                removeWindow(target)
+            }
         }
     }
 
@@ -342,13 +427,13 @@ class FloatingTriggerButton(
             // One solid colour and one stroke, never a gradient. A drawable's stroke is inset
             // inside its bounds, which is where this keyline belongs: inside the 48 dp circle.
             setColor(primary)
-            setStroke((PERIMETER_DP * density).toInt(), onPrimary)
+            setStroke(strokePx, onPrimary)
         }
         val inset = ((BUBBLE_DP - ICON_DP) / 2f * density).toInt()
         val hint = context.getString(R.string.bubble_lookup_hint)
 
         // The press state repaints this drawable and tint; the entrance/fade animator writes the
-        // group's alpha, never the bubble's, so the two never touch the same property.
+        // window's alpha, never the background's, so the two never touch the same property.
         bubbleBackground = circle
         bubbleFillNormal = primary
         bubbleFillPressed = tone.primaryContainer.toArgb()
@@ -384,29 +469,39 @@ class FloatingTriggerButton(
     }
 
     /**
-     * The remove button: the neutral surface disk with a hairline and the paired ink, so it reads
-     * on any page the group floats over, and the app's close glyph. It is a control of its own, not
-     * a decoration on the bubble, so it has its own description, hint and touch target.
+     * The remove target: the neutral surface disk with a hairline and the paired ink, so it reads on
+     * any page it floats over, and the app's close glyph. It carries its own description and hint so
+     * an accessibility service can perform the one action it names.
      *
-     * A press only writes the floating-button preference off; [hide] then fades the whole group
-     * away through the ordinary path, and the Screen lookup settings switch shows the group again.
+     * While a dragged bubble is over it the disk switches to the accent with the paired ink and grows
+     * a little, so the drop the release is about to perform is visible before the finger lifts.
      */
-    private fun buildCloseButton(neutral: NeutralRoles): ImageView {
+    private fun buildDismiss(neutral: NeutralRoles, tone: AccentRoles): ImageView {
+        val fillNormal = neutral.surface.toArgb()
+        val inkNormal = neutral.onSurface.toArgb()
+        val strokeNormal = neutral.outline.toArgb()
         val disk = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(neutral.surface.toArgb())
-            setStroke((PERIMETER_DP * density).toInt(), neutral.outline.toArgb())
+            setColor(fillNormal)
+            setStroke(strokePx, strokeNormal)
         }
-        val inset = ((CLOSE_DP - CLOSE_ICON_DP) / 2f * density).toInt()
+        dismissBackground = disk
+        dismissFillNormal = fillNormal
+        dismissInkNormal = inkNormal
+        dismissStrokeNormal = strokeNormal
+        dismissFillHot = tone.primary.toArgb()
+        dismissInkHot = tone.onPrimary.toArgb()
+
+        val inset = ((DISMISS_DP - DISMISS_ICON_DP) / 2f * density).toInt()
         val hint = context.getString(R.string.bubble_lookup_close_hint)
         return ImageView(context).apply {
             setImageResource(R.drawable.ic_bubble_close)
-            imageTintList = ColorStateList.valueOf(neutral.onSurface.toArgb())
+            imageTintList = ColorStateList.valueOf(inkNormal)
             scaleType = ImageView.ScaleType.CENTER
             setBackground(disk)
             setPadding(inset, inset, inset, inset)
-            minimumWidth = closePx
-            minimumHeight = closePx
+            minimumWidth = dismissPx
+            minimumHeight = dismissPx
             contentDescription = context.getString(R.string.bubble_lookup_close_label)
             accessibilityDelegate = object : View.AccessibilityDelegate() {
                 override fun onInitializeAccessibilityNodeInfo(
@@ -421,7 +516,8 @@ class FloatingTriggerButton(
         }
     }
 
-    private fun buildParams(position: Pair<Int, Int>) = WindowManager.LayoutParams(
+    /** The shared params for one overlay window, positioned in display coordinates. */
+    private fun overlayParams(position: Pair<Int, Int>) = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -446,61 +542,84 @@ class FloatingTriggerButton(
     /**
      * The last dragged position, or a sensible first one: near the right edge at ~45% height. A
      * stored position is clamped too, so one written at another orientation (or by an older build
-     * that did not clamp) cannot put the group where it can be neither seen nor touched. The
-     * position is the group's top-left, so the whole group — bubble and remove button — is what
-     * fits.
+     * that did not clamp) cannot put the bubble where it can be neither seen nor touched.
      */
     private fun restoredOrDefaultPosition(): Pair<Int, Int> {
         TriggerPreferences.floatingButtonPosition(context)?.let { return clampToDisplay(it) }
         val metrics = context.resources.displayMetrics
-        val x = (metrics.widthPixels - groupWidthPx - edgeMarginPx).coerceAtLeast(0)
+        val x = (metrics.widthPixels - bubblePx - edgeMarginPx).coerceAtLeast(0)
         val y = (metrics.heightPixels * DEFAULT_HEIGHT_FRACTION).toInt().coerceAtLeast(0)
         return x to y
     }
 
     /**
-     * Moves the showing group back inside the display, for a rotation or a resize that left its
-     * position outside the new one. The window manager clips the frame it draws, but the position
-     * kept here is what the next drag moves on from: off-display, that drag only resumes once the
-     * finger has travelled back past the clipped distance.
+     * The target's own position: horizontally centred, and [DISMISS_BOTTOM_FRACTION] down the usable
+     * display, clamped so a very short display still keeps it whole and above the very bottom.
      */
-    fun reclampToDisplay() = onMain {
-        val layoutParams = params ?: return@onMain
-        val root = view ?: return@onMain
-        val (x, y) = clampToDisplay(layoutParams.x to layoutParams.y)
-        if (x == layoutParams.x && y == layoutParams.y) return@onMain
-        layoutParams.x = x
-        layoutParams.y = y
-        windowManager.updateViewLayout(root, layoutParams)
-        TriggerPreferences.setFloatingButtonPosition(context, x, y)
+    private fun dismissPosition(): Pair<Int, Int> {
+        val metrics = context.resources.displayMetrics
+        val x = ((metrics.widthPixels - dismissPx) / 2).coerceAtLeast(0)
+        val y = (metrics.heightPixels * DISMISS_BOTTOM_FRACTION).toInt()
+            .coerceIn(0, (metrics.heightPixels - dismissPx).coerceAtLeast(0))
+        return x to y
     }
 
     /**
-     * A position with the whole control group inside the display. The box is this context's own
-     * display metrics, which stop at the status and navigation bars rather than at the screen
-     * edges, so a clamped group is never left under a system bar where the system's own gesture
-     * would take the touch. The group may exceed a tiny display; the box then collapses to its
-     * origin.
+     * Moves the showing bubble back inside the display, for a rotation or a resize that left its
+     * position outside the new one, and re-centres a target that is up on the new display. The
+     * window manager clips the frame it draws, but the position kept here is what the next drag
+     * moves on from: off-display, that drag only resumes once the finger has travelled back past the
+     * clipped distance.
+     */
+    fun reclampToDisplay() = onMain {
+        val layoutParams = params
+        val root = view
+        if (layoutParams != null && root != null) {
+            val (x, y) = clampToDisplay(layoutParams.x to layoutParams.y)
+            if (x != layoutParams.x || y != layoutParams.y) {
+                layoutParams.x = x
+                layoutParams.y = y
+                windowManager.updateViewLayout(root, layoutParams)
+                TriggerPreferences.setFloatingButtonPosition(context, x, y)
+            }
+        }
+        val target = dismissView
+        val targetParams = dismissParams
+        if (target != null && targetParams != null) {
+            val (targetX, targetY) = dismissPosition()
+            if (targetX != targetParams.x || targetY != targetParams.y) {
+                targetParams.x = targetX
+                targetParams.y = targetY
+                windowManager.updateViewLayout(target, targetParams)
+            }
+        }
+    }
+
+    /**
+     * A position with the whole bubble inside the display. The box is this context's own display
+     * metrics, which stop at the status and navigation bars rather than at the screen edges, so a
+     * clamped bubble is never left under a system bar where the system's own gesture would take the
+     * touch. The bubble may exceed a tiny display; the box then collapses to its origin.
      */
     private fun clampToDisplay(position: Pair<Int, Int>): Pair<Int, Int> {
         val metrics = context.resources.displayMetrics
-        val maxX = (metrics.widthPixels - groupWidthPx).coerceAtLeast(0)
-        val maxY = (metrics.heightPixels - groupHeightPx).coerceAtLeast(0)
+        val maxX = (metrics.widthPixels - bubblePx).coerceAtLeast(0)
+        val maxY = (metrics.heightPixels - bubblePx).coerceAtLeast(0)
         return position.first.coerceIn(0, maxX) to position.second.coerceIn(0, maxY)
     }
 
     /**
-     * Press handling, kept on the bubble's own bounds: past the touch slop the press becomes a drag
-     * that moves the whole window, and a release that never got there is a tap. Movement is the
-     * whole test — a timer on top of it only adds a second way for a press on this bubble to do
-     * nothing at all, and nothing here is bound to a long press to deserve one. A drag is clamped
-     * into the display, so a released position is always one the group can be seen and touched at.
+     * Press handling, kept on the bubble's own bounds: past the touch slop the press becomes a drag,
+     * the remove target comes up, and the bubble's window follows the finger. Movement is the whole
+     * test — a timer on top of it only adds a second way for a press on this bubble to do nothing at
+     * all, and nothing here is bound to a long press to deserve one. A drag is clamped into the
+     * display, so a released position is always one the bubble can be seen and touched at.
      *
      * A press repaints the bubble in the pressed colour and the drag gives the normal colour back:
      * once the finger is moving the window, the position is the feedback and the colour has nothing
-     * left to say. A group on its way out has no action to offer and takes the touch, so nothing
-     * underneath receives a press the reader aimed at the bubble. Only the bubble drags; the remove
-     * button is a sibling and handles its own presses.
+     * left to say. While the finger is over the target, the target says so; a release there removes
+     * the bubble, and a release anywhere else only stores its new position. A cancellation never
+     * removes it.
      */
     private fun handleTouch(touched: View, event: MotionEvent): Boolean {
         val layoutParams = params ?: return false
@@ -513,6 +632,7 @@ class FloatingTriggerButton(
                 downX = layoutParams.x
                 downY = layoutParams.y
                 dragging = false
+                overDismiss = false
                 pressColor(true)
             }
 
@@ -522,21 +642,38 @@ class FloatingTriggerButton(
                 if (!dragging && hypot(dx, dy) > touchSlopPx) {
                     dragging = true
                     pressColor(false)
+                    showDismiss()
                 }
                 if (dragging) {
                     val (x, y) = clampToDisplay(downX + dx.toInt() to downY + dy.toInt())
                     layoutParams.x = x
                     layoutParams.y = y
                     windowManager.updateViewLayout(root, layoutParams)
+                    val over = isOverDismiss(event.rawX, event.rawY)
+                    if (over != overDismiss) {
+                        overDismiss = over
+                        animateDismissHighlight(over)
+                    }
                 }
             }
 
             MotionEvent.ACTION_UP -> {
                 pressColor(false)
+                val dropped = dragging && overDismiss
+                overDismiss = false
                 if (dragging) {
-                    TriggerPreferences.setFloatingButtonPosition(
-                        context, layoutParams.x, layoutParams.y
-                    )
+                    if (dropped) {
+                        // The reader dropped the bubble on the remove target: the same dismissal the
+                        // target's own activation performs, so the preference, the fade and the
+                        // settings-page notification all take the one path.
+                        dismissByReader()
+                    } else {
+                        animateDismissHighlight(false)
+                        TriggerPreferences.setFloatingButtonPosition(
+                            context, layoutParams.x, layoutParams.y
+                        )
+                        hideDismiss()
+                    }
                 } else {
                     onTrigger()
                 }
@@ -544,21 +681,33 @@ class FloatingTriggerButton(
 
             MotionEvent.ACTION_CANCEL -> {
                 pressColor(false)
+                overDismiss = false
                 if (dragging) {
+                    animateDismissHighlight(false)
                     TriggerPreferences.setFloatingButtonPosition(
                         context, layoutParams.x, layoutParams.y
                     )
+                    hideDismiss()
                 }
             }
         }
         return true
     }
 
+    /** Whether the finger that is dragging the bubble is over the remove target. */
+    private fun isOverDismiss(rawX: Float, rawY: Float): Boolean {
+        val target = dismissParams ?: return false
+        return rawX >= target.x - dismissSlopPx &&
+            rawX <= target.x + dismissPx + dismissSlopPx &&
+            rawY >= target.y - dismissSlopPx &&
+            rawY <= target.y + dismissPx + dismissSlopPx
+    }
+
     /**
      * The reader removed the floating control: write the preference off and let the ordinary hide
      * fade it away. Only the floating-button preference moves — lookup mode and the Quick Settings
      * tile are separate switches and stay as they were. The Screen lookup settings page reads this
-     * preference, so switching Floating button back on shows the group again.
+     * preference, so switching Floating button back on shows the bubble again.
      */
     private fun dismissByReader() {
         TriggerPreferences.setFloatingButtonEnabled(context, false)
@@ -578,32 +727,71 @@ class FloatingTriggerButton(
         val bubble = bubbleView ?: return
         val ink = if (pressed) bubbleInkPressed else bubbleInkNormal
         background.setColor(if (pressed) bubbleFillPressed else bubbleFillNormal)
-        background.setStroke((PERIMETER_DP * density).toInt(), ink)
+        background.setStroke(strokePx, ink)
         bubble.imageTintList = ColorStateList.valueOf(ink)
     }
 
     /**
-     * Moves the group's opacity over [Motion.SHORT] with [easing]. One animator at a time: whatever
+     * Eases the remove target between its resting and over-it states: the accent disk with the
+     * paired ink, grown a little. The fraction is animated over [Motion.SHORT] with the theme's press
+     * easing, so the highlight arrives with the finger instead of snapping; at a zero animator
+     * duration scale it lands on its end value at once.
+     */
+    private fun animateDismissHighlight(highlighted: Boolean) {
+        val background = dismissBackground ?: return
+        val target = dismissView ?: return
+        val to = if (highlighted) 1f else 0f
+        stopDismissHot()
+        val animator = ValueAnimator.ofFloat(dismissHot, to).apply {
+            duration = Motion.SHORT.toLong()
+            setInterpolator(TimeInterpolator { Motion.pressEasing.transform(it) })
+            addUpdateListener { animation ->
+                val fraction = animation.animatedValue as Float
+                dismissHot = fraction
+                applyDismissHot(background, target, fraction)
+            }
+        }
+        dismissHotAnimator = animator
+        animator.start()
+    }
+
+    /** Writes the over-it fraction onto the target's disk, glyph and scale in one pass. */
+    private fun applyDismissHot(background: GradientDrawable, target: ImageView, fraction: Float) {
+        val evaluator = ArgbEvaluator()
+        val ink = evaluator.evaluate(fraction, dismissInkNormal, dismissInkHot) as Int
+        background.setColor(evaluator.evaluate(fraction, dismissFillNormal, dismissFillHot) as Int)
+        background.setStroke(
+            strokePx,
+            evaluator.evaluate(fraction, dismissStrokeNormal, dismissInkHot) as Int
+        )
+        target.imageTintList = ColorStateList.valueOf(ink)
+        val scale = 1f + (DISMISS_HOT_SCALE - 1f) * fraction
+        target.scaleX = scale
+        target.scaleY = scale
+    }
+
+    /** Writes the resting state directly, for a target that has just been built. */
+    private fun resetDismissHighlight() {
+        val background = dismissBackground ?: return
+        val target = dismissView ?: return
+        stopDismissHot()
+        dismissHot = 0f
+        applyDismissHot(background, target, 0f)
+    }
+
+    /**
+     * Moves the bubble's opacity over [Motion.SHORT] with [easing]. One animator at a time: whatever
      * was running is stopped first, and cleared before the stop, so its own end callback sees itself
      * superseded — that is what keeps an entrance and a fade out from writing the same property
      * together. [onEnd] runs only for the animation that really finished.
-     *
-     * A [ValueAnimator] rather than a view property animator because these fades have to obey the
-     * system's animator duration scale — what the reduced-motion setting drives — and this is the
-     * animator the framework hands that scale to. At zero the fades land on their end value at
-     * once, which is exactly what an entrance and a dismissal should do there.
      */
-    private fun animateAlpha(
-        target: View,
-        to: Float,
-        easing: Easing,
-        onEnd: (() -> Unit)? = null
-    ) {
+    private fun animateBubbleAlpha(to: Float, easing: Easing, onEnd: (() -> Unit)? = null) {
+        val bubble = view ?: return
         stopAlpha()
-        val animator = ValueAnimator.ofFloat(target.alpha, to).apply {
+        val animator = ValueAnimator.ofFloat(bubble.alpha, to).apply {
             duration = Motion.SHORT.toLong()
             setInterpolator(TimeInterpolator { easing.transform(it) })
-            addUpdateListener { target.alpha = it.animatedValue as Float }
+            addUpdateListener { animation -> bubble.alpha = animation.animatedValue as Float }
         }
         animator.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
@@ -616,10 +804,52 @@ class FloatingTriggerButton(
         animator.start()
     }
 
-    /** Stops whatever is writing the opacity, so a direct write is the last word on it. */
+    /**
+     * The target's own fade over the same short duration with [easing]. Same one-animator rule as the
+     * bubble's, so a drag that starts again inside a release's fade out takes it over instead of
+     * removing the target underneath the new drag.
+     */
+    private fun animateDismissAlpha(
+        target: View,
+        to: Float,
+        easing: Easing,
+        onEnd: (() -> Unit)? = null
+    ) {
+        stopDismissAlpha()
+        val animator = ValueAnimator.ofFloat(target.alpha, to).apply {
+            duration = Motion.SHORT.toLong()
+            setInterpolator(TimeInterpolator { easing.transform(it) })
+            addUpdateListener { animation -> target.alpha = animation.animatedValue as Float }
+        }
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (dismissAlphaAnimator !== animation) return
+                dismissAlphaAnimator = null
+                onEnd?.invoke()
+            }
+        })
+        dismissAlphaAnimator = animator
+        animator.start()
+    }
+
+    /** Stops whatever is writing the bubble's opacity, so a direct write is the last word on it. */
     private fun stopAlpha() {
         val running = alphaAnimator ?: return
         alphaAnimator = null
+        running.cancel()
+    }
+
+    /** Stops whatever is writing the target's opacity. */
+    private fun stopDismissAlpha() {
+        val running = dismissAlphaAnimator ?: return
+        dismissAlphaAnimator = null
+        running.cancel()
+    }
+
+    /** Stops whatever is writing the target's over-it highlight. */
+    private fun stopDismissHot() {
+        val running = dismissHotAnimator ?: return
+        dismissHotAnimator = null
         running.cancel()
     }
 

@@ -39,7 +39,7 @@ const ADD_TILE_API = 33;
 
 const HELP_PARAGRAPHS = [
   "Circle text or tap a Japanese line. A missed tap keeps lookup open.",
-  "Drag the floating button to move it, or tap its X to remove it. Switch Floating button back on here to bring it back. The button appears while lookup mode is on.",
+  "Drag the floating button to move it, or drop it on the X at the bottom of the screen to remove it. Switch Floating button back on here to bring it back. The button appears while lookup mode is on.",
   "The Quick Settings tile can be switched off here and removed in Android's Quick Settings editor.",
   "Map a key to the broadcast action shown in Key Mapper.",
   "Notification access lets Gaten control media sessions. Without it, some players may ignore media keys. Gaten resumes playback after a normal lookup dismissal; media stays paused after an interruption.",
