@@ -68,6 +68,8 @@
     <string name="lookup_search_from">from %1$s</string>
     <string name="lookup_search_example">Search for %1$s</string>
     <string name="lookup_search_starts_with">Words starting with %1$s</string>
+    <!-- Home's own idle caption, drawn under the shared search mark below the recent searches. -->
+    <string name="lookup_search_idle_caption">Find your next Japanese word</string>
     <string name="lookup_search_prompt">Enter Japanese or romaji</string>
     <string name="lookup_search_unsupported">English definitions are not searchable</string>
     <!-- What romaji was read as: why "neko" can have an exact ねこ match. -->
