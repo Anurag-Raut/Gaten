@@ -29,7 +29,7 @@
  * outlined cell, never an empty one; and one source's failure never blanks another source's sections.
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import {Icon} from "../components";
@@ -267,6 +267,13 @@ export function AnalyticsScreen({
   const scroll = useRef<ScrollView | null>(null);
   // Only the freshness line depends on this: it is a clock, not a read.
   const [, tick] = useState(0);
+  // The highlighted category of each distribution chart, by its stable key. The two are separate
+  // pieces of state, so the Anki and WaniKani bars can never highlight each other.
+  const [selectedAnki, setSelectedAnki] = useState<string | null>(null);
+  const [selectedSrs, setSelectedSrs] = useState<string | null>(null);
+  // The heatmap's open day, by the day's own offset, so a refresh that redraws the same day keeps
+  // the detail open on the fresh count and a day that disappears closes it on its own.
+  const [selectedDayAgo, setSelectedDayAgo] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => tick((count) => count + 1), FRESHNESS_TICK_MS);
@@ -279,6 +286,28 @@ export function AnalyticsScreen({
     },
     [onOpenSettingsPage]
   );
+
+  // A tap selects a category, and a second tap on the same category clears it; the bar and the key
+  // both call the same toggle, so the two always agree.
+  const toggleAnki = useCallback((key: string) => {
+    setSelectedAnki((current) => (current === key ? null : key));
+  }, []);
+  const toggleSrs = useCallback((key: string) => {
+    setSelectedSrs((current) => (current === key ? null : key));
+  }, []);
+  // A tap on a day opens its detail; a second tap on the same day closes it. The popover itself is
+  // rendered by the grid from the day's current counts, so a refresh never leaves a stale figure.
+  const toggleDay = useCallback((cell: HeatmapCell) => {
+    setSelectedDayAgo((current) => (current === cell.daysAgo ? null : cell.daysAgo));
+  }, []);
+  // A tap on the page outside the charts and the grid is the other way to clear everything: both
+  // chart highlights and the open day. It is a plain press on the content, so a scroll, a button or
+  // a chart pressed inside it still handles its own touch first.
+  const dismiss = useCallback(() => {
+    setSelectedAnki(null);
+    setSelectedSrs(null);
+    setSelectedDayAgo(null);
+  }, []);
 
   const ankiState = ankiRead(anki, openSettings);
   const wkState = waniKaniRead(wanikani, wanikani.refresh, openSettings);
@@ -368,6 +397,19 @@ export function AnalyticsScreen({
     opacity: SRS_INTENSITY[index % SRS_INTENSITY.length],
   }));
 
+  // A refresh can stop drawing a category the reader had chosen — a WaniKani stage the payload no
+  // longer names. Drop that choice so no chart highlights a key that is not on screen. The joined key
+  // list is the real dependency: the arrays are rebuilt every render, but a refresh that draws the
+  // same categories joins to the same string and does not re-run the effect.
+  const ankiKeys = ankiParts.map((part) => part.key);
+  const srsKeys = srsParts.map((part) => part.key);
+  useEffect(() => {
+    setSelectedAnki((current) => (current != null && !ankiKeys.includes(current) ? null : current));
+  }, [ankiKeys.join(",")]);
+  useEffect(() => {
+    setSelectedSrs((current) => (current != null && !srsKeys.includes(current) ? null : current));
+  }, [srsKeys.join(",")]);
+
   // --- Accuracy -------------------------------------------------------------
   // `?? null` on both reads because a cache written by an older build carries neither field: the
   // sections then say the read is unavailable rather than drawing a zero.
@@ -404,6 +446,16 @@ export function AnalyticsScreen({
         ]}
         keyboardShouldPersistTaps="handled"
       >
+        {/* The whole page is one quiet press target so a tap on blank content clears the chart
+            highlights and the open day. It is not a control: it adds no accessibility node and no ink,
+            and a tap on a chart, a legend key, a day or the refresh button handles its own press
+            first — the scroll cancels this press as soon as the finger moves. */}
+        <Pressable
+          accessible={false}
+          importantForAccessibility="no"
+          onPress={dismiss}
+          style={styles.contentDismiss}
+        >
         <Header updated={freshnessLabel(updatedAt, now)} busy={busy} onRefresh={refresh} />
 
         {/* Anki — collection maturity. The ring and the bar are one hue at several strengths; the
@@ -431,8 +483,8 @@ export function AnalyticsScreen({
                 />
                 {collectionCounts != null ? (
                   <>
-                    <StackedBar segments={ankiParts} />
-                    <CountLegend items={ankiParts} />
+                    <StackedBar segments={ankiParts} selectedKey={selectedAnki} onSelect={toggleAnki} />
+                    <CountLegend items={ankiParts} selectedKey={selectedAnki} onSelect={toggleAnki} />
                   </>
                 ) : (
                   <InlineUnavailable>AnkiDroid would not answer the card-state searches.</InlineUnavailable>
@@ -466,8 +518,8 @@ export function AnalyticsScreen({
                 />
                 {active.length > 0 ? (
                   <>
-                    <StackedBar segments={srsParts} />
-                    <CountLegend items={srsParts} />
+                    <StackedBar segments={srsParts} selectedKey={selectedSrs} onSelect={toggleSrs} />
+                    <CountLegend items={srsParts} selectedKey={selectedSrs} onSelect={toggleSrs} />
                   </>
                 ) : (
                   <InlineUnavailable>WaniKani answered no SRS stages.</InlineUnavailable>
@@ -486,7 +538,9 @@ export function AnalyticsScreen({
           {grid == null ? (
             <>
               <SourceFallback read={ankiState} withAction={false} />
-              {ankiState.state === "loading" && <Heatmap columns={unknownGrid(now)} />}
+              {ankiState.state === "loading" && (
+                <Heatmap columns={unknownGrid(now)} selectedDayAgo={null} onSelectDay={toggleDay} />
+              )}
             </>
           ) : (
             <>
@@ -504,7 +558,11 @@ export function AnalyticsScreen({
                   hero: false,
                 }}
               />
-              <Heatmap columns={grid.columns} />
+              <Heatmap
+                columns={grid.columns}
+                selectedDayAgo={selectedDayAgo}
+                onSelectDay={toggleDay}
+              />
               {grid.partial && <Note>Some days unknown.</Note>}
             </>
           )}
@@ -637,6 +695,7 @@ export function AnalyticsScreen({
             {stale.join(" ")}
           </Text>
         )}
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -650,6 +709,9 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: spacing.contentInset,
   },
+  // The dismiss target is exactly the content's own box: it adds no height or width of its own, so a
+  // tap in the page's empty space still reaches it while every child control keeps its own touch.
+  contentDismiss: {width: "100%"},
   headerRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -26,7 +26,7 @@
  * violet — so the reader's accent repaints every fill and the hairlines follow the light and dark
  * schemes.
  */
-import React from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {
   StyleSheet,
   Text,
@@ -35,11 +35,21 @@ import {
   type DimensionValue,
   type ViewStyle,
 } from "react-native";
-import Svg, {Circle} from "react-native-svg";
+import Svg, {Circle, type CircleProps} from "react-native-svg";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  interpolateColor,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import {PressableScale} from "../PressableScale";
 import {useTheme, type ThemeColors} from "../theme";
-import {spacing, typeScale} from "../tokens";
-import type {HeatmapCell} from "./model";
+import {PRESS_EASING_REANIMATED, spacing, typeScale} from "../tokens";
+import {formatCount, type HeatmapCell} from "./model";
 
 /**
  * The height of one heatmap cell, in dp. The width is deliberately not fixed: the twelve week
@@ -82,6 +92,44 @@ const HEATMAP_SWATCH_SIZE = 11;
 const DISTRIBUTION_SWATCH_SIZE = 8;
 
 /**
+ * The usable touch height of a distribution category in the bar, in dp: a real 48 dp target with the
+ * 9 dp capsule centred inside it. The bar is too thin to hit reliably, and an Android touch target
+ * cannot reach outside the bounds of the view that owns it, so the wrapper itself is this tall and
+ * the hit layer is a normal child filling it — not a negative inset hanging out of the parent. The
+ * segments' widths, and so the drawn proportions, are untouched; only the empty space above and
+ * below the capsule is new.
+ */
+const DISTRIBUTION_TOUCH_HEIGHT = 48;
+
+/**
+ * How strongly the categories other than the selected one are faded while a selection is active. The
+ * selected segment is painted at full accent instead, so the reader's choice is the strongest mark in
+ * the bar and the rest recede; the segments' widths — the counts they carry — are untouched.
+ */
+const DISTRIBUTION_DIM_OPACITY = 0.35;
+
+/**
+ * The corner of one segment, in dp: a two-step radius on the 9 dp capsule, enough that each part
+ * reads as its own rounded mark where it meets the next, while the width that carries the count is
+ * untouched. The outer capsule still clips the two end segments to the bar's own 9 dp radius.
+ */
+const DISTRIBUTION_SEGMENT_RADIUS = 2;
+
+/** How long a selected/dimmed state takes to settle, in ms: short enough to feel immediate. */
+const DISTRIBUTION_SELECT_MS = 160;
+
+/** The ring's arc and value settle a touch slower than a tap, so a changed share reads as a sweep. */
+const RING_SELECT_MS = 180;
+
+/** The heatmap's selected-day ring and tooltip fade: one short beat behind the tap. */
+const HEATMAP_SELECT_MS = 140;
+
+/** The gap between the tapped day and its tooltip, and the tooltip's own width bounds, in dp. */
+const TOOLTIP_GAP = 6;
+const TOOLTIP_MIN_WIDTH = 120;
+const TOOLTIP_MAX_WIDTH = 220;
+
+/**
  * The accent opacities for activity levels 1 to 4, in order. The ramp is carried by opacity on the
  * reader's own accent rather than by four tints mixed here in JS, for the reason the stacked bar's
  * segments give: a tint built by hand drifts from the tone the theme resolved, and a fixed hue would
@@ -111,6 +159,12 @@ const RING_STROKE = 9;
  * 84 dp ring with its caption beneath, and keeps that proportion if a caller asks for a larger ring.
  */
 const RING_CENTRE_RATIO = 0.24;
+
+/**
+ * The accent arc as an animated SVG circle: the dash that carries a share moves on the UI thread, so
+ * a refreshed figure sweeps to its new length instead of jumping there.
+ */
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 /**
  * One titled group of numbers. The hairline over the group and the whitespace around it are what
@@ -440,6 +494,7 @@ export function Ring({
   stroke?: number;
 }): React.JSX.Element {
   const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
   // A stroke straddles the path it draws, so the radius gives up half of it to keep the whole ring
   // inside the square the caller lays out; the track and the arc share that one radius so the arc
   // sits exactly on the track and never inside or outside it.
@@ -448,7 +503,26 @@ export function Ring({
   // A share that is not a finite number at all is treated as no share: a ring built from an empty
   // division draws its track and stops, rather than guessing at zero or at a full turn.
   const clamped = share == null || !Number.isFinite(share) ? null : Math.min(1, Math.max(0, share));
-  const arc = clamped == null ? 0 : circumference * clamped;
+  // The displayed share is a shared value so a changed figure animates rather than replacing the
+  // dash in one frame; reduced motion sets it directly, keeping the state change without the sweep.
+  const arcProgress = useSharedValue(clamped ?? 0);
+  useEffect(() => {
+    const target = clamped ?? 0;
+    arcProgress.value = reducedMotion
+      ? target
+      : withTiming(target, {duration: RING_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [clamped, reducedMotion, arcProgress]);
+  // A round cap draws a dot on a zero-length dash, so the arc fades out as its length reaches zero
+  // and the full circle stays a continuous stroke; the track underneath is always whole. The offset
+  // is the animated value rather than the dash array, which keeps the animation to one numeric SVG
+  // prop the renderer already treats as a path-length offset.
+  const arcProps = useAnimatedProps<CircleProps>(() => {
+    const length = Math.max(0, Math.min(circumference, arcProgress.value * circumference));
+    return {
+      strokeDashoffset: circumference - length,
+      strokeOpacity: length > 0.01 ? 1 : 0,
+    };
+  });
   // The figure is set as a fraction of the diameter so the same component reads correctly at any
   // size the caller asks for, and the caption stays at the body size: it is a unit, not a second
   // figure.
@@ -473,15 +547,16 @@ export function Ring({
           strokeWidth={stroke}
         />
         {clamped == null ? null : (
-          <Circle
+          <AnimatedCircle
             cx={size / 2}
             cy={size / 2}
             r={radius}
             fill="none"
             stroke={colors.accent}
             strokeWidth={stroke}
-            strokeDasharray={`${arc} ${circumference - arc}`}
-            strokeDashoffset={0}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            animatedProps={arcProps}
             // SVG starts a dash at three o'clock; a quarter turn back puts this arc's head at the
             // top, and a positive dash then sweeps clockwise from there.
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
@@ -567,6 +642,17 @@ function heatmapSummary(columns: (HeatmapCell | null)[][]): string {
   return `Study activity, last twelve weeks: ${parts.join(", ")}`;
 }
 
+/** The concise sentence one tapped day shows under its date, from the facts the read actually has. */
+function dayDetailText(cell: HeatmapCell): string {
+  if (cell.cards == null) {
+    return "Activity unknown";
+  }
+  if (cell.cards === 0) {
+    return "No cards studied";
+  }
+  return `${formatCount(cell.cards)} ${cell.cards === 1 ? "card" : "cards"} studied`;
+}
+
 /**
  * Twelve weeks of study as a heatmap: one cell per Anki study day, twelve columns read left to right
  * (oldest week first) and seven rows read top to bottom (Monday first). A week is a column because
@@ -579,23 +665,143 @@ function heatmapSummary(columns: (HeatmapCell | null)[][]): string {
  * left over — twelve of them plus their gutters fill the section at any width from 320 dp up, so the
  * grid never scrolls — while their height stays fixed, which is what keeps a cell a wide capsule.
  *
- * The whole grid is one accessibility node. Eighty-four focusable squares would be a wall of
- * fragments to swipe through, and the summary the grid builds for itself — days studied, cards,
- * days that could not be read — is the claim the chart is actually making. The legend repeats the
- * cell fills rather than restating them, so the key cannot drift from the marks.
+ * Every drawn day is its own button: the summary the grid builds for itself is still announced once,
+ * visually hidden, but a reader can land on one day and hear "Mon 5 Jan, 12 cards" before its selected
+ * state opens the same date and count in a small popover beside it. A day the source would not answer
+ * is still a button and still says "Activity unknown"; an empty slot outside the twelve weeks is not.
+ * The legend repeats the cell fills rather than restating them, so the key cannot drift from the
+ * marks.
  */
-export function Heatmap({columns}: {columns: (HeatmapCell | null)[][]}): React.JSX.Element {
+export function Heatmap({
+  columns,
+  selectedDayAgo,
+  onSelectDay,
+}: {
+  columns: (HeatmapCell | null)[][];
+  selectedDayAgo: number | null;
+  onSelectDay: (cell: HeatmapCell) => void;
+}): React.JSX.Element {
   const {colors} = useTheme();
   // The weekday column has to grow with the reader's text size: at 160 % a fixed 13 dp column cuts the
   // M/W/F labels in half, and the twelve columns of cells simply give up the few dp it needs (they are
   // `flex: 1`, so the grid never overflows).
   const {fontScale} = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
   const labelWidth = Math.ceil(HEATMAP_LABEL_WIDTH * fontScale);
+  // One shared layout record keeps a tap from having to re-measure the grid: the row's offset and
+  // the cell's own frame are enough to place the popover without reading the view tree again.
+  const [gridBox, setGridBox] = useState({width: 0, height: 0});
+  const cellLayouts = useRef(
+    new Map<number, {x: number; y: number; width: number; height: number; row: number}>()
+  );
+  const rowOffsets = useRef<number[]>([]);
+  // The day whose text is still on screen while its popover fades out; a new selection replaces it.
+  const [displayedAgo, setDisplayedAgo] = useState<number | null>(null);
+  // The selection the position was last placed for. Null means the next selection is an open, and
+  // the popover is placed at the real anchor before it fades in rather than flying from the origin.
+  const placedAgo = useRef<number | null>(null);
+  const tooltipLeft = useSharedValue(0);
+  const tooltipTop = useSharedValue(0);
+  const tooltipOpacity = useSharedValue(0);
+  const tooltipScale = useSharedValue(0.96);
+
+  const cellFor = (daysAgo: number | null): HeatmapCell | null =>
+    daysAgo == null
+      ? null
+      : columns.flat().find((cell) => cell?.daysAgo === daysAgo) ?? null;
+  const shownAgo = selectedDayAgo ?? displayedAgo;
+  const shownDay = cellFor(shownAgo);
+
+  useEffect(() => {
+    if (selectedDayAgo != null) {
+      setDisplayedAgo(selectedDayAgo);
+    }
+  }, [selectedDayAgo]);
+
+  useEffect(() => {
+    if (selectedDayAgo == null) {
+      placedAgo.current = null;
+      tooltipOpacity.value = reducedMotion
+        ? 0
+        : withTiming(0, {duration: HEATMAP_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+      tooltipScale.value = reducedMotion
+        ? 1
+        : withTiming(0.96, {duration: HEATMAP_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+      return;
+    }
+    const layout = cellLayouts.current.get(selectedDayAgo);
+    if (layout == null || gridBox.width === 0) {
+      return;
+    }
+    // The popover sits under its day and is clamped inside the grid's own width, so a day at either
+    // edge anchors inward rather than overflowing the section; its height is never measured because
+    // it grows downward and the page can scroll under it.
+    const width = Math.min(TOOLTIP_MAX_WIDTH, Math.max(TOOLTIP_MIN_WIDTH, gridBox.width));
+    const anchorY = (rowOffsets.current[layout.row] ?? 0) + layout.y;
+    const centreX = layout.x + layout.width / 2;
+    const left = Math.max(0, Math.min(centreX - width / 2, Math.max(0, gridBox.width - width)));
+    const top = anchorY + layout.height + TOOLTIP_GAP;
+    const opening = placedAgo.current == null;
+    placedAgo.current = selectedDayAgo;
+    // An open is placed directly and then fades; only a move between two open days sweeps, so the
+    // first visible frame is already at the tapped day instead of travelling there from the corner.
+    if (opening) {
+      tooltipLeft.value = left;
+      tooltipTop.value = top;
+    } else {
+      tooltipLeft.value = reducedMotion
+        ? left
+        : withTiming(left, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+      tooltipTop.value = reducedMotion
+        ? top
+        : withTiming(top, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+    }
+    tooltipScale.value = reducedMotion
+      ? 1
+      : withTiming(1, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+    tooltipOpacity.value = reducedMotion
+      ? 1
+      : withTiming(1, {duration: HEATMAP_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [selectedDayAgo, gridBox.width, reducedMotion, tooltipLeft, tooltipTop, tooltipOpacity, tooltipScale]);
+
+  const tooltipStyle = useAnimatedStyle(() => ({
+    opacity: tooltipOpacity.value,
+    transform: [
+      {translateX: tooltipLeft.value},
+      {translateY: tooltipTop.value},
+      {scale: tooltipScale.value},
+    ],
+  }));
+  const tooltipWidth = Math.min(
+    TOOLTIP_MAX_WIDTH,
+    Math.max(TOOLTIP_MIN_WIDTH, gridBox.width || TOOLTIP_MAX_WIDTH)
+  );
+  // A new day's date and count cross-fade over the old pair, keyed by the day; reduced motion keeps
+  // the swap immediate. The tooltip has no action of its own, so it never intercepts a touch meant
+  // for a day underneath it.
+  const contentEntering = reducedMotion ? undefined : FadeIn.duration(HEATMAP_SELECT_MS);
+  const contentExiting = reducedMotion ? undefined : FadeOut.duration(HEATMAP_SELECT_MS);
+
   return (
-    <View accessible accessibilityRole="image" accessibilityLabel={heatmapSummary(columns)}>
-      <View style={styles.heatmapGrid}>
+    <View style={styles.heatmapBlock}>
+      <Text accessible style={styles.visuallyHidden} accessibilityLabel={heatmapSummary(columns)} />
+      <View
+        style={styles.heatmapGrid}
+        onLayout={(event) =>
+          setGridBox({
+            width: event.nativeEvent.layout.width,
+            height: event.nativeEvent.layout.height,
+          })
+        }
+      >
         {HEATMAP_ROW_LABELS.map((label, rowIndex) => (
-          <View key={rowIndex} style={styles.heatmapRow}>
+          <View
+            key={rowIndex}
+            style={styles.heatmapRow}
+            onLayout={(event) => {
+              rowOffsets.current[rowIndex] = event.nativeEvent.layout.y;
+            }}
+          >
             {label == null ? (
               // An unlabelled row still reserves the label column, so all seven rows of cells start
               // on the same vertical line.
@@ -614,15 +820,20 @@ export function Heatmap({columns}: {columns: (HeatmapCell | null)[][]}): React.J
             )}
             {columns.map((column, columnIndex) => {
               const cell = column[rowIndex] ?? null;
+              // A `null` entry is a slot outside the twelve weeks, not an unread day: it stays empty
+              // and inert so the grid's edge is ragged in exactly the way the calendar is.
+              if (cell == null) {
+                return <View key={columnIndex} style={styles.heatmapCell} />;
+              }
               return (
-                <View
+                <HeatmapDay
                   key={columnIndex}
-                  style={[
-                    styles.heatmapCell,
-                    // A `null` entry is a slot outside the twelve weeks, not an unread day: it stays
-                    // empty so the grid's edge is ragged in exactly the way the calendar is.
-                    cell == null ? null : heatmapCellFill(cell.level, colors),
-                  ]}
+                  cell={cell}
+                  selected={selectedDayAgo === cell.daysAgo}
+                  onPress={onSelectDay}
+                  onLayout={(x, y, width, height) => {
+                    cellLayouts.current.set(cell.daysAgo, {x, y, width, height, row: rowIndex});
+                  }}
                 />
               );
             })}
@@ -638,7 +849,94 @@ export function Heatmap({columns}: {columns: (HeatmapCell | null)[][]}): React.J
         </View>
         <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>More</Text>
       </View>
+      {shownDay == null ? null : (
+        <Animated.View
+          pointerEvents="none"
+          accessible={selectedDayAgo != null}
+          accessibilityLabel={shownDay.spoken}
+          // The popover is only a visual echo of the selected day. Once nothing is selected it keeps
+          // fading out, but it must not stay in the accessibility tree for that exit.
+          accessibilityElementsHidden={selectedDayAgo == null}
+          importantForAccessibility={selectedDayAgo == null ? "no-hide-descendants" : "auto"}
+          style={[
+            styles.heatmapTooltip,
+            {
+              maxWidth: tooltipWidth,
+              backgroundColor: colors.surfaceContainerHigh,
+              borderColor: colors.outlineVariant,
+            },
+            tooltipStyle,
+          ]}
+        >
+          <Animated.View
+            key={shownDay.daysAgo}
+            entering={contentEntering}
+            exiting={contentExiting}
+          >
+            <Text style={[typeScale.labelMedium, {color: colors.onSurface}]}>{shownDay.date}</Text>
+            <Text
+              style={[typeScale.bodySmall, styles.heatmapTooltipDetail, {color: colors.onSurfaceVariant}]}
+            >
+              {dayDetailText(shownDay)}
+            </Text>
+          </Animated.View>
+        </Animated.View>
+      )}
     </View>
+  );
+}
+
+/**
+ * One drawn day as a button: the fill keeps the band the grid gave it, and a selected day wears an
+ * accent ring that fades in rather than a border that shifts the 17 dp cell.
+ */
+function HeatmapDay({
+  cell,
+  selected,
+  onPress,
+  onLayout,
+}: {
+  cell: HeatmapCell;
+  selected: boolean;
+  onPress: (cell: HeatmapCell) => void;
+  onLayout: (x: number, y: number, width: number, height: number) => void;
+}): React.JSX.Element {
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const ring = useSharedValue(selected ? 1 : 0);
+  useEffect(() => {
+    const target = selected ? 1 : 0;
+    ring.value = reducedMotion
+      ? target
+      : withTiming(target, {duration: HEATMAP_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [selected, reducedMotion, ring]);
+  const ringStyle = useAnimatedStyle(() => ({opacity: ring.value}));
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityState={{selected}}
+      accessibilityLabel={cell.spoken}
+      onPress={() => onPress(cell)}
+      onLayout={(event) =>
+        onLayout(
+          event.nativeEvent.layout.x,
+          event.nativeEvent.layout.y,
+          event.nativeEvent.layout.width,
+          event.nativeEvent.layout.height
+        )
+      }
+      style={styles.heatmapCell}
+    >
+      {/* The value fill lives on its own non-interactive layer: PressableScale owns the press
+          opacity on the root, so a level's own opacity here would be flattened to full accent.
+          Unknown keeps its outline, zero its neutral, and 1–4 their level; the ring stays its own
+          animated layer above both. */}
+      <View pointerEvents="none" style={[styles.heatmapDayFill, heatmapCellFill(cell.level, colors)]} />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.heatmapDayRing, {borderColor: colors.accent}, ringStyle]}
+      />
+    </PressableScale>
   );
 }
 
@@ -677,43 +975,126 @@ export interface DistributionPart {
  * beneath it at the section-meta size in the quiet ink — the same two-step the metrics use, at one
  * scale down. Each item is one accessibility node reading "312 New", so a screen reader never has to
  * pair a floating number with the word under it.
+ *
+ * Every item is a selectable button: it reports whether it is the chosen category, so a screen
+ * reader can pick a segment too thin for a finger to hit in the bar, and the bar's own summary is
+ * left standing beside it. The button keeps a full 48 dp of height whatever its type size, so a key
+ * is as easy to hit as the bar it names.
  */
-export function CountLegend({items}: {items: DistributionPart[]}): React.JSX.Element {
-  const {colors} = useTheme();
+export function CountLegend({
+  items,
+  selectedKey,
+  onSelect,
+}: {
+  items: DistributionPart[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}): React.JSX.Element {
   return (
     <View style={styles.countLegend}>
       {items.map((item) => (
-        <View
-          key={item.key}
-          accessible
-          accessibilityLabel={`${item.value} ${item.label}`}
-          style={styles.countLegendItem}
-        >
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{item.value}</Text>
-          <View style={styles.countLegendKey}>
-            {/* The swatch repeats the segment's fill on the segment's own backing — the bar draws its
-                accent over the hairline track — so the two composite the same shade, black accents
-                included. */}
-            <View style={[styles.countLegendSwatch, {backgroundColor: colors.outlineVariant}]}>
-              <View
-                style={[
-                  styles.countLegendSwatchFill,
-                  {backgroundColor: item.color},
-                  item.opacity != null && {opacity: item.opacity},
-                ]}
-              />
-            </View>
-            <Text
-              numberOfLines={2}
-              style={[typeScale.labelSmall, styles.countLegendLabel, {color: colors.onSurfaceVariant}]}
-            >
-              {item.label}
-            </Text>
-          </View>
-        </View>
+        <CountLegendButton key={item.key} item={item} selectedKey={selectedKey} onSelect={onSelect} />
       ))}
     </View>
   );
+}
+
+/**
+ * One key under the bar: its figure, its swatch and its name, with the choice carried by animated
+ * emphasis rather than by a hard style swap. The swatch keeps the fill the bar just painted on the
+ * track-tone backing; a chosen key rings it in the accent and lifts its name to the strongest ink.
+ */
+function CountLegendButton({
+  item,
+  selectedKey,
+  onSelect,
+}: {
+  item: DistributionPart;
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}): React.JSX.Element {
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const selected = item.key === selectedKey;
+  const targetFill = distributionOpacity(item, selectedKey) ?? 1;
+  const fillOpacity = useSharedValue(targetFill);
+  const emphasis = useSharedValue(selected ? 1 : 0);
+
+  useEffect(() => {
+    fillOpacity.value = reducedMotion
+      ? targetFill
+      : withTiming(targetFill, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [targetFill, reducedMotion, fillOpacity]);
+  useEffect(() => {
+    const target = selected ? 1 : 0;
+    emphasis.value = reducedMotion
+      ? target
+      : withTiming(target, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [selected, reducedMotion, emphasis]);
+
+  const fillStyle = useAnimatedStyle(() => ({opacity: fillOpacity.value}));
+  const ringStyle = useAnimatedStyle(() => ({opacity: emphasis.value}));
+  const labelStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(
+      emphasis.value,
+      [0, 1],
+      [colors.onSurfaceVariant, colors.onSurface]
+    ),
+  }));
+
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityState={{selected}}
+      accessibilityLabel={`${item.value} ${item.label}`}
+      onPress={() => onSelect(item.key)}
+      style={styles.countLegendItem}
+    >
+      <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{item.value}</Text>
+      <View style={styles.countLegendKey}>
+        {/* The swatch repeats the segment's fill on the segment's own backing — the bar draws its
+            accent over the hairline track — so the two composite the same shade, black accents
+            included. The ring lives outside the clipped swatch so the accent can sit at its edge
+            without changing the 8 dp key's size. */}
+        <View style={styles.countLegendSwatchWrap}>
+          <View style={[styles.countLegendSwatch, {backgroundColor: colors.outlineVariant}]}>
+            <Animated.View
+              style={[
+                styles.countLegendSwatchFill,
+                {backgroundColor: item.color},
+                // The same opacity the bar just painted that segment at, so a dimmed bar still shows
+                // the exact shade its key claims.
+                fillStyle,
+              ]}
+            />
+          </View>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.countLegendSwatchRing, {borderColor: colors.accent}, ringStyle]}
+          />
+        </View>
+        <Animated.Text
+          numberOfLines={2}
+          style={[typeScale.labelSmall, styles.countLegendLabel, labelStyle]}
+        >
+          {item.label}
+        </Animated.Text>
+      </View>
+    </PressableScale>
+  );
+}
+
+/**
+ * The opacity one distribution segment is painted at. With no selection the part keeps the strength
+ * the screen gave it; once a category is chosen it and only it is drawn at full accent, and the rest
+ * are faded, so the choice reads at a glance. The width — the count the segment carries — never
+ * changes, so the bar still states the proportion it always did.
+ */
+function distributionOpacity(part: DistributionPart, selectedKey: string | null): number | undefined {
+  if (selectedKey == null) {
+    return part.opacity;
+  }
+  return part.key === selectedKey ? 1 : (part.opacity ?? 1) * DISTRIBUTION_DIM_OPACITY;
 }
 
 /**
@@ -723,35 +1104,90 @@ export function CountLegend({items}: {items: DistributionPart[]}): React.JSX.Ele
  * to the caller, which hands the same parts to [CountLegend] so the bar and its key are one array
  * read twice. Zero-count segments are dropped from the bar: they would be invisible anyway, and the
  * legend beside it still says "Guru 0".
+ *
+ * The bar is also a way to choose: the wrapper is a real 48 dp touch row with the capsule centred
+ * inside it, each drawn segment gets an equal share of that row, and the chosen one is painted at
+ * full accent while the others fade. A zero-count category has no segment to press, so it is chosen
+ * from its legend like any other.
  */
-export function StackedBar({segments}: {segments: DistributionPart[]}): React.JSX.Element {
+export function StackedBar({
+  segments,
+  selectedKey,
+  onSelect,
+}: {
+  segments: DistributionPart[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}): React.JSX.Element {
   const {colors} = useTheme();
   const drawn = segments.filter((segment) => segment.count > 0);
   const summary = segments
     .map((segment) => `${segment.spoken ?? segment.label} ${segment.count}`)
     .join(", ");
   return (
-    <View>
+    <View style={styles.stackedBarWrap}>
       <View
+        accessible
         accessibilityRole="image"
         accessibilityLabel={summary}
         style={[styles.stackedBar, {backgroundColor: colors.outlineVariant}]}
       >
         {drawn.map((segment) => (
-          <View
+          <StackedSegment key={segment.key} segment={segment} selectedKey={selectedKey} />
+        ))}
+      </View>
+      {/* The bar's touch layer, a normal child of the 48 dp wrapper: the same proportional columns
+          as the segments it covers. It carries no ink and no accessibility of its own — the visible
+          key is the spoken control, and this is only the sighted reader's quicker way to it. */}
+      <View style={styles.stackedHitLayer} pointerEvents="box-none">
+        {drawn.map((segment) => (
+          <PressableScale
             key={segment.key}
-            style={[
-              styles.stackedSegment,
-              {flexGrow: segment.count, backgroundColor: segment.color},
-              // The ramp between the parts of one bar is carried by opacity rather than by three
-              // different hues: the reader's accent is the only hue the page is allowed to spend,
-              // and a tint built here in JS would drift from the tones the theme resolved.
-              segment.opacity != null && {opacity: segment.opacity},
-            ]}
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            onPress={() => onSelect(segment.key)}
+            style={{flexGrow: segment.count, height: "100%"}}
           />
         ))}
       </View>
     </View>
+  );
+}
+
+/**
+ * One drawn segment: width and position come only from `flexGrow` on the count, so the proportions
+ * are untouched, while the rounded corner and the dim/full accent fade are state, not geometry. The
+ * parent capsule still clips the two end segments to the bar's own radius.
+ */
+function StackedSegment({
+  segment,
+  selectedKey,
+}: {
+  segment: DistributionPart;
+  selectedKey: string | null;
+}): React.JSX.Element {
+  const reducedMotion = useReducedMotion();
+  const target = distributionOpacity(segment, selectedKey) ?? 1;
+  const opacity = useSharedValue(target);
+  useEffect(() => {
+    opacity.value = reducedMotion
+      ? target
+      : withTiming(target, {duration: DISTRIBUTION_SELECT_MS, easing: PRESS_EASING_REANIMATED});
+  }, [target, reducedMotion, opacity]);
+  const motion = useAnimatedStyle(() => ({opacity: opacity.value}));
+  return (
+    <Animated.View
+      style={[
+        styles.stackedSegment,
+        {flexGrow: segment.count, backgroundColor: segment.color},
+        // The ramp between the parts of one bar is carried by opacity rather than by three
+        // different hues: the reader's accent is the only hue the page is allowed to spend, and a
+        // tint built here in JS would drift from the tones the theme resolved. While a category is
+        // selected the ramp gives way to the choice: that segment is full accent and the rest fade,
+        // so the two rules never fight.
+        motion,
+      ]}
+    />
   );
 }
 
@@ -868,6 +1304,7 @@ const styles = StyleSheet.create({
   // Twelve columns of seven rows. The gaps are the size of the hole between two cells, and the rows
   // share the grid's width because the cells flex — that is what keeps the grid inside a 320 dp
   // section without a scroll or a second layout for narrow screens.
+  heatmapBlock: {position: "relative"},
   heatmapGrid: {flexDirection: "column", rowGap: HEATMAP_ROW_GAP},
   heatmapRow: {
     flexDirection: "row",
@@ -878,6 +1315,42 @@ const styles = StyleSheet.create({
   heatmapRowLabel: {width: HEATMAP_LABEL_WIDTH},
   heatmapRowLabelText: {lineHeight: HEATMAP_CELL_HEIGHT},
   heatmapCell: {flex: 1, minWidth: 0, borderRadius: HEATMAP_CELL_RADIUS},
+  // The fill is absolute so the value's own opacity, outline or fill is drawn on a layer the press
+  // feedback cannot overwrite, while the button root still carries the 17 dp touch target.
+  heatmapDayFill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: HEATMAP_CELL_RADIUS,
+  },
+  // The selected day's accent ring hangs a hair outside the cell so the 17 dp square's own size and
+  // the widths of its neighbours never move; only its opacity is animated.
+  heatmapDayRing: {
+    position: "absolute",
+    top: -2,
+    left: -2,
+    right: -2,
+    bottom: -2,
+    borderWidth: 2,
+    borderRadius: HEATMAP_CELL_RADIUS + 2,
+  },
+  // The day popover is a quiet surface with a hairline, not a card: it floats over the grid, is
+  // clamped inside the grid's width and grows downward, so long text wraps instead of clipping.
+  heatmapTooltip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  heatmapTooltipDetail: {marginTop: 2},
+  // The chart's aggregate summary stays available to a screen reader without drawing a second
+  // visible sentence under the grid.
+  visuallyHidden: {position: "absolute", width: 1, height: 1, opacity: 0},
   heatmapLegend: {
     flexDirection: "row",
     alignItems: "center",
@@ -912,26 +1385,53 @@ const styles = StyleSheet.create({
     columnGap: spacing.m,
     rowGap: spacing.s,
   },
-  countLegendItem: {minWidth: 0, flexShrink: 1},
+  countLegendItem: {minWidth: 0, flexShrink: 1, minHeight: DISTRIBUTION_TOUCH_HEIGHT},
   // The swatch sits on the label's first line rather than centred on the block, so a name that wraps
   // to a second line still has its key beside the word it starts with. The 4 dp is half of the 16 dp
   // label line less the 8 dp square, which is what puts the two on one optical line.
   countLegendKey: {flexDirection: "row", alignItems: "flex-start", gap: 5, marginTop: 2},
-  countLegendSwatch: {
+  countLegendSwatchWrap: {
     width: DISTRIBUTION_SWATCH_SIZE,
     height: DISTRIBUTION_SWATCH_SIZE,
-    borderRadius: 2,
     marginTop: 4,
+  },
+  countLegendSwatch: {
+    flex: 1,
+    borderRadius: 2,
     // The backing is the bar's own track tone and the fill inside is clipped to it, so the two draw
     // the same composite rather than one over paper and one over a track.
     overflow: "hidden",
   },
   countLegendSwatchFill: {flex: 1},
+  // The ring sits outside the clipped swatch, so a selected key wears the accent without changing
+  // the 8 dp key's footprint. It fades in and out with the choice.
+  countLegendSwatchRing: {
+    position: "absolute",
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderWidth: 2,
+    borderRadius: 5,
+  },
   // A name may wrap rather than truncate: "Apprentice 1-4" cut to "Appren…" would be a key that does
   // not name anything, and the row has already spread itself around whatever space is left.
   countLegendLabel: {flexShrink: 1},
+  // The chart's own 48 dp touch row: the 9 dp capsule is centred in it and the invisible hit layer
+  // fills it, so the whole row is a real Android touch target rather than an overflowed one.
+  stackedBarWrap: {height: DISTRIBUTION_TOUCH_HEIGHT, justifyContent: "center"},
   stackedBar: {height: 9, flexDirection: "row", borderRadius: 9, overflow: "hidden"},
-  stackedSegment: {height: "100%"},
+  stackedSegment: {height: "100%", borderRadius: DISTRIBUTION_SEGMENT_RADIUS},
+  // The transparent layer over the capsule: the same proportional columns as the segments beneath it,
+  // filling the wrapper's own height.
+  stackedHitLayer: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+  },
   unavailable: {borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10},
   unavailableText: {lineHeight: 20},
   // A 48 dp target that hugs the label: the action gets a full-height touch area without becoming a

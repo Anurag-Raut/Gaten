@@ -207,11 +207,16 @@ function dayBefore(now: number, daysAgo: number): Date {
  * different sentences — and the unknown one uses the exact words the design asks for.
  */
 function spokenFor(day: Date, cards: number | null): string {
-  const date = `${WEEKDAY_LABELS[day.getDay()]} ${day.getDate()} ${MONTH_LABELS[day.getMonth()]}`;
+  const date = dateFor(day);
   if (cards == null) {
     return `${date}, Activity unknown`;
   }
   return cards === 0 ? `${date}, No cards` : `${date}, ${cards} cards`;
+}
+
+/** The local date one cell sits on, in the grid's own short form ("Mon 5 Jan"). */
+function dateFor(day: Date): string {
+  return `${WEEKDAY_LABELS[day.getDay()]} ${day.getDate()} ${MONTH_LABELS[day.getMonth()]}`;
 }
 
 /** One day of the grid: the count that was read, the band it earned, and its own spoken label. */
@@ -222,6 +227,8 @@ export interface HeatmapCell {
   cards: number | null;
   /** 0 for a confirmed zero, 1–4 for a counted day's band, null for a day that could not be read. */
   level: 0 | 1 | 2 | 3 | 4 | null;
+  /** The local date the cell is labelled with, without the count. */
+  date: string;
   /** What a screen reader reads for this cell. */
   spoken: string;
 }
@@ -294,6 +301,7 @@ export function heatmap(activity: AnkiActivityDay[], now: number): HeatmapGrid {
       daysAgo: day.daysAgo,
       cards: day.cards,
       level: day.cards == null ? null : day.cards === 0 ? 0 : bandOf(day.cards, bands),
+      date: dateFor(day.at),
       spoken: spokenFor(day.at, day.cards),
     };
   }
