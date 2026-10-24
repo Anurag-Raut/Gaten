@@ -47,6 +47,9 @@ private const val TAG = "Gaten"
 private const val BUBBLE_DP = 48
 private const val ICON_DP = 24
 
+/** How much the bubble grows under a tap; it comes straight back down and never changes colour. */
+private const val BUBBLE_PRESS_SCALE = 1.15f
+
 /** The drop target's diameter and glyph. */
 private const val DISMISS_DP = 48
 private const val DISMISS_ICON_DP = 24
@@ -120,11 +123,13 @@ private const val GONE_TIMEOUT_MS = 150L
  * window anywhere else throws.
  *
  * The bubble's motion is its opacity: it fades in where it was left, and fades out when the reader
- * switches it off or a drag drops it on the target. The target has a short fade of its own, and grows
- * while the dragged finger is over it and shrinks back on the way out; its colours, keyline and round
- * silhouette never change, so a finger on it says only "bigger", never "different". The bubble still
- * changes colour under a finger; the drag and the clamp are not animations — they answer a finger — and
- * the service takes the windows down outright before a capture.
+ * switches it off or a drag drops it on the target — only ever alpha, never a scale. The target has a
+ * short fade of its own, and grows while the dragged finger is over it and shrinks back on the way out;
+ * its colours, keyline and round silhouette never change, so a finger on it says only "bigger", never
+ * "different". The bubble's own disk answers a tap the same way: it grows and comes straight back down,
+ * with its colours untouched, and the lookup waits for that shrink so the capture cannot cut it short.
+ * The drag and the clamp are not animations — they answer a finger — and the service takes the windows
+ * down outright before a capture.
  */
 class FloatingTriggerButton(
     private val context: Context,
@@ -135,6 +140,13 @@ class FloatingTriggerButton(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val density = context.resources.displayMetrics.density
     private val bubblePx = (BUBBLE_DP * density).toInt()
+
+    /**
+     * The bubble's window is larger than the disk it draws, by [BUBBLE_PRESS_SCALE]. The transparent
+     * ring left over is what the disk grows into on a tap: a scaled view is clipped to its window,
+     * so a window the size of the disk would shear the grown disk into a rounded square.
+     */
+    private val bubbleWindowPx = ceil(bubblePx * BUBBLE_PRESS_SCALE).toInt()
     private val dismissPx = (DISMISS_DP * density).toInt()
 
     /**
@@ -152,7 +164,7 @@ class FloatingTriggerButton(
     private val strokePx = (PERIMETER_DP * density).toInt()
 
     /** The bubble on screen, if any; also the source of truth behind [isShowing]. */
-    private var view: ImageView? = null
+    private var view: View? = null
     private var params: WindowManager.LayoutParams? = null
 
     /** The remove target's window, up only for the length of a drag, and the circle inside it. */
@@ -161,17 +173,15 @@ class FloatingTriggerButton(
     private var dismissParams: WindowManager.LayoutParams? = null
 
     /**
-     * The bubble itself, kept separately because the press feedback repaints this one view, while
-     * the window operations always address [view].
+     * The bubble's disk, kept separately because the tap feedback scales this one view, while the
+     * window operations always address [view]. The disk is the child of that window; the window is
+     * the transparent box the disk grows into.
      */
     private var bubbleView: ImageView? = null
 
-    /** The bubble's fill and stroke in both states, so a press only repaints the drawable. */
-    private var bubbleBackground: GradientDrawable? = null
-    private var bubbleFillNormal = 0
-    private var bubbleFillPressed = 0
-    private var bubbleInkNormal = 0
-    private var bubbleInkPressed = 0
+    /** Whatever is writing the bubble disk's tap scale, and the scale it is at now. */
+    private var bubbleScaleAnimator: ValueAnimator? = null
+    private var bubbleScale = 1f
 
     /**
      * Whatever is writing the bubble's opacity: an entrance, or the fade out of a bubble the reader
@@ -218,7 +228,7 @@ class FloatingTriggerButton(
             // standing.
             if (fadingOut) {
                 fadingOut = false
-                pressColor(false)
+                resetBubbleScale()
                 animateBubbleAlpha(1f, Motion.emphasized)
             }
             return@onMain
@@ -300,6 +310,7 @@ class FloatingTriggerButton(
         stopAlpha()
         stopDismissAlpha()
         stopDismissScale()
+        stopBubbleScale()
         fadingOut = false
         val bubble = view
         val target = dismissView
@@ -308,7 +319,6 @@ class FloatingTriggerButton(
         dismissView = null
         dismissParams = null
         bubbleView = null
-        bubbleBackground = null
         dismissCircle = null
         bubble?.let { removeWindow(it) }
         target?.let { removeWindow(it) }
@@ -454,22 +464,26 @@ class FloatingTriggerButton(
     }
 
     /**
-     * A round [ImageView]: an opaque accent disk, a hard keyline inside its edge, and the tiled
-     * lookup glyph tinted `onPrimary` so it reads on that fill in both light and dark modes. The
-     * theme is the app's own choice ([ThemePreferences]), not the device's: this window has no
-     * composition to read it from, so the preferences are read here and resolved against the system
-     * setting the same way.
+     * The bubble: a round [ImageView] — an opaque accent disk, a hard keyline inside its edge, and
+     * the tiled lookup glyph tinted `onPrimary` so it reads on that fill in both light and dark
+     * modes. The theme is the app's own choice ([ThemePreferences]), not the device's: this window
+     * has no composition to read it from, so the preferences are read here and resolved against the
+     * system setting the same way.
      *
      * The fill is opaque and the keyline is the paired ink rather than a paler accent. This disk
      * floats over whatever the other app happens to be drawing, so it has to name its action by
      * itself on a dark page and on a bright one — a translucent disk, or one held together by a
      * hairline alone, would not.
+     *
+     * The disk sits in a window one [BUBBLE_PRESS_SCALE] larger than itself, so a tap's growth has
+     * somewhere to go; only the disk is scaled, and its colours, keyline, glyph and round silhouette
+     * are the same before, during and after.
      */
-    private fun buildBubble(tone: AccentRoles): ImageView {
+    private fun buildBubble(tone: AccentRoles): FrameLayout {
         val primary = tone.primary.toArgb()
         val onPrimary = tone.onPrimary.toArgb()
 
-        val circle = GradientDrawable().apply {
+        val disk = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             // One solid colour and one stroke, never a gradient. A drawable's stroke is inset
             // inside its bounds, which is where this keyline belongs: inside the 48 dp circle.
@@ -479,22 +493,15 @@ class FloatingTriggerButton(
         val inset = ((BUBBLE_DP - ICON_DP) / 2f * density).toInt()
         val hint = context.getString(R.string.bubble_lookup_hint)
 
-        // The press state repaints this drawable and tint; the entrance/fade animator writes the
-        // window's alpha, never the background's, so the two never touch the same property.
-        bubbleBackground = circle
-        bubbleFillNormal = primary
-        bubbleFillPressed = tone.primaryContainer.toArgb()
-        bubbleInkNormal = onPrimary
-        bubbleInkPressed = tone.onPrimaryContainer.toArgb()
-
-        return ImageView(context).apply {
+        bubbleScale = 1f
+        val circle = ImageView(context).apply {
             setImageResource(R.drawable.ic_qs_lookup)
             imageTintList = ColorStateList.valueOf(onPrimary)
             scaleType = ImageView.ScaleType.CENTER
-            setBackground(circle)
+            setBackground(disk)
             setPadding(inset, inset, inset, inset)
-            minimumWidth = bubblePx
-            minimumHeight = bubblePx
+            // The disk is the thing that grows; it is centred in the window and only ever scaled.
+            layoutParams = FrameLayout.LayoutParams(bubblePx, bubblePx, Gravity.CENTER)
             contentDescription = context.getString(R.string.bubble_lookup_label)
             accessibilityDelegate = object : View.AccessibilityDelegate() {
                 override fun onInitializeAccessibilityNodeInfo(
@@ -512,7 +519,14 @@ class FloatingTriggerButton(
             // It is what an accessibility service activates, though, and without it the label and
             // hint above would be describing an action nobody can perform.
             setOnClickListener { onTrigger() }
-        }.also { bubbleView = it }
+        }
+        bubbleView = circle
+        return FrameLayout(context).apply {
+            // Transparent, and exactly the grown disk's size: the ring the tap's scale grows into.
+            minimumWidth = bubbleWindowPx
+            minimumHeight = bubbleWindowPx
+            addView(circle)
+        }
     }
 
     /**
@@ -597,7 +611,7 @@ class FloatingTriggerButton(
     private fun restoredOrDefaultPosition(): Pair<Int, Int> {
         TriggerPreferences.floatingButtonPosition(context)?.let { return clampToDisplay(it) }
         val metrics = context.resources.displayMetrics
-        val x = (metrics.widthPixels - bubblePx - edgeMarginPx).coerceAtLeast(0)
+        val x = (metrics.widthPixels - bubbleWindowPx - edgeMarginPx).coerceAtLeast(0)
         val y = (metrics.heightPixels * DEFAULT_HEIGHT_FRACTION).toInt().coerceAtLeast(0)
         return x to y
     }
@@ -688,8 +702,8 @@ class FloatingTriggerButton(
      */
     private fun clampToDisplay(position: Pair<Int, Int>): Pair<Int, Int> {
         val metrics = context.resources.displayMetrics
-        val maxX = (metrics.widthPixels - bubblePx).coerceAtLeast(0)
-        val maxY = (metrics.heightPixels - bubblePx).coerceAtLeast(0)
+        val maxX = (metrics.widthPixels - bubbleWindowPx).coerceAtLeast(0)
+        val maxY = (metrics.heightPixels - bubbleWindowPx).coerceAtLeast(0)
         return position.first.coerceIn(0, maxX) to position.second.coerceIn(0, maxY)
     }
 
@@ -700,10 +714,11 @@ class FloatingTriggerButton(
      * all, and nothing here is bound to a long press to deserve one. A drag is clamped into the
      * display, so a released position is always one the bubble can be seen and touched at.
      *
-     * A press repaints the bubble in the pressed colour and the drag gives the normal colour back:
-     * once the finger is moving the window, the position is the feedback and the colour has nothing
-     * left to say. While the finger is over the target, the target says so; a release there removes
-     * the bubble, and a release anywhere else only stores its new position. A cancellation never
+     * A press grows the bubble and the drag lets it back down: once the finger is moving the window,
+     * the position is the feedback and the size has nothing left to say. A tap's feedback is that
+     * same grow-and-shrink, and the lookup waits for the shrink to finish so the capture cannot cut
+     * it short. While the finger is over the target, the target says so; a release there removes the
+     * bubble, and a release anywhere else only stores its new position. A cancellation never
      * removes it.
      */
     private fun handleTouch(touched: View, event: MotionEvent): Boolean {
@@ -718,7 +733,7 @@ class FloatingTriggerButton(
                 downY = layoutParams.y
                 dragging = false
                 overDismiss = false
-                pressColor(true)
+                animateBubbleScale(true)
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -726,7 +741,7 @@ class FloatingTriggerButton(
                 val dy = event.rawY - downRawY
                 if (!dragging && hypot(dx, dy) > touchSlopPx) {
                     dragging = true
-                    pressColor(false)
+                    animateBubbleScale(false)
                     showDismiss()
                 }
                 if (dragging) {
@@ -743,10 +758,10 @@ class FloatingTriggerButton(
             }
 
             MotionEvent.ACTION_UP -> {
-                pressColor(false)
                 val dropped = dragging && overDismiss
                 overDismiss = false
                 if (dragging) {
+                    animateBubbleScale(false)
                     if (dropped) {
                         // The reader dropped the bubble on the remove target: the same dismissal the
                         // target's own activation performs, so the preference, the fade and the
@@ -760,12 +775,15 @@ class FloatingTriggerButton(
                         hideDismiss()
                     }
                 } else {
-                    onTrigger()
+                    // The tap's feedback is the disk coming back down; the lookup waits for that to
+                    // finish, because the capture that follows takes the bubble off screen and would
+                    // otherwise cut the shrink short before the reader saw it.
+                    animateBubbleScale(false, onEnd = onTrigger)
                 }
             }
 
             MotionEvent.ACTION_CANCEL -> {
-                pressColor(false)
+                animateBubbleScale(false)
                 overDismiss = false
                 if (dragging) {
                     animateDismissScale(false)
@@ -803,17 +821,53 @@ class FloatingTriggerButton(
     }
 
     /**
-     * Repaints the bubble in the pressed or normal theme tones: the accent's container and its
-     * paired ink while a finger is down, the accent's primary and `onPrimary` otherwise. Both pairs
-     * are the app's own, so the glyph stays readable on the disk in light and dark mode.
+     * Eases the bubble's disk between its resting size and its pressed size. Only the scale moves:
+     * the fill, keyline, glyph and round silhouette are untouched, so a tap reads the same control,
+     * larger. [onEnd] runs only for the animation that really finished; a drag taking the press over,
+     * or another tap, supersedes it and does not fire it.
      */
-    private fun pressColor(pressed: Boolean) {
-        val background = bubbleBackground ?: return
-        val bubble = bubbleView ?: return
-        val ink = if (pressed) bubbleInkPressed else bubbleInkNormal
-        background.setColor(if (pressed) bubbleFillPressed else bubbleFillNormal)
-        background.setStroke(strokePx, ink)
-        bubble.imageTintList = ColorStateList.valueOf(ink)
+    private fun animateBubbleScale(pressed: Boolean, onEnd: (() -> Unit)? = null) {
+        val circle = bubbleView ?: run {
+            onEnd?.invoke()
+            return
+        }
+        val to = if (pressed) BUBBLE_PRESS_SCALE else 1f
+        stopBubbleScale()
+        val animator = ValueAnimator.ofFloat(bubbleScale, to).apply {
+            duration = Motion.SHORT.toLong()
+            setInterpolator(TimeInterpolator { Motion.pressEasing.transform(it) })
+            addUpdateListener { animation ->
+                val scale = animation.animatedValue as Float
+                bubbleScale = scale
+                circle.scaleX = scale
+                circle.scaleY = scale
+            }
+        }
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (bubbleScaleAnimator !== animation) return
+                bubbleScaleAnimator = null
+                onEnd?.invoke()
+            }
+        })
+        bubbleScaleAnimator = animator
+        animator.start()
+    }
+
+    /** Writes the resting scale directly, for a disk that has just been built. */
+    private fun resetBubbleScale() {
+        val circle = bubbleView ?: return
+        stopBubbleScale()
+        bubbleScale = 1f
+        circle.scaleX = 1f
+        circle.scaleY = 1f
+    }
+
+    /** Stops whatever is writing the bubble disk's tap scale. */
+    private fun stopBubbleScale() {
+        val running = bubbleScaleAnimator ?: return
+        bubbleScaleAnimator = null
+        running.cancel()
     }
 
     /**
