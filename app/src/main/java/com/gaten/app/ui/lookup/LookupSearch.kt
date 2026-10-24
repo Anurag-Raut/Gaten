@@ -176,6 +176,12 @@ private val ArtworkShortHeight = 344.dp
 private val CaptionMaxWidth = 280.dp
 
 /**
+ * Home's own cap for the idle prompt's mark and its caption (`SearchArtwork`'s own 300 dp), so the
+ * cover draws the same picture at the same size as the field it borrows.
+ */
+private val HomeArtMaxWidth = 300.dp
+
+/**
  * The space a readable list needs under the query block. When the keyboard leaves less than this,
  * the cover stops pretending it can keep a fixed chrome and becomes one scroller instead.
  */
@@ -439,6 +445,7 @@ internal fun LookupSearchCover(
     LaunchedEffect(answers.query) { listState.scrollTo(0) }
 
     val prompt = stringResource(R.string.lookup_search_prompt)
+    val idleCaption = stringResource(R.string.lookup_search_idle_caption)
     val unsupported = stringResource(R.string.lookup_search_unsupported)
     val noMatches = stringResource(R.string.lookup_no_words)
     val tooLongMessage = stringResource(R.string.lookup_search_too_long)
@@ -464,7 +471,7 @@ internal fun LookupSearchCover(
     // announces itself, and the over-limit helper speaks for the surface while it is up.
     val announcement = when {
         tooLong -> tooLongMessage
-        phase == SearchPhase.Prompt -> prompt
+        phase == SearchPhase.Prompt -> idleCaption
         phase == SearchPhase.Unsupported -> "$prompt. $unsupported"
         phase == SearchPhase.NoMatches -> noMatches
         phase == SearchPhase.Results -> countLine
@@ -512,13 +519,6 @@ internal fun LookupSearchCover(
     val pick: (DictEntry) -> Unit = { chosen ->
         rememberQuery(answers.query)
         onPick(chosen, answers.query)
-    }
-
-    // The empty prompt's own words to tap, or nothing at all for the states that offer no choice.
-    val chips: (@Composable () -> Unit)? = if (phase == SearchPhase.Prompt) {
-        { PromptChips(recents = recents, onChip = onChip) }
-    } else {
-        null
     }
 
     Surface(
@@ -612,6 +612,19 @@ internal fun LookupSearchCover(
                                             .bringIntoViewRequester(firstRowIntoView)
                                     )
                                 }
+                                SearchPhase.Prompt -> {
+                                    // Home's prompt carries its own 16 dp above the words.
+                                    Spacer(Modifier.height(Spacing.l))
+                                    PromptState(
+                                        recents = recents,
+                                        onChip = onChip,
+                                        announcement = announcement,
+                                        availableWidth = (
+                                            minOf(viewportWidth, ContentColumnMaxWidth) -
+                                                inset * 2
+                                        ).coerceAtLeast(0.dp)
+                                    )
+                                }
                                 else -> {
                                     Spacer(Modifier.height(Spacing.m))
                                     CentredState(
@@ -635,7 +648,7 @@ internal fun LookupSearchCover(
                                         } else {
                                             null
                                         },
-                                        prompt = chips,
+                                        prompt = null,
                                         announcement = announcement
                                     )
                                 }
@@ -693,6 +706,20 @@ internal fun LookupSearchCover(
                                 }
                             }
 
+                            SearchPhase.Prompt -> {
+                                // Home's prompt carries its own 16 dp above the words.
+                                Spacer(Modifier.height(Spacing.l))
+                                PromptState(
+                                    recents = recents,
+                                    onChip = onChip,
+                                    announcement = announcement,
+                                    availableWidth = (
+                                        minOf(viewportWidth, ContentColumnMaxWidth) -
+                                            inset * 2
+                                    ).coerceAtLeast(0.dp)
+                                )
+                            }
+
                             else -> {
                                 Spacer(Modifier.height(Spacing.m))
                                 BoxWithConstraints(
@@ -719,7 +746,7 @@ internal fun LookupSearchCover(
                                         } else {
                                             null
                                         },
-                                        prompt = chips,
+                                        prompt = null,
                                         announcement = announcement
                                     )
                                 }
@@ -1291,6 +1318,48 @@ private fun PromptChips(recents: List<String>, onChip: (String) -> Unit, modifie
                 }
             }
         }
+    }
+}
+
+/**
+ * Home's own empty prompt, top-aligned under the field: the reader's recent searches (or, before
+ * they have any, the examples) immediately below it, then Home's own search mark and caption. The
+ * cover reads the same stored history Home does, so the two prompts always agree; only the mark's
+ * placement differs from the old centred state, which is what put the words in the middle of the
+ * screen. The block is decorative below the chips, so the live region keeps announcing the prompt.
+ */
+@Composable
+private fun PromptState(
+    recents: List<String>,
+    onChip: (String) -> Unit,
+    announcement: String?,
+    availableWidth: Dp,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    val type = MaterialTheme.typography
+    // Home insets this block once more than the field (`SearchIdlePrompt`'s own 16 dp), and caps the
+    // mark and its caption at Home's 300 dp; the available width is what the column leaves after
+    // that inset, so the mark never overflows a narrow cover.
+    val artWidth = minOf(HomeArtMaxWidth, (availableWidth - Spacing.l * 2).coerceAtLeast(0.dp))
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.l)
+            .announce(announcement),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        PromptChips(recents = recents, onChip = onChip)
+        Spacer(Modifier.height(Spacing.xl))
+        LookupSearchArtwork(width = artWidth)
+        Spacer(Modifier.height(Spacing.m))
+        Text(
+            text = stringResource(R.string.lookup_search_idle_caption),
+            style = type.bodyMedium,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = artWidth)
+        )
     }
 }
 

@@ -30,6 +30,7 @@ class GatenBridgePackage : ReactPackage {
             GatenTriggerModule(reactContext),
             GatenPlatformModule(reactContext),
             GatenRecognitionModule(reactContext),
+            GatenLookupSheetModule(reactContext),
         )
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
