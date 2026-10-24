@@ -16,7 +16,7 @@
  * The panel slides on the UI thread (Reanimated) and is reduced-motion safe. `pointerEvents` on the
  * transparent backdrop is `box-none` so the lasso/selection underneath the sheet is never blocked.
  */
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore} from "react";
 import {
   BackHandler,
   Dimensions,
@@ -84,6 +84,9 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const anki = useAnkiExport();
+  // The overlay's own search store: sharing the dictionary, history and UI with Home, but never its
+  // searchActive, query or results.
+  const lookupSearch = store.useSearchStore();
 
   const [state, setState] = useState<bridge.LookupSheetState>({
     sessionId: sessionId ?? "",
@@ -210,7 +213,7 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
     void anki.prepareExport(displayedEntry);
   }, [displayedEntry]);
 
-  const searchState = store.useSearchState();
+  const searchState = useSyncExternalStore(lookupSearch.subscribe, lookupSearch.getState);
   const searchRowsData = useMemo(
     () => searchRows(searchState),
     [searchState.hits, searchState.hitsQuery, searchState.query],
@@ -218,10 +221,9 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
 
   useEffect(() => {
     if (searchOpen) {
-      store.loadRecentSearches();
-      store.setSearchActive(true);
+      lookupSearch.loadRecentSearches();
     }
-  }, [searchOpen]);
+  }, [searchOpen, lookupSearch]);
 
   const searchNotice =
     searchState.status === "unsupported" ? (
@@ -235,7 +237,7 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
         icon="error"
         title="The dictionary could not be read"
         body={searchState.error ?? "The dictionary could not be opened."}
-        action={{label: "Try again", onPress: store.retrySearch}}
+        action={{label: "Try again", onPress: lookupSearch.retrySearch}}
       />
     ) : searchState.status === "searching" ? (
       <SearchNotice spin title="Searching the dictionary…" />
@@ -249,18 +251,17 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
 
   const pickSearched = useCallback(
     (entryId: number) => {
-      const hit = store.hitFor(entryId);
+      const hit = lookupSearch.hitFor(entryId);
       if (hit != null) {
-        const committedQuery = store.getSearchState().hitsQuery;
-        store.rememberSearchedQuery(committedQuery);
+        const committedQuery = lookupSearch.getState().hitsQuery;
+        lookupSearch.rememberSearchedQuery(committedQuery);
         setSearchedEntry(hit);
         setSearchedQuery(committedQuery);
       }
       input.current?.blur();
       setSearchOpen(false);
-      store.setSearchActive(false);
     },
-    [],
+    [lookupSearch],
   );
 
   // A WaniKani page opened over the entry is a nested layer of the same shell: the shell's height
@@ -390,12 +391,12 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
                 inputRef={input}
                 query={searchState.query}
                 queryLimited={searchState.queryLimited}
-                onChangeQuery={store.onQueryChange}
+                onChangeQuery={lookupSearch.onQueryChange}
                 onFocus={() => bridge.setTextEntryActive(true)}
                 onBlur={() => bridge.setTextEntryActive(false)}
                 onSearch={() => {
                   input.current?.blur();
-                  store.searchNow();
+                  lookupSearch.searchNow();
                 }}
               />
             </View>
@@ -567,11 +568,16 @@ function EntryDetail({
 
 /** Wraps the root in the providers the Home tab already assumes. */
 export function LookupSheetApp({sessionId}: {sessionId?: string} = {}) {
+  // One scoped store per mounted surface (the surface remounts per lookup session), so the
+  // overlay's search is as ephemeral as the sheet itself and never Home's state.
+  const [searchStore] = useState(() => store.createSearchStore());
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <LookupSheetRoot sessionId={sessionId} />
+          <store.SearchStoreContext.Provider value={searchStore}>
+            <LookupSheetRoot sessionId={sessionId} />
+          </store.SearchStoreContext.Provider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

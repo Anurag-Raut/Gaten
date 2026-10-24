@@ -9,7 +9,8 @@
  * cards. They were the Search tab's own file; the Home tab now shows the same field and the same
  * rows inline, so both screens draw from here rather than from two copies. Nothing here holds
  * state — the query, the results and the reading position all live in `searchStore`, and every
- * screen that shows them reads the same store.
+ * screen that shows them reads the store in scope: Home's default, or the lookup sheet's own
+ * scoped instance while the overlay is up.
  */
 import React from "react";
 import {
@@ -40,6 +41,7 @@ import {
 import type {SearchResult} from "../../native/GatenDict";
 import {SearchArtwork} from "./SearchArtwork";
 import * as store from "./searchStore";
+import {useSearchStore} from "./searchStore";
 
 /** How long the field's focus ring takes to fade in or out. */
 const FOCUS_MS = 150;
@@ -145,7 +147,11 @@ export function SearchRowSeparator() {
 export function SearchIdlePrompt() {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
-  const {recentSearches} = store.useSearchState();
+  const searchStore = useSearchStore();
+  const {recentSearches} = React.useSyncExternalStore(
+    searchStore.subscribe,
+    searchStore.getState,
+  );
   const firstSearch = recentSearches.length === 0;
   // The list already insets itself by the screen's own content inset; the drawing takes what is
   // left of that column, up to the width it is drawn for.
@@ -165,8 +171,8 @@ export function SearchIdlePrompt() {
             accessibilityRole="button"
             accessibilityLabel={`Search for ${word}`}
             onPress={() => {
-              store.onQueryChange(word);
-              store.searchNow();
+              searchStore.onQueryChange(word);
+              searchStore.searchNow();
             }}
             style={[styles.exampleChip, {backgroundColor: colors.surfaceVariant}]}
           >
