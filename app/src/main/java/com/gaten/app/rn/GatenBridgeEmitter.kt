@@ -31,6 +31,13 @@ object GatenBridgeEmitter {
     /** Carries the settings page an outside launch asked for: {"page": "wanikani"} or empty. */
     const val SETTINGS_PAGE_REQUEST = "gaten.settingsPageRequest"
 
+    /**
+     * The floating-button preference changed, from the on-screen remove button or from a settings
+     * write. The payload carries nothing; the Screen lookup page re-reads the preference, which is
+     * what keeps its switch in step with a dismissal it did not perform.
+     */
+    const val FLOATING_BUTTON_CHANGED = "gaten.floatingButtonChanged"
+
     private val reactContext = AtomicReference<ReactContext?>(null)
 
     /** Records the context events are sent through. Called by every module on creation. */
@@ -41,6 +48,14 @@ object GatenBridgeEmitter {
     /** Tells JS the theme choices changed; the payload carries nothing, so the screens re-read. */
     fun emitThemeChanged() {
         emit(THEME_CHANGED, Arguments.createMap())
+    }
+
+    /**
+     * Tells JS the floating-button preference changed; the payload carries nothing, so the Screen
+     * lookup page re-reads the switch.
+     */
+    fun emitFloatingButtonChanged() {
+        emit(FLOATING_BUTTON_CHANGED, Arguments.createMap())
     }
 
     /**

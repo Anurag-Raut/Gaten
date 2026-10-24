@@ -2,7 +2,7 @@
  * The floating-trigger bridge: the on-screen bubble's switch, stored in `gaten_settings` and
  * announced to the running service through the floating-button-changed broadcast.
  */
-import { NativeModules } from "react-native";
+import { DeviceEventEmitter, NativeModules } from "react-native";
 
 interface GatenTriggerNative {
   getFloatingButtonEnabled(): Promise<boolean>;
@@ -28,6 +28,15 @@ export function getFloatingButtonEnabled(): Promise<boolean> {
  */
 export function setFloatingButtonEnabled(enabled: boolean): Promise<void> {
   return GatenTrigger.setFloatingButtonEnabled(enabled);
+}
+
+/**
+ * The floating-button preference changed — from the on-screen remove button or a settings write.
+ * The payload carries nothing; listen and re-read [getFloatingButtonEnabled], so a Screen lookup
+ * page that did not make the change does not keep showing a stale switch.
+ */
+export function onFloatingButtonChanged(listener: () => void): { remove: () => void } {
+  return DeviceEventEmitter.addListener("gaten.floatingButtonChanged", listener);
 }
 
 /** Whether the lookup tile is already in the reader's Quick Settings, as Gaten recorded it. */

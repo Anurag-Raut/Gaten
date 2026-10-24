@@ -46,7 +46,7 @@ const ADD_TILE_API = 33;
 
 const HELP_PARAGRAPHS = [
   "Circle text or tap a Japanese line. A missed tap keeps lookup open.",
-  "Drag the floating button to move it. The button appears while lookup mode is on.",
+  "Drag the floating button to move it, or drop it on the X at the bottom of the screen to remove it. Switch Floating button back on here to bring it back. The button appears while lookup mode is on.",
   "The Quick Settings tile can be switched off here and removed in Android's Quick Settings editor.",
   "Map a key to the broadcast action shown in Key Mapper.",
   "Notification access lets Gaten control media sessions. Without it, some players may ignore media keys. Gaten resumes playback after a normal lookup dismissal; media stays paused after an interruption.",
@@ -106,6 +106,22 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
       .catch(() => {});
   };
 
+  // The floating switch is guarded too: the remove button on the overlay writes the preference and
+  // announces it, so a read that started before a close or a toggle must not put the old value
+  // back. Both the mount/foreground read and the notification go through here.
+  const floatingReadSeq = useRef(0);
+  const readFloatingEnabled = () => {
+    floatingReadSeq.current += 1;
+    const seq = floatingReadSeq.current;
+    void GatenTrigger.getFloatingButtonEnabled()
+      .then((v) => {
+        if (seq === floatingReadSeq.current) {
+          setFloatingEnabled(v);
+        }
+      })
+      .catch(() => {});
+  };
+
   // Tile callbacks can arrive while this page sits under the Quick Settings shade, and both
   // lookup mode and the notification-listener permission are granted in system Settings: re-read
   // on every arrival and foregrounding.
@@ -116,20 +132,23 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
       void GatenPlatform.isNotificationAccessEnabled().then((v) => {
         if (!cancelled) setNotificationAccess(v);
       });
-      void GatenTrigger.getFloatingButtonEnabled().then((v) => {
-        if (!cancelled) setFloatingEnabled(v);
-      });
+      readFloatingEnabled();
       readTileState();
     };
     readAll();
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") readAll();
     });
+    // The overlay's remove button writes the preference in native code; this is how the switch
+    // shows OFF while this page is already in the foreground.
+    const floatingSubscription = GatenTrigger.onFloatingButtonChanged(readFloatingEnabled);
     return () => {
       cancelled = true;
       // A read still in flight when the page goes away must not land on it.
       tileReadSeq.current += 1;
       lookupReadSeq.current += 1;
+      floatingReadSeq.current += 1;
+      floatingSubscription.remove();
       subscription.remove();
     };
   }, []);

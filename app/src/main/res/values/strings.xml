@@ -46,5 +46,7 @@
 
     <!-- The floating lookup bubble's own window; it has no composition to read strings from. -->
     <string name="bubble_lookup_label">Screen lookup</string>
-    <string name="bubble_lookup_hint">Tap to look up; drag to move</string>
+    <string name="bubble_lookup_hint">Tap to look up; drag to move or drop on the X to remove</string>
+    <string name="bubble_lookup_close_label">Remove floating button</string>
+    <string name="bubble_lookup_close_hint">Drop the floating button here to remove it. Turn it back on in Screen lookup settings.</string>
 </resources>

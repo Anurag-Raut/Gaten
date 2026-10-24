@@ -54,6 +54,9 @@ class GatenTriggerModule(reactContext: ReactApplicationContext) :
             Intent(TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED)
                 .setPackage(context.packageName)
         )
+        // Announce the write to JS as well, so a Screen lookup page that is already open (and did
+        // not make this change) re-reads the switch instead of showing a stale value.
+        GatenBridgeEmitter.emitFloatingButtonChanged()
         promise.resolve(null)
     }
 
