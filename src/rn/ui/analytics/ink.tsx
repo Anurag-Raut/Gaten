@@ -125,11 +125,12 @@ const DISTRIBUTION_BAR_HEIGHT = 9;
 const DISTRIBUTION_LAYER_RADIUS = DISTRIBUTION_BAR_HEIGHT / 2;
 
 /**
- * The analytics entrance: one short, decelerating sweep shared by every figure and fill on a screen
- * that has just come into view with data ready. Reduced motion sets the same value straight to its
- * final state.
+ * The analytics entrance: one deliberately slow, decelerating sweep shared by every figure and fill
+ * on a screen that has just come into view with data ready. The cubic Bézier spends most of its
+ * distance early and then settles for the rest of the duration; reduced motion sets the same value
+ * straight to its final state.
  */
-const ANALYTICS_ENTRANCE_MS = 420;
+const ANALYTICS_ENTRANCE_MS = 1100;
 const ANALYTICS_ENTRANCE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 
 /** The count-up text is a normal Text, driven from JS at a bounded rate; 33 ms is about 30 Hz. */
