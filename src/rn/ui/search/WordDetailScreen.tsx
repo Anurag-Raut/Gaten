@@ -14,7 +14,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  ToastAndroid,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -26,7 +25,6 @@ import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenDict from "../../native/GatenDict";
-import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {hitFor, useSearchState} from "./searchStore";
 import {SearchNotice} from "./SearchScreen";
@@ -331,17 +329,10 @@ function AddToAnkiBar({
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
 
-  const share = async () => {
-    try {
-      const shared = await anki.shareToAnkiDroid(entry);
-      if (!shared) {
-        ToastAndroid.show("AnkiDroid cannot be opened for sharing", ToastAndroid.SHORT);
-        ToastAndroid.show("AnkiDroid cannot be opened for sharing", ToastAndroid.SHORT);
-      }
-    } catch {
-      ToastAndroid.show("AnkiDroid cannot be opened for sharing", ToastAndroid.SHORT);
-    }
-  };
+  // The Anki action belongs to a connected AnkiDroid only: without database access there is
+  // nothing to add to and no fallback to offer, so the whole bar stays out of the way rather
+  // than leaving an orphaned deck row or empty footer space behind.
+  if (anki.ankiStatus !== "ready") return null;
 
   const buttonLabel = (() => {
     if (anki.celebrating === entry.id) {
@@ -382,35 +373,19 @@ function AddToAnkiBar({
             {anki.ankiSettings.deckName}
           </Text>
         </View>
-        {anki.ankiStatus !== "notInstalled" && (
-          <Button
-            fullWidth
-            disabled={!enabled}
-            label={busy ? undefined : buttonLabel}
-            leading={
-              busy ? (
-                <ActivityIndicator size="small" color={colors.onActionPrimary} />
-              ) : exportState.kind === "idle" || exportState.kind === "failed" ? (
-                <Icon name="add" size={18} color={colors.onActionPrimary} />
-              ) : null
-            }
-            onPress={() => {
-              if (anki.ankiStatus === "ready") {
-                void anki.addToAnki(entry);
-              } else {
-                void GatenAnki.requestPermission();
-              }
-            }}
-          />
-        )}
-        {anki.ankiStatus === "needsPermission" && (
-          <Button variant="text" label="Send to AnkiDroid instead" onPress={() => void share()} />
-        )}
-        {anki.ankiStatus === "notInstalled" && (
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-            Install AnkiDroid to add cards. You can configure Gaten cards here first.
-          </Text>
-        )}
+        <Button
+          fullWidth
+          disabled={!enabled}
+          label={busy ? undefined : buttonLabel}
+          leading={
+            busy ? (
+              <ActivityIndicator size="small" color={colors.onActionPrimary} />
+            ) : exportState.kind === "idle" || exportState.kind === "failed" ? (
+              <Icon name="add" size={18} color={colors.onActionPrimary} />
+            ) : null
+          }
+          onPress={() => void anki.addToAnki(entry)}
+        />
         {exportState.kind === "failed" && (
           <Text style={[typeScale.bodySmall, {color: colors.error}]}>{exportState.message}</Text>
         )}

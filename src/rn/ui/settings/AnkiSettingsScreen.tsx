@@ -60,7 +60,7 @@ import {
 } from "./anki-validation";
 
 const HELP_PARAGRAPHS = [
-  "Without AnkiDroid access, Add to Anki opens AnkiDroid's add screen, where you choose the deck and card layout.",
+  "Without AnkiDroid access, Add to Anki is unavailable. Grant access here to add cards.",
   "Choose a deck or enter a new name. New decks are created on export.",
   "Separate tags with spaces. Leave blank for none.",
   "Map Expression to at least one field. Duplicates check the first mapped field across all decks for this note type. Select a note type again to reload its fields.",

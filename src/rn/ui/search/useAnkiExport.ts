@@ -64,7 +64,6 @@ export interface AnkiExport extends AnkiExportState {
   prepareExport: (entry: ExportEntry) => Promise<void>;
   addToAnki: (entry: ExportEntry) => Promise<void>;
   refreshAnkiStatus: () => Promise<void>;
-  shareToAnkiDroid: (entry: ExportEntry) => Promise<boolean>;
 }
 
 const EMPTY_SETTINGS: AnkiPreferencesResult = {
@@ -298,19 +297,6 @@ export async function refreshAnkiStatus(): Promise<void> {
 }
 
 /**
- * Hands [entry] to AnkiDroid's own add screen — the fallback when the database permission is not
- * granted. `false` when nothing on the device can take the share.
- */
-export async function shareToAnkiDroid(entry: ExportEntry): Promise<boolean> {
-  return GatenAnki.shareToAnkiDroid({
-    primary: entry.primary,
-    kana: entry.kana,
-    glosses: entry.glosses,
-    pos: entry.pos,
-  });
-}
-
-/**
  * The export state the word detail reads: the AnkiDroid status and settings, every entry's
  * button state under the current configuration, and the celebration cue.
  */
@@ -325,6 +311,5 @@ export function useAnkiExport(): AnkiExport {
     prepareExport,
     addToAnki,
     refreshAnkiStatus,
-    shareToAnkiDroid,
   };
 }

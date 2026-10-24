@@ -73,7 +73,6 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -1703,8 +1702,9 @@ private sealed interface AnkiUiState {
 
 /**
  * "Add to Anki" for [card]: the configured note type is checked when this entry opens, then a tap
- * adds the card, or — when AnkiDroid's database permission is not granted, which the overlay cannot
- * ask for — hands the word to AnkiDroid's own add screen instead.
+ * adds the card. The footer exists only while AnkiDroid is connected with database access; with
+ * AnkiDroid missing, its permission ungranted, or its availability unresolved, no Anki action is
+ * shown — the setup that grants access lives in Gaten's Anki settings, not here.
  *
  * The card is the entry on screen, so a chosen search result exports its own readings and meanings
  * rather than the ones of whichever entry of that word happened to come first. The state is keyed on
@@ -1753,6 +1753,10 @@ private fun AnkiFooter(
         }
     }
 
+    // No AnkiDroid, no database access, no unresolved availability: the action is simply absent.
+    // The deck row and the button are hidden together, so no orphaned destination is left behind.
+    if (status != AnkiStatus.Ready) return
+
     // Update the button from the export outcome; confirmation feedback follows a newly added note.
     suspend fun add() {
         state = AnkiUiState.Busy(R.string.anki_adding)
@@ -1780,28 +1784,15 @@ private fun AnkiFooter(
                 .fillMaxWidth()
                 .padding(top = Spacing.m, bottom = FooterBottomGap)
         ) {
-            if (status == AnkiStatus.NotInstalled) {
-                Text(
-                    text = stringResource(R.string.anki_not_installed),
-                    style = type.small,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                return@Column
-            }
-
-            // The destination is named only on the direct route. On the share route Gaten hands the
-            // word to AnkiDroid's add screen and cannot claim which deck that screen will use.
-            if (status == AnkiStatus.Ready) {
-                // Changed only while nothing is in flight: a deck picked mid-export would name a
-                // destination the write that is already running was not made for.
-                DeckRow(
-                    deck = settings.deckName,
-                    type = type,
-                    enabled = state !is AnkiUiState.Busy,
-                    onChangeDeck = onChangeDeck
-                )
-                Spacer(Modifier.height(Spacing.s))
-            }
+            // Changed only while nothing is in flight: a deck picked mid-export would name a
+            // destination the write that is already running was not made for.
+            DeckRow(
+                deck = settings.deckName,
+                type = type,
+                enabled = state !is AnkiUiState.Busy,
+                onChangeDeck = onChangeDeck
+            )
+            Spacer(Modifier.height(Spacing.s))
 
             val message = error
             if (message != null) {
@@ -1814,15 +1805,7 @@ private fun AnkiFooter(
             }
 
             Button(
-                onClick = {
-                    if (status == AnkiStatus.NeedsPermission) {
-                        if (!AnkiExporter.shareFallback(context, card)) {
-                            error = context.getString(R.string.anki_error_share)
-                        }
-                    } else {
-                        scope.launch { add() }
-                    }
-                },
+                onClick = { scope.launch { add() } },
                 enabled = state is AnkiUiState.Idle,
                 shape = ActionShape,
                 colors = actionButtonColors(),
@@ -1857,19 +1840,13 @@ private fun AnkiFooter(
                     }
 
                     AnkiUiState.Idle -> {
-                        // An open glyph names the handoff: this tap leaves Gaten for AnkiDroid's own
-                        // add screen instead of writing the card here.
-                        val share = status == AnkiStatus.NeedsPermission
                         Icon(
-                            if (share) Icons.AutoMirrored.Rounded.OpenInNew else Icons.Rounded.Add,
+                            Icons.Rounded.Add,
                             contentDescription = null,
                             modifier = Modifier.size(ActionGlyphSize)
                         )
                         Spacer(Modifier.width(Spacing.s))
-                        Text(
-                            stringResource(if (share) R.string.anki_send else R.string.anki_add),
-                            style = type.label
-                        )
+                        Text(stringResource(R.string.anki_add), style = type.label)
                     }
                 }
             }

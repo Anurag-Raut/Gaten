@@ -551,9 +551,8 @@ Inside, there is no intermediate filled card: **grip → header → one body scr
   numbered glosses in `bodyLarge` and **neutral** numbering, then the full part-of-speech line, then
   the kanji strip as **bare `primary` glyph actions** (no tiles, borders or radii).
 - **Footer**: a tappable deck row with a change glyph plus one full-width **52 dp / 13 dp radius** accent action above the bottom
-  inset, with 24 dp breathing room below the action and a 1 dp rule above the footer. Completion labels stay honest (`Added`, `Already in Anki`), the
-  permissionless route is named for what it does (`Send to AnkiDroid`), and only an explicit
-  activation ever writes to Anki.
+  inset, with 24 dp breathing room below the action and a 1 dp rule above the footer. Completion labels stay honest (`Added`, `Already in Anki`).
+  The footer appears only while AnkiDroid is connected, and only an explicit activation ever writes to Anki.
 - **WaniKani reference pages** are another depth in the same sheet — same grip, header and selector,
   one body scroller, no second sheet, no Anki footer, neutral section labels, flat skeletons.
 
