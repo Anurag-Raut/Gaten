@@ -105,7 +105,7 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
         ]}
       >
         <HeadwordSection hit={hit} />
-        <MeaningSection glosses={hit.glosses} partsOfSpeech={hit.pos} />
+        <MeaningSection key={hit.id} glosses={hit.glosses} partsOfSpeech={hit.pos} />
         <OtherSpellingsRow primary={hit.primary} spellings={hit.kanji} />
         {wanikaniConfigured && (
           <WordKanjiSection
@@ -151,9 +151,6 @@ export function HeadwordSection({hit}: {hit: SearchResult}) {
   const posSummary = hit.pos[0]
     ? compactPartOfSpeech(hit.pos[0]).split(" / ")[0].replace(/s$/i, "")
     : null;
-  const metadata = [hit.common ? "Common" : null, posSummary]
-    .filter(Boolean)
-    .join(" · ");
 
   return (
     <View style={[styles.headwordSection, {borderBottomColor: colors.outlineVariant}]}>
@@ -163,44 +160,78 @@ export function HeadwordSection({hit}: {hit: SearchResult}) {
           {readings.join("・")}
         </Text>
       )}
-      {metadata.length > 0 && (
+      {(hit.common || posSummary) && (
         <Text style={[styles.metadata, {color: colors.onSurfaceVariant}]}>
-          {metadata}
+          {hit.common ? "Common" : null}
+          {hit.common && posSummary ? " · " : null}
+          {posSummary && <Text style={{color: colors.primary}}>{posSummary}</Text>}
         </Text>
       )}
     </View>
   );
 }
 
+// Preview five dictionary senses, preserving their grouping, and reveal the rest on request.
 export function MeaningSection({glosses, partsOfSpeech}: {
   glosses: string[];
   partsOfSpeech: string[];
 }) {
   const {colors} = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const visibleGlosses = expanded ? glosses : glosses.slice(0, 5);
   return (
     <View style={[styles.meaningSection, {borderBottomColor: colors.outlineVariant}]}>
-      <Text
-        accessibilityRole="header"
-        style={[typeScale.labelLarge, {color: colors.onSurfaceVariant}]}
-      >
-        Meaning
-      </Text>
+      <View style={styles.meaningHeading}>
+        <Text
+          accessibilityRole="header"
+          style={[typeScale.titleSmall, styles.meaningTitle, {color: colors.onSurface}]}
+        >
+          Meanings
+        </Text>
+        {glosses.length > 0 && (
+          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+            {visibleGlosses.length} of {glosses.length}
+          </Text>
+        )}
+      </View>
       {glosses.length === 0 ? (
         <Text style={[typeScale.bodyMedium, styles.meaningFallback, {color: colors.onSurfaceVariant}]}>
           The dictionary has no gloss for this entry.
         </Text>
       ) : (
         <View style={styles.glosses}>
-          {glosses.map((gloss, index) => (
-            <Text key={`${index}-${gloss}`} style={[styles.meaning, {color: colors.onSurface}]}>
-              {gloss.length > 0 ? `${gloss[0].toUpperCase()}${gloss.slice(1)}` : gloss}
-            </Text>
+          {visibleGlosses.map((gloss, index) => (
+            <View
+              key={`${index}-${gloss}`}
+              style={[
+                styles.meaningRow,
+                index > 0 && {borderTopWidth: 1, borderTopColor: colors.outlineVariant},
+              ]}
+            >
+              <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>
+                {gloss.length > 0 ? `${gloss[0].toUpperCase()}${gloss.slice(1)}` : gloss}
+              </Text>
+            </View>
           ))}
         </View>
       )}
+      {glosses.length > 5 && (
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityState={{expanded}}
+          onPress={() => setExpanded((value) => !value)}
+          style={styles.meaningAction}
+        >
+          <Text style={[typeScale.labelLarge, {color: colors.primary}]}>
+            {expanded ? "Show fewer meanings" : `View all meanings (${glosses.length})`}
+          </Text>
+        </PressableScale>
+      )}
       {partsOfSpeech.length > 0 && (
         <View style={styles.partsOfSpeech}>
-          <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>Part of speech</Text>
+          <Text accessibilityRole="header" style={[typeScale.titleSmall, {color: colors.onSurface}]}>
+            Part of speech
+          </Text>
           <Text
             style={[
               typeScale.bodyMedium,
@@ -237,7 +268,7 @@ export function OtherSpellingsRow({primary, spellings}: {primary: string; spelli
       style={[styles.spellingsRow, {borderBottomColor: colors.outlineVariant}]}
     >
       <View style={styles.detailRowContent}>
-        <Text style={[typeScale.bodyMedium, styles.detailLabel, {color: colors.onSurfaceVariant}]}>
+        <Text style={[typeScale.titleSmall, styles.detailLabel, {color: colors.onSurface}]}>
           Other spellings
         </Text>
         <View style={styles.spellingsSummary}>
@@ -417,11 +448,14 @@ const styles = StyleSheet.create({
   wordTitle: {fontSize: 36, fontWeight: "700"},
   reading: {fontSize: 18, marginTop: spacing.s},
   metadata: {fontSize: 14, marginTop: spacing.m},
-  meaningSection: {paddingVertical: spacing.xl, borderBottomWidth: 1},
-  glosses: {marginTop: spacing.m, gap: spacing.s},
-  partsOfSpeech: {marginTop: spacing.l},
+  meaningSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
+  meaningHeading: {flexDirection: "row", alignItems: "center", gap: spacing.m},
+  meaningTitle: {flex: 1},
+  glosses: {marginTop: spacing.s},
+  meaningRow: {paddingVertical: spacing.l},
+  meaningAction: {minHeight: 48, justifyContent: "center", paddingVertical: spacing.m},
+  partsOfSpeech: {marginTop: spacing.m},
   partsOfSpeechValue: {marginTop: spacing.xs},
-  meaning: {fontSize: 29, fontWeight: "700"},
   meaningFallback: {marginTop: spacing.m},
   detailLabel: {flex: 1},
   spellingsRow: {borderBottomWidth: 1},
