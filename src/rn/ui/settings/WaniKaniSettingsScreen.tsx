@@ -5,20 +5,24 @@
  */
 
 /**
- * The WaniKani token: what connecting does, the token itself, and the way back out.
+ * The WaniKani page: the connection's own state, the daily lesson limit, the token, and the way
+ * back out — all committed by the one Save at the foot of the page.
  *
  * The screen holds no token of its own beyond the field being typed — a reload clears it instead
- * of a secret lingering, and it is emptied again the moment a token is accepted. Connecting
- * verifies before it stores, so a token on the device is always one WaniKani has accepted; a
- * rejected or unreachable token is only reported, and the device is left exactly as it was.
- * Disconnect is the reverse and takes the cache with it.
+ * of a secret lingering, and it is emptied again the moment a token is accepted. Save writes the
+ * lesson limit, which is local, and then checks and stores a token if the field holds one; a blank
+ * field is never sent to WaniKani, so a limit can be saved while disconnected and an untouched
+ * token is never replaced or erased. Connecting verifies before it stores, so a token on the device
+ * is always one WaniKani has accepted; a rejected or unreachable token is only reported, and the
+ * device is left exactly as it was. Disconnect is the reverse, takes the cache with it, and stays
+ * the one explicit action that ends a connection.
  */
 import React, {useEffect, useState} from "react";
 import {KeyboardAvoidingView, ScrollView, Text, View, useWindowDimensions} from "react-native";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
-import {Button, IconButton} from "../components";
+import {Button, Icon, IconButton} from "../components";
 import {reviewStore} from "../review/review-store";
 import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
 import {FieldLabel, SettingsGroup, TextField} from "./settings-components";
@@ -31,6 +35,13 @@ const WANIKANI_LEVELS = 60;
 
 /** Where a token is created, opened in the browser from this screen. */
 const WANIKANI_TOKEN_URL = "https://www.wanikani.com/settings/personal_access_tokens";
+
+/**
+ * What connecting buys the reader: the one line the plainly disconnected state carries. It says
+ * only what Gaten reads — WaniKani's own pages and the account's study progress — because nothing
+ * here is written back to the account.
+ */
+const CONNECTION_HINT = "Connect to read WaniKani's kanji pages and your study progress.";
 
 /** The sentence each failure string shows in "Could not connect to WaniKani: …". */
 export const FAILURE_LABELS: Record<WaniKaniFailure, string> = {
@@ -114,51 +125,76 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
     };
   }, [preferenceRefresh]);
 
-  const saveDailyLimit = () => {
+  /**
+   * The page's one action. It commits both drafts in the order they can safely be committed: the
+   * lesson limit is local and goes first, then a non-blank token is checked with WaniKani and
+   * stored. A blank field is never sent, so this saves a limit (or re-saves it) while disconnected
+   * and can never erase or replace a token the reader did not touch; Disconnect stays the separate,
+   * explicit way out. The limit is only written once the stored value was actually read, so an
+   * unknown current value is never written over with an assumption.
+   */
+  const save = () => {
     const value = dailyLimitInput.trim();
     const limit = value === "" ? null : Number(value);
-    if (limit !== null && (!/^\d+$/.test(value) || !Number.isInteger(limit) || limit < 1 || limit > 1000)) {
+    const tokenDraft = token.trim();
+    const writeLimit = !preferenceLoading && !preferenceLoadFailed;
+    if (
+      writeLimit &&
+      limit !== null &&
+      (!/^\d+$/.test(value) || !Number.isInteger(limit) || limit < 1 || limit > 1000)
+    ) {
       setPreferenceError("Use 1–1000, or leave blank.");
       setPreferenceMessage(null);
       return;
     }
-    setPreferenceBusy(true);
-    setPreferenceError(null);
-    setPreferenceMessage(null);
-    void GatenWaniKani.setDailyLessonLimit(limit)
-      .then((preferences) => {
-        setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
-        setLearnedToday(preferences.learnedToday);
-        setPreferenceMessage("Saved.");
-      })
-      .catch(() => setPreferenceError("Could not save the daily lesson setting. Try again."))
-      .finally(() => setPreferenceBusy(false));
+    if (writeLimit) {
+      setPreferenceBusy(true);
+      setPreferenceError(null);
+      setPreferenceMessage(null);
+      void GatenWaniKani.setDailyLessonLimit(limit)
+        .then((preferences) => {
+          setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
+          setLearnedToday(preferences.learnedToday);
+          setPreferenceMessage("Saved.");
+        })
+        .catch(() => setPreferenceError("Could not save the daily lesson setting. Try again."))
+        .finally(() => setPreferenceBusy(false));
+    }
+    if (tokenDraft !== "") {
+      connect(tokenDraft);
+    }
   };
 
-  let message: string | null = null;
+  // Two kinds of answer, kept apart because each belongs beside the thing it is about: a rejected or
+  // unreachable token is a problem with the field (reported in the Token section, in the error's own
+  // ink), while connected — or disconnected, and what was cleared — is a fact about the connection,
+  // shown with the state it just changed. Every sentence the screen had is still here, whole.
+  let tokenError: string | null = null;
+  let connectionNote: string | null = null;
   if (answer == null) {
     if (failure != null) {
-      message = `Could not connect to WaniKani: ${FAILURE_LABELS[failure]}`;
+      tokenError = `Could not connect to WaniKani: ${FAILURE_LABELS[failure]}`;
     } else if (cleared != null) {
-      message =
+      connectionNote =
         cleared === true
           ? "Disconnected. The saved token and every cached page were removed."
           : "Some of the saved token or cached pages could not be removed. Disconnect again.";
     }
   } else if (answer.status === "connected") {
-    message =
+    connectionNote =
       answer.maxLevelGranted < WANIKANI_LEVELS
         ? `Connected. Your account covers WaniKani's first ${answer.maxLevelGranted} levels; kanji beyond them are shown as outside your subscription.`
         : "Connected. Gaten can read WaniKani's reference content.";
   } else {
-    message = "WaniKani rejected that token. Check it was copied in full.";
+    tokenError = "WaniKani rejected that token. Check it was copied in full.";
   }
 
-  const connect = () => {
+  /** Checks the typed token with WaniKani and stores it; the field is emptied once it is accepted. */
+  const connect = (tokenDraft: string) => {
     setBusy(true);
     setCleared(null);
     setFailure(null);
-    void GatenWaniKani.connect(token)
+    void GatenWaniKani.connect(tokenDraft)
       .then((result) => {
         if (result.status === "connected") {
           setToken("");
@@ -232,6 +268,24 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
 
   const isKnownConnected = connected === true;
   const showTokenField = !isKnownConnected || changingToken;
+  // One busy state for the whole form: both drafts are committed by the one Save below, so the
+  // button and both fields say "something is in flight" the same way.
+  const saving = busy || preferenceBusy;
+  const connectionState =
+    connected == null
+      ? "Checking connection…"
+      : !isKnownConnected
+        ? "Not connected"
+        : answer != null && answer.status === "connected" && answer.maxLevelGranted < WANIKANI_LEVELS
+          ? `Connected · Levels 1–${answer.maxLevelGranted}`
+          : "Connected";
+  // The one line under the state: the reader's own last answer when there is one, otherwise — while
+  // the account is plainly not connected — the sentence that says what connecting buys them.
+  // Nothing is shown while a check is in flight, or when a working connection has nothing new to
+  // report. A partial disconnect is the one thing here drawn in the error's ink, because it asks
+  // for the action that finishes the job.
+  const connectionDetail = connectionNote ?? (connected === false ? CONNECTION_HINT : null);
+  const connectionDetailFailed = connectionNote != null && cleared === false;
   const openTokenPage = () => {
     void GatenPlatform.openUrl(WANIKANI_TOKEN_URL);
   };
@@ -261,7 +315,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
-        // With the keyboard up, a tap on Connect, Disconnect or a row is the row's own.
+        // With the keyboard up, a tap on Save, Disconnect or a row is the row's own.
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           maxWidth: 560,
@@ -270,20 +324,48 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
           paddingLeft: insets.left + horizontalInset,
           paddingRight: insets.right + horizontalInset,
           paddingTop: spacing.s,
-          paddingBottom: spacing.l + insets.bottom,
+          paddingBottom: spacing.xl + insets.bottom,
         }}
       >
         <SettingsGroup title="Connection" style={{marginTop: spacing.s}}>
-          <View style={{paddingVertical: spacing.m}}>
-            <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-              {connected == null
-                ? "Checking connection…"
-                : isKnownConnected
-                  ? answer?.status === "connected" && answer.maxLevelGranted < WANIKANI_LEVELS
-                    ? `Connected · Levels 1–${answer.maxLevelGranted}`
-                    : "Connected"
-                  : "Not connected"}
-            </Text>
+          {/* The state as a compact composition rather than a line on its own: the glyph carries the
+              state, the name carries the service, and one sentence under them says what connecting
+              buys the reader. A missing token is a setup state, not a failure, so the disconnected
+              ink stays neutral and only a working connection takes the success tone. */}
+          <View style={{paddingVertical: spacing.m, flexDirection: "row", alignItems: "center"}}>
+            <Icon
+              name={isKnownConnected ? "check_circle" : "cloud_off"}
+              size={24}
+              color={isKnownConnected ? colors.success : colors.iconSecondary}
+            />
+            <View style={{flex: 1, minWidth: 0, marginStart: spacing.m}}>
+              <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>WaniKani</Text>
+              <Text
+                style={[
+                  typeScale.labelMedium,
+                  {
+                    color: isKnownConnected ? colors.success : colors.onSurfaceVariant,
+                    marginTop: spacing.xs,
+                  },
+                ]}
+              >
+                {connectionState}
+              </Text>
+              {connectionDetail != null && (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[
+                    typeScale.bodySmall,
+                    {
+                      color: connectionDetailFailed ? colors.error : colors.onSurfaceVariant,
+                      marginTop: spacing.xs,
+                    },
+                  ]}
+                >
+                  {connectionDetail}
+                </Text>
+              )}
+            </View>
           </View>
         </SettingsGroup>
 
@@ -299,27 +381,19 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
               }}
               placeholder="Unlimited"
               keyboardType="number-pad"
-              editable={!preferenceBusy && !preferenceLoading && !preferenceLoadFailed}
+              editable={!saving && !preferenceLoading && !preferenceLoadFailed}
               accessibilityLabel="New cards per day. Leave blank for unlimited."
             />
             <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
               Blank = unlimited.
             </Text>
             {learnedToday != null && (
-              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
                 Learned today: {learnedToday} · This device
               </Text>
             )}
-            <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
-              <Button
-                variant="text"
-                label={preferenceBusy ? "Saving…" : "Save"}
-                disabled={preferenceBusy || preferenceLoading || preferenceLoadFailed}
-                onPress={saveDailyLimit}
-              />
-            </View>
             {preferenceLoadFailed && (
-              <View style={{alignSelf: "flex-start"}}>
+              <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
                 <Button
                   variant="text"
                   label="Retry"
@@ -340,15 +414,17 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         </SettingsGroup>
 
         {isKnownConnected && !changingToken && (
-          <View style={{alignSelf: "flex-start", marginTop: spacing.s}}>
-            <Button variant="text" label="Change token" disabled={busy} onPress={() => setChangingToken(true)} />
+          <View style={{alignSelf: "flex-start", marginTop: spacing.l}}>
+            <Button variant="text" label="Change token" disabled={saving} onPress={() => setChangingToken(true)} />
           </View>
         )}
 
         {showTokenField && (
           <SettingsGroup title="Token" style={{marginTop: spacing.l}}>
             <View style={{paddingVertical: spacing.m}}>
-              <FieldLabel label="Personal access token" />
+              {/* The section heading is this field's own label, so the box does not repeat it; the
+                  accessible name keeps the field named for a screen reader, where the placeholder
+                  disappears the moment anything is typed. */}
               <TextField
                 value={token}
                 onChangeText={setToken}
@@ -356,43 +432,47 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
-                editable={!busy}
+                editable={!saving}
+                accessibilityLabel="Personal access token"
               />
               <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
                 <Button variant="text" label="Get a token" onPress={openTokenPage} />
               </View>
+              {tokenError != null && (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[typeScale.bodySmall, {color: colors.error, marginTop: spacing.xs}]}
+                >
+                  {tokenError}
+                </Text>
+              )}
             </View>
           </SettingsGroup>
         )}
 
-        {showTokenField && (
-          <View style={{marginTop: spacing.l}}>
-            <Button
-              label={busy ? "Checking…" : "Connect"}
-              disabled={busy || token.trim().length === 0}
-              fullWidth
-              onPress={connect}
-            />
-          </View>
-        )}
-
         {(isKnownConnected || cleared === false) && (
-          <View style={{marginTop: spacing.s, flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
+          <View style={{marginTop: spacing.xl, flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
             <Button
               variant="text"
               label="Recheck"
-              disabled={busy || !isKnownConnected}
+              disabled={saving || !isKnownConnected}
               onPress={recheck}
             />
-            <Button variant="text" label="Disconnect" disabled={busy} onPress={disconnect} />
+            <Button variant="text" label="Disconnect" disabled={saving} onPress={disconnect} />
           </View>
         )}
 
-        {message != null && (
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurface, marginTop: spacing.l}]}>
-            {message}
-          </Text>
-        )}
+        {/* The page's one action, at the end of the form it commits: the lesson limit always, and a
+            token whenever the field holds one. Disconnect is deliberately not this button — it stays
+            the explicit text action above, so a blank field can never end a connection. */}
+        <View style={{marginTop: spacing.xl}}>
+          <Button
+            label={preferenceBusy ? "Saving…" : busy ? "Checking…" : "Save"}
+            disabled={saving || preferenceLoading || (preferenceLoadFailed && token.trim().length === 0)}
+            fullWidth
+            onPress={save}
+          />
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
