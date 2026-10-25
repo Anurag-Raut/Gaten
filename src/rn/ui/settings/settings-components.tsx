@@ -36,6 +36,7 @@ import {
   IconButton,
   SectionLabel,
 } from "../components";
+import {DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {InkIcon, type InkIconName} from "../InkIcon";
 import {useTheme} from "../theme";
@@ -123,6 +124,7 @@ export function SettingsRow({
   value,
   onPress,
   disabled,
+  expanded,
 }: {
   icon: IconName;
   inkIcon?: InkIconName;
@@ -131,6 +133,7 @@ export function SettingsRow({
   value?: string | null;
   onPress?: () => void;
   disabled?: boolean;
+  expanded?: boolean;
 }) {
   const {colors} = useTheme();
   const inactive = disabled === true;
@@ -159,7 +162,9 @@ export function SettingsRow({
           {value}
         </Text>
       )}
-      {onPress != null && !inactive && <InkIcon name="chevron" size={15} color={colors.fine} />}
+      {onPress != null && !inactive && (expanded == null
+        ? <InkIcon name="chevron" size={15} color={colors.fine} />
+        : <DisclosureChevron expanded={expanded} size={15} color={colors.fine} />)}
     </>
   );
   if (onPress == null || inactive) {
@@ -173,6 +178,7 @@ export function SettingsRow({
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={[title, value, summary].filter(Boolean).join(". ")}
+      accessibilityState={expanded == null ? undefined : {expanded}}
       onPress={onPress}
       style={rowStyle}
     >

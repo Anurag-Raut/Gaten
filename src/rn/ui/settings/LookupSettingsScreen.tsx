@@ -14,6 +14,7 @@
  * comes first, and only then the system screen. The Quick Settings tile is read the same way:
  * whether it is in the shade at all, and whether the reader has it switched on.
  */
+import {Collapsible} from "../Collapsible";
 import React, {useEffect, useRef, useState} from "react";
 import {AppState, Platform, Text, View} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
@@ -322,15 +323,16 @@ function KeyMapperRow() {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   return (
-    <View style={{paddingBottom: expanded ? spacing.m : 0}}>
+    <View>
       <SettingsRow
         icon="key"
         title="Key Mapper"
         value={expanded ? "Hide" : "Set up"}
+        expanded={expanded}
         onPress={() => setExpanded(!expanded)}
       />
-      {expanded && (
-        <View style={{paddingBottom: spacing.m}}>
+      <Collapsible expanded={expanded}>
+        <View style={{paddingBottom: spacing.m * 2}}>
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
             Broadcast action
           </Text>
@@ -371,7 +373,7 @@ function KeyMapperRow() {
             In Key Mapper use Send intent with Broadcast receiver as the target.
           </Text>
         </View>
-      )}
+      </Collapsible>
     </View>
   );
 }

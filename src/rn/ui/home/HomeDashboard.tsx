@@ -8,6 +8,7 @@ import React, {useState} from "react";
 import {ActivityIndicator, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useTheme} from "../theme";
 import {Icon} from "../components";
+import {Collapsible} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
@@ -479,7 +480,6 @@ function RecentLookups({
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   const {recentLookups, recentLookupsError, recentLookupsStatus} = home;
-  const visibleLookups = expanded ? recentLookups : recentLookups.slice(0, 3);
 
   return (
     <View style={styles.recentSection}>
@@ -501,14 +501,24 @@ function RecentLookups({
       </View>
       {recentLookups.length > 0 ? (
         <View style={styles.recentList}>
-          {visibleLookups.map((hit, index) => (
+          {recentLookups.slice(0, 3).map((hit, index) => (
             <RecentLookupRow
               key={hit.id}
               hit={hit}
-              last={index === visibleLookups.length - 1}
+              last={index === Math.min(recentLookups.length, 3) - 1 && !expanded}
               onPress={() => onOpenWord(hit.id)}
             />
           ))}
+          <Collapsible expanded={expanded}>
+            {recentLookups.slice(3).map((hit, index) => (
+              <RecentLookupRow
+                key={hit.id}
+                hit={hit}
+                last={index === recentLookups.length - 4}
+                onPress={() => onOpenWord(hit.id)}
+              />
+            ))}
+          </Collapsible>
         </View>
       ) : recentLookupsStatus === "loading" ? (
         <EmptyRecent
