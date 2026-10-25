@@ -18,6 +18,7 @@ import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.SearchMatch
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.rn.GatenLookupSheetModule
+import com.gaten.app.rn.ReactHostLifecycle
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -81,11 +82,17 @@ object LookupSheetHost {
         val reactHost: ReactHost = app.reactHost
         val surface: ReactSurface = reactHost.createSurface(context, MODULE_NAME, initialProps)
         val view = surface.view ?: return null
+        // Resume the shared host before starting the surface; this session holds it open until stop.
+        ReactHostLifecycle.onSheetSessionOpened(reactHost)
         surface.start()
         return object : Session {
             override val view: View = view
+            private var stopped = false
             override fun stop() {
+                if (stopped) return
+                stopped = true
                 surface.stop()
+                ReactHostLifecycle.onSheetSessionClosed()
             }
         }.also { GatenLookupSheetModule.attach(hostActions) }
     }

@@ -11,6 +11,7 @@ import android.content.Intent
 import android.os.Bundle
 import com.facebook.react.ReactActivity
 import com.gaten.app.rn.GatenBridgeEmitter
+import com.gaten.app.rn.ReactHostLifecycle
 import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
 
 /**
@@ -60,11 +61,27 @@ class MainActivity : ReactActivity() {
         GatenBridgeEmitter.emitSettingsPageRequest(settingsPageRequest)
     }
 
+    /** Registers this Activity as an owner of the shared host's lifecycle. */
+    override fun onResume() {
+        super.onResume()
+        ReactHostLifecycle.onActivityResumed(this)
+    }
+
+    /**
+     * Runs after `super`, so React's delegate has paused the host and this immediately corrects it
+     * when a lookup sheet is still open.
+     */
+    override fun onPause() {
+        super.onPause()
+        ReactHostLifecycle.onActivityPaused(this)
+    }
+
     /** Clears the pending request once a screen has navigated for it (see GatenShellModule). */
     fun consumeSettingsPageRequest() {
         settingsPageRequest = null
     }
 
+    /** Closes lookups when the task finishes and releases this Activity's React host ownership. */
     override fun onDestroy() {
         // Only when the app is really finished: a configuration change destroys this activity too,
         // and a lookup must survive that.
@@ -72,6 +89,7 @@ class MainActivity : ReactActivity() {
             GatenAccessibilityService.dismissForAppExit()
         }
         super.onDestroy()
+        ReactHostLifecycle.onActivityPaused(this)
     }
 
     companion object {
