@@ -13,6 +13,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -327,6 +328,158 @@ class WaniKaniStatsTest {
     }
 
     @Test
+    fun `a mutation the cache cannot know about is what the next read asks again for`() = runBlocking {
+        val api = StatsApi()
+        val client = stats(api)
+        client.read()
+        assertEquals(11, api.requests.size)
+
+        // A review WaniKani accepted a moment after the snapshot was read: the cached one predates it.
+        client.markDirty(fingerprint(TOKEN))
+        val after = client.read() as WaniKaniStatsResult.Available
+
+        assertEquals(22, api.requests.size)
+        assertFalse(after.cached)
+        assertEquals(now, after.snapshot.fetchedAt)
+
+        // The run that answered was read after the mutation, so the cache is worth having again: the
+        // read that follows, with nothing new behind it, is answered from it rather than by asking.
+        val cachedAgain = client.read() as WaniKaniStatsResult.Available
+        assertEquals(22, api.requests.size)
+        assertTrue(cachedAgain.cached)
+    }
+
+    @Test
+    fun `a refresh coalesces with the run before it, until a mutation says the snapshot is old`() =
+        runBlocking {
+            val api = StatsApi()
+            val client = stats(api)
+            client.read()
+            now += WaniKaniStats.STATS_TTL_MS + 1
+            client.refresh()
+            assertEquals(22, api.requests.size)
+
+            client.refresh()
+            assertEquals(22, api.requests.size)
+
+            // A lesson started in between is exactly what the coalesced answer would be missing.
+            client.markDirty(fingerprint(TOKEN))
+            val refreshed = client.refresh() as WaniKaniStatsResult.Available
+            assertEquals(33, api.requests.size)
+            assertFalse(refreshed.cached)
+        }
+
+    @Test
+    fun `a mutation does not spend a request WaniKani asked us to wait for`() = runBlocking {
+        val api = StatsApi()
+        val client = stats(api)
+        val first = client.read() as WaniKaniStatsResult.Available
+
+        // WaniKani limits the read, and a review accepted in the meantime changes nothing about the
+        // wait: the cached numbers answer, with the failure and the wait beside them, and no request
+        // is spent inside it - the invalidation is held, not acted on.
+        now += WaniKaniStats.STATS_TTL_MS + 1
+        api.limited = true
+        client.read()
+        val requests = api.requests.size
+        client.markDirty(fingerprint(TOKEN))
+        val limited = client.read() as WaniKaniStatsResult.Available
+
+        assertEquals(requests, api.requests.size)
+        assertTrue(limited.cached)
+        assertTrue(limited.stale)
+        assertEquals(WaniKaniFailure.RATE_LIMITED, limited.failure)
+        assertEquals(first.snapshot, limited.snapshot)
+    }
+
+    @Test
+    fun `a mutation that lands while a run is in flight keeps the cache invalid`() = runBlocking {
+        val api = StatsApi()
+        val client = stats(api)
+        // The snapshot this run saves was read before the mutation, so it cannot answer for it.
+        api.onFirstRequest = { client.markDirty(fingerprint(TOKEN)) }
+        assertFalse((client.read() as WaniKaniStatsResult.Available).cached)
+
+        val requests = api.requests.size
+        client.read()
+
+        assertEquals(requests * 2, api.requests.size)
+    }
+
+    @Test
+    fun `a mutation for one account is not settled by another account's read`() = runBlocking {
+        val api = StatsApi()
+        val credentials = StatsCredentials(TOKEN)
+        val client = stats(api, credentials)
+        client.read()
+        assertEquals(11, api.requests.size)
+
+        // A review WaniKani accepted for the first account, and the reader then connects a second:
+        // the second account's first read is a run of its own, and it is not the first account's
+        // mutation that it is read after.
+        client.markDirty(fingerprint(TOKEN))
+        credentials.token = OTHER_TOKEN
+        client.read()
+        val requests = api.requests.size
+        assertTrue(requests > 11)
+
+        // Back on the first account, within the five minutes a snapshot is normally kept: its cached
+        // numbers still predate its own mutation, so this read has to ask again.
+        credentials.token = TOKEN
+        val before = api.requests.size
+        val back = client.read() as WaniKaniStatsResult.Available
+
+        assertFalse(back.cached)
+        assertEquals(before + 11, api.requests.size)
+    }
+
+    @Test
+    fun `a mutation for one account made during another account's read is not consumed by it`() =
+        runBlocking {
+            val api = StatsApi()
+            val credentials = StatsCredentials(TOKEN)
+            val client = stats(api, credentials)
+            client.read()
+
+            // The reader has moved to the second account, and the first account's review is accepted
+            // while the second account's first read is in flight.
+            credentials.token = OTHER_TOKEN
+            api.onFirstRequest = { client.markDirty(fingerprint(TOKEN)) }
+            client.read()
+
+            credentials.token = TOKEN
+            val back = client.read() as WaniKaniStatsResult.Available
+
+            assertFalse(back.cached)
+        }
+
+    @Test
+    fun `a snapshot that could not be saved leaves the cache invalid`() = runBlocking {
+        val api = StatsApi()
+        val client = stats(api)
+        client.read()
+        assertEquals(11, api.requests.size)
+
+        // A stats directory that will not take a write. The run's own snapshot stays in memory only,
+        // so the older file must not be served as if it were the one that run read.
+        val statsDir = File(dir, "stats")
+        assumeTrue("this filesystem will not make the stats directory read-only", statsDir.setWritable(false))
+        try {
+            client.markDirty(fingerprint(TOKEN))
+            val unsaved = client.read() as WaniKaniStatsResult.Available
+            assertEquals(WaniKaniFailure.STORAGE, unsaved.cacheFailure)
+            assertEquals(22, api.requests.size)
+
+            // The mutation is still outstanding: the next read asks WaniKani rather than answering
+            // from the snapshot that was never written.
+            client.read()
+            assertEquals(33, api.requests.size)
+        } finally {
+            statsDir.setWritable(true)
+        }
+    }
+
+    @Test
     fun `a run that fails keeps the last complete snapshot and says why`() = runBlocking {
         val api = StatsApi()
         val client = stats(api)
@@ -464,12 +617,15 @@ class WaniKaniStatsTest {
     }
 
     /** The cache file one account's snapshot is written to, named the way [WaniKaniStats] names it. */
-    private fun statsFile(token: String): File {
-        val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-            .take(WaniKaniStats.ACCOUNT_KEY_CHARS)
-        return File(dir, "stats/$digest.json")
-    }
+    private fun statsFile(token: String): File =
+        File(dir, "stats/${fingerprint(token).take(WaniKaniStats.ACCOUNT_KEY_CHARS)}.json")
+
+    /**
+     * The fingerprint of a token's account: what the counters are scoped to and what a mutation is
+     * reported for, which is the whole digest rather than the length the cache's file name keeps.
+     */
+    private fun fingerprint(token: String): String =
+        MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it) }
 
     @Test
     fun `the recall section sums the answers and names the three worst with a sample`() = runBlocking {
@@ -801,6 +957,12 @@ class WaniKaniStatsTest {
         /** A body to answer `GET /level_progressions` with instead of the collection of [levelRecords]. */
         var levelBody: String? = null
 
+        /**
+         * Run once, on the first request of a run: what lets a test make a mutation land while the
+         * reads that run is made of are still in flight.
+         */
+        var onFirstRequest: (() -> Unit)? = null
+
         override suspend fun getWithMeta(
             path: String,
             query: List<Pair<String, String>>,
@@ -814,6 +976,7 @@ class WaniKaniStatsTest {
             }
             requests += key
             conditional[path] = if (ifNoneMatch == null) null else "$path|$ifNoneMatch"
+            onFirstRequest?.let { it(); onFirstRequest = null }
 
             if (reject) return WaniKaniFetchWithMeta.Unauthorized
             if (limited) return WaniKaniFetchWithMeta.Failed(WaniKaniFailure.RATE_LIMITED, 120)
@@ -864,7 +1027,7 @@ class WaniKaniStatsTest {
     }
 
     /** The token store without a keystore: what the stats read takes the credential from. */
-    private class StatsCredentials(private var token: String?) : WaniKaniCredentials {
+    private class StatsCredentials(var token: String?) : WaniKaniCredentials {
         override fun hasToken(): Boolean = token != null
         override fun read(): String? = token
         override fun save(token: String): Boolean {
@@ -880,6 +1043,9 @@ class WaniKaniStatsTest {
 
     private companion object {
         const val TOKEN = "a-token"
+
+        /** A second account on the same device, for the tests that switch between two. */
+        const val OTHER_TOKEN = "another-token"
         const val NEXT_REVIEWS_AT = "2018-04-11T22:00:00.000000Z"
 
         /** `GET /user`, with the fields the dashboard reads. */

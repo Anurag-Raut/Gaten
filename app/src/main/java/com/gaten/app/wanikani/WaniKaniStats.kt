@@ -21,6 +21,8 @@ import java.net.URLDecoder
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * The account's own WaniKani numbers, as the dashboard shows them: the level the reader is on, the
@@ -98,6 +100,35 @@ internal class WaniKaniStats(
     private val blockedUntil = HashMap<String, Long>()
 
     /**
+     * The mutations each account has seen that its cached snapshot cannot know about, and the point in
+     * that account's sequence the last completed run was read after - per account, because the cache
+     * is: one account's read must never settle a mutation made for another, or the account that changed
+     * would be answered from its pre-mutation snapshot again. [mutations] is written by [markDirty]
+     * while a run may be in flight, so its counters are atomic; [settled] moves only under [lock].
+     */
+    private val mutations = ConcurrentHashMap<String, AtomicLong>()
+
+    private val settled = HashMap<String, Long>()
+
+    /**
+     * Records that [account] changed since its cached snapshot was read - a review WaniKani accepted, a
+     * lesson it started - so the next [read] or [refresh] for that account bypasses the five-minute
+     * cache and the five-second refresh coalesce. The wait a rate limit asked for, the fallback to the
+     * cached snapshot and the cache of a read nobody invalidated all behave as before, and no read is
+     * spent per answer.
+     *
+     * [account] is the fingerprint the counters are scoped to
+     * ([WaniKaniLearningPreferences.currentAccount]), taken by the caller before the write it finishes
+     * and cut here to the cache's own account key: nothing is read from the credential, so an answer
+     * landing after that was replaced still invalidates the account it was sent for. Null - nothing
+     * stored - invalidates nothing.
+     */
+    fun markDirty(account: String?) {
+        val key = (account ?: return).take(ACCOUNT_KEY_CHARS)
+        mutations.computeIfAbsent(key) { AtomicLong() }.incrementAndGet()
+    }
+
+    /**
      * The snapshot the dashboard shows: the cached one while it is younger than [STATS_TTL_MS], and a
      * fresh read otherwise. A cached snapshot that cannot be refreshed is still the answer, marked
      * [WaniKaniStatsResult.Available.stale], with the failure beside it.
@@ -126,16 +157,30 @@ internal class WaniKaniStats(
                 )
             } ?: WaniKaniStatsResult.Unreachable(WaniKaniFailure.RATE_LIMITED, waiting)
         }
+        // A mutation the cache cannot know about is what makes it not worth answering from, whether
+        // the read is a plain one or a refresh: both are asking for numbers that are now known to be
+        // older than one the account already has.
+        val dirty = (mutations[key]?.get() ?: 0L) > (settled[key] ?: 0L)
         val age = cached?.let { now() - it.snapshot.fetchedAt }
         if (age != null && age >= 0) {
-            if (!force && age < STATS_TTL_MS) return@withLock available(cached.snapshot, cached = true)
-            if (force && age < REFRESH_COALESCE_MS) return@withLock available(cached.snapshot, cached = true)
+            if (!force && !dirty && age < STATS_TTL_MS) {
+                return@withLock available(cached.snapshot, cached = true)
+            }
+            if (force && !dirty && age < REFRESH_COALESCE_MS) {
+                return@withLock available(cached.snapshot, cached = true)
+            }
         }
+        // The mutations this run is read after: one made while it is in flight is not in the snapshot
+        // it saves, so the cache stays invalid for it.
+        val readAfter = mutations[key]?.get() ?: 0L
         when (val run = withContext(Dispatchers.IO) { readAll(token, cached) }) {
             is Run.Completed -> {
                 // WaniKani answered, so any earlier wait is over.
                 blockedUntil.remove(key)
                 val saved = store.saveStats(key, encode(run.snapshot, run.etags, digest(token)))
+                // Only a snapshot that is on disk can answer the next read, so a save that did not
+                // take leaves the cache invalid rather than serving the older file as if it were it.
+                if (saved) settled[key] = readAfter
                 available(run.snapshot, cached = false).copy(
                     cacheFailure = if (saved) null else WaniKaniFailure.STORAGE
                 )
@@ -1247,11 +1292,22 @@ internal sealed interface WaniKaniStatsResult {
  * The stats client over the app's own directories: the same cache root the reference client uses
  * (`noBackupFilesDir/wanikani/cache`, which `disconnect` deletes whole) and the same Keystore
  * credential, so the token is read and used on the Kotlin side only and never reaches JS.
+ *
+ * One instance for the process, kept here: what a mutation marks on it (see [WaniKaniStats.markDirty])
+ * and the wait a rate limit asks it to keep are both facts about this run of the app, and a client
+ * built per call could carry neither - a second instance would ask WaniKani again inside a wait the
+ * first one is held to, and would not know the cache it reads has been invalidated.
  */
+@Synchronized
 internal fun waniKaniStats(context: Context): WaniKaniStats {
     val app = context.applicationContext
-    return WaniKaniStats(File(app.noBackupFilesDir, CACHE_ROOT), KeystoreCredentials(app))
+    return stats ?: WaniKaniStats(File(app.noBackupFilesDir, CACHE_ROOT), KeystoreCredentials(app))
+        .also { stats = it }
 }
+
+/** The process's one stats client; see [waniKaniStats] for why it is not built per call. */
+@Volatile
+private var stats: WaniKaniStats? = null
 
 /** The cache root `WaniKaniRepository` builds; the stats snapshot lives inside it. */
 private const val CACHE_ROOT = "wanikani/cache"

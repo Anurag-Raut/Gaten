@@ -172,3 +172,72 @@ test('a collection that is not set up is named, and its decks are never read', a
   assert.equal(state.failure, 'NOT_SET_UP');
   assert.equal(deckReads, 0);
 });
+
+test('today reads distinct cards for the Anki study day without applying the deck selection', async () => {
+  const searches = [];
+  const store = storeOver({
+    decks: async () => [deck(1), deck(2)],
+    getStudyDeckIds: async () => [2],
+    counts: async (queries) => { searches.push(queries); return [9]; },
+  });
+  await store.loadAnkiDecks();
+  await until(() => !store.getAnkiDecks().todayRefreshing, 'today count');
+  assert.deepEqual(searches, [['prop:rated=0']]);
+  assert.equal(store.getAnkiDecks().studiedToday, 9);
+  assert.equal(store.getAnkiDecks().todayFailure, null);
+  assert.deepEqual(store.getAnkiDecks().studyDecks.map((item) => item.id), [2]);
+});
+
+test('a slow today search does not delay opening decks and concurrent reads share it', async () => {
+  const pending = deferred();
+  let searches = 0;
+  const store = storeOver({
+    decks: async () => [deck(1)],
+    getStudyDeckIds: async () => null,
+    counts: async () => { searches += 1; return pending.promise; },
+  });
+  await store.loadAnkiDecks();
+  await store.loadAnkiDecks();
+  assert.equal(store.getAnkiDecks().status, 'ready');
+  assert.equal(store.getAnkiDecks().todayRefreshing, true);
+  assert.equal(store.getAnkiDecks().studiedToday, null);
+  assert.equal(searches, 1);
+  pending.resolve([0]);
+  await until(() => !store.getAnkiDecks().todayRefreshing, 'confirmed zero');
+  assert.equal(store.getAnkiDecks().studiedToday, 0);
+});
+
+test('an unavailable or malformed today search never masquerades as a confirmed zero', async () => {
+  for (const answer of [null, undefined, -1, 1.5, NaN]) {
+    const store = storeOver({
+      decks: async () => [deck(1)],
+      getStudyDeckIds: async () => null,
+      counts: async () => [answer],
+    });
+    await store.loadAnkiDecks();
+    await until(() => !store.getAnkiDecks().todayRefreshing, 'unavailable today count');
+    assert.equal(store.getAnkiDecks().status, 'ready');
+    assert.equal(store.getAnkiDecks().studiedToday, null);
+    assert.equal(store.getAnkiDecks().todayFailure, 'PROVIDER');
+  }
+});
+
+test('permission loss clears today and rejects a late count from the previous read', async () => {
+  const pending = deferred();
+  let permitted = true;
+  const store = storeOver({
+    status: async () => permitted ? 'ready' : 'permissionNeeded',
+    decks: async () => [deck(1)],
+    getStudyDeckIds: async () => null,
+    counts: async () => pending.promise,
+  });
+  await store.loadAnkiDecks();
+  permitted = false;
+  await store.loadAnkiDecks();
+  pending.resolve([10]);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(store.getAnkiDecks().studiedToday, null);
+  assert.equal(store.getAnkiDecks().todayFailure, 'PERMISSION');
+  assert.equal(store.getAnkiDecks().todayRefreshing, false);
+});

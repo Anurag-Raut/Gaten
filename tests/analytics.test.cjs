@@ -39,6 +39,51 @@ const anki = loadTypeScript('src/rn/ui/analytics/useAnkiStats.ts', (name) => {
   return {};
 });
 
+function waniKaniStore(bridge) {
+  return loadTypeScript('src/rn/ui/analytics/useWaniKaniStats.ts', (name) => {
+    if (name === '../../native/GatenWaniKani') return bridge;
+    if (name === 'react') return {};
+    if (name === 'react-native') return {AppState: {addEventListener: () => ({remove() {}})}};
+    throw new Error(`Unexpected import: ${name}`);
+  });
+}
+
+test('an accepted study write retires an older stats read without discarding saved numbers', async () => {
+  let resolveOld;
+  const oldRead = new Promise((resolve) => { resolveOld = resolve; });
+  const available = (dueNow) => ({status: 'available', snapshot: {dueNow}, stale: false});
+  let calls = 0;
+  const store = waniKaniStore({
+    refreshStats: async () => ++calls === 2 ? oldRead : available(calls === 1 ? 4 : 3),
+  });
+  await store.loadWaniKaniStats(true);
+  const old = store.loadWaniKaniStats(true);
+  store.invalidateWaniKaniStats();
+  assert.equal(store.getWaniKaniStats().snapshot.dueNow, 4);
+  assert.equal(store.getWaniKaniStats().stale, true);
+  await store.loadWaniKaniStats(true);
+  assert.equal(calls, 3);
+  resolveOld(available(4));
+  await old;
+  assert.equal(store.getWaniKaniStats().snapshot.dueNow, 3);
+  assert.equal(store.getWaniKaniStats().stale, false);
+});
+
+test('invalidating study stats preserves an account rate-limit deadline and makes no request', async () => {
+  let calls = 0;
+  const store = waniKaniStore({refreshStats: async () => {
+    calls += 1;
+    return {status: 'available', snapshot: {dueNow: 4}, stale: true,
+      failure: 'RATE_LIMITED', retryAfterSeconds: 60};
+  }});
+  await store.loadWaniKaniStats(true);
+  const deadline = store.getWaniKaniStats().retryAt;
+  store.invalidateWaniKaniStats();
+  await store.loadWaniKaniStats(true);
+  assert.equal(store.getWaniKaniStats().retryAt, deadline);
+  assert.equal(calls, 1);
+});
+
 /** Local noon on a given day, so subtracting whole days keeps the same calendar day everywhere. */
 function noon(year, month, day) {
   return new Date(year, month - 1, day, 12, 0, 0).getTime();

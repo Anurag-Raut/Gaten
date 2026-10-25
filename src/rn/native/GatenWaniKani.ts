@@ -290,12 +290,26 @@ export type WaniKaniLessonStartResult =
   | { status: "authRejected" }
   | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
 
-/** Device-local daily goal and successful lesson starts since local midnight. */
+/**
+ * Device-local daily goal, and what the account connected to this device has done since local
+ * midnight: the lesson starts and the distinct subjects whose reviews WaniKani accepted. Both counts
+ * are the account's own — the native side scopes them to the stored credential, which never reaches
+ * this layer — and both belong to the date in `activityDate`.
+ */
 export interface WaniKaniLearningPreferences {
   /** Null means no daily goal is set. */
   dailyLimit: number | null;
-  /** Unique assignments successfully started on this device today. */
+  /** Unique assignments successfully started today; the number the daily goal is checked against. */
   learnedToday: number;
+  /** Unique subjects whose review WaniKani accepted today, or null when the counters could not be read or written. */
+  reviewedToday?: number | null;
+  /** The local calendar day the counts belong to, `YYYY-MM-DD`. */
+  activityDate?: string;
+  /**
+   * `STORAGE` when today's counters could not be read or written on this device, null otherwise; the
+   * hub shows both counts as unavailable while it is set.
+   */
+  activityFailure?: "STORAGE" | null;
 }
 
 interface GatenWaniKaniNative {

@@ -10,9 +10,9 @@
  * the card kept the count a finished session had already worked off — and how one deck list could be
  * read twice within a moment.
  *
- * This holds the list, the reader's study selection and the export deck, and nothing else. The seven
- * study days behind Home's week and its streak are Home's own read: the picker has no use for them,
- * and seven searches is not a cost to pay again on every deck change.
+ * The hub also reads one collection-wide study-day count. That search settles independently of the
+ * decks, so unavailable analytics cannot prevent the reader from starting a session. The seven
+ * study days behind Home's week and its streak remain Home's own read.
  *
  * The shape follows the app's other stores: one state object, subscribers, a read that a second
  * caller joins rather than repeats, and the numbers already on screen kept while a refresh is in
@@ -45,6 +45,11 @@ export interface AnkiDecksState {
   configuredDeckName: string;
   /** True while a read is in flight; whatever is already on screen stays up. */
   refreshing: boolean;
+  /** Distinct cards studied across all decks in AnkiDroid's current study day. */
+  studiedToday: number | null;
+  todayRefreshing: boolean;
+  /** An independent failure: the deck list can still be ready when this search is unavailable. */
+  todayFailure: AnkiDecksFailure | null;
 }
 
 let state: AnkiDecksState = {
@@ -54,12 +59,17 @@ let state: AnkiDecksState = {
   studyDecks: null,
   configuredDeckName: "",
   refreshing: false,
+  studiedToday: null,
+  todayRefreshing: false,
+  todayFailure: null,
 };
 
 const listeners = new Set<() => void>();
 
 /** The read in flight, so a card and the picker opening together spend one run of calls. */
 let inFlight: Promise<void> | null = null;
+let todayInFlight: Promise<void> | null = null;
+let todayGeneration = 0;
 
 function set(patch: Partial<AnkiDecksState>) {
   state = {...state, ...patch};
@@ -92,6 +102,33 @@ export function getAnkiDecks(): AnkiDecksState {
   return state;
 }
 
+/** Reads one distinct-card study-day count without delaying or failing the independent deck read. */
+function loadToday(): void {
+  if (todayInFlight != null) return;
+  const generation = todayGeneration;
+  set({todayRefreshing: true});
+  const tracked = (async () => {
+    try {
+      const counts = await Anki.counts(["prop:rated=0"]);
+      if (generation !== todayGeneration) return;
+      const value = counts[0];
+      if (value == null || !Number.isSafeInteger(value) || value < 0) {
+        set({todayFailure: "PROVIDER"});
+      } else {
+        set({studiedToday: value, todayFailure: null});
+      }
+    } catch (error) {
+      if (generation !== todayGeneration) return;
+      set({todayFailure: failureOf(error)});
+    } finally {
+      if (generation === todayGeneration) set({todayRefreshing: false});
+    }
+  })().finally(() => {
+    if (todayInFlight === tracked) todayInFlight = null;
+  });
+  todayInFlight = tracked;
+}
+
 /**
  * Reads AnkiDroid's status, its deck list, the study selection and the export deck together. A caller
  * that arrives while a read is in flight joins that read instead of asking the provider the same
@@ -112,6 +149,7 @@ export function loadAnkiDecks(): Promise<void> {
       if (status !== "ready") {
         throw {code: status === "notInstalled" ? "ANKI_NOT_INSTALLED" : "ANKI_PERMISSION"};
       }
+      loadToday();
       const [decks, configuredDeckName, includedIds] = await Promise.all([
         Anki.decks(),
         // A reader who has not chosen an export deck yet is not a failure: the picker's own default
@@ -130,12 +168,17 @@ export function loadAnkiDecks(): Promise<void> {
     } catch (error) {
       const failure = failureOf(error);
       const gone = failure === "NOT_INSTALLED" || failure === "PERMISSION";
+      if (gone) {
+        todayGeneration += 1;
+        todayInFlight = null;
+      }
       set({
         status: gone || state.decks == null ? "unavailable" : "ready",
         failure,
         decks: gone ? null : state.decks,
         studyDecks: gone ? null : state.studyDecks,
         refreshing: false,
+        ...(gone ? {studiedToday: null, todayRefreshing: false, todayFailure: failure} : {}),
       });
     }
   })().finally(() => {

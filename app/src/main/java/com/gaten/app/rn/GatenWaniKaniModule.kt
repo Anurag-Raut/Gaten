@@ -81,7 +81,12 @@ class GatenWaniKaniModule(
         promise.resolve(WaniKaniRepository.isConfigured(reactApplicationContext))
     }
 
-    /** Reads the optional daily lesson goal and this device's count of successful starts today. */
+    /**
+     * Reads the optional daily lesson goal, today's count of successful lesson starts, and today's
+     * count of distinct subjects whose review WaniKani accepted - the day's own activity for the
+     * account the stored token belongs to. The account itself is a digest the Kotlin side keeps, and
+     * it never appears in this answer.
+     */
     @ReactMethod
     fun getLearningPreferences(promise: Promise) {
         try {
@@ -277,6 +282,11 @@ class GatenWaniKaniModule(
      * and a submission that did not go through resolves as `{ status: "failed", failure }` with
      * `retryAfterSeconds` when there is one — whether WaniKani refused the request or never answered
      * it — exactly as [reviewQueue] does.
+     *
+     * A review WaniKani accepted is counted once for its subject today, and the cached stats are
+     * marked outdated so the next dashboard read is a fresh one. Neither is allowed to fail the
+     * answer: the remote write happened and is never sent again, and a counter that could not be
+     * written is reported by the next [getLearningPreferences] read instead.
      */
     @ReactMethod
     fun submitReview(
@@ -287,6 +297,10 @@ class GatenWaniKaniModule(
     ) {
         scope.launch {
             try {
+                // The account this review belongs to, taken before the request: the counters are
+                // scoped to it, and an answer landing after the credential was replaced must not be
+                // counted for the account that replaced it.
+                val account = learningPreferences.currentAccount()
                 when (
                     val submission = WaniKaniRepository.submitReview(
                         reactApplicationContext,
@@ -295,7 +309,18 @@ class GatenWaniKaniModule(
                         incorrectReadingAnswers.toInt()
                     )
                 ) {
-                    WaniKaniReviewSubmission.Submitted -> promise.resolve(status("accepted"))
+                    WaniKaniReviewSubmission.Submitted -> {
+                        // Best-effort: the review is WaniKani's already, and no local counter may
+                        // turn that into a rejected promise. A counter that could not be kept is
+                        // reported by the next getLearningPreferences read.
+                        try {
+                            learningPreferences.recordReviewedSubject(subjectId.toInt(), account)
+                        } catch (e: Exception) {
+                            // Nothing to do about it here; the answer is accepted either way.
+                        }
+                        waniKaniStats(reactApplicationContext).markDirty(account)
+                        promise.resolve(status("accepted"))
+                    }
                     WaniKaniReviewSubmission.NeedsToken -> promise.resolve(status("needsToken"))
                     WaniKaniReviewSubmission.AuthRejected -> promise.resolve(status("authRejected"))
                     is WaniKaniReviewSubmission.Unreachable -> promise.resolve(
@@ -352,6 +377,10 @@ class GatenWaniKaniModule(
      * Enforces the device-local daily limit before starting a new assignment. Same-day successful
      * assignment retries resolve as started without another request. Other outcomes are started,
      * dailyLimitReached (with the limit and count), needsToken, authRejected or failed.
+     *
+     * A lesson WaniKani started is counted once for its assignment today, and the cached stats are
+     * marked outdated so the next dashboard read is a fresh one — both best-effort, as in
+     * [submitReview].
      */
     @ReactMethod
     fun startLesson(assignmentId: Double, promise: Promise) {
@@ -369,7 +398,11 @@ class GatenWaniKaniModule(
                         promise.resolve(status("needsToken"))
                         return@withLock
                     }
-                    if (learningPreferences.wasStartedToday(id)) {
+                    // The account today's counts and this start belong to, taken before the request:
+                    // an answer landing after the credential was replaced is not counted for the
+                    // account that replaced it.
+                    val account = learningPreferences.currentAccount()
+                    if (learningPreferences.wasStartedToday(id, account)) {
                         promise.resolve(status("started"))
                         return@withLock
                     }
@@ -381,7 +414,15 @@ class GatenWaniKaniModule(
                     }
                     when (val result = WaniKaniRepository.startLesson(reactApplicationContext, id)) {
                         WaniKaniLessonStart.Started -> {
-                            learningPreferences.recordStartedAssignment(id)
+                            // Best-effort, as in submitReview: the lesson is WaniKani's already, and
+                            // a counter that could not be kept is reported by the next preferences
+                            // read rather than failing this answer.
+                            try {
+                                learningPreferences.recordStartedAssignment(id, account)
+                            } catch (e: Exception) {
+                                // The answer is started either way.
+                            }
+                            waniKaniStats(reactApplicationContext).markDirty(account)
                             promise.resolve(status("started"))
                         }
                         WaniKaniLessonStart.NeedsToken -> promise.resolve(status("needsToken"))
@@ -596,10 +637,20 @@ class GatenWaniKaniModule(
             putInt("learnedToday", learnedToday)
         }
 
+    /**
+     * The day's counters as JS reads them. Everything is written, nulls included, so the screen can
+     * tell "nothing done" from "nothing to read": `learnedToday` stays a number because the daily
+     * goal is checked against it, while `reviewedToday` is null exactly when a counter could not be
+     * read or written. The account the counters are scoped to is a digest the Kotlin side keeps and
+     * neither its value nor anything it was derived from is written here.
+     */
     private fun WaniKaniLearningPreferences.Snapshot.toJsMap(): WritableMap =
         Arguments.createMap().apply {
             if (dailyLimit == null) putNull("dailyLimit") else putInt("dailyLimit", dailyLimit)
             putInt("learnedToday", learnedToday)
+            reviewedToday?.let { putInt("reviewedToday", it) } ?: putNull("reviewedToday")
+            putString("activityDate", activityDate)
+            if (activityFailure) putString("activityFailure", "STORAGE") else putNull("activityFailure")
         }
 
     /**
