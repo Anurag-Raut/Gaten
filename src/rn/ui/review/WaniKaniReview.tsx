@@ -35,7 +35,7 @@ import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {MAX_CONTENT_WIDTH, spacing} from "../tokens";
 import {useTheme} from "../theme";
-import {Icon} from "../components";
+import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {
   ActionFooter,
   AnswerInput,
@@ -270,42 +270,40 @@ export function WaniKaniReview({
                   <Text style={[styles.revealLabel, {color: colors.onSurface}]}>
                     {revealed ? "Hide answer" : "Show answer"}
                   </Text>
-                  <Icon
-                    name={revealed ? "keyboard_arrow_up" : "keyboard_arrow_down"}
-                    size={20}
-                    color={colors.onSurfaceVariant}
-                  />
+                  <DisclosureChevron expanded={revealed} size={20} color={colors.onSurfaceVariant} />
                 </Pressable>
-                {revealed && tabs.length > 1 && (
-                  <View style={[styles.tabRow, {borderBottomColor: colors.outlineVariant}]}>
-                    {tabs.map((tab) => {
-                      const selected = tab === activeTab;
-                      return (
-                        <Pressable
-                          key={tab}
-                          accessibilityRole="tab"
-                          accessibilityState={{selected}}
-                          onPress={() => setActiveTab(tab)}
-                          style={styles.tabCell}
-                        >
-                          <Text
-                            style={[
-                              styles.tabLabel,
-                              {
-                                color: selected ? colors.onSurface : colors.onSurfaceVariant,
-                                fontWeight: selected ? "700" : "500",
-                              },
-                            ]}
+                <Collapsible expanded={revealed}>
+                  {tabs.length > 1 && (
+                    <View style={[styles.tabRow, {borderBottomColor: colors.outlineVariant}]}>
+                      {tabs.map((tab) => {
+                        const selected = tab === activeTab;
+                        return (
+                          <Pressable
+                            key={tab}
+                            accessibilityRole="tab"
+                            accessibilityState={{selected}}
+                            onPress={() => setActiveTab(tab)}
+                            style={styles.tabCell}
                           >
-                            {DETAIL_TAB_LABELS[tab]}
-                          </Text>
-                          {selected && <View style={[styles.tabUnderline, {backgroundColor: colors.accent}]} />}
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                )}
-                {revealed && <ReviewDetails item={item} tab={activeTab} />}
+                            <Text
+                              style={[
+                                styles.tabLabel,
+                                {
+                                  color: selected ? colors.onSurface : colors.onSurfaceVariant,
+                                  fontWeight: selected ? "700" : "500",
+                                },
+                              ]}
+                            >
+                              {DETAIL_TAB_LABELS[tab]}
+                            </Text>
+                            {selected && <View style={[styles.tabUnderline, {backgroundColor: colors.accent}]} />}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                  <ReviewDetails item={item} tab={activeTab} />
+                </Collapsible>
               </>
             )}
             {failed && (

@@ -20,6 +20,7 @@ import {
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
 import {Button, Icon, IconButton, distinctIdeographs} from "../components";
+import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
@@ -243,15 +244,11 @@ export function OtherSpellingsRow({primary, spellings}: {primary: string; spelli
           <Text style={[typeScale.titleSmall, {color: colors.onSurface}]}>
             {alternatives.length} {alternatives.length === 1 ? "variant" : "variants"}
           </Text>
-          <Icon
-            name={expanded ? "keyboard_arrow_down" : "keyboard_arrow_right"}
-            size={24}
-            color={colors.onSurfaceVariant}
-          />
+          <DisclosureChevron expanded={expanded} size={20} color={colors.onSurfaceVariant} />
         </View>
       </View>
       {/* One row per spelling: a list the eye can count, not variants strung together with a dot. */}
-      {expanded && (
+      <Collapsible expanded={expanded}>
         <View style={styles.alternatives}>
           {alternatives.map((spelling, index) => (
             <View
@@ -267,7 +264,7 @@ export function OtherSpellingsRow({primary, spellings}: {primary: string; spelli
             </View>
           ))}
         </View>
-      )}
+      </Collapsible>
     </PressableScale>
   );
 }

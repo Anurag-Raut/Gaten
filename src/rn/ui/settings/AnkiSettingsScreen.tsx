@@ -36,6 +36,7 @@ import type {
 } from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import {Button, Icon, IconButton} from "../components";
+import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {reviewStore} from "../review/review-store";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
@@ -488,12 +489,9 @@ export function AnkiSettingsScreen({
               <Text style={[typeScale.labelLarge, {color: colors.onSurface, flex: 1}]}>
                 Edit front, back, and styling
               </Text>
-              <Icon
-                name={showAdvanced ? "keyboard_arrow_up" : "keyboard_arrow_down"}
-                color={colors.onSurfaceVariant}
-              />
+              <DisclosureChevron expanded={showAdvanced} color={colors.onSurfaceVariant} />
             </PressableScale>
-            {showAdvanced && (
+            <Collapsible expanded={showAdvanced}>
               <View style={{marginTop: spacing.m}}>
                 <ChoiceRow
                   label="Note type"
@@ -573,7 +571,7 @@ export function AnkiSettingsScreen({
                     </>
                   )}
               </View>
-            )}
+            </Collapsible>
           </View>
         </SettingsGroup>
 
