@@ -75,3 +75,16 @@ collapsed, in light mode.
 (`c1283036…` expected, upstream now serves `46396cce…`); the `examples.sqlite` used for these builds
 is an earlier run of the same script (schema `user_version=1`, probe lookups pass). The repo's pinned
 hash is stale upstream — a separate, reviewable change.
+
+## Typography and disclosure follow-up
+
+Refreshed on the latest local source with three typography roles (36px bold display,
+15px semibold headings/actions, 14px regular body), animated Collapsible meanings,
+and synchronized DisclosureChevron. TypeScript and debug APK build passed; the APK
+was installed on emulator-5556. Expand/collapse was repeated in light and dark themes
+(5 of 25 → 25 of 25 → 5 of 25). Emulator left open on the collapsed entry in light mode.
+
+Current evidence: `meanings-collapsed-light.png`, `meanings-collapsed-dark.png`,
+`meanings-expanded-light-bottom.png`, `meanings-expanded-dark-bottom.png`,
+`meanings-collapsed-again-light.png`, and `meaning-toggle.gif`. Other images above
+are from the earlier iteration, before the three-style typography and animated arrow.
