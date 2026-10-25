@@ -250,6 +250,9 @@ export function SourceRow({
  * The compact header of a step inside the flow: the way back, what the screen is, and — when
  * there is one — the count or state that belongs to it. The glyph is the design's 21 dp; its target is
  * Android's own 48 dp, so the arrow sits where the design puts it without being hard to hit.
+ *
+ * The title is centred on the screen: the back button and the count each occupy a 48 dp lane of the
+ * row, so the flexed title between them has the screen's own centre.
  */
 export function SubHeader({
   title,
@@ -274,11 +277,13 @@ export function SubHeader({
       <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.subHeaderTitle, {color: colors.onSurface}]}>
         {title}
       </Text>
-      {right != null && (
-        <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.onSurfaceVariant}]}>
-          {right}
-        </Text>
-      )}
+      <View style={styles.subHeaderRightLane}>
+        {right != null && (
+          <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.onSurfaceVariant}]}>
+            {right}
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -893,8 +898,22 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "center",
   },
-  subHeaderTitle: {fontSize: 14, fontWeight: "700", letterSpacing: -0.3, marginStart: 2},
-  subHeaderRight: {fontSize: 11, marginStart: "auto", paddingStart: spacing.m},
+  // The title's own padding is symmetric, so it keeps the screen's centre; it also keeps a gap to
+  // the count for the titles that run out of room (a deck name) and ellipsize against it.
+  subHeaderTitle: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: spacing.m,
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    textAlign: "center",
+  },
+  // The mirror of the back button's own 48 dp lane, so the title between the two lanes sits on the
+  // screen's centre. A count wider than the lane (a large accessibility font) widens it and shifts
+  // the title rather than letting the two run into each other; the title ellipsizes instead.
+  subHeaderRightLane: {minWidth: 48, flexShrink: 0, alignItems: "flex-end", justifyContent: "center"},
+  subHeaderRight: {fontSize: 11},
   progressArea: {marginTop: 2},
   progressTrack: {height: 2, width: "100%", overflow: "hidden"},
   progressFill: {height: 2},
