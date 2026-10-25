@@ -28,17 +28,17 @@
  */
 import React, {useEffect, useRef, useState} from "react";
 import {
+  ActivityIndicator,
   InteractionManager,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
-  type DimensionValue,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import Svg, {Circle, type CircleProps} from "react-native-svg";
+import Svg, {Circle, Path, type CircleProps} from "react-native-svg";
 import {useIsFocused} from "@react-navigation/native";
 import Animated, {
   Easing,
@@ -56,6 +56,16 @@ import {PressableScale} from "../PressableScale";
 import {useTheme, type ThemeColors} from "../theme";
 import {PRESS_EASING_REANIMATED, spacing, typeScale} from "../tokens";
 import {formatCount, type HeatmapCell} from "./model";
+import type {Artwork} from "./illustrations";
+
+/** How a source that cannot be read is marked: neutral, a wait, or a failure. */
+export type SourceTone = "neutral" | "warning" | "error";
+
+/**
+ * Where the source motif gives way to a smaller one, in dp. Below it the page's own content inset
+ * shrinks to 16 dp as well, so the artwork steps down with the text rather than crowding it.
+ */
+const NARROW_WIDTH = 360;
 
 /**
  * The height of one heatmap cell, in dp. The width is deliberately not fixed: the twelve week
@@ -1485,6 +1495,111 @@ function StackedPaintLayer({
 }
 
 /**
+ * What a source's own section shows when it cannot be read at all: the design's motif, the state's own
+ * dot or spinner, the message, and the one action that fixes it. It is drawn once per source — the
+ * sections that read the same source draw a line of their own instead — and it is still not a card:
+ * the motif sits on the page with no panel, fill or radius around it.
+ */
+export function SourceUnavailable({
+  art: Art,
+  tone = "neutral",
+  busy = false,
+  title,
+  detail,
+  action,
+}: {
+  art: React.ComponentType<Artwork>;
+  tone?: SourceTone;
+  busy?: boolean;
+  title: string;
+  detail: string;
+  action?: {label: string; onPress: () => void};
+}): React.JSX.Element {
+  const {colors} = useTheme();
+  const {width} = useWindowDimensions();
+  // The dot and the message agree on the tone; a neutral state keeps the page's ink and the muted dot
+  // the navigation uses for "nothing is wrong here".
+  const toneColor = tone === "error" ? colors.error : tone === "warning" ? colors.warning : null;
+  return (
+    <View style={styles.sourceBody}>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.sourceArt, width < NARROW_WIDTH && styles.sourceArtNarrow]}
+      >
+        <Art color={colors.accent} background={colors.background} />
+      </View>
+      <View style={styles.sourceCopy}>
+        <View style={styles.sourceStatus}>
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <View style={[styles.sourceDot, {backgroundColor: toneColor ?? colors.fine}]} />
+          )}
+          <Text style={[styles.sourceTitle, {color: toneColor ?? colors.onSurface}]}>{title}</Text>
+        </View>
+        <Text style={[styles.sourceDetail, {color: colors.onSurfaceVariant}]}>{detail}</Text>
+        {action != null ? (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+            onPress={action.onPress}
+            style={styles.sourceAction}
+          >
+            <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{action.label}</Text>
+            <ChevronRight color={colors.accent} />
+          </PressableScale>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A section whose only source has nothing to give it: the design's motif and one short line, and no
+ * action — the action lives in the source's own summary above, and repeating it here would offer the
+ * same fix three times down the page.
+ */
+export function AnalyticsEmpty({
+  art: Art,
+  message,
+}: {
+  art: React.ComponentType<Artwork>;
+  message: string;
+}): React.JSX.Element {
+  const {colors} = useTheme();
+  const {width} = useWindowDimensions();
+  return (
+    <View style={styles.emptyRow}>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.emptyArt, width < NARROW_WIDTH && styles.emptyArtNarrow]}
+      >
+        <Art color={colors.accent} background={colors.background} />
+      </View>
+      <Text style={[styles.emptyCopy, {color: colors.onSurfaceVariant}]}>{message}</Text>
+    </View>
+  );
+}
+
+/** The design's chevron: the trail of the one action a section offers, drawn at the label's own size. */
+function ChevronRight({color}: {color: string}) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24">
+      <Path
+        d="m9 6 6 6-6 6"
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
  * The honest "we cannot read this" block: a line of explanation fenced above and below by the same
  * hairline the sections use, and an optional text action under it. It is not a banner and not a card —
  * there is no fill and no radius — because unavailability is not a thing to look at, it is a thing to
@@ -1519,30 +1634,6 @@ export function InlineUnavailable({
           <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{action.label}</Text>
         </PressableScale>
       ) : null}
-    </View>
-  );
-}
-
-/**
- * Flat placeholder bars for type that has not loaded. Three widths cycle so a stack reads as unloaded
- * text rather than as one solid block, and the radius is explicitly zero so a placeholder can never
- * drift into looking like a card. There is no shimmer and no animation: motion belongs to the screen,
- * and a placeholder should sit still until the real numbers arrive.
- */
-export function SkeletonLines({lines = 2}: {lines?: number}): React.JSX.Element {
-  const {colors} = useTheme();
-  const widths: DimensionValue[] = ["100%", "62%", "84%"];
-  return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {Array.from({length: lines}, (_, index) => (
-        <View
-          key={index}
-          style={[
-            styles.skeletonLine,
-            {width: widths[index % widths.length], backgroundColor: colors.surfaceVariant},
-          ]}
-        />
-      ))}
     </View>
   );
 }
@@ -1743,10 +1834,26 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: "row",
   },
+  // The motif holds its own box and never shrinks: the copy wraps beside it instead, which is what
+  // keeps the two columns readable from 320 dp to 560 dp and at any text size.
+  sourceBody: {flexDirection: "row", alignItems: "center", gap: spacing.m, minHeight: 91},
+  sourceArt: {width: 96, height: 88, alignItems: "center", justifyContent: "center"},
+  sourceArtNarrow: {width: 75, height: 75},
+  sourceCopy: {flex: 1, minWidth: 0, alignItems: "flex-start", justifyContent: "center"},
+  sourceStatus: {flexDirection: "row", alignItems: "center", gap: 7},
+  sourceDot: {width: 6, height: 6, borderRadius: 3},
+  // 13 sp/19 at 600: the design's status line, which no single type role carries. It shrinks so a long
+  // message wraps beside the dot instead of pushing the row past the section.
+  sourceTitle: {...typeScale.description, fontWeight: "600", flexShrink: 1},
+  sourceDetail: {...typeScale.bodySmall, lineHeight: 18, marginTop: 4},
+  sourceAction: {flexDirection: "row", alignItems: "center", gap: 4, minHeight: 48, marginTop: 2},
+  emptyRow: {flexDirection: "row", alignItems: "center", gap: spacing.m, minHeight: 105},
+  emptyArt: {width: 124, height: 85, alignItems: "center", justifyContent: "center"},
+  emptyArtNarrow: {width: 100},
+  emptyCopy: {...typeScale.description, flexShrink: 1, minWidth: 0, maxWidth: 180},
   unavailable: {borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10},
   unavailableText: {lineHeight: 20},
   // A 48 dp target that hugs the label: the action gets a full-height touch area without becoming a
   // block the eye would read as a control surface.
   unavailableAction: {minHeight: 48, alignSelf: "flex-start", justifyContent: "center"},
-  skeletonLine: {height: 12, borderRadius: 0, marginBottom: 10},
 });

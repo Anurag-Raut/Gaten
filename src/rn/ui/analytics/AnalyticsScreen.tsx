@@ -24,9 +24,11 @@
  * service rows. Every figure here is a summary the reader cannot get from the review screens.
  *
  * The screen is presentational. The numbers come from `useAnkiStats` and `useWaniKaniStats`, both
- * cached at module scope, and nothing here writes to either service. Three rules hold everywhere: a
+ * cached at module scope, and nothing here writes to either service. Four rules hold everywhere: a
  * figure a source did not answer is an em dash, never a zero; a day the source would not answer is an
- * outlined cell, never an empty one; and one source's failure never blanks another source's sections.
+ * outlined cell, never an empty one; one source's failure never blanks another source's sections; and a
+ * source that cannot be read is named once — in its own section, with the one action that fixes it —
+ * while the sections that read it draw a motif and a line of their own instead of repeating the action.
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
@@ -37,6 +39,7 @@ import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {
+  AnalyticsEmpty,
   AnalyticsSection,
   AnimatedValueText,
   BarRow,
@@ -46,11 +49,20 @@ import {
   Metric,
   MetricPair,
   Ring,
-  SkeletonLines,
+  SourceUnavailable,
   StackedBar,
   useAnalyticsEntrance,
   type DistributionPart,
+  type SourceTone,
 } from "./ink";
+import {
+  AccuracyArt,
+  AnkiConnectionArt,
+  LevelProgressArt,
+  StudyActivityArt,
+  WaniKaniConnectionArt,
+  type Artwork,
+} from "./illustrations";
 import {
   accuracyOf,
   activeStages,
@@ -67,13 +79,14 @@ import {
   type HeatmapCell,
 } from "./model";
 import {
-  ANKI_ACTIVITY_DAYS,
   useAnkiStats,
   type AnkiStatsFailure,
   type AnkiStatsSnapshot,
   type AnkiStatsState,
 } from "./useAnkiStats";
 import {useWaniKaniStats, type WaniKaniStatsState} from "./useWaniKaniStats";
+import * as Anki from "../../native/GatenAnki";
+import * as GatenPlatform from "../../native/GatenPlatform";
 import type {WaniKaniStatsSnapshot} from "../../native/GatenWaniKani";
 import type {SettingsPageName} from "../navigation";
 
@@ -93,29 +106,160 @@ const ANKI_INTENSITY = [0.2, 0.42, 0.67, 1] as const;
 const SRS_INTENSITY = [0.2, 0.4, 0.6, 0.8, 1] as const;
 
 /**
- * What each reason AnkiDroid's numbers are missing says, in as few words as the fact allows, and
- * which of the two actions clears it: the Anki settings page (where the grant is asked for) or a
- * plain re-read. Installing AnkiDroid happens outside Gaten, so that one is not told to anyone whose
- * failure is anything else.
+ * How a dependent section reads its source's failure. `empty` means the source simply has nothing yet
+ * and the section's own sentence stands; the rest are the design's wording for a source that failed,
+ * is waiting for a permission, or is offline.
  */
-const ANKI_NOTICES: Record<AnkiStatsFailure, {body: string; settings?: boolean}> = {
-  NOT_INSTALLED: {body: "AnkiDroid is not installed."},
-  PERMISSION: {body: "AnkiDroid has not granted access to its collection.", settings: true},
-  NOT_SET_UP: {body: "AnkiDroid has no collection yet."},
-  NOT_FOUND: {body: "The deck Gaten reads is no longer in the collection.", settings: true},
-  MALFORMED: {body: "AnkiDroid answered something Gaten could not read."},
-  PROVIDER: {body: "AnkiDroid's collection refused the read."},
+type Downstream = "empty" | "error" | "permission" | "offline";
+
+const DOWNSTREAM_MESSAGES: Record<Exclude<Downstream, "empty">, string> = {
+  error: "Unavailable until the read succeeds.",
+  permission: "Waiting for permission.",
+  offline: "Unavailable while offline.",
+};
+
+/** What a source still being read says in the sections that depend on it. */
+const DOWNSTREAM_LOADING = "Loading source data…";
+
+/** Which of AnkiDroid's own fixes a failure needs. */
+type AnkiFix = "install" | "grant" | "open" | "settings" | "retry";
+
+/**
+ * What each reason AnkiDroid's numbers are missing says, how it is marked, which action clears it, and
+ * what the sections that read AnkiDroid say meanwhile. `Install` opens the store page and `Grant
+ * access` asks for the collection permission: both happen outside a read, so neither is cleared by
+ * reading again.
+ */
+const ANKI_FAILURES: Record<
+  AnkiStatsFailure,
+  {tone: SourceTone; title: string; detail: string; downstream: Downstream; fix: AnkiFix}
+> = {
+  NOT_INSTALLED: {
+    tone: "neutral",
+    title: "AnkiDroid is not installed.",
+    detail: "Open the AnkiDroid installation flow.",
+    downstream: "empty",
+    fix: "install",
+  },
+  PERMISSION: {
+    tone: "neutral",
+    title: "AnkiDroid access needed.",
+    detail: "Allow Gaten to read collection statistics.",
+    downstream: "permission",
+    fix: "grant",
+  },
+  NOT_SET_UP: {
+    tone: "neutral",
+    title: "AnkiDroid has no collection yet.",
+    detail: "Open AnkiDroid once to create it.",
+    downstream: "empty",
+    fix: "open",
+  },
+  NOT_FOUND: {
+    tone: "error",
+    title: "The deck Gaten reads is no longer in the collection.",
+    detail: "Choose the deck again in Anki settings.",
+    downstream: "error",
+    fix: "settings",
+  },
+  MALFORMED: {
+    tone: "error",
+    title: "Could not read collection.",
+    detail: "The last attempt failed.",
+    downstream: "error",
+    fix: "retry",
+  },
+  PROVIDER: {
+    tone: "error",
+    title: "Could not read collection.",
+    detail: "The last attempt failed.",
+    downstream: "error",
+    fix: "retry",
+  },
+};
+
+/** Where a reader without AnkiDroid gets it. */
+const ANKI_DROID_URL = "https://play.google.com/store/apps/details?id=com.ichi2.anki";
+
+/** Runs one of the page's own openers, and says so when the device took nothing. */
+function openOrSay(opened: Promise<boolean>, failure: string) {
+  void opened
+    .then((done) => {
+      if (!done) {
+        void GatenPlatform.toast(failure);
+      }
+    })
+    .catch(() => {
+      void GatenPlatform.toast(failure);
+    });
+}
+
+/**
+ * Asks for AnkiDroid's own collection permission — the request the review screen makes — and reads the
+ * numbers again once it is granted.
+ */
+function grantAnkiAccess(refresh: () => void) {
+  void Anki.requestPermission()
+    .then((granted) => {
+      if (granted) {
+        refresh();
+        return;
+      }
+      void GatenPlatform.toast("AnkiDroid access was not granted");
+    })
+    .catch(() => {
+      void GatenPlatform.toast("Could not ask for AnkiDroid access");
+    });
+}
+
+/** The action each of AnkiDroid's fixes offers, built from the page's own callbacks. */
+function ankiAction(
+  fix: AnkiFix,
+  anki: AnkiStatsState,
+  onOpenSettings: (page: SettingsPageName) => void
+): {label: string; onPress: () => void} {
+  switch (fix) {
+    case "install":
+      return {
+        label: "Install",
+        onPress: () =>
+          openOrSay(GatenPlatform.openUrl(ANKI_DROID_URL), "Could not open the Play Store"),
+      };
+    case "grant":
+      return {label: "Grant access", onPress: () => grantAnkiAccess(anki.refresh)};
+    case "open":
+      return {
+        label: "Open AnkiDroid",
+        onPress: () => openOrSay(Anki.openAnkiDroid(), "Could not open AnkiDroid"),
+      };
+    case "settings":
+      return {label: "Anki settings", onPress: () => onOpenSettings("anki")};
+    case "retry":
+      return {label: "Try again", onPress: anki.refresh};
+  }
+}
+
+/**
+ * How a source that cannot be read is shown: the tone of its mark, its message and supporting line, the
+ * one action that clears it, and what the sections that read it say meanwhile.
+ */
+type SourceFailure = {
+  tone: SourceTone;
+  title: string;
+  detail: string;
+  downstream: Downstream;
+  action?: {label: string; onPress: () => void};
 };
 
 /**
- * One source, as a section can draw it: its numbers, a read still on its way, or the sentence that
- * says why there are none. The three are separate states rather than a nullable value because they
- * mean three different things, and only the third is allowed to talk about a missing service.
+ * One source, as a section can draw it: its numbers, a read still on its way, or the presentation of why
+ * there are none. The three are separate states rather than a nullable value because they mean three
+ * different things, and only the third is allowed to talk about a missing service.
  */
 type SourceRead<T> =
   | {state: "loading"}
   | {state: "ready"; data: T}
-  | {state: "gone"; body: string; action?: {label: string; onPress: () => void}};
+  | {state: "gone"; failure: SourceFailure};
 
 /**
  * AnkiDroid's read as the sections need it. A read that has not answered yet is `loading`, and only a
@@ -132,13 +276,10 @@ function ankiRead(
   if (anki.status === "loading") {
     return {state: "loading"};
   }
-  const notice = ANKI_NOTICES[anki.failure ?? "PROVIDER"];
+  const failure = ANKI_FAILURES[anki.failure ?? "PROVIDER"];
   return {
     state: "gone",
-    body: notice.body,
-    action: notice.settings
-      ? {label: "Anki settings", onPress: () => onOpenSettings("anki")}
-      : {label: "Try again", onPress: anki.refresh},
+    failure: {...failure, action: ankiAction(failure.fix, anki, onOpenSettings)},
   };
 }
 
@@ -158,27 +299,60 @@ function waniKaniRead(
     const rejected = wanikani.status === "authRejected";
     return {
       state: "gone",
-      body: rejected ? "WaniKani refused the stored token." : "WaniKani is not connected.",
-      action: {
-        label: rejected ? "Connect again" : "Connect WaniKani",
-        onPress: () => onOpenSettings("wanikani"),
+      failure: {
+        tone: "neutral",
+        title: rejected ? "WaniKani refused the stored token." : "Not connected",
+        detail: rejected ? "Connect again with a new token." : "Connect to see WaniKani progress.",
+        downstream: "empty",
+        action: {
+          label: rejected ? "Connect again" : "Connect",
+          onPress: () => onOpenSettings("wanikani"),
+        },
       },
     };
   }
-  // `failed`: a read that settled with nothing to show. When WaniKani asked for a wait, that wait is
-  // the reason the reader is not told to try again straight away.
+  // A device that really is offline is the one failure WaniKani names as such, so it is the only one
+  // allowed to say "offline"; everything else reads as a failed read. A rate limit is a wait, and the
+  // wait is why the reader is not offered a retry that would do nothing.
+  if (wanikani.failure === "OFFLINE") {
+    return {
+      state: "gone",
+      failure: {
+        tone: "warning",
+        title: "You are offline.",
+        detail: "Internet is required for WaniKani.",
+        downstream: "offline",
+        action: {label: "Reconnect", onPress: refresh},
+      },
+    };
+  }
+  if (wanikani.retryAfterSeconds != null) {
+    return {
+      state: "gone",
+      failure: {
+        tone: "warning",
+        title: `WaniKani asked for a ${wanikani.retryAfterSeconds}s wait.`,
+        detail: "Refresh after the wait to load your numbers.",
+        downstream: "error",
+      },
+    };
+  }
   return {
     state: "gone",
-    body:
-      wanikani.message ??
-      (wanikani.retryAfterSeconds != null
-        ? `WaniKani asked for a ${wanikani.retryAfterSeconds}s wait.`
-        : "WaniKani could not be read."),
-    action: wanikani.retryAfterSeconds == null ? {label: "Try again", onPress: refresh} : undefined,
+    failure: {
+      tone: "error",
+      title: wanikani.message ?? "Could not load WaniKani.",
+      detail: "Check the connection and retry.",
+      downstream: "error",
+      action: {label: "Try again", onPress: refresh},
+    },
   };
 }
 
-/** The heading, and the one control on the page. */
+/**
+ * The heading, and the one control on the page. The line under it is the age of the numbers on screen;
+ * with nothing read yet it says the read is in flight, or that there is no data at all.
+ */
 function Header({
   updated,
   busy,
@@ -197,7 +371,7 @@ function Header({
           numberOfLines={1}
           style={[typeScale.description, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
         >
-          {updated ?? "Updating…"}
+          {updated ?? (busy ? "Updating…" : "No data yet")}
         </Text>
       </View>
       <PressableScale
@@ -213,35 +387,59 @@ function Header({
   );
 }
 
-/** What a section shows instead of a source's numbers: a skeleton while the read is open, or the line
- *  that says why there are none. A read that answered draws its numbers in the section itself. */
-function SourceFallback({read, withAction = true}: {read: SourceRead<unknown>; withAction?: boolean}) {
+/**
+ * What a source's own section shows while it has no numbers: the design's motif, its state's mark, and
+ * the one action that fixes it. Used by the two source sections only, so a failure is stated once — the
+ * sections that read the same source draw a line of their own instead. A read that answered draws its
+ * numbers in the section itself.
+ */
+function SourceState({
+  read,
+  art,
+  loadingTitle,
+  loadingDetail,
+}: {
+  read: SourceRead<unknown>;
+  art: React.ComponentType<Artwork>;
+  loadingTitle: string;
+  loadingDetail: string;
+}) {
+  if (read.state === "ready") {
+    return null;
+  }
   if (read.state === "loading") {
-    return <SkeletonLines />;
+    return <SourceUnavailable art={art} busy title={loadingTitle} detail={loadingDetail} />;
   }
-  if (read.state === "gone") {
-    return (
-      <InlineUnavailable action={withAction ? read.action : undefined}>{read.body}</InlineUnavailable>
-    );
+  return (
+    <SourceUnavailable
+      art={art}
+      tone={read.failure.tone}
+      title={read.failure.title}
+      detail={read.failure.detail}
+      action={read.failure.action}
+    />
+  );
+}
+
+/**
+ * The one line a section shows in place of its numbers when its source has none: the design's wording
+ * for a source that is still reading, refused or offline, and the section's own sentence when the source
+ * simply has nothing to show yet.
+ */
+function downstreamMessage(read: SourceRead<unknown>, empty: string): string {
+  if (read.state === "loading") {
+    return DOWNSTREAM_LOADING;
   }
-  return null;
+  if (read.state === "gone" && read.failure.downstream !== "empty") {
+    return DOWNSTREAM_MESSAGES[read.failure.downstream];
+  }
+  return empty;
 }
 
 /** The quiet sentence under a section's numbers, in the page's own muted ink. */
 function Note({children}: {children: React.ReactNode}) {
   const {colors} = useTheme();
   return <Text style={[styles.note, {color: colors.onSurfaceVariant}]}>{children}</Text>;
-}
-
-/**
- * The grid drawn while the first read is on its way: twelve weeks of days the source has not answered
- * yet. It is built by the same function that builds the real grid, from a window in which every day is
- * unknown, so the skeleton is the chart's own "unknown" treatment rather than a second drawing of it —
- * and it claims nothing: the summary reads no active days, no cards.
- */
-function unknownGrid(now: number): (HeatmapCell | null)[][] {
-  const unknown = Array.from({length: ANKI_ACTIVITY_DAYS}, (_, daysAgo) => ({daysAgo, cards: null}));
-  return heatmap(unknown, now).columns;
 }
 
 /** A share of a whole, or null when the two halves are not both known. */
@@ -477,9 +675,14 @@ export function AnalyticsScreen({
             mature share is the only place the page draws a proportion of a whole. */}
         <AnalyticsSection title="Anki" meta="Collection" first>
           {ankiData == null ? (
-            // This is the first section of its source, so it carries the action: a page with nothing
-            // connected should offer the fix once, not repeat the same button down the page.
-            <SourceFallback read={ankiState} />
+            // The source's own section is the one place its failure is named and its fix offered; the
+            // sections that read it say a line of their own instead of repeating this.
+            <SourceState
+              read={ankiState}
+              art={AnkiConnectionArt}
+              loadingTitle="Checking AnkiDroid…"
+              loadingDetail="Checking collection access."
+            />
           ) : (
             <View style={styles.ringRow}>
               <Ring
@@ -532,7 +735,12 @@ export function AnalyticsScreen({
             appear in a stage. */}
         <AnalyticsSection title="WaniKani" meta="Progress">
           {wkData == null ? (
-            <SourceFallback read={wkState} />
+            <SourceState
+              read={wkState}
+              art={WaniKaniConnectionArt}
+              loadingTitle="Connecting…"
+              loadingDetail="Checking your WaniKani account."
+            />
           ) : (
             <View style={styles.ringRow}>
               <Ring
@@ -580,15 +788,14 @@ export function AnalyticsScreen({
             distinct-card searches are what the released provider supports. It is never presented as
             review events, and a day it would not answer stays unknown. It sits after the two source
             summaries because it is the one section that reads a long history rather than today's
-            state, and because the two summaries are what a reader opens the page for. */}
+            state, and because the two summaries are what a reader opens the page for. While AnkiDroid
+            has no numbers the section draws the design's motif and one line, and no second action. */}
         <AnalyticsSection title="Study activity" meta="12 weeks · Anki">
           {grid == null ? (
-            <>
-              <SourceFallback read={ankiState} withAction={false} />
-              {ankiState.state === "loading" && (
-                <Heatmap columns={unknownGrid(now)} selectedDayAgo={null} onSelectDay={toggleDay} />
-              )}
-            </>
+            <AnalyticsEmpty
+              art={StudyActivityArt}
+              message={downstreamMessage(ankiState, "Study history will appear here.")}
+            />
           ) : (
             <>
               <MetricPair
@@ -619,10 +826,14 @@ export function AnalyticsScreen({
         </AnalyticsSection>
 
         {/* Accuracy — cumulative over every answer WaniKani still counts for this account, which is
-            why it carries no date range: the API keeps a running total per subject, not a log. */}
+            why it carries no date range: the API keeps a running total per subject, not a log. While
+            WaniKani has no numbers the section draws the design's motif and one line, no second action. */}
         <AnalyticsSection title="Accuracy" meta="WaniKani">
           {wkData == null ? (
-            <SourceFallback read={wkState} withAction={false} />
+            <AnalyticsEmpty
+              art={AccuracyArt}
+              message={downstreamMessage(wkState, "Answer accuracy will appear here.")}
+            />
           ) : overall == null ? (
             <InlineUnavailable>Accuracy unavailable.</InlineUnavailable>
           ) : (
@@ -715,10 +926,14 @@ export function AnalyticsScreen({
 
         {/* Level progress — how long a level is taking, from WaniKani's own level progressions. A
             level's duration is its start to its pass, not its completion time, which is when the last
-            item on it was finished rather than when the level was left behind. */}
+            item on it was finished rather than when the level was left behind. While WaniKani has no
+            numbers the section draws the design's motif and one line, and no second action. */}
         <AnalyticsSection title="Level progress" meta="WaniKani">
           {wkData == null ? (
-            <SourceFallback read={wkState} withAction={false} />
+            <AnalyticsEmpty
+              art={LevelProgressArt}
+              message={downstreamMessage(wkState, "Your level history will appear here.")}
+            />
           ) : history == null ? (
             <InlineUnavailable>Level history unavailable.</InlineUnavailable>
           ) : history.length === 0 ? (
