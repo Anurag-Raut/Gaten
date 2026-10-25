@@ -202,14 +202,42 @@ test('stale offline zero is not completion and offers sync retry rather than que
   }
 });
 
-test('stale failed snapshot offers sync retry while retaining known counts', () => {
-  const [reviews, lessons] = models(hub({summary: snapshot({sync: 'failed'})}));
+test('a stale snapshot with work waiting opens the queue and keeps the saved counts', () => {
+  const [reviews, lessons] = models(hub({
+    summary: snapshot({dueNow: 3, lessonsNow: 4, sync: 'failed'}),
+  }));
   assert.match(moduleText(reviews), /\b3\b/);
   assert.match(moduleText(lessons), /\b4\b/);
   assert.equal(reviews.stale, true);
   assert.equal(lessons.stale, true);
-  assert.equal(reviews.tap, 'sync');
-  assert.equal(lessons.tap, 'sync');
+  // A cached count is still a count: the row opens the queue it knows about, and the queue read is
+  // the validation. It is never presented as a finished queue.
+  assert.equal(reviews.tap, 'reviews');
+  assert.equal(reviews.complete, false);
+  assert.equal(lessons.tap, 'lessons');
+  assert.equal(lessons.complete, false);
+});
+
+test('a stale snapshot in a rate-limit wait opens the queue and states the wait', () => {
+  const [reviews, lessons] = models(hub({
+    summary: snapshot({dueNow: 2, lessonsNow: 2, sync: 'failed', retryAfterSeconds: 45}),
+  }));
+  assert.equal(reviews.tap, 'reviews');
+  assert.equal(reviews.notice, 'Try again in 45 seconds.');
+  assert.equal(lessons.tap, 'lessons');
+  assert.equal(lessons.notice, 'Try again in 45 seconds.');
+});
+
+test('a stale zero snapshot offers the read instead of a queue that may be gone', () => {
+  const [reviews, lessons] = models(hub({
+    summary: snapshot({dueNow: 0, lessonsNow: 0, sync: 'failed'}),
+  }));
+  for (const module of [reviews, lessons]) {
+    assert.equal(module.stale, true);
+    assert.equal(module.tap, 'sync');
+    assert.equal(module.complete, false);
+    assert.notEqual(module.subline, 'All caught up');
+  }
 });
 
 test('failed initial read exposes retry and rate-limit guidance', () => {
@@ -348,11 +376,18 @@ const reactStub = {
  * to stay shared between the flow and Home.
  */
 function buildStores(wkOverrides = {}, ankiOverrides = {}) {
+  const missing = (name) => async () => {
+    throw new Error(`Unexpected WaniKani call: ${String(name)}`);
+  };
   const wk = new Proxy(wkOverrides, {
     get(target, name) {
       if (name in target) return target[name];
       if (name === 'getLearningPreferences') return async () => ({dailyLimit: null, learnedToday: 0});
-      return async () => { throw new Error(`Unexpected WaniKani call: ${String(name)}`); };
+      // The regular read and the forced refresh are one bridge call behind two names. A case may
+      // mock either one; which one the store asked for is asserted only where a case mocks both.
+      if (name === 'stats') return target.refreshStats ?? missing(name);
+      if (name === 'refreshStats') return target.stats ?? missing(name);
+      return missing(name);
     },
   });
   const anki = new Proxy(ankiOverrides, {get: (target, name) => {
@@ -415,7 +450,7 @@ test('store opens a connected hub with loaded counts', async () => {
     refreshStats: async () => availableStats(),
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'hub snapshot');
   assert.equal(store.getState().step.summary.dueNow, 1);
   assert.equal(store.getState().step.summary.lessonsNow, 1);
   assert.equal(store.getState().step.refreshing, false);
@@ -446,7 +481,7 @@ test('a token lost while a chosen queue is read keeps the hub that explains the 
     reviewQueue: async () => ({status: 'needsToken'}),
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'hub snapshot');
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub after a lost token');
   assert.equal(store.getState().step.connection, 'disconnected');
@@ -459,7 +494,7 @@ test("the hub's counts are the ones Home's card reads, from one read", async () 
     refreshStats: async () => { statsReads += 1; return availableStats({dueNow: 2, lessonsNow: 3}); },
   });
   reviewStore.openWaniKani();
-  await until(() => reviewStore.getState().step.kind === 'wkHome' && !reviewStore.getState().busy, 'hub snapshot');
+  await until(() => reviewStore.getState().step.kind === 'wkHome' && !reviewStore.getState().busy && !reviewStore.getState().step.refreshing, 'hub snapshot');
   assert.equal(statsReads, 1);
   const shared = waniKaniStats.getWaniKaniStats();
   assert.equal(shared.status, 'ready');
@@ -512,7 +547,7 @@ test('a reset during the connect hub read is read again instead of leaving skele
   firstRead.resolve(availableStats({dueNow: 99, lessonsNow: 99}));
   await connecting;
   await until(
-    () => reviewStore.getState().step.kind === 'wkHome' && !reviewStore.getState().busy,
+    () => reviewStore.getState().step.kind === 'wkHome' && !reviewStore.getState().busy && !reviewStore.getState().step.refreshing,
     'hub settled',
   );
   const step = reviewStore.getState().step;
@@ -575,13 +610,13 @@ test('store retains confirmed counts while a refresh is pending', async () => {
     refreshStats: async () => (++calls === 1 ? availableStats() : nextRead.promise),
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'initial hub snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'initial hub snapshot');
   store.retryWaniKaniSync();
   await until(() => store.getState().step.kind === 'wkHome' && store.getState().step.refreshing, 'refresh start');
   assert.equal(store.getState().step.summary.dueNow, 1);
   assert.equal(store.getState().step.summary.lessonsNow, 1);
   nextRead.resolve(availableStats({dueNow: 2, lessonsNow: 3}));
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'refresh finish');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'refresh finish');
   assert.equal(store.getState().step.summary.dueNow, 2);
   assert.equal(store.getState().step.summary.lessonsNow, 3);
 });
@@ -597,7 +632,7 @@ test('rejected refresh keeps an old zero snapshot stale and clears refreshing', 
     },
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'initial zero snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'initial zero snapshot');
   store.retryWaniKaniSync();
   await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'failed refresh');
 
@@ -634,7 +669,7 @@ test('a saved final review stays acknowledged through refresh failure and clears
     submitReview: async () => { savedReviews += 1; return {status: 'accepted'}; },
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'initial WaniKani snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'initial WaniKani snapshot');
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview' && !store.getState().busy, 'single review');
   store.wkEntry('mountain');
@@ -687,12 +722,12 @@ test('store resumes a paused review at the saved answer', async () => {
     reviewQueue: async () => ({status: 'available', items: [item]}),
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'hub snapshot');
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview', 'review session');
   store.wkEntry('my saved answer');
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'return to hub');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'return to hub');
   assert.equal(store.getState().step.pausedReview.entry, 'my saved answer');
   store.startReviews();
   assert.equal(store.getState().step.kind, 'wkReview');
@@ -711,18 +746,18 @@ test('auth rejection opens the connection page and clears the saved review sessi
     reviewQueue: async () => ({status: 'available', items: [item]}),
   });
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'hub snapshot');
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview', 'review session');
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'paused review in hub');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'paused review in hub');
   assert.ok(store.getState().step.pausedReview);
   store.retryWaniKaniSync();
   await until(() => store.getState().step.kind === 'wkConnect' && !store.getState().busy, 'auth rejection');
   assert.equal(store.getState().step.rejected, true);
   // Reconnecting does not bring back the session that went with the refused token.
   store.openWaniKani();
-  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub after reconnecting');
+  await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy && !store.getState().step.refreshing, 'hub after reconnecting');
   assert.equal(store.getState().step.pausedReview, null);
 });
 
@@ -1112,26 +1147,24 @@ test('resuming while the Anki picker is open refreshes its deck list', async () 
   assert.equal(store.getState().step.decks.length, 2);
 });
 
-test('a submitted Anki grade marks an empty deck complete until fresh counts become positive', async () => {
-  // The grade empties the deck and the shared list is read again with it, so the picker opens on the
-  // finished deck rather than on the counts it had one card ago.
+test('a fresh Anki deck read replaces its rows after a submitted grade', async () => {
   const {store, setVisibleDeck} = await finishSingleAnkiCard('submitted');
   store.openDecks();
-  await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, 'completed Anki deck');
-  assert.deepEqual(store.getState().step.completedDeckIds, [7]);
+  await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, 'empty Anki deck');
+  assert.equal(store.getState().step.decks[0].newCount, 0);
 
   setVisibleDeck(deck(7));
   store.openDecks();
   await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, 'Anki deck with fresh due cards');
-  assert.deepEqual(store.getState().step.completedDeckIds, []);
+  assert.equal(store.getState().step.decks[0].newCount, 7);
 });
 
-test('ignored or missing Anki grades do not mark an empty deck complete', async () => {
+test('ignored or missing Anki grades leave the freshly read deck counts unchanged', async () => {
   for (const gradeResult of ['ignored', 'notFound']) {
     const {store} = await finishSingleAnkiCard(gradeResult);
     store.openDecks();
     await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, `${gradeResult} Anki result`);
-    assert.deepEqual(store.getState().step.completedDeckIds, []);
+    assert.equal(store.getState().step.decks[0].newCount, 7);
   }
 });
 
@@ -1272,8 +1305,6 @@ test('all-clear Anki still lists every deck and never opens an empty session', a
   assert.deepEqual(step.decks.map((item) => item.id), [1, 2, 3]);
   assert.ok(step.decks.every((item) => item.newCount + item.learnCount + item.reviewCount === 0));
   assert.equal(step.filteredEmpty, false);
-  // No session was tracked in this store, so nothing may claim evidence-backed completion.
-  assert.deepEqual(step.completedDeckIds, []);
   // A cleared deck row does not read the scheduler, so no empty session can be reached from it.
   store.startDeck(step.decks[0]);
   await Promise.resolve();
@@ -1317,7 +1348,9 @@ test('a second start while the first review read is in flight fires no second re
   await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
   store.startReviews();
   store.startReviews();
-  await until(() => reviewReads === 1 && store.getState().busy, 'pending review queue read');
+  // The tap shows as the reviews row's own pending action, not as the whole hub's busy state.
+  await until(() => reviewReads === 1 && store.getState().step.pendingAction === 'reviews', 'pending review queue read');
+  assert.equal(store.getState().busy, false);
   store.startReviews();
   assert.equal(reviewReads, 1);
   reviewRead.resolve({status: 'available', items: [item]});
@@ -1338,10 +1371,215 @@ test('a second start while the first lessons read is in flight fires no second r
   await until(() => store.getState().step.kind === 'wkHome' && !store.getState().busy, 'hub snapshot');
   store.startLessons();
   store.startLessons();
-  await until(() => lessonReads === 1 && store.getState().busy, 'pending lesson queue read');
+  await until(() => lessonReads === 1 && store.getState().step.pendingAction === 'lessons', 'pending lesson queue read');
+  assert.equal(store.getState().busy, false);
   store.startLessons();
   assert.equal(lessonReads, 1);
   lessonsRead.resolve({status: 'available', items: [lessonItem(1)]});
   await until(() => store.getState().step.kind === 'wkLesson' && !store.getState().busy, 'lesson batch');
   assert.equal(lessonReads, 1);
+});
+
+test('opening WaniKani releases global busy while its hub refresh is pending', async () => {
+  const stats = deferred();
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => stats.promise,
+  });
+  store.openWaniKani();
+  await until(
+    () => store.getState().step.kind === 'wkHome' && store.getState().step.refreshing,
+    'pending hub refresh',
+  );
+  assert.equal(store.getState().busy, false);
+  stats.resolve(availableStats());
+  await until(() => !store.getState().step.refreshing, 'settled hub refresh');
+});
+
+test('late review queue answers never replace Anki and a new WaniKani visit can start', async () => {
+  for (const firstResult of [
+    {status: 'available', items: [reviewItem(1)]},
+    {status: 'empty'},
+    {status: 'failed', failure: 'OFFLINE'},
+  ]) {
+    const firstQueue = deferred();
+    let reviewReads = 0;
+    const store = mockStore({
+      isConfigured: async () => true,
+      refreshStats: async () => availableStats(),
+      reviewQueue: async () => ++reviewReads === 1 ? firstQueue.promise : {
+        status: 'available', items: [reviewItem(9)],
+      },
+    }, {
+      status: async () => 'ready',
+      decks: async () => [deck(7)],
+      getConfiguredDeckName: async () => 'Deck 7',
+      getStudyDeckIds: async () => null,
+    });
+    store.openWaniKani();
+    await until(() => store.getState().step.kind === 'wkHome', 'initial WaniKani hub');
+    store.startReviews();
+    await until(
+      () => reviewReads === 1 && store.getState().step.pendingAction === 'reviews',
+      'pending review queue',
+    );
+    store.openAnki();
+    await until(() => store.getState().step.kind === 'decks' && !store.getState().busy, 'Anki picker');
+    firstQueue.resolve(firstResult);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(store.getState().step.kind, 'decks');
+    assert.equal(store.getState().step.decks[0].id, 7);
+
+    store.openWaniKani();
+    await until(() => store.getState().step.kind === 'wkHome', 'replacement WaniKani hub');
+    store.startReviews();
+    await until(() => store.getState().step.kind === 'wkReview', 'replacement review queue');
+    assert.equal(store.getState().step.session.items[0].subjectId, 9);
+  }
+});
+
+test('queue rate limits block sync and foreground reads, then expire and reset with the account', async () => {
+  const realNow = Date.now;
+  let clock = realNow();
+  Date.now = () => clock;
+  try {
+    let statsReads = 0;
+    let reviewReads = 0;
+    let lessonReads = 0;
+    let preferenceReads = 0;
+    const store = mockStore({
+      isConfigured: async () => true,
+      refreshStats: async () => { statsReads += 1; return availableStats(); },
+      reviewQueue: async () => {
+        reviewReads += 1;
+        if (reviewReads < 3) return {status: 'failed', failure: 'RATE_LIMITED', retryAfterSeconds: 30};
+        return {status: 'available', items: [reviewItem(3)]};
+      },
+      getLearningPreferences: async () => {
+        preferenceReads += 1;
+        return {dailyLimit: null, learnedToday: 0};
+      },
+      lessonsQueue: async () => { lessonReads += 1; return {status: 'available', items: [lessonItem(3)]}; },
+    });
+    store.openWaniKani();
+    await until(() => store.getState().step.kind === 'wkHome', 'initial WaniKani hub');
+    store.startReviews();
+    await until(
+      () => store.getState().step.reviewFailure?.failure === 'RATE_LIMITED' && store.getState().step.pendingAction == null,
+      'queue rate limit',
+    );
+    store.retryWaniKaniSync();
+    store.onResumed();
+    await Promise.resolve();
+    assert.equal(statsReads, 1);
+    store.startLessons();
+    // The hub entry's own budget read plus the one a lesson start makes: two reads, and still no
+    // queue read, which is what the rate limit protects.
+    await until(() => preferenceReads === 2, 'local lesson budget read');
+    assert.equal(lessonReads, 0);
+
+    clock += 31_000;
+    store.retryWaniKaniSync();
+    await until(() => statsReads === 2 && !store.getState().step.refreshing, 'expired sync retry');
+    store.startReviews();
+    await until(() => reviewReads === 2 && store.getState().step.reviewFailure?.failure === 'RATE_LIMITED', 'second queue wait');
+
+    store.resetWaniKaniAccount();
+    store.openWaniKani();
+    await until(() => store.getState().step.kind === 'wkHome', 'reset account hub');
+    store.startReviews();
+    await until(() => store.getState().step.kind === 'wkReview', 'queue after account reset');
+    assert.equal(reviewReads, 3);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('a hidden pending review settles into its retained session after re-entering the WaniKani hub', async () => {
+  const submitted = deferred();
+  let submits = 0;
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => availableStats(),
+    reviewQueue: async () => ({status: 'available', items: [reviewItem(1), reviewItem(2)]}),
+    submitReview: async () => (++submits === 1 ? submitted.promise : {status: 'accepted'}),
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome', 'initial WaniKani hub');
+  store.startReviews();
+  await until(() => store.getState().step.kind === 'wkReview', 'review queue');
+  store.wkEntry('mountain');
+  store.wkCheck();
+  await until(() => submits === 1 && !store.getState().busy, 'pending review write');
+  const pending = store.getState().step.session;
+  store.wkEntry('must not clone pending');
+  assert.strictEqual(store.getState().step.session, pending);
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome', 'hub during review write');
+  assert.strictEqual(store.getState().step.pausedReview, pending);
+  submitted.resolve({status: 'accepted'});
+  await until(() => store.getState().step.pausedReview?.index === 1, 'settled hidden review');
+  assert.notStrictEqual(store.getState().step.pausedReview, pending);
+});
+
+test('a final pending review clears its retained session without replacing an Anki picker', async () => {
+  const submitted = deferred();
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => availableStats(),
+    reviewQueue: async () => ({status: 'available', items: [reviewItem(1)]}),
+    submitReview: async () => submitted.promise,
+  }, {
+    status: async () => 'ready',
+    decks: async () => [deck(7)],
+    getConfiguredDeckName: async () => 'Deck 7',
+    getStudyDeckIds: async () => null,
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome', 'initial WaniKani hub');
+  store.startReviews();
+  await until(() => store.getState().step.kind === 'wkReview', 'review queue');
+  store.wkEntry('mountain');
+  store.wkCheck();
+  await until(() => store.getState().step.session.phase === 'submitting' && !store.getState().busy, 'pending review write');
+  store.openAnki();
+  await until(() => store.getState().step.kind === 'decks', 'Anki picker');
+  submitted.resolve({status: 'accepted'});
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(store.getState().step.kind, 'decks');
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome', 'post-write WaniKani hub');
+  assert.equal(store.getState().step.pausedReview, null);
+});
+
+test('a hidden pending lesson settles into its retained batch after re-entering the WaniKani hub', async () => {
+  const started = deferred();
+  let starts = 0;
+  const store = mockStore({
+    isConfigured: async () => true,
+    refreshStats: async () => availableStats({lessonsNow: 2}),
+    getLearningPreferences: async () => ({dailyLimit: null, learnedToday: 0}),
+    lessonsQueue: async () => ({status: 'available', items: [lessonItem(1), lessonItem(2)]}),
+    startLesson: async () => (++starts === 1 ? started.promise : {status: 'started'}),
+  });
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome', 'initial WaniKani hub');
+  store.startLessons();
+  await until(() => store.getState().step.kind === 'wkLesson', 'lesson batch');
+  store.lessonNext();
+  store.lessonNext();
+  store.lessonEntry('mountain');
+  store.lessonCheck();
+  await until(() => starts === 1 && !store.getState().busy, 'pending lesson write');
+  const pending = store.getState().step.session;
+  store.lessonEntry('must not clone pending');
+  assert.strictEqual(store.getState().step.session, pending);
+  store.openWaniKani();
+  await until(() => store.getState().step.kind === 'wkHome', 'hub during lesson write');
+  assert.strictEqual(store.getState().step.pausedLesson, pending);
+  started.resolve({status: 'started'});
+  await until(() => store.getState().step.pausedLesson?.quizIndex === 1, 'settled hidden lesson');
+  assert.notStrictEqual(store.getState().step.pausedLesson, pending);
 });

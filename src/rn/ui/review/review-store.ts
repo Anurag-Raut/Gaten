@@ -27,6 +27,7 @@ import * as WaniKani from "../../native/GatenWaniKani";
 import {getAnkiDecks, loadAnkiDecks} from "../anki/useAnkiDecks";
 import {
   getWaniKaniStats,
+  invalidateWaniKaniStats,
   loadWaniKaniStats,
   resetWaniKaniStats,
 } from "../analytics/useWaniKaniStats";
@@ -179,7 +180,17 @@ export interface WaniKaniHubState {
   learningPreferences?: WaniKaniLearningPreferences | null;
   learningPreferencesFailed?: boolean;
   sessionFinished?: boolean;
+  /**
+   * The one row action the reader is waiting on — the queue or the sync they just tapped — or null
+   * when nothing of theirs is in flight. A background refresh leaves it null, so a row the reader
+   * did not touch never spins on another read's behalf, and the page can draw the spinner on the
+   * row that was tapped rather than over the whole hub.
+   */
+  pendingAction?: WaniKaniHubPendingAction | null;
 }
+
+/** The hub row actions a reader can have in flight, named as the rows are. */
+export type WaniKaniHubPendingAction = "reviews" | "lessons" | "sync";
 
 /** What the review screen is doing. */
 export type ReviewStep =
@@ -193,7 +204,7 @@ export type ReviewStep =
       source: "anki" | "waniKani";
     }
   | { kind: "blocked"; failure: ReviewFailure }
-  | { kind: "decks"; decks: AnkiDeckResult[]; configuredDeckName: string; filteredEmpty?: boolean; completedDeckIds?: number[] }
+  | { kind: "decks"; decks: AnkiDeckResult[]; configuredDeckName: string; filteredEmpty?: boolean }
   | {
       kind: "session";
       card: ReviewCard;
@@ -383,9 +394,14 @@ class ReviewStore {
   private pausedReview: WaniKaniSession | null = null;
   private hubRequest = 0;
   private lastHub: WaniKaniHubState | null = null;
-  private completedAnkiDeckIds = new Set<number>();
-  private ankiSubmittedInSession = false;
-
+  /**
+   * The hub row action in flight, and the token that owns it. The token is what keeps a superseded
+   * action's completion from clearing a newer action's spinner or a reset hub's clean state.
+   */
+  private pendingAction: WaniKaniHubPendingAction | null = null;
+  private pendingToken = 0;
+  /** Absolute queue-only rate limit; the shared stats store only knows waits from summary reads. */
+  private queueRetryAt: number | null = null;
   /** When the app went to the background with a card on screen, so the time spent away can be
    *  taken back out of AnkiDroid's answer time. */
   private pausedAt: number | null = null;
@@ -417,6 +433,60 @@ class ReviewStore {
     action();
   }
 
+  /**
+   * Marks `action` as the row the reader is waiting on and hands back the token that ends it. The
+   * token is bumped by a reset or a newer action, so a late completion can only ever clear the
+   * spinner it started.
+   */
+  private beginPending(action: WaniKaniHubPendingAction): number {
+    this.pendingAction = action;
+    const token = ++this.pendingToken;
+    if (this.state.step.kind === "wkHome") this.set({step: this.hubStep()});
+    return token;
+  }
+
+  /** Clears the pending row, unless a reset or a newer action has taken its place. */
+  private endPending(token: number): void {
+    if (token !== this.pendingToken) return;
+    this.pendingAction = null;
+    if (this.state.step.kind === "wkHome") this.set({step: this.hubStep()});
+  }
+
+  /** Forgets the pending row outright: an account change, or a fresh entry that supersedes it. */
+  private clearPending(): void {
+    this.pendingToken += 1;
+    this.pendingAction = null;
+  }
+
+  /**
+   * Seconds a rate limit still asks the reader to wait, or null when no wait is in force. Queue
+   * reads can be rate-limited independently of the shared summary, so the later deadline wins.
+   */
+  private rateLimitWaitSeconds(): number | null {
+    const now = Date.now();
+    if (this.queueRetryAt != null && this.queueRetryAt <= now) this.queueRetryAt = null;
+    const retryAt = Math.max(getWaniKaniStats().retryAt ?? 0, this.queueRetryAt ?? 0);
+    const seconds = Math.ceil((retryAt - now) / 1000);
+    return seconds > 0 ? seconds : null;
+  }
+
+  /** Retains a queue's explicit wait without shortening an overlapping shared-summary wait. */
+  private rememberQueueRateLimit(retryAfterSeconds: number | null | undefined): void {
+    if (retryAfterSeconds == null) return;
+    this.queueRetryAt = Math.max(this.queueRetryAt ?? 0, Date.now() + retryAfterSeconds * 1000);
+  }
+
+  /** States a blocked explicit sync without spending a summary request during the queue's wait. */
+  private showRateLimitWait(wait: number): void {
+    const summary = this.state.step.kind === "wkHome" ? this.state.step.summary : this.lastHub?.summary;
+    this.set({step: this.hubStep({
+      refreshing: false,
+      failed: summary == null,
+      summary: summary == null ? null : {...summary, sync: "failed", retryAfterSeconds: wait},
+      failure: {failure: "RATE_LIMITED", retryAfterSeconds: wait},
+    })});
+  }
+
   private collapseDetails() {
     this.set({ expandedKanji: null, expandedRadical: null });
   }
@@ -429,6 +499,10 @@ class ReviewStore {
    */
   openAnki() {
     this.ifIdle(() => {
+      // Queue reads no longer hold global busy. Retire their ownership before the Anki picker becomes
+      // visible so a late WaniKani answer cannot replace it.
+      this.hubRequest += 1;
+      this.clearPending();
       // Back to the picker, whatever step was left behind: the deck that was being studied is not
       // the one this entry chose.
       this.set({ deck: null, step: { kind: "opening", source: "anki" } });
@@ -462,11 +536,7 @@ class ReviewStore {
         this.set({step: {kind: "failed", failure: failure ?? "PROVIDER", afterGrade: false}});
         return;
       }
-      for (const deck of decks) {
-        if (deck.newCount + deck.learnCount + deck.reviewCount > 0) this.completedAnkiDeckIds.delete(deck.id);
-      }
       this.set({step: {kind: "decks", decks: studyDecks, configuredDeckName,
-        completedDeckIds: studyDecks.filter((deck) => this.completedAnkiDeckIds.has(deck.id)).map((deck) => deck.id),
         filteredEmpty: studyDecks.length === 0 && decks.length > 0}});
     } finally {
       this.setBusy(false);
@@ -494,25 +564,30 @@ class ReviewStore {
     this.ifIdle(() => {
       if (this.state.step.kind === "wkLesson") this.pausedLesson = this.state.step.session;
       if (this.state.step.kind === "wkReview") this.pausedReview = this.state.step.session;
+      // The configuration read is part of this visit too. Bump first, before it awaits, so an
+      // earlier entry cannot reopen WaniKani after a provider switch or account reset.
+      this.clearPending();
+      const request = ++this.hubRequest;
       this.set({ deck: null, step: { kind: "opening", source: "waniKani" } });
       this.setBusy(true);
-      const request = this.hubRequest;
       void (async () => {
         try {
           const configured = await WaniKani.isConfigured();
           if (request !== this.hubRequest) return;
+          // Only the configuration gate is globally busy. The hub's refresh shows its own loading
+          // state so cached rows remain available while the summary is read.
+          this.setBusy(false);
           if (!configured) {
             this.accountUnavailable("disconnected");
             return;
           }
-          await this.enterWaniKaniHome();
+          void this.enterWaniKaniHome();
         } catch (error) {
-          // The opening step is still up while the token check runs, so it has to surface too.
-          if (this.state.step.kind !== "wkHome" && this.state.step.kind !== "opening") return;
+          if (request !== this.hubRequest) return;
           this.set({step: this.hubStep({failed: true, refreshing: false,
             failure: {failure: waniKaniFailureOf(error), retryAfterSeconds: null}})});
         } finally {
-          this.setBusy(false);
+          if (request === this.hubRequest) this.setBusy(false);
         }
       })();
     });
@@ -521,9 +596,14 @@ class ReviewStore {
   /** Forget account-specific queues and sessions whenever credentials change. */
   resetWaniKaniAccount() {
     this.hubRequest += 1;
+    this.clearPending();
+    this.queueRetryAt = null;
     this.lastHub = null;
     this.pausedLesson = null;
     this.pausedReview = null;
+    // Reset deliberately retires the configuration gate too; its stale finally is still forbidden
+    // from clearing any later action.
+    this.setBusy(false);
     if (this.state.step.kind.startsWith("wk")) {
       this.set({step: {kind: "opening", source: "waniKani"}});
     }
@@ -573,6 +653,7 @@ class ReviewStore {
       learningPreferences: step?.learningPreferences ?? null,
       learningPreferencesFailed: step?.learningPreferencesFailed ?? false,
       sessionFinished: step?.sessionFinished ?? false,
+      pendingAction: this.pendingAction,
       ...patch,
     };
   }
@@ -582,11 +663,19 @@ class ReviewStore {
    * counts themselves are read through the store Home's card and the dashboard draw from, so one
    * read serves all three surfaces and they cannot disagree about what is due. The lesson budget
    * stays this page's own read: nothing else in the app has a use for it.
+   *
+   * `force` is the reader's own sync, or the re-read a finished session or a fresh connection asks
+   * for. A plain hub entry leaves it off, and the shared store then answers from its own cache when
+   * the numbers are young instead of spending a run of requests to learn what it already knows.
+   * `sessionFinished` marks the re-read a finished session asks for, so the rows say they are
+   * updating rather than celebrating a completion they have not confirmed.
    */
-  private async enterWaniKaniHome(sessionFinished = false): Promise<void> {
+  private async enterWaniKaniHome(
+    options: {force?: boolean; sessionFinished?: boolean} = {},
+  ): Promise<void> {
     const request = ++this.hubRequest;
     this.set({step: this.hubStep({refreshing: true, failed: false, failure: null,
-      ...(sessionFinished ? {sessionFinished: true} : {})})});
+      ...(options.sessionFinished ? {sessionFinished: true} : {})})});
     const learning = WaniKani.getLearningPreferences().then(
       (preferences) => ({preferences, failed: false}),
       () => ({preferences: null, failed: true}),
@@ -597,20 +686,51 @@ class ReviewStore {
     // and it joins any read already in flight instead of starting a second run of requests.
     let stats = getWaniKaniStats();
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await loadWaniKaniStats(true);
+      await loadWaniKaniStats(options.force === true);
       if (request !== this.hubRequest || this.state.step.kind !== "wkHome") return;
+      // The snapshot is read back from the store, never taken from the promise's own answer: a read
+      // this call joined — Home's card's, or another surface's — writes that same singleton, and
+      // reading it here is what keeps a coalesced or racing read from losing its snapshot.
       stats = getWaniKaniStats();
       if (isTerminalWaniKaniStatus(stats.status)) break;
     }
-    const budget = await learning;
+    this.settleWaniKaniHub(request, await learning);
+  }
+
+  /**
+   * The app came back to an open hub: the queues may have moved on while it was away, so the counts
+   * and the local daily budget are both read again — the same pair the hub opens with. Nothing is
+   * bumped here: a background read must not supersede a queue the reader is already starting, and
+   * its answer is dropped the moment an account reset or a newer hub entry takes over.
+   */
+  private async refreshWaniKaniHub(): Promise<void> {
+    const request = this.hubRequest;
+    this.set({step: this.hubStep({refreshing: true})});
+    const learning = WaniKani.getLearningPreferences().then(
+      (preferences) => ({preferences, failed: false}),
+      () => ({preferences: null, failed: true}),
+    );
+    await loadWaniKaniStats(false);
+    this.settleWaniKaniHub(request, await learning);
+  }
+
+  /**
+   * Applies one read of the shared store, and the local daily budget beside it, to the hub. A read
+   * whose request token has been superseded answers nothing at all, so an old answer can never
+   * overwrite an account that has since been replaced, or a row the reader has since started.
+   */
+  private settleWaniKaniHub(
+    request: number,
+    learning: {preferences: WaniKaniLearningPreferences | null; failed: boolean},
+  ): void {
     if (request !== this.hubRequest || this.state.step.kind !== "wkHome") return;
     this.set({step: this.hubStep({
-      learningPreferences: budget.preferences,
-      learningPreferencesFailed: budget.failed,
+      learningPreferences: learning.preferences,
+      learningPreferencesFailed: learning.failed,
     })});
     // The budget read above gave a reset another window: take the store as it stands now, not as it
     // stood when the read finished, so an account forgotten mid-flight is not shown as current.
-    stats = getWaniKaniStats();
+    const stats = getWaniKaniStats();
     // A store with no answer at all (a reset landed between the reads, or one is still on its way)
     // would leave the hub on its skeletons with no way out: state the sync failed so it offers a retry.
     if (stats.status === "idle" || stats.status === "loading") {
@@ -675,45 +795,65 @@ class ReviewStore {
     }
   }
 
-  /** Retry a summary read; queue-specific failures remain until that queue is read successfully. */
+  /**
+   * Retry a summary read; queue-specific failures remain until that queue is read successfully. The
+   * reader's own tap is what this is, so it forces the read past the cache and shows as the sync
+   * row's own pending action — never as the whole hub's busy state, which would lock the other row.
+   */
   retryWaniKaniSync() {
-    this.ifIdle(() => {
-      this.setBusy(true);
-      void (async () => {
-        try {
-          await this.enterWaniKaniHome();
-        } catch (error) {
-          const summary = this.state.step.kind === "wkHome" ? this.state.step.summary : null;
-          this.set({step: this.hubStep({failed: true, refreshing: false,
-            summary: summary == null ? null : {...summary, sync: "failed"},
-            failure: {failure: waniKaniFailureOf(error), retryAfterSeconds: null}})});
-        } finally {
-          this.setBusy(false);
-        }
-      })();
-    });
+    if (this.state.busy || this.pendingAction != null) return;
+    const wait = this.rateLimitWaitSeconds();
+    if (wait != null) {
+      this.showRateLimitWait(wait);
+      return;
+    }
+    const token = this.beginPending("sync");
+    void (async () => {
+      try {
+        await this.enterWaniKaniHome({force: true});
+      } catch (error) {
+        // `enterWaniKaniHome` advances the hub generation itself. The pending token, rather than
+        // that generation, owns this explicit retry and prevents a retired retry from repainting.
+        if (token !== this.pendingToken || this.state.step.kind !== "wkHome") return;
+        const summary = this.state.step.summary;
+        this.set({step: this.hubStep({failed: true, refreshing: false,
+          summary: summary == null ? null : {...summary, sync: "failed"},
+          failure: {failure: waniKaniFailureOf(error), retryAfterSeconds: null}})});
+      } finally {
+        this.endPending(token);
+      }
+    })();
   }
 
   /** Start a fresh queue, or resume the exact saved answer and submission state. */
   startReviews() {
-    this.ifIdle(() => {
-      if (this.pausedReview != null) {
-        this.set({step: {kind: "wkReview", session: this.pausedReview}});
-        return;
+    if (this.state.busy || this.pendingAction != null) return;
+    if (this.pausedReview != null) {
+      this.set({step: {kind: "wkReview", session: this.pausedReview}});
+      return;
+    }
+    // The queue read is the validation, but it is not made inside a rate-limit wait: WaniKani asked
+    // for the pause and firing the read would spend the budget the pause protects. The row says the
+    // wait instead, and the tap stays available for when it is over.
+    const wait = this.rateLimitWaitSeconds();
+    if (wait != null) {
+      this.set({step: this.hubStep({reviewFailure: {failure: "RATE_LIMITED", retryAfterSeconds: wait}})});
+      return;
+    }
+    const token = this.beginPending("reviews");
+    const request = this.hubRequest;
+    void (async () => {
+      try {
+        await this.enterWaniKaniReview();
+      } catch (error) {
+        if (request !== this.hubRequest) return;
+        this.set({step: this.hubStep({reviewFailure: {
+          failure: waniKaniFailureOf(error), retryAfterSeconds: null,
+        }})});
+      } finally {
+        this.endPending(token);
       }
-      this.setBusy(true);
-      void (async () => {
-        try {
-          await this.enterWaniKaniReview();
-        } catch (error) {
-          this.set({step: this.hubStep({reviewFailure: {
-            failure: waniKaniFailureOf(error), retryAfterSeconds: null,
-          }})});
-        } finally {
-          this.setBusy(false);
-        }
-      })();
-    });
+    })();
   }
 
   /** Reads WaniKani's review queue and enters it. */
@@ -744,46 +884,64 @@ class ReviewStore {
         this.accountUnavailableInSession("expired");
         return;
       case "failed":
+        if (queue.failure === "RATE_LIMITED") this.rememberQueueRateLimit(queue.retryAfterSeconds);
         this.set({step: this.hubStep({reviewFailure: {
           failure: queue.failure, retryAfterSeconds: queue.retryAfterSeconds ?? null,
         }})});
     }
   }
 
-  /** The review queue is finished: back to the hub, with the counts asked of WaniKani again. */
+  /**
+   * The review queue is finished: back to the hub, with the counts asked of WaniKani again. The read
+   * is forced because the queue just changed: a cached answer would show the count the session has
+   * already worked off.
+   */
   private async finishWaniKani(sessionFinished = false): Promise<void> {
     this.pausedReview = null;
-    await this.enterWaniKaniHome(sessionFinished);
+    await this.enterWaniKaniHome({force: true, sessionFinished});
   }
 
-  /** Re-read the local daily budget before starting or resuming any lesson batch. */
+  /**
+   * Re-read the local daily budget before starting or resuming any lesson batch. Like the reviews
+   * tap, the row action is the reader's own: it shows as that row's pending action, is not made
+   * inside a rate-limit wait, and never takes the whole hub's busy state.
+   */
   startLessons() {
-    this.ifIdle(() => {
-      this.setBusy(true);
-      const request = this.hubRequest;
-      void (async () => {
-        try {
-          const preferences = await WaniKani.getLearningPreferences();
-          if (request !== this.hubRequest) return;
-          this.set({step: this.hubStep({learningPreferences: preferences,
-            learningPreferencesFailed: false, lessonFailure: null})});
-          const budget = preferences.dailyLimit == null ? LESSON_BATCH_SIZE
-            : Math.max(0, preferences.dailyLimit - preferences.learnedToday);
-          if (budget === 0) return;
-          if (this.pausedLesson != null) {
-            this.set({step: {kind: "wkLesson", session: this.pausedLesson}});
-            return;
-          }
-          await this.enterWaniKaniLessons(Math.min(LESSON_BATCH_SIZE, budget));
-        } catch (error) {
-          this.set({step: this.hubStep({lessonFailure: {
-            failure: waniKaniFailureOf(error), retryAfterSeconds: null,
-          }})});
-        } finally {
-          this.setBusy(false);
+    if (this.state.busy || this.pendingAction != null) return;
+    const token = this.beginPending("lessons");
+    const request = this.hubRequest;
+    void (async () => {
+      try {
+        // The daily budget is local account state, not a queue read: it remains available while a
+        // queue rate-limit is active and can still prevent an unnecessary queue request.
+        const preferences = await WaniKani.getLearningPreferences();
+        if (request !== this.hubRequest) return;
+        this.set({step: this.hubStep({learningPreferences: preferences,
+          learningPreferencesFailed: false, lessonFailure: null})});
+        const budget = preferences.dailyLimit == null ? LESSON_BATCH_SIZE
+          : Math.max(0, preferences.dailyLimit - preferences.learnedToday);
+        if (budget === 0) return;
+        if (this.pausedLesson != null) {
+          this.set({step: {kind: "wkLesson", session: this.pausedLesson}});
+          return;
         }
-      })();
-    });
+        const wait = this.rateLimitWaitSeconds();
+        if (wait != null) {
+          this.set({step: this.hubStep({lessonFailure: {
+            failure: "RATE_LIMITED", retryAfterSeconds: wait,
+          }})});
+          return;
+        }
+        await this.enterWaniKaniLessons(Math.min(LESSON_BATCH_SIZE, budget));
+      } catch (error) {
+        if (request !== this.hubRequest) return;
+        this.set({step: this.hubStep({lessonFailure: {
+          failure: waniKaniFailureOf(error), retryAfterSeconds: null,
+        }})});
+      } finally {
+        this.endPending(token);
+      }
+    })();
   }
 
   /**
@@ -801,7 +959,7 @@ class ReviewStore {
     switch (queue.status) {
       case "available": {
         if (queue.items.length === 0) {
-          await this.enterWaniKaniHome();
+          await this.enterWaniKaniHome({force: true});
           return;
         }
         const batch = queue.items.slice(0, batchSize);
@@ -813,7 +971,7 @@ class ReviewStore {
       }
       case "empty":
         this.pausedLesson = null;
-        await this.enterWaniKaniHome();
+        await this.enterWaniKaniHome({force: true});
         return;
       case "locked": {
         // The summary counted lessons WaniKani has but this account cannot start; say so rather than
@@ -828,6 +986,7 @@ class ReviewStore {
         this.accountUnavailableInSession("expired");
         return;
       case "failed":
+        if (queue.failure === "RATE_LIMITED") this.rememberQueueRateLimit(queue.retryAfterSeconds);
         this.set({step: this.hubStep({lessonFailure: {
           failure: queue.failure, retryAfterSeconds: queue.retryAfterSeconds ?? null,
         }})});
@@ -852,7 +1011,7 @@ class ReviewStore {
       // let the hub read the account that had just been replaced.
       this.resetWaniKaniAccount();
       resetWaniKaniStats();
-      await this.enterWaniKaniHome();
+      await this.enterWaniKaniHome({force: true});
       return { status: "connected" };
     } catch (error) {
       return { status: "failed", failure: waniKaniFailureOf(error) };
@@ -864,7 +1023,7 @@ class ReviewStore {
   /** One keystroke in the review's answer field. */
   wkEntry(text: string) {
     const step = this.state.step;
-    if (step.kind !== "wkReview") return;
+    if (step.kind !== "wkReview" || step.session.phase === "submitting") return;
     this.set({ step: { kind: "wkReview", session: { ...step.session, entry: text } } });
   }
 
@@ -970,9 +1129,25 @@ class ReviewStore {
   }
 
   /**
-   * Sends the subject's completed review. The counters are the ones WaniKani asks for, taken from the
-   * session as they were counted; a subject that was answered wrongly is still submitted, because that
-   * is how WaniKani learns the answer was wrong.
+   * Installs a settled review only when its exact pending object is still retained. A hub visit may
+   * change while a write is in flight; the retained session, not that read generation, owns the
+   * write's result. Hidden Anki stays untouched, while an open WaniKani hub republishes its resume row.
+   */
+  private replacePausedReview(previous: WaniKaniSession, next: WaniKaniSession): boolean {
+    if (this.pausedReview !== previous) return false;
+    this.pausedReview = next;
+    const current = this.state.step;
+    if (current.kind === "wkReview" && current.session === previous) {
+      this.set({step: {kind: "wkReview", session: next}});
+    } else if (current.kind === "wkHome") {
+      this.set({step: this.hubStep()});
+    }
+    return true;
+  }
+
+  /**
+   * Sends the subject's completed review. The pending object is captured verbatim: it prevents a
+   * return to the hub from discarding an accepted write, without ever replaying that write.
    */
   private submitWaniKani() {
     const step = this.state.step;
@@ -981,21 +1156,14 @@ class ReviewStore {
     if (session.phase === "submitting") return;
     const item = session.items[session.index];
     if (item == null) return;
-    this.set({
-      step: {
-        kind: "wkReview",
-        // The answer that earned the submission is correct, so the field shows it in green with the
-        // kit's explicit mark while the request is in flight - never a wrong answer's feedback.
-        session: {
-          ...session,
-          phase: "submitting",
-          feedback: { tone: "right", text: "✓ Correct" },
-          failure: null,
-          authRejected: false,
-        },
-      },
-    });
-    const request = this.hubRequest;
+    const pending: WaniKaniSession = {
+      ...session,
+      phase: "submitting",
+      feedback: {tone: "right", text: "✓ Correct"},
+      failure: null,
+      authRejected: false,
+    };
+    this.set({step: {kind: "wkReview", session: pending}});
     void (async () => {
       try {
         const result = await WaniKani.submitReview(
@@ -1003,40 +1171,26 @@ class ReviewStore {
           session.incorrectMeaning,
           session.incorrectReading
         );
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkReview") return;
+        if (this.pausedReview !== pending) return;
         if (result.status === "accepted") {
-          this.advanceWaniKani(current.session);
+          invalidateWaniKaniStats();
+          this.advanceWaniKani(pending);
           return;
         }
-        const rejected =
-          result.status === "authRejected" || result.status === "needsToken";
-        this.set({
-          step: {
-            kind: "wkReview",
-            session: {
-              ...current.session,
-              phase: "submitFailed",
-              failure: rejected ? null : result.status === "failed" ? result.failure : null,
-              authRejected: rejected,
-            },
-          },
+        const rejected = result.status === "authRejected" || result.status === "needsToken";
+        this.replacePausedReview(pending, {
+          ...pending,
+          phase: "submitFailed",
+          failure: rejected ? null : result.status === "failed" ? result.failure : null,
+          authRejected: rejected,
         });
       } catch (error) {
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkReview") return;
-        this.set({
-          step: {
-            kind: "wkReview",
-            session: {
-              ...current.session,
-              phase: "submitFailed",
-              failure: waniKaniFailureOf(error),
-              authRejected: false,
-            },
-          },
+        if (this.pausedReview !== pending) return;
+        this.replacePausedReview(pending, {
+          ...pending,
+          phase: "submitFailed",
+          failure: waniKaniFailureOf(error),
+          authRejected: false,
         });
       }
     })();
@@ -1053,8 +1207,9 @@ class ReviewStore {
     this.submitWaniKani();
   }
 
-  /** The subject is saved: the next one, or the caught-up state when the queue is done. */
+  /** Settles an accepted review into its retained session, navigating only when it is still visible. */
   private advanceWaniKani(session: WaniKaniSession) {
+    if (this.pausedReview !== session) return;
     const item = session.items[session.index];
     // One part was just finished. For a subject with a reading, its meaning was already counted when
     // the screen moved to the reading, so this adds the part that was on screen, not the whole
@@ -1062,27 +1217,29 @@ class ReviewStore {
     const done = session.doneParts + (item == null ? 0 : 1);
     const next = session.index + 1;
     if (next >= session.items.length) {
-      void this.finishWaniKani(true);
+      const visible =
+        this.state.step.kind === "wkReview" && this.state.step.session === session;
+      this.pausedReview = null;
+      if (visible) {
+        void this.finishWaniKani(true);
+      } else if (this.state.step.kind === "wkHome") {
+        this.set({step: this.hubStep()});
+      }
       return;
     }
-    this.set({
-      step: {
-        kind: "wkReview",
-        session: {
-          ...session,
-          index: next,
-          part: "meaning",
-          entry: "",
-          incorrectMeaning: 0,
-          incorrectReading: 0,
-          feedback: null,
-          retrying: false,
-          doneParts: done,
-          phase: "answering",
-          failure: null,
-          authRejected: false,
-        },
-      },
+    this.replacePausedReview(session, {
+      ...session,
+      index: next,
+      part: "meaning",
+      entry: "",
+      incorrectMeaning: 0,
+      incorrectReading: 0,
+      feedback: null,
+      retrying: false,
+      doneParts: done,
+      phase: "answering",
+      failure: null,
+      authRejected: false,
     });
   }
 
@@ -1124,7 +1281,7 @@ class ReviewStore {
   /** One keystroke in the lesson quiz's answer field. */
   lessonEntry(text: string) {
     const step = this.state.step;
-    if (step.kind !== "wkLesson") return;
+    if (step.kind !== "wkLesson" || step.session.phase === "starting") return;
     this.set({ step: { kind: "wkLesson", session: { ...step.session, entry: text } } });
   }
 
@@ -1199,7 +1356,24 @@ class ReviewStore {
     })();
   }
 
-  /** Starts the subject whose quiz just finished; on success, the next subject or the hub. */
+  /**
+   * Installs a settled lesson only if its exact pending object is still retained. A hidden Anki
+   * picker never receives a WaniKani write result, while the WaniKani hub immediately sees the
+   * updated paused batch.
+   */
+  private replacePausedLesson(previous: WaniKaniLessonSession, next: WaniKaniLessonSession): boolean {
+    if (this.pausedLesson !== previous) return false;
+    this.pausedLesson = next;
+    const current = this.state.step;
+    if (current.kind === "wkLesson" && current.session === previous) {
+      this.set({step: {kind: "wkLesson", session: next}});
+    } else if (current.kind === "wkHome") {
+      this.set({step: this.hubStep()});
+    }
+    return true;
+  }
+
+  /** Starts the quiz-complete subject and settles its result into the session that issued it. */
   private startWaniKaniLesson() {
     const step = this.state.step;
     if (step.kind !== "wkLesson") return;
@@ -1207,62 +1381,51 @@ class ReviewStore {
     if (session.phase === "starting") return;
     const item = session.batch[session.quizIndex];
     if (item == null) return;
-    this.set({
-      step: {
-        kind: "wkLesson",
-        session: {
-          ...session,
-          phase: "starting",
-          feedback: { tone: "right", text: "✓ Correct" },
-          failure: null,
-          authRejected: false,
-        },
-      },
-    });
-    const request = this.hubRequest;
+    const pending: WaniKaniLessonSession = {
+      ...session,
+      phase: "starting",
+      feedback: {tone: "right", text: "✓ Correct"},
+      failure: null,
+      authRejected: false,
+    };
+    this.set({step: {kind: "wkLesson", session: pending}});
     void (async () => {
       try {
         const result = await WaniKani.startLesson(item.assignmentId);
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkLesson") return;
+        if (this.pausedLesson !== pending) return;
         if (result.status === "started") {
-          this.advanceLesson(current.session);
+          invalidateWaniKaniStats();
+          this.advanceLesson(pending);
           return;
         }
         if (result.status === "dailyLimitReached") {
-          this.pausedLesson = {...current.session, phase: "quizzing"};
-          this.set({step: this.hubStep({learningPreferences: {
-            dailyLimit: result.dailyLimit, learnedToday: result.learnedToday,
-          }})});
+          const paused = {...pending, phase: "quizzing" as const};
+          this.pausedLesson = paused;
+          const current = this.state.step;
+          if (
+            (current.kind === "wkLesson" && current.session === pending) ||
+            current.kind === "wkHome"
+          ) {
+            this.set({step: this.hubStep({learningPreferences: {
+              dailyLimit: result.dailyLimit, learnedToday: result.learnedToday,
+            }})});
+          }
           return;
         }
         const rejected = result.status === "authRejected" || result.status === "needsToken";
-        this.set({
-          step: {
-            kind: "wkLesson",
-            session: {
-              ...current.session,
-              phase: "startFailed",
-              failure: rejected ? null : result.status === "failed" ? result.failure : null,
-              authRejected: rejected,
-            },
-          },
+        this.replacePausedLesson(pending, {
+          ...pending,
+          phase: "startFailed",
+          failure: rejected ? null : result.status === "failed" ? result.failure : null,
+          authRejected: rejected,
         });
       } catch (error) {
-        if (request !== this.hubRequest) return;
-        const current = this.state.step;
-        if (current.kind !== "wkLesson") return;
-        this.set({
-          step: {
-            kind: "wkLesson",
-            session: {
-              ...current.session,
-              phase: "startFailed",
-              failure: waniKaniFailureOf(error),
-              authRejected: false,
-            },
-          },
+        if (this.pausedLesson !== pending) return;
+        this.replacePausedLesson(pending, {
+          ...pending,
+          phase: "startFailed",
+          failure: waniKaniFailureOf(error),
+          authRejected: false,
         });
       }
     })();
@@ -1277,36 +1440,38 @@ class ReviewStore {
     this.startWaniKaniLesson();
   }
 
-  /** The subject is started: the next one, or the hub once the batch is done. */
+  /** Settles an accepted lesson into its retained batch, navigating only when it is still visible. */
   private advanceLesson(session: WaniKaniLessonSession) {
+    if (this.pausedLesson !== session) return;
     const item = session.batch[session.quizIndex];
     // As in the review: the part on screen was just finished, and for a subject with a reading its
     // meaning was counted when the screen moved to it.
     const done = session.doneParts + (item == null ? 0 : 1);
     const next = session.quizIndex + 1;
     if (next >= session.batch.length) {
+      const visible =
+        this.state.step.kind === "wkLesson" && this.state.step.session === session;
       this.pausedLesson = null;
-      void this.enterWaniKaniHome(true);
+      if (visible) {
+        void this.enterWaniKaniHome({force: true, sessionFinished: true});
+      } else if (this.state.step.kind === "wkHome") {
+        this.set({step: this.hubStep()});
+      }
       return;
     }
-    this.set({
-      step: {
-        kind: "wkLesson",
-        session: {
-          ...session,
-          quizIndex: next,
-          part: "meaning",
-          entry: "",
-          incorrectMeaning: 0,
-          incorrectReading: 0,
-          feedback: null,
-          retrying: false,
-          doneParts: done,
-          phase: "quizzing",
-          failure: null,
-          authRejected: false,
-        },
-      },
+    this.replacePausedLesson(session, {
+      ...session,
+      quizIndex: next,
+      part: "meaning",
+      entry: "",
+      incorrectMeaning: 0,
+      incorrectReading: 0,
+      feedback: null,
+      retrying: false,
+      doneParts: done,
+      phase: "quizzing",
+      failure: null,
+      authRejected: false,
     });
   }
 
@@ -1321,7 +1486,7 @@ class ReviewStore {
         try {
           if (target === "reviews") await this.enterWaniKaniReview();
           else if (target === "lessons") await this.enterWaniKaniLessons();
-          else await this.enterWaniKaniHome();
+          else await this.enterWaniKaniHome({force: true});
         } catch (error) {
           this.set({
             step: {
@@ -1343,7 +1508,6 @@ class ReviewStore {
   startDeck(deck: AnkiDeckResult) {
     if (deck.newCount + deck.learnCount + deck.reviewCount <= 0) return;
     this.ifIdle(() => {
-      this.ankiSubmittedInSession = false;
       this.set({ deck });
       this.nextCard();
     });
@@ -1379,8 +1543,7 @@ class ReviewStore {
     void (async () => {
       const taken = Date.now() - session.startedAt;
       try {
-        const result = await Anki.grade(session.token, ease, taken);
-        if (result === "submitted") this.ankiSubmittedInSession = true;
+        await Anki.grade(session.token, ease, taken);
         // Whatever the provider answered, the card is off the deck it came from, so the counts
         // Home's card and the picker share are read again — one read, joined with anything already
         // in flight — and the card behind this page is right by the time the reader is back on it.
@@ -1444,16 +1607,12 @@ class ReviewStore {
       return;
     }
     if (step.kind === "wkHome") {
-      const request = this.hubRequest;
-      void WaniKani.getLearningPreferences().then((preferences) => {
-        if (request === this.hubRequest && this.state.step.kind === "wkHome") {
-          this.set({step: this.hubStep({learningPreferences: preferences, learningPreferencesFailed: false})});
-        }
-      }).catch(() => {
-        if (request === this.hubRequest && this.state.step.kind === "wkHome") {
-          this.set({step: this.hubStep({learningPreferences: null, learningPreferencesFailed: true})});
-        }
-      });
+      // A queue-specific wait is not stored by the shared summary reader. Do not use foregrounding
+      // to bypass it with a new stats request; the existing row failure continues to name the wait.
+      if (this.rateLimitWaitSeconds() != null) return;
+      // Both the counts and the local budget, as the hub opens with: the queues move on while the
+      // app is away, and the budget is the reader's own day, which may have rolled over.
+      void this.refreshWaniKaniHub();
       return;
     }
     if (step.kind !== "session") return;
@@ -1492,7 +1651,6 @@ class ReviewStore {
       try {
         const queue = await Anki.nextCard(deck.id);
         if (queue.kind === "empty") {
-          if (this.ankiSubmittedInSession) this.completedAnkiDeckIds.add(deck.id);
           this.set({ step: { kind: "done", deckName: deck.name } });
         } else {
           const [card, preferences] = await Promise.all([

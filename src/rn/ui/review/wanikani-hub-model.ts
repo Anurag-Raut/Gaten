@@ -9,7 +9,12 @@
  * cached zero never reads as a finished queue.
  */
 import type {IconName} from "../icons";
-import type {WaniKaniHubState, WaniKaniLessonSession, WaniKaniSession} from "./review-store";
+import type {
+  WaniKaniHubState,
+  WaniKaniLessonSession,
+  WaniKaniSession,
+  WaniKaniSummary,
+} from "./review-store";
 import {LESSON_BATCH_SIZE} from "./review-store";
 
 export type HubTap = "reviews" | "lessons" | "sync" | "connect";
@@ -36,6 +41,17 @@ const OFFLINE_NOTE = "Offline · displaying last known values.";
 
 /** The caveat a snapshot whose refresh failed is stated with. */
 const FAILED_NOTE = "Refresh failed · showing saved count";
+
+/**
+ * The caveat a cached snapshot is stated with: the device is offline, a rate limit is still asking
+ * for a wait, or the refresh simply failed. The wait is named because it is the one caveat with
+ * something to do about it — the reader can act when the seconds run out, and not before.
+ */
+function staleNote(summary: WaniKaniSummary): string {
+  if (summary.sync === "offline") return OFFLINE_NOTE;
+  if (summary.retryAfterSeconds != null) return `Try again in ${summary.retryAfterSeconds} seconds.`;
+  return FAILED_NOTE;
+}
 
 function countLabel(count: number, singular: string, plural: string): string {
   return count === 1 ? singular : plural;
@@ -157,13 +173,18 @@ function reviewsModel(hub: WaniKaniHubState, now: number): HubModuleModel {
   const update = sessionUpdate(hub, stale);
   const next = summary.nextReviewAt == null ? null : nextReview(summary.nextReviewAt, now);
   if (stale) {
+    // A cached count is still a count: with work waiting, the row opens the queue it knows about and
+    // the queue read is itself the validation. A cached zero is no evidence of a finished queue, so
+    // that row retries the read instead — only WaniKani can say the queue is really clear. After a
+    // finished session the counts predate the work just done, so neither row may open a queue the
+    // session may have emptied: both offer the read instead.
     return {
       ...reviewsRow(`${summary.dueNow} ${countLabel(summary.dueNow, "review due", "reviews due")}`),
       extra: update ?? (next == null ? null : `Next review · Last known: ${next}`),
       trailing: {value: String(summary.dueNow), label: "due"},
-      tap: "sync",
+      tap: hub.sessionFinished === true ? "sync" : summary.dueNow > 0 ? "reviews" : "sync",
       stale: true,
-      notice: summary.sync === "offline" ? OFFLINE_NOTE : FAILED_NOTE,
+      notice: staleNote(summary),
     };
   }
   // A time that has already passed is not a next review: a clear queue then says only that it is clear.
@@ -261,13 +282,17 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
       ? null
       : `Next batch · ${batchSize} ${batchSize === 1 ? "card" : "cards"}`;
   if (stale) {
+    // As in the reviews row: a cached nonempty queue opens, and the read that follows validates it;
+    // a cached zero offers the read instead of claiming there is nothing to learn. A finished
+    // session's counts predate the work, so this row too offers the read rather than a queue the
+    // session may have changed.
     return {
       ...lessonsRow(`${count} ${countLabel(count, "lesson available", "lessons available")}`),
       extra: update ?? batch,
       trailing: {value: String(count), label: "ready"},
-      tap: "sync",
+      tap: hub.sessionFinished === true ? "sync" : count > 0 ? "lessons" : "sync",
       stale: true,
-      notice: summary.sync === "offline" ? OFFLINE_NOTE : FAILED_NOTE,
+      notice: staleNote(summary),
     };
   }
   if (count === 0) {

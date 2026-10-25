@@ -224,7 +224,6 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
           <AnkiDeckPicker
             decks={step.decks}
             filteredEmpty={step.filteredEmpty}
-            completedDeckIds={step.completedDeckIds}
             busy={review.busy}
             onBack={leave}
             onStart={(deck) => reviewActions.startDeck(deck)}

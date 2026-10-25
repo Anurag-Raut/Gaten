@@ -6,21 +6,42 @@
 
 /**
  * WaniKani's two queues, drawn as the very rows Anki's decks are: what the queue is called, how much
- * of it is waiting, and — once it is clear — the same green check. A tap anywhere on a row is the
- * whole action: it opens the review or lesson flow, retries the read that failed, or takes the reader
- * to the connection screen. The hub has no buttons of its own, no summary line and no count it did
- * not confirm.
+ * of it is waiting, and — once it is clear — the success check in the reader's accent. A tap anywhere
+ * on a row is the whole action: it opens the review or lesson flow, retries the read that failed, or
+ * takes the reader to the connection screen. The header's own Refresh control is the one button the
+ * page carries; there is no summary line and no count the hub did not confirm.
+ *
+ * While the row the reader acted on is still working, that row says what is happening — Opening
+ * reviews…, Opening lessons…, Refreshing — with a spinner, every row goes quiet, and the row's
+ * accessibility state is busy. A background re-read does not lock anything: it only adds a quiet
+ * "Updating…" line under the heading.
  */
-import React from "react";
+import React, {useState} from "react";
 import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {Icon} from "../components";
+import {DialogShell} from "../settings/settings-components";
+import {Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
+import {MetricPair, useAnalyticsEntrance} from "../analytics/ink";
 import type {WaniKaniHubState} from "./review-store";
+import type {WaniKaniLearningPreferences} from "../../native/GatenWaniKani";
 import {deriveWaniKaniHub, type HubModuleModel} from "./wanikani-hub-model";
 import {SectionCaption, StudyRow, SuccessCheck} from "./review-ui";
+
+/**
+ * Today's activity fields are optional in the bridge type: an older native side (or a test bridge)
+ * may not carry them at all, in which case nothing is claimed about today. `activityDate` stamps the
+ * local calendar day the counts belong to, as `YYYY-MM-DD`.
+ */
+
+/** The device's local calendar day, in the same `YYYY-MM-DD` form the activity stamp uses. */
+function localDayKey(now: Date): string {
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 
 /**
  * The next time a row already states in its own extra line, said the way a sentence is read out:
@@ -109,7 +130,6 @@ export function WaniKaniHome({
   onConnect: () => void;
 }) {
   const {colors} = useTheme();
-  const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
   const insets = useSafeAreaInsets();
   const {width, fontScale} = useWindowDimensions();
   const inset = width < 360 ? spacing.l : spacing.contentInset;
@@ -117,6 +137,38 @@ export function WaniKaniHome({
   const stacked = width < 340 || fontScale >= 1.5;
   const [reviews, lessons] = deriveWaniKaniHub(hub);
   const allClear = reviews.complete && lessons.complete;
+  const [todayHelpOpen, setTodayHelpOpen] = useState(false);
+  // The one row action the reader is waiting on. Every row disables while it is in flight, and the
+  // row it belongs to shows the spinner and what is happening instead of its standing words.
+  const pending = hub.pendingAction ?? null;
+  const pendingText =
+    pending === "reviews" ? "Opening reviews…"
+    : pending === "lessons" ? "Opening lessons…"
+    : pending === "sync" ? "Refreshing"
+    : null;
+  const locked = busy || pending != null;
+
+  // Today's two device-local figures. Each is shown only when the read that produced it succeeded
+  // and is stamped with today's own date; anything else is a dash with the reason beside it.
+  const prefs: WaniKaniLearningPreferences | null = hub.learningPreferences ?? null;
+  const prefsFailed = hub.learningPreferencesFailed === true;
+  const storageFailed = prefs?.activityFailure === "STORAGE";
+  const datedToday = prefs?.activityDate === localDayKey(new Date());
+  const reviewed =
+    prefs != null && !prefsFailed && datedToday && !storageFailed && typeof prefs.reviewedToday === "number"
+      ? prefs.reviewedToday
+      : null;
+  const learned =
+    prefs != null && !prefsFailed && datedToday && !storageFailed ? prefs.learnedToday : null;
+  const hintFor = (known: boolean): string | null => {
+    if (prefs == null) return prefsFailed ? "Couldn't read your settings." : "Checking…";
+    if (storageFailed) return "Couldn't read today's activity.";
+    if (!datedToday) return "Not available for today.";
+    return known ? null : "Not tracked yet on this device.";
+  };
+  // The analytics page's one-shot entrance: the Today figures sweep in once, when the first of
+  // them is actually known, and never replay on a refresh.
+  const entrance = useAnalyticsEntrance(reviewed != null || learned != null);
 
   const pressFor = (model: HubModuleModel) => {
     switch (model.tap) {
@@ -139,22 +191,29 @@ export function WaniKaniHome({
   const sharedCaveat =
     reviews.notice != null && reviews.notice === lessons.notice ? reviews.notice : null;
 
-  const rowFor = (model: HubModuleModel) => (
-    <StudyRow
-      art={<Icon name={model.icon} size={24} color={colors.accent} />}
-      holderSurface
-      title={model.title}
-      titleSize={17}
-      subline={model.subline}
-      extra={model.extra}
-      trailing={model.trailing}
-      complete={model.complete}
-      minHeight={stacked ? 118 : 110}
-      accessibilityLabel={rowLabel(model)}
-      disabled={busy}
-      onPress={pressFor(model)}
-    />
-  );
+  const rowFor = (model: HubModuleModel) => {
+    // The spinner belongs to the row the reader acted on; a sync in flight shows on the row that
+    // asked for the read. Every other row just goes quiet.
+    const pendingRow =
+      pending != null && (pending === model.id || (pending === "sync" && model.tap === "sync"));
+    return (
+      <StudyRow
+        art={<Icon name={model.icon} size={24} color={colors.accent} />}
+        holderSurface
+        title={model.title}
+        titleSize={17}
+        subline={pendingRow && pendingText != null ? pendingText : model.subline}
+        extra={model.extra}
+        trailing={model.trailing}
+        complete={model.complete}
+        loading={pendingRow}
+        minHeight={stacked ? 118 : 110}
+        accessibilityLabel={rowLabel(model)}
+        disabled={locked}
+        onPress={pressFor(model)}
+      />
+    );
+  };
 
   const sectionFor = (model: HubModuleModel) => {
     if (model.loading) {
@@ -196,6 +255,20 @@ export function WaniKaniHome({
               <Icon name="arrow_back" size={24} color={colors.onSurface} />
             </PressableScale>
             <Text style={[styles.topTitle, {color: colors.onSurface}]}>WaniKani</Text>
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Refresh"
+              accessibilityState={{disabled: locked}}
+              disabled={locked}
+              onPress={onRetrySync}
+              style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
+            >
+              <Icon
+                name="refresh"
+                size={22}
+                color={locked ? colors.onSurfaceVariant : colors.accent}
+              />
+            </PressableScale>
           </View>
           <Text accessibilityRole="header" style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
             Your study
@@ -203,26 +276,65 @@ export function WaniKaniHome({
           <Text style={[styles.subtitle, {color: colors.onSurfaceVariant}]}>
             {allClear ? "Everything available is clear for now." : "Choose what to work on next."}
           </Text>
+          {pending === "sync" && (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[styles.subtitle, styles.updating, {color: colors.onSurfaceVariant}]}
+            >
+              Refreshing
+            </Text>
+          )}
+          {pending !== "sync" && hub.refreshing && !busy && (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[styles.subtitle, styles.updating, {color: colors.onSurfaceVariant}]}
+            >
+              Updating…
+            </Text>
+          )}
           {allClear && (
             <View
-              style={[
-                styles.caughtUp,
-                {
-                  backgroundColor: dark ? "#18291F" : "#ECF8F0",
-                  borderColor: dark ? "#294734" : "#D8ECDC",
-                },
-              ]}
+              style={styles.caughtUp}
+              accessible
+              accessibilityLabel="You're all caught up. No reviews or new lessons are waiting."
             >
               <SuccessCheck />
-              <View style={styles.caughtUpCopy}>
-                <Text style={[styles.caughtUpTitle, {color: colors.onSurface}]}>
-                  You’re all caught up
-                </Text>
-                <Text style={[styles.caughtUpBody, {color: colors.onSurfaceVariant}]}>
-                  No reviews or new lessons are waiting.
-                </Text>
-              </View>
+              <Text style={[styles.caughtUpText, {color: colors.onSurfaceVariant}]}>
+                You’re all caught up — no reviews or new lessons are waiting.
+              </Text>
             </View>
+          )}
+          {/* Nothing done today says nothing: the block stands only while one of its figures is a
+              real count, and an unread figure (a dash) keeps it up so its reason stays visible. */}
+          {!(reviewed === 0 && learned === 0) && (
+            <>
+              <View style={[styles.todayHeading, {borderBottomColor: colors.outlineVariant}]}>
+                <SectionCaption style={styles.todayCaption}>Today</SectionCaption>
+                <IconButton
+                  name="help"
+                  size={18}
+                  accessibilityLabel="About today’s activity"
+                  onPress={() => setTodayHelpOpen(true)}
+                />
+              </View>
+              <View style={styles.todayMetrics}>
+                <MetricPair
+                  left={{
+                    value: reviewed == null ? "—" : String(reviewed),
+                    count: reviewed == null ? null : {value: reviewed},
+                    caption: "Items reviewed",
+                    note: hintFor(reviewed != null),
+                  }}
+                  right={{
+                    value: learned == null ? "—" : String(learned),
+                    count: learned == null ? null : {value: learned},
+                    caption: "Lessons learned",
+                    note: hintFor(learned != null),
+                  }}
+                  entrance={entrance}
+                />
+              </View>
+            </>
           )}
           <SectionCaption>Available study</SectionCaption>
           {sectionFor(reviews)}
@@ -232,6 +344,30 @@ export function WaniKaniHome({
           )}
         </View>
       </ScrollView>
+      {todayHelpOpen && (
+        <DialogShell
+          title="About today’s activity"
+          onDismiss={() => setTodayHelpOpen(false)}
+          actions={
+            <Text
+              accessibilityRole="button"
+              onPress={() => setTodayHelpOpen(false)}
+              style={[styles.dialogAction, {color: colors.accent}]}
+            >
+              Close
+            </Text>
+          }
+        >
+          <Text style={[styles.dialogParagraph, {color: colors.onSurfaceVariant}]}>
+            Counts include distinct items reviewed and lessons learned in Gaten on this device today.
+            Repeated reviews of an item count once.
+          </Text>
+          <Text style={[styles.dialogParagraph, {color: colors.onSurfaceVariant}]}>
+            Today resets at local midnight. Review tracking starts with this version; activity from
+            WaniKani or other devices is not included.
+          </Text>
+        </DialogShell>
+      )}
     </View>
   );
 }
@@ -242,20 +378,30 @@ const styles = StyleSheet.create({
   content: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
   top: {flexDirection: "row", alignItems: "center", minHeight: 48, marginBottom: 29},
   back: {width: 48, height: 48, alignItems: "flex-start", justifyContent: "center"},
+  // The header's one button, drawn as the analytics page draws its own: a quiet circular chip, not a
+  // bare icon.
+  refresh: {width: 44, height: 44, borderRadius: 22, marginLeft: "auto", alignItems: "center", justifyContent: "center"},
   topTitle: {...typeScale.titleLarge, flexShrink: 1},
   subtitle: {fontFamily: "Inter", fontSize: 12, lineHeight: 17, marginTop: spacing.s},
-  caughtUp: {
+  updating: {marginTop: 4},
+  // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
+  caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: 22},
+  caughtUpText: {fontFamily: "Inter", fontSize: 12, lineHeight: 17, flex: 1, minWidth: 0},
+  // The Today heading row: the caption's own text stretches, the help target stands beside it, and
+  // the row carries the one hairline the SectionCaption used to draw alone. The caption sits on the
+  // rule's own baseline — bottom-aligned — so the text keeps the 12 dp gap every other caption has
+  // instead of floating in a taller row, and the figures start one step under the rule.
+  todayHeading: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.m,
-    borderRadius: 13,
-    borderWidth: 1,
-    padding: spacing.m,
+    alignItems: "flex-end",
     marginTop: 22,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
-  caughtUpCopy: {flex: 1, minWidth: 0},
-  caughtUpTitle: {fontFamily: "Inter", fontSize: 13, lineHeight: 18, fontWeight: "700"},
-  caughtUpBody: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, marginTop: 2},
+  todayCaption: {flex: 1, marginTop: 0, marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0},
+  todayMetrics: {marginTop: 12},
+  dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14},
+  dialogParagraph: {fontFamily: "Inter", fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
   notice: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, marginTop: spacing.m, marginBottom: spacing.xs},
   // The page's own footnote: the design's 11 dp muted line, one spacing step under the last row.
   caveat: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, marginTop: spacing.m},

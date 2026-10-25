@@ -29,6 +29,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type StyleProp,
   type TextInputProps,
   type TextStyle,
@@ -312,12 +313,12 @@ export function ProgressLine({value, height = 2}: {value: number; height?: numbe
 
 /**
  * The one success mark the app draws: a filled disc with a tick on it, at 22 dp. The pair is the
- * design's own green in both modes — a light disc with dark ink on it in the dark theme, so the tick
- * keeps its contrast on the lighter green.
+ * reader's chosen accent with the ink that reads on it — the same accent/onPrimary pairing the
+ * filled actions and the selected navigation pill are held to — so the mark follows the accent
+ * chosen in Settings instead of a fixed status green.
  */
 export function SuccessCheck({size = 22}: {size?: number}) {
   const {colors} = useTheme();
-  const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
   return (
     <View
       accessible={false}
@@ -329,11 +330,57 @@ export function SuccessCheck({size = 22}: {size?: number}) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: dark ? "#69C796" : "#238858",
+          backgroundColor: colors.accent,
         },
       ]}
     >
-      <Icon name="check" size={size * 0.64} color={dark ? "#17171A" : "#FFFFFF"} />
+      <Icon name="check" size={size * 0.64} color={colors.onPrimary} />
+    </View>
+  );
+}
+
+/**
+ * Two flat figures side by side, split by one vertical hairline — the paired-figure grammar the
+ * Analytics page uses, without any card around it. A "—" value means the figure is not known; the
+ * optional hint says why, or names the scope the figure covers. A narrow window or large type stacks
+ * the pair so no line is clipped.
+ */
+export function MetricPair({
+  metrics,
+}: {
+  metrics: Array<{value: string; label: string; hint?: string | null}>;
+}) {
+  const {colors} = useTheme();
+  // A narrow window or large type leaves each half-column too little room for its hint to read:
+  // the pair then stacks, so every line grows to the full content width and wraps freely.
+  const {width, fontScale} = useWindowDimensions();
+  const stacked = width < 340 || fontScale >= 1.5;
+  return (
+    <View style={[styles.metricRow, stacked && styles.metricRowStacked]}>
+      {metrics.map((metric, index) => (
+        <View
+          key={metric.label}
+          accessible
+          accessibilityLabel={`${
+            metric.value === "—" ? "Not available" : metric.value
+          }, ${metric.label}${metric.hint == null ? "" : `, ${metric.hint}`}`}
+          style={[
+            styles.metric,
+            !stacked && index > 0 && styles.metricSpaced,
+            !stacked && index > 0 && {borderStartColor: colors.outlineVariant},
+          ]}
+        >
+          <Text style={[styles.metricValue, {color: colors.onSurface}]}>{metric.value}</Text>
+          <Text numberOfLines={2} style={[styles.metricLabel, {color: colors.onSurfaceVariant}]}>
+            {metric.label}
+          </Text>
+          {metric.hint != null && (
+            <Text style={[styles.metricHint, {color: colors.onSurfaceVariant}]}>
+              {metric.hint}
+            </Text>
+          )}
+        </View>
+      ))}
     </View>
   );
 }
@@ -353,6 +400,7 @@ export function StudyRow({
   extra = null,
   trailing = null,
   complete = false,
+  loading = false,
   minHeight,
   accessibilityLabel,
   disabled = false,
@@ -370,6 +418,8 @@ export function StudyRow({
   /** The count and its caption; null when the queue has nothing to count. */
   trailing?: {value: string; label: string} | null;
   complete?: boolean;
+  /** True while the row's own action is in flight: a spinner takes the trailing lane's place. */
+  loading?: boolean;
   minHeight: number;
   accessibilityLabel: string;
   disabled?: boolean;
@@ -416,27 +466,36 @@ export function StudyRow({
         )}
       </View>
       <View style={styles.studyTrailing}>
-        {complete ? (
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.accent} />
+        ) : complete ? (
           <SuccessCheck />
         ) : trailing != null ? (
           <Text numberOfLines={1} style={[styles.studyCount, {color: colors.accent}]}>
             {trailing.value}
           </Text>
         ) : null}
-        {!complete && trailing != null && (
+        {!complete && !loading && trailing != null && (
           <Text numberOfLines={1} style={[styles.studyCountLabel, {color: colors.onSurfaceVariant}]}>
             {trailing.label}
           </Text>
         )}
       </View>
-      <InkIcon name="chevron" size={22} color={colors.onSurfaceVariant} />
+      {/* The chevron says the row leads somewhere: a cleared or locked informational row has none. */}
+      {onPress != null && <InkIcon name="chevron" size={22} color={colors.onSurfaceVariant} />}
     </>
   );
   const rowStyle = [styles.studyRow, {minHeight, borderBottomColor: colors.outlineVariant}];
 
   if (onPress == null) {
     return (
-      <View accessible accessibilityRole="none" accessibilityLabel={accessibilityLabel} style={rowStyle}>
+      <View
+        accessible
+        accessibilityRole="none"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={loading ? {busy: true} : undefined}
+        style={rowStyle}
+      >
         {content}
       </View>
     );
@@ -446,7 +505,7 @@ export function StudyRow({
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{disabled}}
+      accessibilityState={{disabled, busy: loading}}
       disabled={disabled}
       onPress={onPress}
       style={rowStyle}
@@ -462,28 +521,22 @@ export function DeckRow({
   name,
   counts,
   due,
-  completed = false,
-  completedToday = false,
   onPress,
 }: {
   deckId: number | string;
   name: string;
   counts: string;
   due: number;
-  completed?: boolean;
-  /** True only when a session in this deck finished today, which is the evidence "Completed today" needs. */
-  completedToday?: boolean;
   onPress: () => void;
 }) {
-  // Nothing due is clear on its own: a deck with no cards left does not need a receipt to say so, and
-  // the receipt only changes the words. A deck with cards due is never called clear.
+  // Nothing due is clear on its own: a deck with no cards left does not need a receipt to say so.
+  // A deck with cards due is never called clear.
   const cleared = due === 0;
-  const caughtUp = cleared && completed;
   return (
     <StudyRow
       art={<DeckThumbnail deckId={deckId} width={48} height={48} />}
       title={name}
-      subline={cleared ? (caughtUp && completedToday ? "Completed today" : "Clear for now") : counts}
+      subline={cleared ? "Clear for now" : counts}
       trailing={cleared ? null : {value: String(due), label: "due"}}
       complete={cleared}
       minHeight={90}
@@ -869,6 +922,14 @@ const styles = StyleSheet.create({
   studyTrailing: {alignItems: "flex-end", marginStart: spacing.s},
   studyCount: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
   studyCountLabel: {fontSize: 10, lineHeight: 13, marginTop: 1},
+  metricRow: {flexDirection: "row", alignItems: "flex-start", marginTop: spacing.s},
+  metricRowStacked: {flexDirection: "column", gap: spacing.l},
+  metric: {flex: 1, minWidth: 0},
+  // One vertical hairline between the two figures, as the paired figures elsewhere in the app use.
+  metricSpaced: {borderStartWidth: 1, paddingStart: spacing.l, marginStart: spacing.l},
+  metricValue: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
+  metricLabel: {fontSize: 12, lineHeight: 16, fontWeight: "600", marginTop: 3},
+  metricHint: {fontSize: 11, lineHeight: 15, marginTop: 3},
   action: {
     minHeight: 52,
     borderRadius: shape.button,

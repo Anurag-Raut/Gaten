@@ -7,6 +7,11 @@ one row grammar, and WaniKani's earlier black Start buttons are gone. Read it wi
 [Gaten / Ink v1](../Gaten_Ink_Design_Language_v1.md) (the app-wide authority) and the
 [implementation map](../design-language.md).
 
+The [25 October study hub refinement](../design-language.md#study-hub-refinement-25-october-2026)
+supersedes this frozen prototype's fixed-green completion marks, unconditional chevrons and
+refresh-only stale-row actions, and adds separate daily activity figures. The prototype files remain
+unchanged as a record of the supplied V4 design.
+
 ## What is in the package
 
 | File | Use |

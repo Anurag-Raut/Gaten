@@ -4,6 +4,12 @@ Read out of the working tree on 21 October 2026. This file records what the code
 deviations taken on purpose; the package itself is indexed in [README.md](README.md), and
 [the implementation map](../design-language.md) stays the app-wide source of precedence.
 
+**25 October update:** the [study hub refinement](../design-language.md#study-hub-refinement-25-october-2026)
+adds Today figures, selected-accent completion marks and explicit refresh/pending states. Cleared
+rows no longer carry a navigation chevron or claim a per-deck dated completion. Stale nonempty
+WaniKani rows open their own live queues directly. The sections below describe the historical
+21 October implementation, not the current behavior of those superseded details.
+
 ## What the app implements now
 
 - **One shared row.** `StudyRow`, `SectionCaption` and `SuccessCheck` live in

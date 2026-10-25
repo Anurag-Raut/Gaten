@@ -7,6 +7,30 @@ current Home, Analytics and Settings rules; this companion records other screen 
 historical checks.
 The original supplied v1 document remains inside the frozen unified-hubs reference package.
 
+## Study hub refinement (25 October 2026)
+
+- Anki and WaniKani keep the unified Ink rows and add a flat **Today** section above their study
+  destinations. Statistics use the page canvas, whitespace and hairlines; they have no card or
+  tinted panel. Missing counts stay unavailable rather than becoming zero.
+- Anki shows **Cards studied** across all decks in AnkiDroid's current study day (distinct cards,
+  repeated ratings counted once), alongside **Ready now** for the selected study decks. These
+  figures have different scopes and never form a completion percentage. Deck rows with no work
+  say **Clear for now**; they do not infer a dated completion from an in-memory session receipt.
+- WaniKani shows separate **Items reviewed** and **Lessons learned** figures, explicitly **On this
+  device**. Reviews count distinct subjects whose submission was accepted; lessons count distinct
+  assignments successfully started. Their date boundary is local midnight. Credential changes
+  isolate activity, and review history starts with this version rather than being backfilled.
+- Reviews and Lessons remain independent full-row destinations. A stale nonempty count still opens
+  its live queue in one tap. The header's explicit Refresh action updates both counts; background
+  refresh preserves usable rows, while a user action shows its own pending state. Offline, rate
+  limits, locks and unavailable queues retain their own explanations.
+- A chevron appears only on an actionable row. Completion checks follow the reader's selected
+  accent and its paired foreground; the former fixed-green discs and rounded green all-clear
+  panels are replaced by accent checks and flat neutral copy.
+- The frozen V4 prototype remains a historical reference. These refinements supersede its green
+  completion marks, unconditional chevrons and refresh-only stale-row actions. Build/test and
+  device evidence for this change are recorded with the PR.
+
 ## Home and Settings source audit (22 October 2026)
 
 - Consolidated the current palette, seven accents, selected-accent actions/counts/streak marks,
