@@ -22,6 +22,9 @@ screen while the back control keeps the left edge and the progress count the rig
    card 猫 with **Show answer** → tapped it to reveal the answer.
 5. Captures at each step, plus a short recording of the reveal; no card was graded (leaving a session
    grades nothing, and the session was left and re-entered to record the reveal from the question side).
+6. The other screen that shares the header: Home → **WaniKani** card → hub → **Reviews** row → the
+   WaniKani review question (kanji 締, `1 of 96`). Nothing was answered there either, so the
+   account's SRS is untouched.
 
 ## Results
 
@@ -32,6 +35,7 @@ screen while the back control keeps the left edge and the progress count the rig
 | `03-anki-deck-picker.png` | deck picker — `Anki`, no count | x 505–574 of 1080 | **−0.5 px** |
 | `05-answer-font-scale-1.5.png` | answer phase at system font scale 1.5 | x 441–638 of 1080 | **−0.5 px** |
 | `06-answer-narrow-360dp-font-scale-1.5.png` | answer phase, 360 dp wide (720x1600 @ 320 dpi) and font scale 1.5 | x 289–431 of 720 | **0.0 px** |
+| `07-wanikani-review-question.png` | WaniKani review question — `WaniKani`, `1 of 96` | x 466–613 of 1080 | **−0.5 px** |
 | `04-anki-reveal.mp4` | 8.0 s recording: question → reveal → answer (Android `screenrecord` emits a frame only when the screen changes, so the file is 10 frames) | — | — |
 
 Offsets are the title's ink centre against the capture's own centre, measured from the PNGs in this
@@ -44,9 +48,11 @@ stay left-aligned.
 
 ## Limitations
 
-- One deck with two new cards on this emulator; the header was exercised on the Anki question, answer
-  and deck-picker steps, not on a WaniKani lesson/review (same `SubHeader`, not opened here).
+- One Anki deck with two new cards on this emulator. The header was exercised on the Anki question,
+  answer and deck-picker steps and on the WaniKani review question; the WaniKani revealed/answer
+  state and the WaniKani lesson pages (same `SubHeader`) were not driven.
 - Narrow/large-font cases were produced with `wm size` / `wm density` / `settings put system
   font_scale` overrides and then reverted (`wm size reset`, `wm density reset`, font scale 0.94); they
   are a phone-sized emulator, not a second physical device.
-- No grading was performed, so no Anki collection state was changed by this pass.
+- No grading was performed in either flow, so neither the Anki collection nor the WaniKani account
+  state was changed by this pass.
