@@ -918,8 +918,8 @@ class ReviewStore {
         if (request !== this.hubRequest) return;
         this.set({step: this.hubStep({learningPreferences: preferences,
           learningPreferencesFailed: false, lessonFailure: null})});
-        const budget = preferences.dailyLimit == null ? LESSON_BATCH_SIZE
-          : Math.max(0, preferences.dailyLimit - preferences.learnedToday);
+        // The goal always exists; what the day already had is what the batch cannot spend.
+        const budget = Math.max(0, preferences.dailyLimit - preferences.learnedToday);
         if (budget === 0) return;
         if (this.pausedLesson != null) {
           this.set({step: {kind: "wkLesson", session: this.pausedLesson}});

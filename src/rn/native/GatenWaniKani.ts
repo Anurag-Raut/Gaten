@@ -297,8 +297,8 @@ export type WaniKaniLessonStartResult =
  * this layer — and both belong to the date in `activityDate`.
  */
 export interface WaniKaniLearningPreferences {
-  /** Null means no daily goal is set. */
-  dailyLimit: number | null;
+  /** The daily goal the device works to: 1–20, and 15 until the reader sets one. */
+  dailyLimit: number;
   /** Unique assignments successfully started today; the number the daily goal is checked against. */
   learnedToday: number;
   /** Unique subjects whose review WaniKani accepted today, or null when the counters could not be read or written. */
@@ -315,7 +315,7 @@ export interface WaniKaniLearningPreferences {
 interface GatenWaniKaniNative {
   isConfigured(): Promise<boolean>;
   getLearningPreferences(): Promise<WaniKaniLearningPreferences>;
-  setDailyLessonLimit(limit: number | null): Promise<WaniKaniLearningPreferences>;
+  setDailyLessonLimit(limit: number): Promise<WaniKaniLearningPreferences>;
   connect(token: string): Promise<WaniKaniConnectionResult>;
   reconnect(): Promise<WaniKaniConnectionResult>;
   disconnect(): Promise<boolean>;
@@ -346,8 +346,8 @@ export function getLearningPreferences(): Promise<WaniKaniLearningPreferences> {
   return GatenWaniKani.getLearningPreferences();
 }
 
-/** Saves a daily goal from 1 through 1000, or null to allow unlimited lessons. */
-export function setDailyLessonLimit(limit: number | null): Promise<WaniKaniLearningPreferences> {
+/** Saves a daily goal from 1 through 20; the native side refuses anything outside that range. */
+export function setDailyLessonLimit(limit: number): Promise<WaniKaniLearningPreferences> {
   return GatenWaniKani.setDailyLessonLimit(limit);
 }
 

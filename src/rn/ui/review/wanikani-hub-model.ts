@@ -269,12 +269,9 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
   const count = summary.lessonsNow;
   // The batch is only named when the reader's own settings say how many cards it would hold: an
   // unavailable daily limit means the composition is not known, so the row says nothing about it.
-  const remainingDailyBudget =
-    preferences == null
-      ? null
-      : dailyLimit == null
-        ? LESSON_BATCH_SIZE
-        : Math.max(0, dailyLimit - learnedToday);
+  // A goal always exists, so the budget is the goal minus what the day already had; only an
+  // unanswered read leaves the composition unknown.
+  const remainingDailyBudget = dailyLimit == null ? null : Math.max(0, dailyLimit - learnedToday);
   const batchSize =
     remainingDailyBudget == null ? null : Math.min(count, LESSON_BATCH_SIZE, remainingDailyBudget);
   const batch =

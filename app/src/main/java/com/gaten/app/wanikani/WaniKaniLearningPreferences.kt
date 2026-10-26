@@ -24,14 +24,14 @@ internal interface WaniKaniLearningStorage {
     /** The stored activity document, or null when none is stored. */
     fun activity(): String?
 
-    /** The stored daily lesson goal, or null when none is set. */
-    fun dailyLimit(): Int?
+    /** The daily lesson goal exactly as it sits on disk: 0 when nothing was ever stored. */
+    fun dailyLimit(): Int
 
     /** Stores [activity]; false when the document is not on disk afterwards. */
     fun saveActivity(activity: String): Boolean
 
-    /** Stores [limit], or forgets the goal when it is null; false when it did not take. */
-    fun saveDailyLimit(limit: Int?): Boolean
+    /** Stores [limit]; false when it did not take. */
+    fun saveDailyLimit(limit: Int): Boolean
 }
 
 /**
@@ -69,8 +69,12 @@ internal class WaniKaniLearningPreferences(
 
     /** What a screen reads: the goal, today's counts, and whether they could be kept. */
     data class Snapshot(
-        /** The configured daily lesson goal, or null when none is set. */
-        val dailyLimit: Int?,
+        /**
+         * The daily lesson goal the device is working to, always a number: [DEFAULT_DAILY_LESSONS]
+         * until the reader sets one, and read into [MIN_DAILY_LESSONS]..[MAX_DAILY_LESSONS] when a
+         * number an older build stored falls outside it.
+         */
+        val dailyLimit: Int,
         /** Distinct assignments whose lessons were started today: the number the goal is checked against. */
         val learnedToday: Int,
         /** Distinct subjects reviewed today, or null when the counters could not be read or written. */
@@ -94,8 +98,17 @@ internal class WaniKaniLearningPreferences(
     fun read(): Snapshot {
         val day = today().toString()
         val activity = activityFor(accountFingerprint(), day)
+        val storedLimit = storage.dailyLimit()
         return Snapshot(
-            dailyLimit = storage.dailyLimit(),
+            // There is no unlimited setting: nothing stored — or a 0 an older build left meaning
+            // "unlimited" — works to the default, and a legacy goal above today's range reads as the
+            // range's own top. Nothing is rewritten here; the number on disk changes only when the
+            // reader saves a goal.
+            dailyLimit = when {
+                storedLimit <= 0 -> DEFAULT_DAILY_LESSONS
+                storedLimit > MAX_DAILY_LESSONS -> MAX_DAILY_LESSONS
+                else -> storedLimit
+            },
             // The goal is checked against what is on disk, so a counter that could not be written is
             // reported as unavailable rather than hiding the day the reader has already had.
             learnedToday = activity?.started?.size ?: 0,
@@ -106,14 +119,15 @@ internal class WaniKaniLearningPreferences(
     }
 
     /**
-     * Saves the daily lesson goal; null allows unlimited lessons. Not scoped to an account, because
-     * it is the device's own. A write that does not take is thrown: it is the one thing here the
+     * Saves the daily lesson goal, which is always a number: the device has no unlimited setting.
+     * Not scoped to an account, because it is the device's own. A goal outside the range is refused
+     * here rather than stored, and a write that does not take is thrown: it is the one thing here the
      * caller asked for and did not get, and the screen promises the goal was saved.
      */
     @Synchronized
-    fun setDailyLimit(limit: Int?): Snapshot {
-        require(limit == null || limit in MIN_DAILY_LIMIT..MAX_DAILY_LIMIT) {
-            "Daily lesson limit must be between $MIN_DAILY_LIMIT and $MAX_DAILY_LIMIT, or unlimited."
+    fun setDailyLimit(limit: Int): Snapshot {
+        require(limit in MIN_DAILY_LESSONS..MAX_DAILY_LESSONS) {
+            "Daily lesson limit must be between $MIN_DAILY_LESSONS and $MAX_DAILY_LESSONS."
         }
         check(storage.saveDailyLimit(limit)) { "The daily lesson goal could not be saved." }
         return read()
@@ -238,9 +252,6 @@ internal class WaniKaniLearningPreferences(
         const val FIELD_DAY = "day"
         const val FIELD_STARTED = "started"
         const val FIELD_REVIEWED = "reviewed"
-
-        const val MIN_DAILY_LIMIT = 1
-        const val MAX_DAILY_LIMIT = 1000
     }
 }
 
@@ -249,14 +260,13 @@ private class PreferenceStorage(private val preferences: SharedPreferences) : Wa
 
     override fun activity(): String? = preferences.getString(KEY_ACTIVITY, null)
 
-    override fun dailyLimit(): Int? = preferences.getInt(KEY_DAILY_LIMIT, 0).takeIf { it > 0 }
+    override fun dailyLimit(): Int = preferences.getInt(KEY_DAILY_LIMIT, 0)
 
     override fun saveActivity(activity: String): Boolean =
         editor().putString(KEY_ACTIVITY, activity).commit()
 
-    override fun saveDailyLimit(limit: Int?): Boolean = editor().apply {
-        if (limit == null) remove(KEY_DAILY_LIMIT) else putInt(KEY_DAILY_LIMIT, limit)
-    }.commit()
+    override fun saveDailyLimit(limit: Int): Boolean =
+        editor().putInt(KEY_DAILY_LIMIT, limit).commit()
 
     /**
      * An editor that also drops the counters the old unscoped version of this class left behind - a
@@ -280,6 +290,11 @@ private const val KEY_ACTIVITY = "activity"
 
 /** The daily goal; the same key the previous version used, so a configured goal survives. */
 private const val KEY_DAILY_LIMIT = "daily_lesson_limit"
+
+/** The daily lesson goal the device accepts, and the one an unset device works to. */
+internal const val MIN_DAILY_LESSONS = 1
+internal const val MAX_DAILY_LESSONS = 20
+internal const val DEFAULT_DAILY_LESSONS = 15
 
 /** The keys the unscoped version stored its activity under; only ever removed. */
 private const val KEY_LEGACY_DAY = "learned_day"

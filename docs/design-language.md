@@ -197,10 +197,12 @@ cards and rounded section tiles.
 
 - WaniKani Settings contains connection status, the daily new-card limit, and token controls. Keep
   it minimal; do not restore the removed overview or make read-only, token-storage, or account-change
-  claims there. The daily limit is blank and unlimited by default; accept whole numbers from 1 to
-  1000. Count a lesson only after its successful `PUT`, on this device and by local calendar day.
-  Cap each offered batch at the remaining daily allowance. Pausing keeps unfinished work for resume,
-  and the review flow is unchanged.
+  claims there. The daily goal is a whole number from 1 to 20 and 15 until the reader sets one — there
+  is no unlimited setting; the preference layer reads a device with nothing stored (or a legacy 0)
+  as 15, reads a legacy goal above 20 as 20, and refuses a save outside the range. Count a lesson only
+  after its successful `PUT`, on this device and by local calendar day. Cap each offered batch at the
+  remaining daily allowance. Pausing keeps unfinished work for resume, and the review flow is
+  unchanged.
 - Anki cards Settings stores study-deck selection by stable deck IDs. A null selection means all
   decks; an explicit empty selection means none. The selection filters the Anki hub and Home Anki due
   counts. Opening Anki always shows the deck hub, including when one deck matches; starting a card
