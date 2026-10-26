@@ -46,6 +46,7 @@ import {Collapsible, DisclosureChevron} from "./Collapsible";
 import * as Anki from "../native/GatenAnki";
 import * as GatenDict from "../native/GatenDict";
 import * as GatenHaptics from "../native/GatenHaptics";
+import * as GatenPlatform from "../native/GatenPlatform";
 import * as GatenWaniKani from "../native/GatenWaniKani";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
@@ -90,7 +91,7 @@ function failureMessage(failure: ReviewFailure, detail?: string): string {
   }
   switch (failure) {
     case "NOT_INSTALLED":
-      return "AnkiDroid is not installed, so there is nothing here to review.";
+      return "AnkiDroid is not installed. Please install it to continue using this functionality.";
     case "PERMISSION":
       return "Gaten needs AnkiDroid's database access to read and answer cards.";
     case "NOT_SET_UP":
@@ -446,6 +447,20 @@ function BlockedView({
           title={title}
           body={failureMessage(failure)}
         >
+          {failure === "NOT_INSTALLED" && (
+            <FilledAction
+              label="Install AnkiDroid"
+              onPress={() => {
+                void GatenPlatform.openUrl("https://play.google.com/store/apps/details?id=com.ichi2.anki")
+                  .then((opened) => {
+                    if (!opened) void GatenPlatform.toast("Could not open the Play Store");
+                  })
+                  .catch(() => {
+                    void GatenPlatform.toast("Could not open the Play Store");
+                  });
+              }}
+            />
+          )}
           {failure === "PERMISSION" && (
             <FilledAction label="Allow AnkiDroid access" disabled={busy} onPress={onGrant} />
           )}
