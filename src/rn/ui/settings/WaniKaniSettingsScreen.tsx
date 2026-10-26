@@ -40,6 +40,14 @@ const WANIKANI_LEVELS = 60;
 const WANIKANI_TOKEN_URL = "https://www.wanikani.com/settings/personal_access_tokens";
 
 /**
+ * The daily lesson goal's range, mirroring `WaniKaniLearningPreferences` so the field can say what is
+ * wrong before a round trip. The device still decides: the bridge and the preference layer refuse
+ * anything outside it.
+ */
+const MIN_LESSON_LIMIT = 1;
+const MAX_LESSON_LIMIT = 20;
+
+/**
  * What connecting buys the reader: the one line the plainly disconnected state carries. It says
  * only what Gaten reads — WaniKani's own pages and the account's study progress — because nothing
  * here is written back to the account.
@@ -110,7 +118,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
     void GatenWaniKani.getLearningPreferences()
       .then((preferences) => {
         if (cancelled) return;
-        setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
+        setDailyLimitInput(String(preferences.dailyLimit));
         setPreferenceError(null);
       })
       .catch(() => {
@@ -137,15 +145,14 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
    */
   const save = () => {
     const value = dailyLimitInput.trim();
-    const limit = value === "" ? null : Number(value);
+    const limit = Number(value);
     const tokenDraft = token.trim();
     const writeLimit = !preferenceLoading && !preferenceLoadFailed;
     if (
       writeLimit &&
-      limit !== null &&
-      (!/^\d+$/.test(value) || !Number.isInteger(limit) || limit < 1 || limit > 1000)
+      (!/^\d+$/.test(value) || limit < MIN_LESSON_LIMIT || limit > MAX_LESSON_LIMIT)
     ) {
-      setPreferenceError("Use 1–1000, or leave blank.");
+      setPreferenceError("Use 1–20.");
       return;
     }
     if (writeLimit) {
@@ -153,7 +160,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
       setPreferenceError(null);
       void GatenWaniKani.setDailyLessonLimit(limit)
         .then((preferences) => {
-          setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
+          setDailyLimitInput(String(preferences.dailyLimit));
         })
         .catch(() => setPreferenceError("Could not save the daily lesson setting. Try again."))
         .finally(() => setPreferenceBusy(false));
@@ -376,10 +383,9 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
                 setDailyLimitInput(value);
                 setPreferenceError(null);
               }}
-              placeholder="Unlimited"
               keyboardType="number-pad"
               editable={!saving && !preferenceLoading && !preferenceLoadFailed}
-              accessibilityLabel="New per day. Leave blank for unlimited."
+              accessibilityLabel="New per day. A whole number from 1 to 20."
             />
             {preferenceLoadFailed && (
               <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>

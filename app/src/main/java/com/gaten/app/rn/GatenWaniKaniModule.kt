@@ -11,6 +11,8 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.gaten.app.wanikani.MAX_DAILY_LESSONS
+import com.gaten.app.wanikani.MIN_DAILY_LESSONS
 import com.gaten.app.wanikani.WaniKaniConnection
 import com.gaten.app.wanikani.WaniKaniFailure
 import com.gaten.app.wanikani.WaniKaniLessonItem
@@ -96,17 +98,22 @@ class GatenWaniKaniModule(
         }
     }
 
-    /** Saves a daily lesson goal; null means unlimited. */
+    /**
+     * Saves a daily lesson goal. The goal is always a number: there is no unlimited setting, and the
+     * range is enforced here and again in the preferences layer, so nothing outside it is stored even
+     * if a caller asks.
+     */
     @ReactMethod
-    fun setDailyLessonLimit(limit: Double?, promise: Promise) {
+    fun setDailyLessonLimit(limit: Double, promise: Promise) {
         try {
-            val validatedLimit = limit?.let {
-                require(it.isFinite() && it % 1.0 == 0.0 && it in 1.0..1000.0) {
-                    "Daily lesson limit must be a whole number from 1 to 1000, or unlimited."
-                }
-                it.toInt()
+            require(
+                limit.isFinite() &&
+                    limit % 1.0 == 0.0 &&
+                    limit in MIN_DAILY_LESSONS.toDouble()..MAX_DAILY_LESSONS.toDouble()
+            ) {
+                "Daily lesson limit must be a whole number from $MIN_DAILY_LESSONS to $MAX_DAILY_LESSONS."
             }
-            promise.resolve(learningPreferences.setDailyLimit(validatedLimit).toJsMap())
+            promise.resolve(learningPreferences.setDailyLimit(limit.toInt()).toJsMap())
         } catch (e: IllegalArgumentException) {
             promise.reject("WK_INVALID_DAILY_LIMIT", e.message, e)
         } catch (e: Exception) {
@@ -407,9 +414,10 @@ class GatenWaniKaniModule(
                         return@withLock
                     }
                     val preferences = learningPreferences.read()
-                    val dailyLimit = preferences.dailyLimit
-                    if (dailyLimit != null && preferences.learnedToday >= dailyLimit) {
-                        promise.resolve(dailyLimitReached(dailyLimit, preferences.learnedToday))
+                    if (preferences.learnedToday >= preferences.dailyLimit) {
+                        promise.resolve(
+                            dailyLimitReached(preferences.dailyLimit, preferences.learnedToday)
+                        )
                         return@withLock
                     }
                     when (val result = WaniKaniRepository.startLesson(reactApplicationContext, id)) {
@@ -646,7 +654,7 @@ class GatenWaniKaniModule(
      */
     private fun WaniKaniLearningPreferences.Snapshot.toJsMap(): WritableMap =
         Arguments.createMap().apply {
-            if (dailyLimit == null) putNull("dailyLimit") else putInt("dailyLimit", dailyLimit)
+            putInt("dailyLimit", dailyLimit)
             putInt("learnedToday", learnedToday)
             reviewedToday?.let { putInt("reviewedToday", it) } ?: putNull("reviewedToday")
             putString("activityDate", activityDate)

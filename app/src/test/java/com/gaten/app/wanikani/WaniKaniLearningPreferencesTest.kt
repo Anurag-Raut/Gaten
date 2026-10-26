@@ -154,10 +154,30 @@ class WaniKaniLearningPreferencesTest {
     }
 
     @Test
-    fun `the goal is saved and cleared, and a goal that could not be saved is thrown`() {
+    fun `the goal has a default and a range, and a goal that could not be saved is thrown`() {
         val preferences = preferences()
-        assertEquals(3, preferences.setDailyLimit(3).dailyLimit)
-        assertNull(preferences.setDailyLimit(null).dailyLimit)
+        // Nothing stored is not "no goal": the device works to the default.
+        assertEquals(DEFAULT_DAILY_LESSONS, preferences.read().dailyLimit)
+
+        // A number an older build could have left behind is read into the range, and is not itself
+        // rewritten — the number on disk changes only when the reader saves a goal.
+        storage.limit = 0
+        assertEquals(DEFAULT_DAILY_LESSONS, preferences.read().dailyLimit)
+        storage.limit = 1000
+        assertEquals(MAX_DAILY_LESSONS, preferences.read().dailyLimit)
+        assertEquals(1000, storage.limit)
+
+        // Both ends of the range are goals; nothing outside it is.
+        assertEquals(MIN_DAILY_LESSONS, preferences.setDailyLimit(1).dailyLimit)
+        assertEquals(MAX_DAILY_LESSONS, preferences.setDailyLimit(20).dailyLimit)
+        for (outside in listOf(0, 21)) {
+            try {
+                preferences.setDailyLimit(outside)
+                fail("$outside is outside the range a device accepts")
+            } catch (e: IllegalArgumentException) {
+                // The range, checked before anything is stored.
+            }
+        }
 
         storage.failLimitWrites = true
         try {
@@ -166,14 +186,8 @@ class WaniKaniLearningPreferencesTest {
         } catch (e: IllegalStateException) {
             assertEquals("The daily lesson goal could not be saved.", e.message)
         }
-        assertNull(preferences.read().dailyLimit)
-
-        try {
-            preferences.setDailyLimit(0)
-            fail("a goal below one lesson is not a goal")
-        } catch (e: IllegalArgumentException) {
-            // The limit's own range, checked before anything is stored.
-        }
+        // A write that did not take leaves the last goal that did.
+        assertEquals(MAX_DAILY_LESSONS, preferences.read().dailyLimit)
     }
 
     /** A token store without a keystore; the counters are scoped to whatever it holds. */
@@ -197,13 +211,15 @@ class WaniKaniLearningPreferencesTest {
     /** A store in a map, whose writes can be made to fail, and which counts the ones that were made. */
     private class FakeStorage : WaniKaniLearningStorage {
         var activity: String? = null
-        var limit: Int? = null
+
+        /** What sits on disk: 0 until a goal is saved, as the preference file has it. */
+        var limit: Int = 0
         var failActivityWrites = false
         var failLimitWrites = false
         var activityWrites = 0
 
         override fun activity(): String? = activity
-        override fun dailyLimit(): Int? = limit
+        override fun dailyLimit(): Int = limit
 
         override fun saveActivity(activity: String): Boolean {
             if (failActivityWrites) return false
@@ -212,7 +228,7 @@ class WaniKaniLearningPreferencesTest {
             return true
         }
 
-        override fun saveDailyLimit(limit: Int?): Boolean {
+        override fun saveDailyLimit(limit: Int): Boolean {
             if (failLimitWrites) return false
             this.limit = limit
             return true

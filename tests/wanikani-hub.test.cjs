@@ -84,7 +84,7 @@ test('initial hub shows loading without presenting missing counts as zero', () =
 test('ready snapshot uses real review detail and a preference-backed lesson batch', () => {
   const [reviews, lessons] = models(hub({
     summary: snapshot({nextHourCount: null}),
-    learningPreferences: {dailyLimit: null, learnedToday: 0},
+    learningPreferences: {dailyLimit: 15, learnedToday: 0},
   }));
   assert.equal(reviews.subline, '3 reviews due');
   assert.deepEqual(reviews.trailing, {value: '3', label: 'due'});
@@ -303,7 +303,7 @@ test('paused lesson session reports progress and actual mixed batch types', () =
 test('singular queue labels and next-batch detail are grammatically singular', () => {
   const [reviews, lessons] = models(hub({
     summary: snapshot({dueNow: 1, lessonsNow: 1}),
-    learningPreferences: {dailyLimit: null, learnedToday: 0},
+    learningPreferences: {dailyLimit: 15, learnedToday: 0},
   }));
   assert.equal(reviews.subline, '1 review due');
   assert.deepEqual(reviews.trailing, {value: '1', label: 'due'});
@@ -347,13 +347,13 @@ test('a reached daily limit hides a paused lesson resume action', () => {
   assert.match(moduleText(lessons), /Daily limit reached/);
 });
 
-test('unset daily lesson limit leaves the normal five-card batch behavior unchanged', () => {
+test('a nearly spent goal leaves only what the goal has left', () => {
   const [, lessons] = models(hub({
     summary: snapshot({lessonsNow: 9}),
-    learningPreferences: {dailyLimit: null, learnedToday: 14},
+    learningPreferences: {dailyLimit: 15, learnedToday: 14},
   }));
   assert.equal(lessons.subline, '9 lessons available');
-  assert.equal(lessons.extra, 'Next batch · 5 cards');
+  assert.equal(lessons.extra, 'Next batch · 1 card');
 });
 
 function deferred() {
@@ -382,7 +382,7 @@ function buildStores(wkOverrides = {}, ankiOverrides = {}) {
   const wk = new Proxy(wkOverrides, {
     get(target, name) {
       if (name in target) return target[name];
-      if (name === 'getLearningPreferences') return async () => ({dailyLimit: null, learnedToday: 0});
+      if (name === 'getLearningPreferences') return async () => ({dailyLimit: 15, learnedToday: 0});
       // The regular read and the forced refresh are one bridge call behind two names. A case may
       // mock either one; which one the store asked for is asserted only where a case mocks both.
       if (name === 'stats') return target.refreshStats ?? missing(name);
@@ -838,7 +838,7 @@ test('a late lesson start cannot advance a lesson session from a reset account',
   const store = mockStore({
     isConfigured: async () => true,
     refreshStats: async () => availableStats({lessonsNow: 2}),
-    getLearningPreferences: async () => ({dailyLimit: null, learnedToday: 0}),
+    getLearningPreferences: async () => ({dailyLimit: 15, learnedToday: 0}),
     lessonsQueue: async () => ({
       status: 'available',
       items: queueReads++ === 0 ? [lessonItem(31)] : [lessonItem(41), lessonItem(42)],
@@ -1364,7 +1364,7 @@ test('a second start while the first lessons read is in flight fires no second r
   const store = mockStore({
     isConfigured: async () => true,
     refreshStats: async () => availableStats({lessonsNow: 2}),
-    getLearningPreferences: async () => ({dailyLimit: null, learnedToday: 0}),
+    getLearningPreferences: async () => ({dailyLimit: 15, learnedToday: 0}),
     lessonsQueue: async () => { lessonReads += 1; return lessonsRead.promise; },
   });
   store.openWaniKani();
@@ -1458,7 +1458,7 @@ test('queue rate limits block sync and foreground reads, then expire and reset w
       },
       getLearningPreferences: async () => {
         preferenceReads += 1;
-        return {dailyLimit: null, learnedToday: 0};
+        return {dailyLimit: 15, learnedToday: 0};
       },
       lessonsQueue: async () => { lessonReads += 1; return {status: 'available', items: [lessonItem(3)]}; },
     });
@@ -1560,7 +1560,7 @@ test('a hidden pending lesson settles into its retained batch after re-entering 
   const store = mockStore({
     isConfigured: async () => true,
     refreshStats: async () => availableStats({lessonsNow: 2}),
-    getLearningPreferences: async () => ({dailyLimit: null, learnedToday: 0}),
+    getLearningPreferences: async () => ({dailyLimit: 15, learnedToday: 0}),
     lessonsQueue: async () => ({status: 'available', items: [lessonItem(1), lessonItem(2)]}),
     startLesson: async () => (++starts === 1 ? started.promise : {status: 'started'}),
   });

@@ -394,7 +394,7 @@ from pages with a draft.
 | Screen lookup | Lookup mode, Floating button, Quick Settings tile and shortcut/key mapping; During lookup includes the media-pause permission/control. Preserve the explicit permission disclosure before native permission prompts. |
 | Text recognition | Current model and available model, download/import/remove actions, progress and cancel, installation/error states, and Help. Download confirmation is a dialog; progress stays in the flat form. |
 | Anki cards | AnkiDroid access/refresh, Study decks, Export deck/tags, and Card layout with note type, field mappings and HTML/CSS controls. Toolbar Save commits the draft; leaving dirty state offers Discard / Keep editing. Study-deck selection is independent of export destination. |
-| WaniKani | Connection status, Lessons → New per day, and token controls. Accepted daily limits are 1–1000, and blank means Unlimited: the field's own `Unlimited` placeholder carries that, so no helper line repeats it, and no line reports the learner's running count. One filled **Save** at the foot of the page commits both drafts: it writes the lesson limit, and checks and stores a token only when the field holds one, so a blank field saves the limit without touching a token that is already saved. Disconnect stays a separate, explicit text action. A saved limit is carried by the button's own Saving… → Save round-trip; only a failure takes ink under the field. |
+| WaniKani | Connection status, Lessons → New per day, and token controls. The daily goal is a whole number from 1 to 20, and 15 until the reader sets one — the field always shows the goal the device works to, so there is no unlimited setting, no placeholder and no helper line, and no line reports the learner's running count. One filled **Save** at the foot of the page commits both drafts: it writes the lesson limit, and checks and stores a token only when the field holds one, so a blank field saves the limit without touching a token that is already saved. Disconnect stays a separate, explicit text action. A saved limit is carried by the button's own Saving… → Save round-trip; only a failure takes ink under the field. |
 | Appearance | Theme radio rows, visible Accent swatches, and Feedback. Theme/accent apply immediately. Feedback shows Haptics → System and a Sounds switch with the short Anki and review cues description. |
 | About | App/version, Privacy, Attributions and Licence. Use the same flat rows for links, with essential legal explanations allowed to wrap. |
 
@@ -410,11 +410,11 @@ Selection must be conveyed semantically as well as visually.
 
 ### 7.4 Dialogs and fields
 
-- Shared fields use 14 / 20 text, a surface fill, 1 dp neutral outline and radius 14 dp.
-  Focus adds a 2 dp accent outline with 2 dp offset. The box carries its own inset and sizes the
-  input inside it; the input's own style keeps no padding, because Android's EditText padding
-  otherwise wins for the entered text and a value sits at the platform's inset while the
-  placeholder uses the box's.
+- Shared fields use 14 / 20 text, the quiet filled surface (`surfaceVariant`), radius 14 dp and **no
+  outline**: a field draws no border at rest and no ring when focused — focus is the caret and the
+  keyboard. The box carries its own inset and sizes the input inside it; the input's own style keeps
+  no padding, because Android's EditText padding otherwise wins for the entered text and a value sits
+  at the platform's inset while the placeholder uses the box's.
 - A field's name is `labelLarge` in `onSurface` — the strongest of the two labels a form has, so it
   never reads as another section heading (the quiet 12 / 18 `labelMedium` above it). A field that
   carries only a placeholder states its name in its accessible label too.
