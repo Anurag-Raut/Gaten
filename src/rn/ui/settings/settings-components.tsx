@@ -289,9 +289,10 @@ export function FieldLabel({
 }
 
 /**
- * The box a settings page types into: a white/dark surface with a
- * quiet outline and the app's own corner and control height. Everything a caller passes to a
- * `TextInput` goes through, and its own `style` still wins over the text inside the box.
+ * The box a settings page types into: the quiet filled surface the app already uses for fields, the
+ * app's own corner and control height, and no outline — not at rest, and not the ring a focused field
+ * could wear. Focus is the caret and the keyboard. Everything a caller passes to a `TextInput` goes
+ * through, and its own `style` still wins over the text inside the box.
  *
  * The box's inset belongs to the wrapper around the input, not to the input's own style: on Android
  * a `TextInput` carries the platform's EditText padding, which beats the style padding for some
@@ -301,7 +302,6 @@ export function FieldLabel({
  */
 export function TextField(props: TextInputProps) {
   const {colors} = useTheme();
-  const [focused, setFocused] = useState(false);
   const input = useRef<TextInput>(null);
   return (
     <Pressable
@@ -311,33 +311,20 @@ export function TextField(props: TextInputProps) {
       onPress={() => {
         if (props.editable !== false) input.current?.focus();
       }}
-      style={[
-        {
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.outlineVariant,
-          borderRadius: shape.small,
-          minHeight: 49,
-          justifyContent: "center",
-          paddingLeft: spacing.l,
-          paddingRight: spacing.l,
-          paddingTop: spacing.m,
-          paddingBottom: spacing.m,
-        },
-        focused && {outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 2},
-      ]}
+      style={{
+        backgroundColor: colors.surfaceVariant,
+        borderRadius: shape.small,
+        minHeight: 49,
+        justifyContent: "center",
+        paddingLeft: spacing.l,
+        paddingRight: spacing.l,
+        paddingTop: spacing.m,
+        paddingBottom: spacing.m,
+      }}
     >
       <TextInput
         {...props}
         ref={input}
-        onFocus={(event) => {
-          setFocused(true);
-          props.onFocus?.(event);
-        }}
-        onBlur={(event) => {
-          setFocused(false);
-          props.onBlur?.(event);
-        }}
         placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
         underlineColorAndroid="transparent"
         style={[typeScale.bodyMedium, {color: colors.onSurface, padding: 0}, props.style]}
