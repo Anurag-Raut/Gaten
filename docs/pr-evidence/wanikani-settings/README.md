@@ -1,5 +1,12 @@
 # WaniKani settings evidence
 
+> **Superseded by the reader's later styling and goal changes.** These captures are from `dc64529`:
+> they show the outlined fields with the `Unlimited` placeholder and the old 1–1000 goal, which this
+> branch has since replaced with a filled, outline-free field and a goal of 1–20 that is 15 until the
+> reader sets one. What they still show is the behaviour that did not change — one Save, the
+> connection composition, the blank-token save, no success line, the measured field inset — and the
+> whole set is replaced by a capture of the current head in the next emulator window.
+
 Captured on 26 October 2026 on `emulator-5554` (Android 14, x86_64, 1080 × 2340 at 440 dpi, font
 scale 0.94), driven with `agent-device 0.21.31`.
 
