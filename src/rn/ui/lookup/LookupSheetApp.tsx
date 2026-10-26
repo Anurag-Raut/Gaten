@@ -449,6 +449,14 @@ function EmptyState({
         <Text style={[typeScale.bodyMedium, styles.emptyMessage, {color: colors.onSurfaceVariant}]}>
           {noText ? "No text found" : "No dictionary matches"}
         </Text>
+        {/* Nothing was read: the tap or the circle landed on no readable text, so the caption says
+            what happened and the line under it says what to do instead — the lasso reads a crop
+            the tap cannot, and the reader has no other way to learn that from this sheet. */}
+        {noText && (
+          <Text style={[typeScale.bodySmall, styles.emptySource, {color: colors.onSurfaceVariant}]}>
+            Circle the text on screen to look it up.
+          </Text>
+        )}
         {!noText && source.length > 0 && (
           <Text style={[typeScale.bodySmall, styles.emptySource, {color: colors.onSurfaceVariant}]}>
             {source}

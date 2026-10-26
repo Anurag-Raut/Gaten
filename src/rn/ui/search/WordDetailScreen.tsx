@@ -22,9 +22,11 @@ import {useFocusEffect} from "@react-navigation/native";
 import {Button, Icon, IconButton, distinctIdeographs} from "../components";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
-import {useTheme} from "../theme";
+import {useTheme, type ThemeColors} from "../theme";
 import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
+import * as GatenAnki from "../../native/GatenAnki";
+import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {hitFor, useSearchState} from "./searchStore";
@@ -35,6 +37,11 @@ export interface SearchWordScreenProps {
   entryId: number;
   onBack: () => void;
   onOpenKanji: (character: string) => void;
+}
+
+/** Section boundaries: the muted ink at a third, so they read apart from the row rules' hairline. */
+function sectionRule(colors: ThemeColors): string {
+  return `${colors.onSurfaceVariant}52`;
 }
 
 export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScreenProps) {
@@ -153,7 +160,7 @@ export function HeadwordSection({hit}: {hit: SearchResult}) {
     : null;
 
   return (
-    <View style={[styles.headwordSection, {borderBottomColor: colors.outlineVariant}]}>
+    <View style={[styles.headwordSection, {borderBottomColor: sectionRule(colors)}]}>
       <Text style={[styles.wordTitle, {color: colors.onSurface}]}>{hit.primary}</Text>
       {readings.length > 0 && (
         <Text style={[styles.reading, {color: colors.onSurfaceVariant}]}>
@@ -193,7 +200,7 @@ export function MeaningSection({glosses, partsOfSpeech}: {
     </View>
   ));
   return (
-    <View style={[styles.meaningSection, {borderBottomColor: colors.outlineVariant}]}>
+    <View style={[styles.meaningSection, {borderBottomColor: sectionRule(colors)}]}>
       <View style={styles.meaningHeading}>
         <Text
           accessibilityRole="header"
@@ -272,7 +279,7 @@ export function OtherSpellingsRow({primary, spellings}: {primary: string; spelli
       accessibilityHint={expanded ? "Collapse other spellings" : "Expand other spellings"}
       accessibilityState={{expanded}}
       onPress={() => setExpanded((value) => !value)}
-      style={[styles.spellingsRow, {borderBottomColor: colors.outlineVariant}]}
+      style={[styles.spellingsRow, {borderBottomColor: sectionRule(colors)}]}
     >
       <View style={styles.detailRowContent}>
         <Text style={[typeScale.labelLarge, styles.detailLabel, {color: colors.onSurface}]}>
@@ -363,11 +370,70 @@ export function AddToAnkiBar({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
+  // The deck list is read when the row is opened, not on every render: AnkiDroid's provider is the
+  // only source, and the reader may never touch the control.
+  const [deckOpen, setDeckOpen] = useState(false);
+  const [decks, setDecks] = useState<AnkiDeckResult[] | null>(null);
+  const [deckLoadFailed, setDeckLoadFailed] = useState(false);
+  const [deckSaving, setDeckSaving] = useState(false);
+  const [deckError, setDeckError] = useState<string | null>(null);
 
   // The Anki action belongs to a connected AnkiDroid only: without database access there is
   // nothing to add to and no fallback to offer, so the whole bar stays out of the way rather
   // than leaving an orphaned deck row or empty footer space behind.
   if (anki.ankiStatus !== "ready") return null;
+
+  const busy = exportState.kind === "checking" || exportState.kind === "busy";
+  const enabled = exportState.kind === "idle" || exportState.kind === "failed";
+  // An export in flight owns the saved configuration, so the deck cannot be moved under it.
+  const deckLocked = deckSaving || busy;
+
+  /**
+   * Read AnkiDroid's decks. A failure is reported and leaves the list unread, so the next open
+   * reads again instead of showing an empty collection.
+   */
+  const loadDecks = () => {
+    setDeckLoadFailed(false);
+    void GatenAnki.decks()
+      .then((list) => setDecks(list))
+      .catch(() => setDeckLoadFailed(true));
+  };
+
+  /** Open or close the deck list, reading AnkiDroid's decks the first time it is opened. */
+  const toggleDeckList = () => {
+    if (deckLocked) return;
+    const next = !deckOpen;
+    setDeckOpen(next);
+    if (next && decks === null) {
+      loadDecks();
+    }
+  };
+
+  /**
+   * Move the export destination: everything but the deck name is kept, and the button is re-judged
+   * against the new deck — `prepareExport` re-reads the saved configuration — so a word already in
+   * that deck says so before Add is offered again. Add is held while the write is in flight, so a
+   * tap can never export into the deck the reader is leaving.
+   */
+  const chooseDeck = async (deckName: string) => {
+    setDeckOpen(false);
+    if (deckLocked || deckName === anki.ankiSettings.deckName) return;
+    setDeckSaving(true);
+    setDeckError(null);
+    try {
+      const refused = await GatenAnki.savePreferences({...anki.ankiSettings, deckName});
+      if (refused) {
+        setDeckError("AnkiDroid did not accept that deck.");
+        return;
+      }
+      await anki.refreshAnkiStatus();
+      await anki.prepareExport(entry);
+    } catch {
+      setDeckError("Could not save the deck.");
+    } finally {
+      setDeckSaving(false);
+    }
+  };
 
   const buttonLabel = (() => {
     if (anki.celebrating === entry.id) {
@@ -379,17 +445,16 @@ export function AddToAnkiBar({
     return "Add to Anki";
   })();
 
-  const busy = exportState.kind === "checking" || exportState.kind === "busy";
-  const enabled = exportState.kind === "idle" || exportState.kind === "failed";
-
   return (
     <View
       style={[
         styles.bar,
         {
           backgroundColor: colors.background,
-          borderTopColor: colors.outlineVariant,
-          paddingBottom: insets.bottom + spacing.s,
+          borderTopColor: sectionRule(colors),
+          // The design's 24 dp of air under the action, above the bottom inset: this bar is the last
+          // thing on screen, and the button must not sit on the screen's edge.
+          paddingBottom: insets.bottom + spacing.xl,
         },
       ]}
     >
@@ -399,18 +464,85 @@ export function AddToAnkiBar({
           {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
         ]}
       >
-        <View style={styles.deckRow}>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel={`Anki deck: ${anki.ankiSettings.deckName}`}
+          accessibilityHint="Changes the deck new cards are added to"
+          accessibilityState={{expanded: deckOpen, disabled: deckLocked}}
+          disabled={deckLocked}
+          onPress={toggleDeckList}
+          style={styles.deckRow}
+        >
           <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>Anki deck</Text>
-          <Text
-            accessibilityLabel={`Anki deck: ${anki.ankiSettings.deckName}`}
-            style={[typeScale.labelLarge, styles.deckName, {color: colors.onSurface}]}
+          <View style={styles.deckValue}>
+            <Text style={[typeScale.labelLarge, styles.deckName, {color: colors.onSurface}]}>
+              {anki.ankiSettings.deckName}
+            </Text>
+            {/* 16 dp, the label's own size: at 20 the glyph read taller than the deck name it
+                discloses. The row keeps its 48 dp target — only the glyph is smaller. */}
+            <DisclosureChevron expanded={deckOpen} size={16} color={colors.onSurfaceVariant} />
+          </View>
+        </PressableScale>
+        {/* Measured while clipped and animated open and closed, the way the entry's own disclosures
+            are, so the footer grows instead of jumping; collapsed it takes no touches and stays out
+            of the accessibility tree. Bounded, so a collection with many decks cannot push the
+            action out of the sheet. */}
+        <Collapsible expanded={deckOpen}>
+          <ScrollView
+            style={styles.deckList}
+            contentContainerStyle={styles.deckListContent}
+            showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
           >
-            {anki.ankiSettings.deckName}
-          </Text>
-        </View>
+            {deckLoadFailed ? (
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Try reading AnkiDroid's decks again"
+                onPress={loadDecks}
+                style={styles.deckOption}
+              >
+                <Text style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.error}]}>
+                  Could not read AnkiDroid's decks. Try again.
+                </Text>
+              </PressableScale>
+            ) : decks === null ? (
+              <Text style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}>
+                Reading AnkiDroid decks…
+              </Text>
+            ) : decks.length === 0 ? (
+              <Text style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}>
+                AnkiDroid has no decks to choose from.
+              </Text>
+            ) : (
+              decks.map((deck) => (
+                <PressableScale
+                  key={deck.id}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: deck.name === anki.ankiSettings.deckName,
+                    disabled: deckLocked,
+                  }}
+                  disabled={deckLocked}
+                  onPress={() => void chooseDeck(deck.name)}
+                  style={styles.deckOption}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.onSurface}]}
+                  >
+                    {deck.name}
+                  </Text>
+                  {deck.name === anki.ankiSettings.deckName && (
+                    <Icon name="check" size={18} color={colors.primary} />
+                  )}
+                </PressableScale>
+              ))
+            )}
+          </ScrollView>
+        </Collapsible>
         <Button
           fullWidth
-          disabled={!enabled}
+          disabled={!enabled || deckSaving}
           label={busy ? undefined : buttonLabel}
           leading={
             busy ? (
@@ -421,6 +553,9 @@ export function AddToAnkiBar({
           }
           onPress={() => void anki.addToAnki(entry)}
         />
+        {deckError !== null && (
+          <Text style={[typeScale.bodyMedium, {color: colors.error}]}>{deckError}</Text>
+        )}
         {exportState.kind === "failed" && (
           <Text style={[typeScale.bodyMedium, {color: colors.error}]}>{exportState.message}</Text>
         )}
@@ -492,6 +627,19 @@ const styles = StyleSheet.create({
   kanjiCharacter: {fontSize: 36, fontWeight: "700"},
   bar: {borderTopWidth: 1, paddingTop: spacing.m},
   footerContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center", gap: spacing.s},
-  deckRow: {minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.m},
+  deckRow: {minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.m},
+  deckValue: {flexDirection: "row", alignItems: "center", gap: spacing.xs, flexShrink: 1},
   deckName: {flexShrink: 1, textAlign: "right"},
+  deckList: {maxHeight: 216},
+  deckListContent: {paddingVertical: spacing.xs},
+  deckOption: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.m,
+    paddingHorizontal: spacing.s,
+  },
+  deckOptionName: {flexShrink: 1},
+  deckNote: {paddingVertical: spacing.s, paddingHorizontal: spacing.s},
 });
