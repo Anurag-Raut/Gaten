@@ -969,10 +969,10 @@ function StructuredAnkiAnswer({
   const partOfSpeech = posHtml?.replace(/<\/small>.*$/i, "") ?? "";
   return (
     <View accessible accessibilityLabel={`${displayAnkiField(fields.expression)}, ${displayAnkiField(fields.reading)}, ${displayAnkiField(glossHtml ?? "")}`}>
-      <Text style={[typeScale.displayMedium, {color: colors.onSurface}]}>
+      <Text style={[typeScale.displayMedium, styles.answerHeadword, {color: colors.onSurface}]}>
         {displayAnkiField(fields.expression)}
       </Text>
-      <Text style={[styles.answerReading, {color: colors.onSurfaceVariant}]}>
+      <Text style={[styles.answerReading, styles.answerHeadword, {color: colors.onSurfaceVariant}]}>
         {displayAnkiField(fields.reading)}
       </Text>
       <Text style={[styles.answerMeaning, {color: colors.onSurface}]}>
@@ -1207,6 +1207,9 @@ const styles = StyleSheet.create({
   exampleEnglish: {marginTop: spacing.xs},
   waniKaniSection: {marginTop: spacing.xl},
   waniKaniTitle: {marginBottom: spacing.s},
+  // The answer's headword block mirrors the question side, which centres the front word: the
+  // expression and its reading are centred together, and the meaning below stays left-aligned.
+  answerHeadword: {textAlign: "center"},
   answerReading: {marginTop: spacing.xs, fontSize: 17, lineHeight: 24, fontWeight: "400"},
   answerMeaning: {marginTop: spacing.m, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: "Inter"},
   gapS: {height: spacing.s},
