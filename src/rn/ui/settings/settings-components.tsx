@@ -13,7 +13,7 @@
  * `ui/settings/` assemble them, and the copy stays in each page. Buttons, icons and the
  * press-scale come from `ui/components` / `ui/PressableScale`, so every tab draws them alike.
  */
-import React, {useState} from "react";
+import React, {useRef, useState} from "react";
 import {
   Modal,
   Pressable,
@@ -260,8 +260,12 @@ export function OutlinedButton({
 }
 
 /**
- * The label over a field: what the field holds, in the reader's quiet ink, at the same rhythm on
- * every page that asks for something.
+ * The name of the field under it: what the field holds, at the rhythm every page that asks for
+ * something uses.
+ *
+ * It is deliberately the strongest of the two labels a form has — `labelLarge` in the page's own
+ * ink, where a section heading is the quiet 12/18 `labelMedium` — so a reader can tell "Lessons"
+ * (the group) from "New per day" (the field) at a glance.
  */
 export function FieldLabel({
   label,
@@ -274,8 +278,8 @@ export function FieldLabel({
   return (
     <Text
       style={[
-        typeScale.labelMedium,
-        {color: colors.onSurfaceVariant, marginBottom: spacing.s},
+        typeScale.labelLarge,
+        {color: colors.onSurface, marginBottom: spacing.s},
         style,
       ]}
     >
@@ -287,40 +291,58 @@ export function FieldLabel({
 /**
  * The box a settings page types into: a white/dark surface with a
  * quiet outline and the app's own corner and control height. Everything a caller passes to a
- * `TextInput` goes through, and its own `style` still wins over the box.
+ * `TextInput` goes through, and its own `style` still wins over the text inside the box.
+ *
+ * The box's inset belongs to the wrapper around the input, not to the input's own style: on Android
+ * a `TextInput` carries the platform's EditText padding, which beats the style padding for some
+ * input types — measured on the emulator, the value that had been typed sat at the platform's ~8 dp
+ * while the placeholder used the box's 16 dp. An input sized inside the wrapper's padding follows
+ * both, and the platform's own padding is cleared so it cannot add a second inset.
  */
 export function TextField(props: TextInputProps) {
   const {colors} = useTheme();
   const [focused, setFocused] = useState(false);
+  const input = useRef<TextInput>(null);
   return (
-    <TextInput
-      {...props}
-      onFocus={(event) => {
-        setFocused(true);
-        props.onFocus?.(event);
+    <Pressable
+      // The box is one target: a tap on the inset it keeps for the input focuses the input too.
+      // Not an accessibility element itself, so the field keeps the label it already carries.
+      accessible={false}
+      onPress={() => {
+        if (props.editable !== false) input.current?.focus();
       }}
-      onBlur={(event) => {
-        setFocused(false);
-        props.onBlur?.(event);
-      }}
-      placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
-      underlineColorAndroid="transparent"
       style={[
-        typeScale.bodyMedium,
         {
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: colors.outlineVariant,
           borderRadius: shape.small,
-          color: colors.onSurface,
-          paddingHorizontal: spacing.l,
-          paddingVertical: spacing.m,
           minHeight: 49,
+          justifyContent: "center",
+          paddingLeft: spacing.l,
+          paddingRight: spacing.l,
+          paddingTop: spacing.m,
+          paddingBottom: spacing.m,
         },
-        props.style,
         focused && {outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 2},
       ]}
-    />
+    >
+      <TextInput
+        {...props}
+        ref={input}
+        onFocus={(event) => {
+          setFocused(true);
+          props.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          props.onBlur?.(event);
+        }}
+        placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
+        underlineColorAndroid="transparent"
+        style={[typeScale.bodyMedium, {color: colors.onSurface, padding: 0}, props.style]}
+      />
+    </Pressable>
   );
 }
 

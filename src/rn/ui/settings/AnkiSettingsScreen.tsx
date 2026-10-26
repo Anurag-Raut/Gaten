@@ -743,17 +743,19 @@ function TemplateEditor({
   return (
     <View style={{marginBottom: spacing.m}}>
       <FieldLabel label={label} />
-      <TextField
-        value={value}
-        onChangeText={onChange}
-        multiline
-        style={{
-          minHeight: 60,
-          maxHeight: 120,
-          textAlignVertical: "top",
-          fontFamily: "monospace",
-        }}
-      />
+      {/* The box keeps its own 60–120 dp size; the field's style sizes the text area inside it. */}
+      <View style={{minHeight: 60, maxHeight: 120}}>
+        <TextField
+          value={value}
+          onChangeText={onChange}
+          multiline
+          style={{
+            minHeight: 36,
+            textAlignVertical: "top",
+            fontFamily: "monospace",
+          }}
+        />
+      </View>
     </View>
   );
 }

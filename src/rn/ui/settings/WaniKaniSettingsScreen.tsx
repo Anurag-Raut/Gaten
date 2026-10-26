@@ -16,6 +16,9 @@
  * is always one WaniKani has accepted; a rejected or unreachable token is only reported, and the
  * device is left exactly as it was. Disconnect is the reverse, takes the cache with it, and stays
  * the one explicit action that ends a connection.
+ *
+ * Nothing here reports a success in prose: a save that worked shows through the button's own
+ * Saving… → Save round-trip, and only failures take ink under the field they belong to.
  */
 import React, {useEffect, useState} from "react";
 import {KeyboardAvoidingView, ScrollView, Text, View, useWindowDimensions} from "react-native";
@@ -81,9 +84,9 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   const [failure, setFailure] = useState<WaniKaniFailure | null>(null);
   const [cleared, setCleared] = useState<boolean | null>(null);
   const [dailyLimitInput, setDailyLimitInput] = useState("");
-  const [learnedToday, setLearnedToday] = useState<number | null>(null);
   const [preferenceBusy, setPreferenceBusy] = useState(false);
-  const [preferenceMessage, setPreferenceMessage] = useState<string | null>(null);
+  // Only a failure is kept: a save that worked shows through the button's own Saving… → Save
+  // round-trip, so the page never grows a success line it would then have to clear.
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [preferenceLoading, setPreferenceLoading] = useState(true);
   const [preferenceLoadFailed, setPreferenceLoadFailed] = useState(false);
@@ -108,7 +111,6 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
       .then((preferences) => {
         if (cancelled) return;
         setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
-        setLearnedToday(preferences.learnedToday);
         setPreferenceError(null);
       })
       .catch(() => {
@@ -144,18 +146,14 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
       (!/^\d+$/.test(value) || !Number.isInteger(limit) || limit < 1 || limit > 1000)
     ) {
       setPreferenceError("Use 1–1000, or leave blank.");
-      setPreferenceMessage(null);
       return;
     }
     if (writeLimit) {
       setPreferenceBusy(true);
       setPreferenceError(null);
-      setPreferenceMessage(null);
       void GatenWaniKani.setDailyLessonLimit(limit)
         .then((preferences) => {
           setDailyLimitInput(preferences.dailyLimit?.toString() ?? "");
-          setLearnedToday(preferences.learnedToday);
-          setPreferenceMessage("Saved.");
         })
         .catch(() => setPreferenceError("Could not save the daily lesson setting. Try again."))
         .finally(() => setPreferenceBusy(false));
@@ -377,21 +375,12 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
               onChangeText={(value) => {
                 setDailyLimitInput(value);
                 setPreferenceError(null);
-                setPreferenceMessage(null);
               }}
               placeholder="Unlimited"
               keyboardType="number-pad"
               editable={!saving && !preferenceLoading && !preferenceLoadFailed}
-              accessibilityLabel="New cards per day. Leave blank for unlimited."
+              accessibilityLabel="New per day. Leave blank for unlimited."
             />
-            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-              Blank = unlimited.
-            </Text>
-            {learnedToday != null && (
-              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
-                Learned today: {learnedToday} · This device
-              </Text>
-            )}
             {preferenceLoadFailed && (
               <View style={{alignSelf: "flex-start", marginTop: spacing.xs}}>
                 <Button
@@ -402,12 +391,12 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
                 />
               </View>
             )}
-            {(preferenceError != null || preferenceMessage != null) && (
+            {preferenceError != null && (
               <Text
                 accessibilityLiveRegion="polite"
-                style={[typeScale.bodySmall, {color: preferenceError ? colors.error : colors.onSurfaceVariant, marginTop: spacing.xs}]}
+                style={[typeScale.bodySmall, {color: colors.error, marginTop: spacing.xs}]}
               >
-                {preferenceError ?? preferenceMessage}
+                {preferenceError}
               </Text>
             )}
           </View>
