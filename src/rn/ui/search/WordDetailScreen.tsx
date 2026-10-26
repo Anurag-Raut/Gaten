@@ -478,11 +478,16 @@ export function AddToAnkiBar({
             <Text style={[typeScale.labelLarge, styles.deckName, {color: colors.onSurface}]}>
               {anki.ankiSettings.deckName}
             </Text>
-            <DisclosureChevron expanded={deckOpen} size={20} color={colors.onSurfaceVariant} />
+            {/* 16 dp, the label's own size: at 20 the glyph read taller than the deck name it
+                discloses. The row keeps its 48 dp target — only the glyph is smaller. */}
+            <DisclosureChevron expanded={deckOpen} size={16} color={colors.onSurfaceVariant} />
           </View>
         </PressableScale>
-        {deckOpen && (
-          // Bounded, so a collection with many decks cannot push the action out of the sheet.
+        {/* Measured while clipped and animated open and closed, the way the entry's own disclosures
+            are, so the footer grows instead of jumping; collapsed it takes no touches and stays out
+            of the accessibility tree. Bounded, so a collection with many decks cannot push the
+            action out of the sheet. */}
+        <Collapsible expanded={deckOpen}>
           <ScrollView
             style={styles.deckList}
             contentContainerStyle={styles.deckListContent}
@@ -534,7 +539,7 @@ export function AddToAnkiBar({
               ))
             )}
           </ScrollView>
-        )}
+        </Collapsible>
         <Button
           fullWidth
           disabled={!enabled || deckSaving}
