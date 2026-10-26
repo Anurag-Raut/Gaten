@@ -743,19 +743,20 @@ function TemplateEditor({
   return (
     <View style={{marginBottom: spacing.m}}>
       <FieldLabel label={label} />
-      {/* The box keeps its own 60–120 dp size; the field's style sizes the text area inside it. */}
-      <View style={{minHeight: 60, maxHeight: 120}}>
-        <TextField
-          value={value}
-          onChangeText={onChange}
-          multiline
-          style={{
-            minHeight: 36,
-            textAlignVertical: "top",
-            fontFamily: "monospace",
-          }}
-        />
-      </View>
+      {/* The box stays 60–120 dp: the text area is what gets bounded (34 + the box's 24 dp padding
+          and 2 dp border = 60, 94 + 26 = 120), so a long template scrolls inside its own box instead
+          of growing past the fields below it. */}
+      <TextField
+        value={value}
+        onChangeText={onChange}
+        multiline
+        style={{
+          minHeight: 34,
+          maxHeight: 94,
+          textAlignVertical: "top",
+          fontFamily: "monospace",
+        }}
+      />
     </View>
   );
 }
