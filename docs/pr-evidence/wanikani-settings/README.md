@@ -1,53 +1,61 @@
 # WaniKani settings evidence
 
 Captured on 26 October 2026 on `emulator-5554` (Android 14, x86_64, 1080 × 2340 at 440 dpi, font
-scale 0.94) from the working tree committed as the source revision below — the same tree the whole
-PR is reviewed from.
+scale 0.94), driven with `agent-device 0.21.31`.
 
 | Fact | Value |
 | --- | --- |
-| Source revision (UI commit) | `20bec14` (contained in the capture revision `03a0c16`) |
+| Captured source revision | `dc64529` (the fix commit; the evidence commit that adds these files follows it) |
 | Build | `flock /tmp/gaten-redesign-gradle.lock ./gradlew :app:assembleDebug` |
-| APK | `app/build/outputs/apk/debug/app-x86_64-debug.apk`, sha256 `1a6e389936626b2f9f770105e5dc7d2e178383d291f5003b9c8b99d3e755627e`, versionCode 10 |
-| Installed | `adb install -r` (debug signature `c5bcc30b…`, the same one the fixture already had) |
-| Driver | `agent-device 0.21.31` (`open`, `click`/`fill`/`press --settle`, `wait text`, `screenshot`, `record`) |
-| Freshness | the installed APK's `assets/index.android.bundle` contains this change's copy, and the running UI shows it |
+| APK | `app/build/outputs/apk/debug/app-x86_64-debug.apk`, sha256 `fac7009a5f02f36819117391f0467f8168b7837b02c5f4a61d7e1c141c4f132e`, versionCode 10 |
+| Installed | `adb install -r` for the owner's user 0, and `adb install --user 11 -r` in an isolated user |
 
-| State | Page | After Save | Recording |
-| --- | --- | --- | --- |
-| Disconnected (isolated user) | [after-disconnected-top.png](after-disconnected-top.png) | [after-disconnected-saved.png](after-disconnected-saved.png) | [wk-save-blank-token-disconnected.mp4](wk-save-blank-token-disconnected.mp4) · [contact sheet](wk-save-blank-token-disconnected-sheet.png) |
-| Connected (owner's fixture) | [after-connected-top.png](after-connected-top.png) | [after-connected-saved.png](after-connected-saved.png) | [wk-save-blank-token-connected.mp4](wk-save-blank-token-connected.mp4) · [contact sheet](wk-save-blank-token-connected-sheet.png) |
+| State | Files |
+| --- | --- |
+| Disconnected, isolated user | [empty](after-disconnected-empty.png) · [20 typed](after-disconnected-filled.png) · [invalid limit](after-disconnected-error.png) · [saved](after-disconnected-saved.png) · [reopened](after-disconnected-persisted.png) · [recording](wk-save-blank-token-disconnected.mp4) ([sheet](wk-save-blank-token-disconnected-sheet.png), 5.1 s) |
+| Connected, owner's fixture | [page](after-connected-top.png) · [after save](after-connected-saved.png) · [recording](wk-save-blank-token-connected.mp4) ([sheet](wk-save-blank-token-connected-sheet.png), 4.4 s) |
+| Shared field on an existing page (Anki cards) | [Deck and Tags](after-settings-anki-fields.png) · [template editors](after-settings-anki-templates.png) |
 
 ## What the captures show
 
-- **Whole page, disconnected.** `Connection` carries the state as a composition — `cloud_off` in the
-  neutral ink, the service name, `Not connected`, and one sentence saying what connecting buys the
-  reader — instead of a bold line on its own. Group hairlines, the field, its two hints, the `Token`
-  section with `Get a token` as a text link, and **one filled `Save` at the end** of the form, 24 dp
-  below the section rule. The whole page fits one screen at this size; nothing is cut off or clipped.
-- **Saving the lesson limit with a blank token while disconnected** (recording, 9.4 s): the field is
-  typed into, the keyboard is dismissed, `Save` is tapped, `Saved.` appears under the hints, and the
-  connection stays `Not connected` — no token was sent, no error, no state change.
-- **Connected.** `check_circle` in the success ink with `Connected`, the token section hidden behind
-  the quiet `Change token` action, `Recheck` and `Disconnect` as separate text actions, and the same
-  single `Save`. The account is the owner's existing fixture, untouched: the page reads `Connected`
-  after the app data was carried over an in-place install, and Home still reports the same
-  `96 reviews due`.
-- **Saving with a blank token while connected** (recording, 6.5 s): `Change token` opens the token
-  field (empty), `Save` is tapped with that field empty, `Saved.` appears, and the page stays
-  `Connected` with `Disconnect` still offered — the stored token was neither replaced nor erased.
-
-## How the disconnected state was captured without touching the owner's account
-
-`pm create-user wk_disconnected` created an isolated secondary Android user, the APK was installed
-for it (`adb install --user 10 -r`), and the capture ran there; the owner's user 0, its AnkiDroid
-link and its WaniKani token were never cleared, disconnected or opened for editing. The user was
-removed afterwards (`pm remove-user 10`), which deletes only that user's data.
+- **Hierarchy, not two labels that look alike.** `Lessons` stays the quiet 12 / 18 section heading;
+  `New per day` is the field's own name at `labelLarge` in the surface ink. The same role reaches
+  every form using the shared label — Anki's Deck, Tags and monospace template editors, and the
+  review flow's token field — which is why the Anki page is captured here beside this screen.
+- **Nothing the field already says.** The Lessons section is the field and its `Unlimited`
+  placeholder and nothing else: no "Blank = unlimited." line, no learned-today count, no success
+  line. A save shows through the button's own `Saving… → Save` round-trip, and persistence is proved
+  by leaving and reopening the page (`after-disconnected-persisted.png` shows `20` back with no prose
+  anywhere). Failures keep their ink under the field they belong to:
+  `after-disconnected-error.png` carries "Use 1–1000, or leave blank.", and a deliberately garbage
+  token submitted from the isolated user keeps its rejection under the Token section.
+- **The field inset, measured before and after.** With the box's padding on the input itself, the
+  *entered* value rendered at the platform's own inset while the placeholder used the box's. On this
+  device, with the box border at x = 61 px (2.75 px/dp): the typed `20` began at x = 86 px (9.1 dp),
+  the password dots at x = 77 px (5.8 dp), and the placeholder at x = 110 px (17.8 dp). With the
+  inset on the wrapper that sizes the input, both agree: `20` at x = 121 px (21.8 dp) and the dots at
+  x = 112 px (18.5 dp). The same measurement on the Anki page's own fields — Deck x = 109 px, Tags
+  x = 109–116 px (17.5–20 dp) — shows the component's existing callers unchanged, and the multiline
+  card-layout editors keep their 60–120 dp box with the text inset inside it.
+- **The inset is not dead space.** A tap 14 px inside the box's left padding focuses the field
+  (the snapshot reports the input `[focused]`), so the box still behaves as one target.
+- **The connected flow is intact.** After the in-place install the owner's fixture still reads
+  `Connected`, and Home still reports the same `96 reviews due`; `Change token`, `Recheck` and
+  `Disconnect` stay separate text actions, and saving with an empty token field leaves the page
+  `Connected` with `Disconnect` still offered — the stored token is neither replaced nor erased.
 
 ## Not exercised
 
-- 320 dp / 160 % text and TalkBack; the wrapping and touch-target behaviour at those settings is
-  reasoned from the shared patterns, not observed.
-- Entering a real token, and a rejected or unreachable token: no credentials were requested, exposed
-  or typed. The rejected-token path is covered by the existing code and its unchanged copy.
-- The `Retry` path for a failed lesson-preference read.
+- 320 dp / 160 % text and TalkBack.
+- Entering a real token, and a genuinely unreachable WaniKani: no credentials were requested,
+  exposed or typed. The rejection line is visible in the capture only because the isolated user
+  submitted a deliberately invalid value.
+- The `Retry` path for a failed lesson-preference read, which needs a storage failure to trigger.
+- The Save predicate has no automated test; the three guards (blank token never sent, no write on an
+  unread preference, invalid limit blocked) are stated in the pull request instead.
+
+## Restored after the capture
+
+The isolated user was removed, the current user is 0 as found, 1080 × 2340 / 440 dpi / font scale
+0.94 are unchanged, the fixture's lesson limit is left at blank = unlimited, the `agent-device`
+session was closed and no Metro server was started.
