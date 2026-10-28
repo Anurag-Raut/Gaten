@@ -44,15 +44,17 @@ import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Collapsible, DisclosureChevron} from "./Collapsible";
 import * as Anki from "../native/GatenAnki";
+import {downloadAnkiDroid} from "./anki/anki-actions";
 import * as GatenDict from "../native/GatenDict";
 import * as GatenHaptics from "../native/GatenHaptics";
 import * as GatenWaniKani from "../native/GatenWaniKani";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "./tokens";
+import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "./tokens";
 import {useTheme, type Theme} from "./theme";
-import {DialogShell, OutlinedButton} from "./settings/settings-components";
+import {OutlinedButton} from "./settings/settings-components";
+import {DialogShell} from "./DialogShell";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
 import {stepDepth, type ReviewFailure, type ReviewStep} from "./review/review-store";
 import {reviewActions, useReview} from "./review/useReview";
@@ -90,7 +92,7 @@ function failureMessage(failure: ReviewFailure, detail?: string): string {
   }
   switch (failure) {
     case "NOT_INSTALLED":
-      return "AnkiDroid is not installed, so there is nothing here to review.";
+      return "Download AnkiDroid and open it once to set up your collection, then return here to review.";
     case "PERMISSION":
       return "Gaten needs AnkiDroid's database access to read and answer cards.";
     case "NOT_SET_UP":
@@ -384,12 +386,10 @@ function OpeningView({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title={source === "anki" ? "Anki" : "WaniKani"} onBack={onBack} />
-      </View>
+      <SubHeader title={source === "anki" ? "Anki" : "WaniKani"} onBack={onBack} />
       <View
         style={[
           styles.centred,
@@ -421,7 +421,7 @@ function BlockedView({
   const {colors} = theme;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   const title =
     failure === "NOT_INSTALLED"
       ? "AnkiDroid is not installed"
@@ -432,9 +432,7 @@ function BlockedView({
           : "Review unavailable";
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="Anki" onBack={onBack} />
-      </View>
+      <SubHeader title="Anki" onBack={onBack} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -446,6 +444,9 @@ function BlockedView({
           title={title}
           body={failureMessage(failure)}
         >
+          {failure === "NOT_INSTALLED" && (
+            <FilledAction label="Download AnkiDroid" onPress={downloadAnkiDroid} />
+          )}
           {failure === "PERMISSION" && (
             <FilledAction label="Allow AnkiDroid access" disabled={busy} onPress={onGrant} />
           )}
@@ -489,7 +490,7 @@ function AnkiSession({
   const {colors} = theme;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   const card = session.card;
   // The note's own sentence is the example source: it is already on the device, so the answer never
   // waits on a network and stays readable with no connection at all.
@@ -597,12 +598,12 @@ function AnkiSession({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <SubHeader
+        title={session.revealed ? "Answer" : card.deckName}
+        right={`${place} of ${total}`}
+        onBack={onBack}
+      />
       <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader
-          title={session.revealed ? "Answer" : card.deckName}
-          right={`${place} of ${total}`}
-          onBack={onBack}
-        />
         <ProgressLine value={place / total} />
       </View>
       {/* The deck space is one surface: the card, its kanji strip and the inline details scroll
@@ -1030,12 +1031,10 @@ function DoneView({
   const {colors} = theme;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title={deckName} onBack={onFinish} />
-      </View>
+      <SubHeader title={deckName} onBack={onFinish} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -1071,12 +1070,10 @@ function WaniKaniFailedView({
   const {colors} = theme;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="WaniKani" onBack={onBack} />
-      </View>
+      <SubHeader title="WaniKani" onBack={onBack} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -1119,12 +1116,10 @@ function FailedView({
   const {colors} = theme;
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="Anki" onBack={onBack} />
-      </View>
+      <SubHeader title="Anki" onBack={onBack} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -1158,14 +1153,7 @@ function FailedView({
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
-  centred: {
-    flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
-    alignSelf: "center",
-  },
+  centred: {...CONTENT_COLUMN, flexGrow: 1, alignItems: "center", justifyContent: "center"},
   textAction: {
     minHeight: 48,
     paddingHorizontal: spacing.m,
@@ -1179,7 +1167,7 @@ const styles = StyleSheet.create({
   deckSpace: {
     paddingTop: spacing.m,
   },
-  deckContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  deckContent: CONTENT_COLUMN,
   // The card's own box, so the answer flash has something to cover. No surface, no radius and no
   // padding of its own: the note type's text sits directly on the screen's background, and the
   // WebView measures itself, so the box is exactly as tall as the card.

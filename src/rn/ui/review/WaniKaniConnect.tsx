@@ -30,7 +30,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import {FieldLabel, TextField} from "../settings/settings-components";
 import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
-import {spacing, typeScale} from "../tokens";
+import {contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {
   ActionFooter,
@@ -60,7 +60,7 @@ export function WaniKaniConnect({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   const [token, setToken] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -94,9 +94,7 @@ export function WaniKaniConnect({
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
-        <View style={{paddingHorizontal: contentInset}}>
-          <SubHeader title="WaniKani" onBack={onBack} />
-        </View>
+        <SubHeader title="WaniKani" onBack={onBack} />
         <ScrollView
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}

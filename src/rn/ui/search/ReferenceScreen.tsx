@@ -6,8 +6,8 @@
 
 /**
  * The full-screen WaniKani pages the Search tab pushes: one behind a tapped kanji chip, one
- * behind a tapped radical component. No app bar — the panel brings its own heading and back
- * arrow, since the real title is not known until the lookup answers.
+ * behind a tapped radical component. Full pages use the shared app bar above the subject heading;
+ * the lookup overlay keeps its compact panel heading and local back action.
  *
  * A radical tap hands the id straight to the shell, which owns the Tick and the open-or-toggle
  * decision: only the shell knows whether the tap opens a new radical page or closes the open one
@@ -17,6 +17,7 @@ import React from "react";
 import {View} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {WaniKaniPanel, type WaniKaniTarget} from "../wanikani/WaniKaniPanel";
+import {ScreenHeader} from "../ScreenHeader";
 import {useTheme} from "../theme";
 
 export interface SearchKanjiScreenProps {
@@ -78,9 +79,15 @@ function ReferencePage({
         paddingBottom: insets.bottom,
       }}
     >
+      {!overlay && (
+        <ScreenHeader
+          title={target.kind === "kanji" ? "Kanji details" : "Radical details"}
+          onBack={onBack}
+        />
+      )}
       <WaniKaniPanel
         target={target}
-        showBack
+        showBack={overlay}
         onBack={onBack}
         scrollable
         onRadical={onOpenRadical}

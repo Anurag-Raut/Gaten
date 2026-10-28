@@ -24,7 +24,7 @@ import * as GatenRecognition from "../../native/GatenRecognition";
 import type {AnkiStatus} from "../../native/GatenAnki";
 import type {SettingsPageName} from "../navigation";
 import {useTheme} from "../theme";
-import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
 
 /** What the Anki row says under its name: the page's own business, or AnkiDroid's other two states. */
@@ -104,7 +104,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
           style={[
             CONTENT_COLUMN,
             {
-              paddingHorizontal: width < 360 ? 16 : 22,
+              paddingHorizontal: contentInsetFor(width),
               paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
             },
           ]}

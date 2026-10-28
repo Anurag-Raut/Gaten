@@ -19,11 +19,12 @@ import {
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
-import {Button, Icon, IconButton, distinctIdeographs} from "../components";
+import {Button, Icon, distinctIdeographs} from "../components";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
+import {ScreenHeader} from "../ScreenHeader";
 import {useTheme, type ThemeColors} from "../theme";
-import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
@@ -108,7 +109,7 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
         style={styles.body}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
+          {paddingHorizontal: contentInsetFor(width)},
         ]}
       >
         <HeadwordSection hit={hit} />
@@ -127,27 +128,10 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
 }
 
 function WordAppBar({onBack}: {onBack: () => void}) {
-  const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <View
-      style={[
-        styles.appBar,
-        {
-          backgroundColor: colors.background,
-          minHeight: 64 + insets.top,
-          paddingTop: insets.top,
-          borderBottomColor: colors.outlineVariant,
-        },
-      ]}
-    >
-      <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onBack} />
-      <Text
-        accessibilityRole="header"
-        style={[styles.appBarTitle, {color: colors.onSurface}]}
-      >
-        Word details
-      </Text>
+    <View style={{paddingTop: insets.top}}>
+      <ScreenHeader title="Word details" onBack={onBack} bordered />
     </View>
   );
 }
@@ -461,7 +445,7 @@ export function AddToAnkiBar({
       <View
         style={[
           styles.footerContent,
-          {paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset},
+          {paddingHorizontal: contentInsetFor(width)},
         ]}
       >
         <PressableScale
@@ -566,21 +550,8 @@ export function AddToAnkiBar({
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  appBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.xs,
-    borderBottomWidth: 1,
-  },
-  appBarTitle: {...typeScale.labelLarge, flex: 1},
   body: {flex: 1},
-  scrollContent: {
-    alignSelf: "center",
-    width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
+  scrollContent: {...CONTENT_COLUMN, paddingTop: spacing.xl, paddingBottom: spacing.xl},
   headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
   wordTitle: {fontSize: 36, fontWeight: "700"},
   reading: {...typeScale.bodyMedium, marginTop: spacing.s},
@@ -626,7 +597,7 @@ const styles = StyleSheet.create({
   },
   kanjiCharacter: {fontSize: 36, fontWeight: "700"},
   bar: {borderTopWidth: 1, paddingTop: spacing.m},
-  footerContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center", gap: spacing.s},
+  footerContent: {...CONTENT_COLUMN, gap: spacing.s},
   deckRow: {minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.m},
   deckValue: {flexDirection: "row", alignItems: "center", gap: spacing.xs, flexShrink: 1},
   deckName: {flexShrink: 1, textAlign: "right"},

@@ -33,7 +33,7 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {MAX_CONTENT_WIDTH, spacing} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, spacing} from "../tokens";
 import {useTheme} from "../theme";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {
@@ -131,7 +131,7 @@ export function WaniKaniReview({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   const item = session.items[session.index];
   const reading = session.part === "reading";
   const submitting = session.phase === "submitting";
@@ -177,12 +177,12 @@ export function WaniKaniReview({
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
+        <SubHeader
+          title="WaniKani"
+          right={`${session.index + 1} of ${session.items.length}`}
+          onBack={onBack}
+        />
         <View style={{paddingHorizontal: contentInset}}>
-          <SubHeader
-            title="WaniKani"
-            right={`${session.index + 1} of ${session.items.length}`}
-            onBack={onBack}
-          />
           <ProgressLine value={progress} height={3} />
         </View>
         <ScrollView
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     paddingBottom: spacing.xl,
   },
-  reviewContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  reviewContent: CONTENT_COLUMN,
   hero: {alignItems: "center", marginTop: spacing.m, marginBottom: spacing.m},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
   promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},

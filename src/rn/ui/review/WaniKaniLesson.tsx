@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {
   ActionFooter,
@@ -148,7 +148,7 @@ export function WaniKaniLesson({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   const teaching = session.phase === "teaching";
   const item = teaching ? session.batch[session.teachIndex] : session.batch[session.quizIndex];
   if (item == null) return null;
@@ -167,12 +167,12 @@ export function WaniKaniLesson({
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
+        <SubHeader
+          title="WaniKani"
+          right={`${position + 1} of ${session.batch.length}`}
+          onBack={onBack}
+        />
         <View style={{paddingHorizontal: contentInset}}>
-          <SubHeader
-            title="WaniKani"
-            right={`${position + 1} of ${session.batch.length}`}
-            onBack={onBack}
-          />
           <ProgressLine value={progress} height={3} />
         </View>
         <ScrollView
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.l,
     paddingBottom: spacing.xl,
   },
-  content: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  content: CONTENT_COLUMN,
   hero: {alignItems: "center", marginTop: spacing.l, marginBottom: spacing.xl},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
   promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},

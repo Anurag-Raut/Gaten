@@ -22,7 +22,7 @@ import {
 import {Button, Icon} from "../components";
 import type {IconName} from "../icons";
 import {useTheme} from "../theme";
-import {shape, spacing, typeScale} from "../tokens";
+import {contentInsetFor, shape, spacing, typeScale} from "../tokens";
 
 /**
  * A state with no results to show: what happened, and — when something can be done — the one
@@ -52,7 +52,7 @@ export function SearchNotice({
       style={styles.noticeScroll}
       contentContainerStyle={[
         styles.notice,
-        {padding: width < 360 ? spacing.l : spacing.contentInset},
+        {padding: contentInsetFor(width)},
       ]}
     >
       <View style={[styles.noticeCard, {backgroundColor: colors.surface}]}>

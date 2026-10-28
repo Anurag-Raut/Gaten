@@ -34,7 +34,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useIsFocused} from "@react-navigation/native";
-import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
@@ -86,6 +86,7 @@ import {
 } from "./useAnkiStats";
 import {useWaniKaniStats, type WaniKaniStatsState} from "./useWaniKaniStats";
 import * as Anki from "../../native/GatenAnki";
+import {downloadAnkiDroid} from "../anki/anki-actions";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import type {WaniKaniStatsSnapshot} from "../../native/GatenWaniKani";
 import type {SettingsPageName} from "../navigation";
@@ -178,9 +179,6 @@ const ANKI_FAILURES: Record<
   },
 };
 
-/** Where a reader without AnkiDroid gets it. */
-const ANKI_DROID_URL = "https://play.google.com/store/apps/details?id=com.ichi2.anki";
-
 /** Runs one of the page's own openers, and says so when the device took nothing. */
 function openOrSay(opened: Promise<boolean>, failure: string) {
   void opened
@@ -222,8 +220,7 @@ function ankiAction(
     case "install":
       return {
         label: "Install",
-        onPress: () =>
-          openOrSay(GatenPlatform.openUrl(ANKI_DROID_URL), "Could not open the Play Store"),
+        onPress: downloadAnkiDroid,
       };
     case "grant":
       return {label: "Grant access", onPress: () => grantAnkiAccess(anki.refresh)};
@@ -653,7 +650,7 @@ export function AnalyticsScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingHorizontal: width < 360 ? spacing.l : spacing.contentInset,
+            paddingHorizontal: contentInsetFor(width),
             paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
           },
         ]}
@@ -1001,12 +998,7 @@ export function AnalyticsScreen({
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  content: {
-    width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
-    alignSelf: "center",
-    paddingHorizontal: spacing.contentInset,
-  },
+  content: {...CONTENT_COLUMN, paddingHorizontal: spacing.contentInset},
   // The dismiss target is exactly the content's own box: it adds no height or width of its own, so a
   // tap in the page's empty space still reaches it while every child control keeps its own touch.
   contentDismiss: {width: "100%"},
