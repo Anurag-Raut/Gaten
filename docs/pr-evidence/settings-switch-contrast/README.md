@@ -22,6 +22,7 @@ Rendered evidence for the checked switch colours in `SwitchRow`
 
 | File | State |
 |---|---|
+| `reported-before.png` | **Before, as reported**: the reader's own phone screenshot, dark, Lookup mode **On** |
 | `05-lookup-toggle-on-light.png` | Screen lookup, light — **Lookup mode On** |
 | `06-lookup-toggle-off-light.png` | Screen lookup, light — **Lookup mode Off** |
 | `07-lookup-toggle-off-dark.png` | Screen lookup, dark — **Lookup mode Off** |
@@ -30,6 +31,18 @@ Rendered evidence for the checked switch colours in `SwitchRow`
 Every still carries three switch rows at once: Lookup mode (the row under test), Floating button
 (**On**) and Quick Settings tile (**Off**), so the on and off treatments of the same component sit
 in one frame.
+
+## Before → after
+
+| | Before | After |
+|---|---|---|
+| File | `reported-before.png` | `08-lookup-toggle-on-dark.png` |
+| Source | the reader's own phone, as reported | `emulator-5554`, debug APK built at this head |
+| Frame | 1272×2772, ≈3.5 px/dp | 1080×2340 @ 440 dpi, 2.75 px/dp |
+| Switch | lavender track `rgb(166,180,253)` with a near-black thumb `rgb(17,17,17)` on a `rgb(16,17,21)` page — the thumb disappears where it leaves the track | thumb `rgb(162,176,247)` ≈ `#A5B4FC` on track `rgb(49,46,129)` = `#312E81`, reading against the same `#101114` page |
+
+Different devices and scales, so no pixel-for-pixel equivalence is claimed between the two frames;
+the change they show together is the thumb's colour role.
 
 ## Measured on the stills (1080 px wide, 2.75 px/dp)
 
@@ -48,8 +61,8 @@ states are the shipped behaviour, unchanged: the secondary-icon grey thumb on `s
 
 ## Superseded
 
-The four files here replace the copies taken earlier from the combined dirty build on the old base
-`7d12ac4`; those are no longer the evidence for this branch.
+The four captured stills here replace the copies taken earlier from the combined dirty build on the
+old base `7d12ac4`; those are no longer the evidence for this branch.
 
 ## Not exercised
 
