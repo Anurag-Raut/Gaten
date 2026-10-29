@@ -56,6 +56,18 @@ jobs:
         if: steps.examples-cache.outputs.cache-hit != 'true'
         run: python3 tools/build_examples_db.py
 
+      # The RTK reference asset is generated the same way and verified by the debug build.
+      - name: Cache the generated RTK database
+        id: rtk-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/db/rtk.sqlite
+          key: rtk-${{ hashFiles('tools/build_rtk_db.py') }}
+
+      - name: Build the RTK database
+        if: steps.rtk-cache.outputs.cache-hit != 'true'
+        run: python3 tools/build_rtk_db.py
+
       # The manga-ocr weights are gitignored and fetched by the build, so a run without the cache
       # downloads ~117 MB. The key is bumped by hand when the catalog's URLs or files change.
       - name: Cache the bundled manga-ocr model

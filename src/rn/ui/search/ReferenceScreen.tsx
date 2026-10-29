@@ -17,6 +17,8 @@ import React from "react";
 import {View} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {WaniKaniPanel, type WaniKaniTarget} from "../wanikani/WaniKaniPanel";
+import {RtkKanjiPanel} from "../rtk/RtkKanjiPanel";
+import {useKanjiReferenceSource} from "../kanjiReference";
 import {ScreenHeader} from "../ScreenHeader";
 import {useTheme} from "../theme";
 
@@ -70,6 +72,10 @@ function ReferencePage({
       : undefined;
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  // The chosen reference decides what a kanji page is. Radicals exist only in WaniKani's subject
+  // graph, so a radical page is always WaniKani's regardless of the choice.
+  const source = useKanjiReferenceSource();
+  const rememberKanji = target.kind === "kanji" && source === "rtk";
   return (
     <View
       style={{
@@ -85,14 +91,23 @@ function ReferencePage({
           onBack={onBack}
         />
       )}
-      <WaniKaniPanel
-        target={target}
-        showBack={overlay}
-        onBack={onBack}
-        scrollable
-        onRadical={onOpenRadical}
-        onSettings={onSettings}
-      />
+      {rememberKanji && target.kind === "kanji" ? (
+        <RtkKanjiPanel
+          character={target.character}
+          showBack={overlay}
+          onBack={onBack}
+          scrollable
+        />
+      ) : (
+        <WaniKaniPanel
+          target={target}
+          showBack={overlay}
+          onBack={onBack}
+          scrollable
+          onRadical={onOpenRadical}
+          onSettings={onSettings}
+        />
+      )}
     </View>
   );
 }

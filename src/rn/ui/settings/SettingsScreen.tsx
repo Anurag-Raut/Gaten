@@ -23,6 +23,7 @@ import * as GatenWaniKani from "../../native/GatenWaniKani";
 import * as GatenRecognition from "../../native/GatenRecognition";
 import type {AnkiStatus} from "../../native/GatenAnki";
 import type {SettingsPageName} from "../navigation";
+import {useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme} from "../theme";
 import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
@@ -42,6 +43,7 @@ function ankiSummary(status: AnkiStatus): string {
 export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) => void}) {
   const theme = useTheme();
   const colors = theme.colors;
+  const kanjiReference = useKanjiReferenceSource();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
 
@@ -145,6 +147,12 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               title="WaniKani"
               value={wanikaniConnected ? "Connected" : "Not connected"}
               onPress={() => onOpenPage("wanikani")}
+            />
+            <SettingsRow
+              icon="school"
+              title="Kanji reference"
+              value={kanjiReference === "rtk" ? "Remembering the Kanji" : "WaniKani"}
+              onPress={() => onOpenPage("reference")}
             />
           </SettingsGroup>
           <SettingsGroup title="App" style={{marginTop: 22}}>
