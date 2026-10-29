@@ -127,9 +127,11 @@ private const val GONE_TIMEOUT_MS = 150L
  * short fade of its own, and grows while the dragged finger is over it and shrinks back on the way out;
  * its colours, keyline and round silhouette never change, so a finger on it says only "bigger", never
  * "different". The bubble's own disk answers a tap the same way: it grows and comes straight back down,
- * with its colours untouched, and the lookup waits for that shrink so the capture cannot cut it short.
- * The drag and the clamp are not animations — they answer a finger — and the service takes the windows
- * down outright before a capture.
+ * with its colours untouched. The lookup is fired on the tap itself, not at the end of that shrink:
+ * an accepted capture takes the bubble off screen in the same pass, so the shrink is never drawn for
+ * it, and waiting the animation out only added its duration to every lookup. The drag and the clamp
+ * are not animations — they answer a finger — and the service takes the windows down outright before
+ * a capture.
  */
 class FloatingTriggerButton(
     private val context: Context,
@@ -775,10 +777,14 @@ class FloatingTriggerButton(
                         hideDismiss()
                     }
                 } else {
-                    // The tap's feedback is the disk coming back down; the lookup waits for that to
-                    // finish, because the capture that follows takes the bubble off screen and would
-                    // otherwise cut the shrink short before the reader saw it.
-                    animateBubbleScale(false, onEnd = onTrigger)
+                    // The lookup fires on the tap itself. An accepted capture hides the bubble in the
+                    // same pass (the service's startOrderedCapture → hideThen), so the release shrink
+                    // is never drawn for it: waiting the animation out first only added its duration
+                    // to every lookup. The shrink still plays when the trigger is refused — the
+                    // screen is off or locked, or the tap just closes an open panel — which is the
+                    // case it exists for; the press grow while the finger is held is unchanged.
+                    animateBubbleScale(false)
+                    onTrigger()
                 }
             }
 
@@ -823,14 +829,11 @@ class FloatingTriggerButton(
     /**
      * Eases the bubble's disk between its resting size and its pressed size. Only the scale moves:
      * the fill, keyline, glyph and round silhouette are untouched, so a tap reads the same control,
-     * larger. [onEnd] runs only for the animation that really finished; a drag taking the press over,
-     * or another tap, supersedes it and does not fire it.
+     * larger. A drag taking the press over, or another tap, supersedes a running animation; nothing
+     * is notified on its end, the lookup no longer waits for the shrink.
      */
-    private fun animateBubbleScale(pressed: Boolean, onEnd: (() -> Unit)? = null) {
-        val circle = bubbleView ?: run {
-            onEnd?.invoke()
-            return
-        }
+    private fun animateBubbleScale(pressed: Boolean) {
+        val circle = bubbleView ?: return
         val to = if (pressed) BUBBLE_PRESS_SCALE else 1f
         stopBubbleScale()
         val animator = ValueAnimator.ofFloat(bubbleScale, to).apply {
@@ -847,7 +850,6 @@ class FloatingTriggerButton(
             override fun onAnimationEnd(animation: Animator) {
                 if (bubbleScaleAnimator !== animation) return
                 bubbleScaleAnimator = null
-                onEnd?.invoke()
             }
         })
         bubbleScaleAnimator = animator
