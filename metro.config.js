@@ -6,6 +6,7 @@
  */
 
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const { withReactNativeGrab } = require('react-native-grab/metro');
 
 /**
  * Metro configuration for React Native 0.86.
@@ -13,4 +14,4 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
  */
 const config = {};
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+module.exports = withReactNativeGrab(mergeConfig(getDefaultConfig(__dirname), config));

@@ -40,6 +40,7 @@ import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {reviewStore} from "../review/review-store";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
+import {ReactNativeGrabSurface} from "react-native-grab";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {
@@ -674,49 +675,51 @@ function ChoiceDialog<T extends string | number | null>({
   const {colors} = useTheme();
   return (
     <Modal transparent animationType="fade" onRequestClose={onDismiss}>
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: spacing.xl,
-        }}
-        onPress={onDismiss}
-      >
+      <ReactNativeGrabSurface active style={{flex: 1}}>
         <Pressable
           style={{
-            backgroundColor: colors.surface,
-            borderRadius: 20,
-            paddingVertical: spacing.s,
-            width: "100%",
-            maxWidth: 360,
-            maxHeight: 480,
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: spacing.xl,
           }}
-          onPress={(event: GestureResponderEvent) => event.stopPropagation()}
+          onPress={onDismiss}
         >
-          <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}>
-            {options.map((option, index) => (
-              <PressableScale
-                key={`${option.name}:${index}`}
-                accessibilityRole="button"
-                onPress={() => onSelect(option.id)}
-                style={{
-                  minHeight: 48,
-                  paddingHorizontal: spacing.xl,
-                  paddingVertical: spacing.s,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  borderBottomWidth: index < options.length - 1 ? 1 : 0,
-                  borderBottomColor: colors.outlineVariant,
-                }}
-              >
-                <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{option.name}</Text>
-              </PressableScale>
-            ))}
-          </ScrollView>
+          <Pressable
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 20,
+              paddingVertical: spacing.s,
+              width: "100%",
+              maxWidth: 360,
+              maxHeight: 480,
+            }}
+            onPress={(event: GestureResponderEvent) => event.stopPropagation()}
+          >
+            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}>
+              {options.map((option, index) => (
+                <PressableScale
+                  key={`${option.name}:${index}`}
+                  accessibilityRole="button"
+                  onPress={() => onSelect(option.id)}
+                  style={{
+                    minHeight: 48,
+                    paddingHorizontal: spacing.xl,
+                    paddingVertical: spacing.s,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    borderBottomWidth: index < options.length - 1 ? 1 : 0,
+                    borderBottomColor: colors.outlineVariant,
+                  }}
+                >
+                  <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{option.name}</Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </ReactNativeGrabSurface>
     </Modal>
   );
 }
