@@ -1,0 +1,71 @@
+Lookup sheet landscape — capture log (this branch's own build)
+=============================================================
+
+Build under test
+  Branch  fix/lookup-landscape-fullheight @ 1b7b2b6b99bc262e7db487c4f6d631aa875fa5c7
+          (base dev 7e02486e346a164d38443f61f1055ce6e96d811b)
+  APK     app/build/outputs/apk/debug/app-x86_64-debug.apk, 294,648,986 B
+  SHA-256 d24568eabbf66253fc0a2a40f8df99d8d262101b802b724ca23e9e45fb570c46
+          host file and the installed /data/app/~~0T5A1604KhbyQih9ibqjMA==/com.gaten-…/base.apk
+          both hashed in this session: identical.
+  Bundle  assets/index.android.bundle SHA-256 493e14d9… (contains this change; the pre-fix baseline
+          bundle does not contain the `inlineFooter` marker this change adds).
+
+Device  emulator-5554, AVD Gaten_Lookup_Review (pixel_5, API 34, x86_64), 1080x2340 @ 440 dpi,
+        font scale 0.94, light theme. Portrait at the start and restored at the end
+        (user_rotation=0, accelerometer_rotation=1); landscape was driven with
+        `settings put system accelerometer_rotation 0` + `user_rotation 1`.
+
+Fixture Gaten Home -> Recently looked up -> 猫 word detail (no typing; no search-history write).
+
+Commands (adb only; no agent-device helper, service bound throughout)
+  adb install -r app/build/outputs/apk/debug/app-x86_64-debug.apk
+  adb shell am start -n com.gaten/.app.MainActivity
+  adb shell am broadcast -a com.gaten.action.TRIGGER_LOOKUP -p com.gaten     # opens (or toggles)
+  adb shell input tap <x> <y>            # 01 used 112,447 (the 猫 line)
+                                         # 02/03 used 581,493 (the ねこ・ネコ line)
+  adb shell input swipe 1170 950 1170 300 600   # x2, the entry scroller in landscape
+  adb exec-out screencap -p > <file>.png
+  adb shell screenrecord --time-limit 34 /sdcard/clip-landscape-primary.mp4
+  adb shell screenrecord --time-limit 20 /sdcard/clip-landscape-dismiss.mp4
+  adb logcat -v time -s Gaten
+
+Panel geometry measured from the stills (2.75 px/dp)
+  portrait  01 : panel x 0..1079 (full width), y 701..2339      -> the 70 % portrait snap
+  landscape 02 : panel x 400..1939 (1540 px = 560 dp), y 0..1079 -> the full window height
+  landscape 03 : identical to 02 (only the scrolled content differs)
+  Landscape gutters are 145 dp of dimmed frozen frame on each side.
+
+Log excerpts (transcribed from `adb logcat -v time -s Gaten` during the session)
+  portrait, 18:52
+    18:52:20.041 Overlay window added for a 1080x2340 capture (+106 ms since the trigger)
+    18:52:23.456 Tap hit line 2
+    18:52:23.817 Tap complete in 359 ms
+    18:52:43.829 Media resume: sending a media play key event
+    18:52:43.842 Overlay window removed (resumed=true)          # press above the panel
+
+  landscape, 18:55 — one discarded take first
+    18:53:40.979 Mapping: bitmap 2340x1080, view 2340x1080, origin (0, 0), scale 1.0x1.0
+    18:53:41.426 Screen scan ready in 401 ms (7 lines)
+    18:53:44.398 Tap missed: no text box within 66 px            # a tap on the 猫 glyph
+    …that take was discarded: the isolated 猫 glyph is not in the landscape index, so the readings
+    line ねこ・ネコ is the tap target.
+
+  landscape, 18:55 — the take behind 02/03/04/05
+    18:55:14.155 Screen scan ready in 451 ms (7 lines)
+    18:55:17.086 Tap hit line 2
+    18:55:17.473 Tap complete in 387 ms
+    (two swipes, no log lines)
+    18:55:53.x  press inside the panel (1714,298) -> no line at all
+    18:55:55.980 Media resume: sending a media play key event
+    18:55:55.996 Overlay window removed (resumed=true)          # press in the side gutter (150,540)
+
+Negative control
+  After the inside-panel press: `grep -c 'Overlay window removed'` = 0, and the post-press still was
+  byte-identical to 03-landscape-anki-inline.png (both md5 aee6cd2213830fed52b59e2c413a7762).
+
+Device state restored after the pass
+  user_rotation=0, accelerometer_rotation=1, wm size 1080x2340, font_scale 0.94,
+  enabled_accessibility_services = com.gaten/com.gaten.app.GatenAccessibilityService (enabled,
+  bound), no accessibility-overlay window, Gaten MainActivity in the foreground, the /sdcard clips
+  deleted. No app data cleared, no settings changed beyond the rotation toggles above.
