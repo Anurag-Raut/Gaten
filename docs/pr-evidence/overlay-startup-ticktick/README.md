@@ -10,7 +10,8 @@ the service's own stage lines.
 |---|---|---|
 | The floating bubble fires the lookup **on the tap** instead of waiting for its 150 ms release-shrink animation to end | `app/src/main/java/com/gaten/app/trigger/FloatingTriggerButton.kt` | `bubble-baseline.log` vs `bubble-fixed.log` |
 | The now-unused `onEnd` callback on the shrink animation was removed | same file | — |
-| Stale comment corrected: the service **does** read the interactive window list (`flagRetrieveInteractiveWindows` is set, `OverlayWindowController.focusWentToInputMethod` uses it), but the window focus returns at dismissal, not when the collapse animation ends, so the Quick Settings wait stays a fixed 400 ms | `app/src/main/java/com/gaten/app/GatenAccessibilityService.kt` | comment only |
+| The Quick Settings tile's fixed shade wait is cut **400 ms → 300 ms**, calibrated to the measured collapse | `app/src/main/java/com/gaten/app/GatenAccessibilityService.kt` | `tile-wait.log` |
+| Stale comment corrected: the service **does** read the interactive window list (`flagRetrieveInteractiveWindows` is set, `OverlayWindowController.focusWentToInputMethod` uses it), but the window focus returns at dismissal, not when the collapse animation ends, so the wait stays a fixed one | same file | comment |
 | Inline `onMain` entry-handling was **reverted**; triggers keep their original posted-to-main-queue semantics | `app/src/main/java/com/gaten/app/GatenAccessibilityService.kt` | not in diff |
 
 ## Method
@@ -48,6 +49,20 @@ Broadcast trigger (service log clock, `Trigger accepted` → stage), bubble enab
 
 The broadcast path is unchanged within noise: it never had the shrink wait.
 
+Quick Settings tile (service log clock, `Trigger accepted` → stage; the shade is dismissed by the
+tile itself and the service then waits out the collapse):
+
+| Stage | Before (400 ms wait) | After (300 ms wait) | Difference |
+|---|---|---|---|
+| `performCapture called` | 404–408 ms | 303 ms | ≈ −100 ms |
+| `Overlay window added` | 441–493 ms | 329–338 ms | ≈ −130 ms |
+| `Frozen frame on screen` | 484–540 ms | 371–375 ms | ≈ −140 ms |
+
+The collapse itself measured ≈150–200 ms on this emulator (animation scale 1.0); nothing earlier is
+safe (focus returns at ≈125 ms, before it finishes, and the window list keeps the shade at
+full-display bounds throughout). All eight tile takes with the 300 ms wait froze a shade-free frame
+(top-band mean luminance 151.9–152.6). Detail and caveats: `tile-wait.log`.
+
 ## Text readiness (source-confirmed; not changed by this patch)
 
 The frozen frame and "text you can tap" are two different moments:
@@ -80,10 +95,11 @@ dropped only on 90 s idle, memory pressure, or service unbind).
   (A/B/C proposals declined pending evidence).
 - **Bubble wait fixed** (≈155 ms, measured). **All-trigger ~500 ms not reproduced and not resolved** —
   the time that remains is the two terms above, neither of which this patch changed.
-- The Quick Settings tile keeps its fixed **400 ms** shade wait. An early exit from the window list
-  was prototyped and removed: the window focus returns at dismissal, not when the collapse animation
-  finishes, so a focus-based exit could freeze a half-collapsed shade. Verifying an early exit needs
-  actual tile-path captures (bitmap shown to contain no shade), which were not run.
+- The Quick Settings tile's shade wait is **300 ms**, down from 400 ms. An early exit from the
+  window list was prototyped and rejected: the window focus returns at dismissal, not when the
+  collapse animation finishes, and the window list keeps the shade at full-display bounds for the
+  whole animation, so no earlier signal is safe. 300 ms is the measured ≈150–200 ms collapse plus a
+  safety band; on a slower device a half-collapsed shade in a capture means this must go back up.
 - One-time cold cost is visible on the first capture after the service starts (~170–250 ms to the
   frozen frame vs ~95 ms warm). This is warm-up and is not the recurring delay.
 - Full-chain smoke on the fixed build (trigger → capture → overlay → frozen frame → ML Kit index,
