@@ -418,8 +418,9 @@ Selection must be conveyed semantically as well as visually.
 - A field's name is `labelLarge` in `onSurface` — the strongest of the two labels a form has, so it
   never reads as another section heading (the quiet 12 / 18 `labelMedium` above it). A field that
   carries only a placeholder states its name in its accessible label too.
-- Switch rows use the same 60 dp minimum and flexible copy block. On-state tracks use the
-  accent with paired foreground; disabled state uses the theme's disabled roles.
+- Switch rows use the same 60 dp minimum and flexible copy block. The thumb disc reaches past its
+  track, so the on state fills the thumb with the accent and the track with `accentSubtle`; off keeps
+  `surfaceVariant` with the secondary-icon grey thumb, disabled the theme's disabled roles.
 - Shared dialogs center a surface with 20 dp corners and 24 dp padding over a 50% black
   backdrop. Cap width at 360 dp; long help content scrolls, with actions remaining reachable.
 - Keep permission disclosure explicit, including its acknowledgement where required.

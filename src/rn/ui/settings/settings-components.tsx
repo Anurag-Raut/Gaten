@@ -371,11 +371,13 @@ export function SwitchRow({
         accessibilityLabel={title}
         accessibilityHint={summary}
         style={{minHeight: 48}}
+        // Android's thumb is a disc larger than its track, so it reaches past the track onto the
+        // row's background: the accent fills the thumb and its quiet container fills the track.
         trackColor={{
           false: disabled ? colors.disabled : colors.surfaceVariant,
-          true: disabled ? colors.disabled : colors.accent,
+          true: disabled ? colors.disabled : colors.accentSubtle,
         }}
-        thumbColor={disabled ? colors.onDisabled : value ? colors.onActionPrimary : colors.iconSecondary}
+        thumbColor={disabled ? colors.onDisabled : value ? colors.accent : colors.iconSecondary}
       />
     </View>
   );
