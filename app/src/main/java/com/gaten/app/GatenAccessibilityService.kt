@@ -51,8 +51,14 @@ import java.util.concurrent.Executors
 
 /**
  * How long a trigger from the Quick Settings tile waits for the shade to collapse before capturing.
- * The service does not ask for the window list (flagRetrieveInteractiveWindows), so it cannot watch
- * the shade go and waits a fixed time long enough for a normal collapse instead.
+ *
+ * The service *can* see the shade — `flagRetrieveInteractiveWindows` is set in
+ * `accessibility_service_config.xml`, and `OverlayWindowController.focusWentToInputMethod` reads the
+ * window list for the IME — but the window focus is handed back when the shade is dismissed, not
+ * when its collapse animation has finished, so focus cannot prove the shade is off the screen. An
+ * early exit on that signal could freeze a half-collapsed shade into the capture, so the tile keeps
+ * a fixed wait long enough for a normal collapse. Verified only by an actual capture on the tile
+ * path; do not shorten this from the window list alone.
  */
 private const val ShadeCollapseMs = 400L
 
