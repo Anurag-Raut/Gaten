@@ -1,0 +1,14 @@
+# discard: tap in Scanning, then dismiss (BACK) before the index settled
+1793278754.901  8834  8834 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793278754.957  8834  8834 D Gaten   : Overlay window added for a 1080x2340 capture (+56 ms since the trigger)
+1793278754.999  8834  8834 D Gaten   : Frozen frame on screen (+98 ms since the trigger)
+1793278755.118  8834  8834 D Gaten   : Tap queued while the screen index is still building
+1793278755.610  8834  8834 D Gaten   : Overlay window removed (resumed=true)
+# discard: tap in Scanning, then a lasso (swipe) before the index settled
+1793278762.431  8834  8834 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793278762.473  8834  8834 D Gaten   : Overlay window added for a 1080x2340 capture (+43 ms since the trigger)
+1793278762.516  8834  8834 D Gaten   : Frozen frame on screen (+85 ms since the trigger)
+1793278762.646  8834  8834 D Gaten   : Tap queued while the screen index is still building
+1793278763.293  8834  9011 D Gaten   : Early screen scan ready in 825 ms
+1793278763.293  8834  8834 D Gaten   : Screen scan ready in 765 ms (26 lines)
+1793278763.502  8834  8834 D Gaten   : Overlay window removed (resumed=true)

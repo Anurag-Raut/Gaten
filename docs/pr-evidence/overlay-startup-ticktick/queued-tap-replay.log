@@ -1,0 +1,10 @@
+# queued-tap replay recording (screenrecord, 15 s) — same log window as queued-tap-replay.mp4
+1793278907.211  8834  8834 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793278907.310  8834  8834 D Gaten   : Overlay window added for a 1080x2340 capture (+99 ms since the trigger)
+1793278907.350  8834  8834 D Gaten   : Frozen frame on screen (+139 ms since the trigger)
+1793278907.443  8834  8834 D Gaten   : Tap queued while the screen index is still building
+1793278908.154  8834  9014 D Gaten   : Early screen scan ready in 853 ms
+1793278908.159  8834  8834 D Gaten   : Screen scan ready in 785 ms (18 lines)
+1793278908.177  8834  8834 D Gaten   : Replaying the queued tap
+1793278908.177  8834  8834 D Gaten   : Tap hit line 11
+1793278908.691  8834  8834 D Gaten   : Tap complete in 512 ms

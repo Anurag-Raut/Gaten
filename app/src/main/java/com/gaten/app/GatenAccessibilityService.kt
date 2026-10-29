@@ -51,10 +51,21 @@ import java.util.concurrent.Executors
 
 /**
  * How long a trigger from the Quick Settings tile waits for the shade to collapse before capturing.
- * The service does not ask for the window list (flagRetrieveInteractiveWindows), so it cannot watch
- * the shade go and waits a fixed time long enough for a normal collapse instead.
+ *
+ * The service can see the shade — `flagRetrieveInteractiveWindows` is set in
+ * `accessibility_service_config.xml` — but nothing short of the pixels proves the collapse has
+ * finished. The window list keeps the shade's window at full-display bounds for the whole
+ * animation and only hands focus back when the dismissal starts, on the emulator at ≈125 ms into a
+ * ≈185 ms collapse; SystemUI emits no completion event. Capturing on that signal froze a
+ * half-collapsed shade, so the tile waits a fixed time.
+ *
+ * Measured on the API 34 emulator at animation scale 1.0, the shade is visually gone ≈150–200 ms
+ * after the dismissal dispatch. This wait is that bound plus a safety band; every tile capture in
+ * `docs/pr-evidence/overlay-startup-ticktick/` was taken with it and held no shade. If a device's
+ * collapse is slower, the band absorbs it; a half-collapsed shade in a capture means this is too
+ * short for that device and it must go back up.
  */
-private const val ShadeCollapseMs = 400L
+private const val ShadeCollapseMs = 300L
 
 /**
  * Gaten' only use of the accessibility framework: screenshots the screen when a lookup is
