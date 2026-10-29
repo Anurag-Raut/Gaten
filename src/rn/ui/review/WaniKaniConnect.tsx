@@ -17,15 +17,9 @@
  * There is no second way in: the prototype's button simply simulated a connection, and this one
  * authenticates, so the reader's own token is what the flow asks for.
  */
-import React, {useState} from "react";
-import {
-  KeyboardAvoidingView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import React, {useEffect, useRef, useState} from "react";
+import {Keyboard, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import {FieldLabel, TextField} from "../settings/settings-components";
@@ -90,16 +84,34 @@ export function WaniKaniConnect({
   };
 
   const pending = busy || connecting;
+  const scrollRef = useRef<ScrollView>(null);
+
+  // The action bar is pinned under the form, so with the keyboard up the focused field can sit
+  // partly behind it: once the keyboard has settled, the form is scrolled to its end so the field
+  // and the link under it stay above the action, which the KeyboardAvoidingView has lifted into
+  // view. A no-op when the form already fits.
+  useEffect(() => {
+    const sub = Keyboard.addListener("keyboardDidShow", () => {
+      scrollRef.current?.scrollToEnd({animated: true});
+    });
+    return () => sub.remove();
+  }, []);
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      {/* The KeyboardAvoidingView (the project's keyboard library, as the review and lesson screens
+          use) wraps only the header and the form, so the token field lifts clear of the keyboard. */}
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <SubHeader title="WaniKani" onBack={onBack} />
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           style={styles.screen}
-          contentContainerStyle={[styles.body, {paddingHorizontal: contentInset}]}
+          contentContainerStyle={[
+            styles.body,
+            {paddingLeft: insets.left + contentInset, paddingRight: insets.right + contentInset},
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           <StateBlock
@@ -124,6 +136,7 @@ export function WaniKaniConnect({
               autoCapitalize="none"
               autoCorrect={false}
               editable={!pending}
+              returnKeyType="go"
               accessibilityLabel="WaniKani personal access token"
               onSubmitEditing={() => {
                 if (token.trim() !== "" && !pending) connect();
@@ -148,14 +161,17 @@ export function WaniKaniConnect({
             )}
           </View>
         </ScrollView>
-        <ActionFooter bottomInset={insets.bottom}>
-          <FilledAction
-            label="Connect WaniKani"
-            disabled={pending || token.trim() === ""}
-            onPress={connect}
-          />
-        </ActionFooter>
       </KeyboardAvoidingView>
+      {/* The action stays at the screen's bottom edge, deliberately outside the KeyboardAvoidingView:
+          with the keyboard up it passes *under* the IME rather than rising above it, while the token
+          field inside the KAV lifts clear of the keyboard. The IME action key is the same connect. */}
+      <ActionFooter bottomInset={insets.bottom}>
+        <FilledAction
+          label="Connect WaniKani"
+          disabled={pending || token.trim() === ""}
+          onPress={connect}
+        />
+      </ActionFooter>
     </View>
   );
 }
