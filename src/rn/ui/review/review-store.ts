@@ -1602,6 +1602,12 @@ class ReviewStore {
     this.pausedAt = null;
     if (this.state.busy) return;
     const { step } = this.state;
+    if (step.kind === "blocked" &&
+        (step.failure === "NOT_INSTALLED" || step.failure === "NOT_SET_UP")) {
+      // Installing or setting up AnkiDroid happens outside Gaten; recheck when the reader returns.
+      this.openAnki();
+      return;
+    }
     if (step.kind === "decks") {
       this.openDecks();
       return;

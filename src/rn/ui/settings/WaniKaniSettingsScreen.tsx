@@ -25,13 +25,14 @@ import {KeyboardAvoidingView, ScrollView, Text, View, useWindowDimensions} from 
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
-import {Button, Icon, IconButton} from "../components";
+import {Button, Icon} from "../components";
 import {reviewStore} from "../review/review-store";
+import {ScreenHeader} from "../ScreenHeader";
 import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
 import {FieldLabel, SettingsGroup, TextField} from "./settings-components";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
-import {spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 
 /** WaniKani's own level count; an account granted all of them needs no note about what is covered. */
 const WANIKANI_LEVELS = 60;
@@ -80,7 +81,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const horizontalInset = width < 360 ? 16 : 22;
+  const horizontalInset = contentInsetFor(width);
   const [token, setToken] = useState("");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [changingToken, setChangingToken] = useState(false);
@@ -301,21 +302,8 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   // and no `keyboardVerticalOffset` because this view is the scene's top child.
   return (
     <KeyboardAvoidingView behavior="padding" style={{flex: 1, backgroundColor: colors.background}}>
-      <View
-        style={{
-          // 64 dp below the status bar, as the Kotlin's TopAppBar is — see SettingsPageScaffold.
-          minHeight: 64 + insets.top,
-          flexDirection: "row",
-          alignItems: "center",
-          paddingTop: insets.top,
-        }}
-      >
-        {/* The Kotlin bar's navigation icon: this page is pushed over the tab, so the bar it hides
-            leaves the arrow as the way back. */}
-        <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onClose} color={colors.onSurface} />
-        <Text style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]} numberOfLines={1}>
-          WaniKani
-        </Text>
+      <View style={{paddingTop: insets.top}}>
+        <ScreenHeader title="WaniKani" onBack={onClose} />
       </View>
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -323,9 +311,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         // With the keyboard up, a tap on Save, Disconnect or a row is the row's own.
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          maxWidth: 560,
-          width: "100%",
-          alignSelf: "center",
+          ...CONTENT_COLUMN,
           paddingLeft: insets.left + horizontalInset,
           paddingRight: insets.right + horizontalInset,
           paddingTop: spacing.s,

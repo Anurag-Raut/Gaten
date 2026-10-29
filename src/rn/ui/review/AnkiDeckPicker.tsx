@@ -22,10 +22,10 @@
 import React, {useState} from "react";
 import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {IconButton} from "../components";
-import {DialogShell} from "../settings/settings-components";
+import {DialogShell} from "../DialogShell";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import {useAnkiDecks, type AnkiDecksFailure} from "../anki/useAnkiDecks";
 import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SubHeader, SuccessCheck} from "./review-ui";
@@ -81,7 +81,7 @@ export function AnkiDeckPicker({
   const anki = useAnkiDecks();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   // No cached/offline state is labelled here: the AnkiDroid read is a local provider read, and the
   // store funnels any failure to the full-screen blocked/failed step.
   // Parent decks count their children, so only the top level is added up: the same rule Home's
@@ -131,9 +131,7 @@ export function AnkiDeckPicker({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="Anki" onBack={onBack} />
-      </View>
+      <SubHeader title="Anki" onBack={onBack} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -278,7 +276,7 @@ export function AnkiDeckPicker({
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
-  body: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  body: CONTENT_COLUMN,
   title: {marginTop: 18},
   caption: {marginTop: 22},
   // The Today heading row: the caption's own text stretches, the help target stands beside it, and

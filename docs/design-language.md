@@ -110,7 +110,29 @@ cards and rounded section tiles.
 | React Native semantic colors | `src/rn/ui/theme.tsx` |
 | Typography, spacing and named radii | `src/rn/ui/tokens.ts` |
 | Shared controls | `src/rn/ui/components.tsx` |
+| Shared pushed-screen app bar | `src/rn/ui/ScreenHeader.tsx` |
+| Shared dialogs | `src/rn/ui/DialogShell.tsx` |
+| Responsive content inset and column | `contentInsetFor` and `CONTENT_COLUMN` in `src/rn/ui/tokens.ts` |
 | Floating tab navigation | `src/rn/ui/BottomBar.tsx` |
+
+## Shared screen structure (28 October 2026)
+
+| Pattern | Shared implementation |
+| --- | --- |
+| Navigation headers | `ScreenHeader`: a left-aligned `titleLarge` title beside a 48 dp back target, in a minimum-64 dp bar. Handles horizontal safe areas and trailing Help, Save or count content. Screens supply the top safe-area inset once. |
+| Primary actions | Review's `FilledAction` delegates to the same `Button` used by Settings and Search. Button typography, disabled states, accent colors and press feedback have one implementation. |
+| Dialogs | Settings, study hubs and review import the app-level `DialogShell`; their content and actions stay with each caller. |
+| Content layout | `contentInsetFor(width)` supplies 16 dp below 360 dp and 22 dp otherwise. `CONTENT_COLUMN` caps and centers content at 560 dp; callers add their own padding. |
+
+All pushed review, settings and search detail pages use the shared app bar, including Anki settings
+while loading. Full-page kanji/radical details keep their subject heading beneath the app bar; the
+lookup overlay keeps its local heading and back action. Large header text can grow the bar past
+64 dp, and long titles ellipsize against trailing controls.
+
+The AnkiDroid-not-installed state offers **Download AnkiDroid**, using the same store-opening action
+as Analytics. Returning after installation or first-time setup rechecks AnkiDroid's availability.
+Study inputs, authored Anki HTML, charts and lookup-overlay geometry keep their own presentation.
+These changes have no new device captures; compilation checks do not establish visual verification.
 
 ## Production choices
 

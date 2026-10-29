@@ -20,7 +20,7 @@ import type {Accent, ThemeMode} from "../../native/GatenTheme";
 import {PressableScale} from "../PressableScale";
 import {SwitchRow, SettingsGroup, SettingsPageScaffold, RowIcon} from "./settings-components";
 import {useTheme} from "../theme";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {contentInsetFor, MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 
 /** The accents, in the order the Compose screen laid them out: a 4 + 3 block. */
 const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", "Black"];
@@ -28,7 +28,7 @@ const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", 
 export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   const theme = useTheme();
   const {width} = useWindowDimensions();
-  const horizontalPadding = width < 360 ? 16 : 22;
+  const horizontalPadding = contentInsetFor(width);
   const accentGridWidth = Math.min(width - horizontalPadding * 2, MAX_CONTENT_WIDTH - 44);
   const accentCellWidth = Math.floor(
     (accentGridWidth - spacing.s * 3) / 4

@@ -11,7 +11,7 @@
  * bridge (see `theme.tsx`).
  */
 import {Easing as ReanimatedEasing} from "react-native-reanimated";
-import type {TextStyle} from "react-native";
+import type {TextStyle, ViewStyle} from "react-native";
 
 /** The spacing scale, in dp. */
 export const spacing = {
@@ -25,8 +25,23 @@ export const spacing = {
   xxl: 32,
 } as const;
 
+/**
+ * The house horizontal content inset in dp, from the screen's own width: the usual
+ * [spacing.contentInset] (22), tightened to [spacing.l] (16) on phones narrower than 360 dp.
+ */
+export function contentInsetFor(width: number): number {
+  return width < 360 ? spacing.l : spacing.contentInset;
+}
+
 /** Nothing in the app is wider than this, however wide the screen is. */
 export const MAX_CONTENT_WIDTH = 560;
+
+/**
+ * The shared content column: as wide as its parent up to the [MAX_CONTENT_WIDTH] cap, centred. It
+ * carries no padding of its own, so a consumer adds the horizontal inset (see [contentInsetFor])
+ * and any surrounding rhythm it needs.
+ */
+export const CONTENT_COLUMN: ViewStyle = {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"};
 
 /** Two cards are put beside each other from here on; below it a phone has width for one. */
 export const TWO_COLUMN_WIDTH = 640;

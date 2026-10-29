@@ -34,7 +34,7 @@ import type {
 import {Button, Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
-import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 
 /** What was tapped: a kanji by its character, or a radical by its WaniKani subject id. */
 export type WaniKaniTarget =
@@ -175,7 +175,7 @@ export function WaniKaniPanel({
     <View
       style={[
         styles.content,
-        {paddingHorizontal: embedded ? 0 : width < 360 ? spacing.l : spacing.contentInset},
+        {paddingHorizontal: embedded ? 0 : contentInsetFor(width)},
       ]}
     >
       {lookup === null && unreachable === null && <Skeleton compact={compact} />}
@@ -233,7 +233,10 @@ export function WaniKaniPanel({
 
   return (
     <View style={styles.root}>
-      <View style={styles.headerRow}>
+      <View style={[
+        styles.headerRow,
+        !showBack && !embedded && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
+      ]}>
         {showBack && onBack && (
           <IconButton
             name="arrow_back"
@@ -309,7 +312,7 @@ function AvailableContent({
   const meaningMnemonic = (radical ?? kanji)?.meaningMnemonic;
 
   return (
-    <View style={{maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center", width: "100%"}}>
+    <View style={CONTENT_COLUMN}>
       {/* A radical's own drawing is what the page is about, so it gets the page's one focal
           surface; a kanji has its character in the heading and needs none. */}
       {radical && (
@@ -567,7 +570,7 @@ function Skeleton({compact}: {compact: boolean}) {
   return (
     <View
       accessibilityLabel="Looking up WaniKani…"
-      style={{maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center", width: "100%"}}
+      style={CONTENT_COLUMN}
     >
       <View style={styles.sectionBlock}>
         <SkeletonLabel compact={compact} />
@@ -608,7 +611,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.s,
     paddingBottom: spacing.xl,
   },
-  scrollContent: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  scrollContent: CONTENT_COLUMN,
   // Match the landing lookup modal's hierarchy: the hero glyph and the gloss use the same roles
   // the shared entry sections do, so a WaniKani page reads as the same sheet.
   heroGlyph: {fontSize: 36, fontWeight: "700"},
@@ -642,9 +645,7 @@ const styles = StyleSheet.create({
   },
   notes: {gap: spacing.s, marginTop: spacing.s},
   notice: {
-    width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
-    alignSelf: "center",
+    ...CONTENT_COLUMN,
     borderRadius: shape.medium,
     padding: spacing.l,
     marginTop: spacing.s,

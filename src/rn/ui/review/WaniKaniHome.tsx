@@ -19,10 +19,11 @@
 import React, {useState} from "react";
 import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {DialogShell} from "../settings/settings-components";
+import {DialogShell} from "../DialogShell";
 import {Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {ScreenHeader} from "../ScreenHeader";
+import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {MetricPair, useAnalyticsEntrance} from "../analytics/ink";
 import type {WaniKaniHubState} from "./review-store";
@@ -132,7 +133,7 @@ export function WaniKaniHome({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width, fontScale} = useWindowDimensions();
-  const inset = width < 360 ? spacing.l : spacing.contentInset;
+  const inset = contentInsetFor(width);
   // Narrow screens and large type get a taller floor for the row: its lines wrap instead of clipping.
   const stacked = width < 340 || fontScale >= 1.5;
   const [reviews, lessons] = deriveWaniKaniHub(hub);
@@ -232,12 +233,32 @@ export function WaniKaniHome({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
+      <ScreenHeader
+        title="WaniKani"
+        onBack={onBack}
+        trailing={
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Refresh"
+            accessibilityState={{disabled: locked}}
+            disabled={locked}
+            onPress={onRetrySync}
+            style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
+          >
+            <Icon
+              name="refresh"
+              size={22}
+              color={locked ? colors.onSurfaceVariant : colors.accent}
+            />
+          </PressableScale>
+        }
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.body,
           {
-            paddingTop: spacing.s,
+            paddingTop: spacing.xl,
             paddingBottom: insets.bottom + spacing.xl,
             paddingLeft: insets.left + inset,
             paddingRight: insets.right + inset,
@@ -245,31 +266,6 @@ export function WaniKaniHome({
         ]}
       >
         <View style={styles.content}>
-          <View style={styles.top}>
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              onPress={onBack}
-              style={styles.back}
-            >
-              <Icon name="arrow_back" size={24} color={colors.onSurface} />
-            </PressableScale>
-            <Text style={[styles.topTitle, {color: colors.onSurface}]}>WaniKani</Text>
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Refresh"
-              accessibilityState={{disabled: locked}}
-              disabled={locked}
-              onPress={onRetrySync}
-              style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
-            >
-              <Icon
-                name="refresh"
-                size={22}
-                color={locked ? colors.onSurfaceVariant : colors.accent}
-              />
-            </PressableScale>
-          </View>
           <Text accessibilityRole="header" style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
             Your study
           </Text>
@@ -375,13 +371,10 @@ export function WaniKaniHome({
 const styles = StyleSheet.create({
   screen: {flex: 1},
   body: {flexGrow: 1},
-  content: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
-  top: {flexDirection: "row", alignItems: "center", minHeight: 48, marginBottom: 29},
-  back: {width: 48, height: 48, alignItems: "flex-start", justifyContent: "center"},
-  // The header's one button, drawn as the analytics page draws its own: a quiet circular chip, not a
-  // bare icon.
-  refresh: {width: 44, height: 44, borderRadius: 22, marginLeft: "auto", alignItems: "center", justifyContent: "center"},
-  topTitle: {...typeScale.titleLarge, flexShrink: 1},
+  content: CONTENT_COLUMN,
+  // The bar's one trailing button, drawn as the analytics page draws its own: a quiet circular chip,
+  // not a bare icon.
+  refresh: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
   subtitle: {fontFamily: "Inter", fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   updating: {marginTop: 4},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.

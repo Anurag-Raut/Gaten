@@ -35,15 +35,16 @@ import type {
   AnkiStatus,
 } from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {Button, Icon, IconButton} from "../components";
+import {Button, Icon} from "../components";
+import {DialogShell} from "../DialogShell";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {reviewStore} from "../review/review-store";
+import {ScreenHeader} from "../ScreenHeader";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
-import {spacing, typeScale} from "../tokens";
+import {contentInsetFor, spacing, typeScale} from "../tokens";
 import {
-  DialogShell,
   CONTENT_COLUMN,
   FieldLabel,
   HelpAction,
@@ -82,7 +83,7 @@ export function AnkiSettingsScreen({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const horizontalInset = width < 360 ? 16 : 22;
+  const horizontalInset = contentInsetFor(width);
   const [draft, setDraft] = useState<AnkiPreferencesResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<AnkiStatus>("notInstalled");
@@ -204,22 +205,22 @@ export function AnkiSettingsScreen({
 
   if (draft == null || saved == null) {
     return (
-      <View style={{flex: 1, backgroundColor: colors.background, padding: spacing.xl, justifyContent: "center"}}>
-        <View style={{alignSelf: "flex-start", position: "absolute", top: insets.top + spacing.s, left: spacing.l}}>
-          <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onClose} color={colors.onSurface} />
+      <View style={{flex: 1, backgroundColor: colors.background, paddingTop: insets.top}}>
+        <ScreenHeader title="Anki cards" onBack={onClose} />
+        <View style={{flex: 1, padding: spacing.xl, paddingBottom: spacing.xl + insets.bottom, justifyContent: "center"}}>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+            {preferencesLoadFailed ? "Could not read Anki settings" : "Reading Anki settings…"}
+          </Text>
+          {preferencesLoadFailed && (
+            <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
+              <Button
+                label="Retry"
+                onPress={() => setPreferencesRefresh((value) => value + 1)}
+                disabled={preferencesLoading}
+              />
+            </View>
+          )}
         </View>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-          {preferencesLoadFailed ? "Could not read Anki settings" : "Reading Anki settings…"}
-        </Text>
-        {preferencesLoadFailed && (
-          <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
-            <Button
-              label="Retry"
-              onPress={() => setPreferencesRefresh((value) => value + 1)}
-              disabled={preferencesLoading}
-            />
-          </View>
-        )}
       </View>
     );
   }
@@ -323,25 +324,21 @@ export function AnkiSettingsScreen({
   // rectangle the calculation expects.
   return (
     <KeyboardAvoidingView behavior="padding" style={{flex: 1, backgroundColor: colors.background}}>
-      <View
-        style={{
-          // 64 dp below the status bar, as the Kotlin's TopAppBar is — see SettingsPageScaffold.
-          minHeight: 64 + insets.top,
-          flexDirection: "row",
-          alignItems: "center",
-          paddingTop: insets.top,
-        }}
-      >
-        <IconButton name="arrow_back" accessibilityLabel="Back" onPress={leave} color={colors.onSurface} />
-        <Text style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]} numberOfLines={1}>
-          Anki cards
-        </Text>
-        <HelpAction paragraphs={HELP_PARAGRAPHS} />
-        <Button
-          variant="text"
-          label="Save"
-          disabled={!dirty || (draftDirty && error != null) || preferencesLoading || loading || loadingFields || saving}
-          onPress={save}
+      <View style={{paddingTop: insets.top}}>
+        <ScreenHeader
+          title="Anki cards"
+          onBack={leave}
+          trailing={
+            <>
+              <HelpAction paragraphs={HELP_PARAGRAPHS} />
+              <Button
+                variant="text"
+                label="Save"
+                disabled={!dirty || (draftDirty && error != null) || preferencesLoading || loading || loadingFields || saving}
+                onPress={save}
+              />
+            </>
+          }
         />
       </View>
       <ScrollView
@@ -352,7 +349,6 @@ export function AnkiSettingsScreen({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           ...CONTENT_COLUMN,
-          maxWidth: 560,
           paddingLeft: insets.left + horizontalInset,
           paddingRight: insets.right + horizontalInset,
           paddingTop: spacing.xl,

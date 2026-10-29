@@ -15,7 +15,6 @@
  */
 import React, {useRef, useState} from "react";
 import {
-  Modal,
   Pressable,
   ScrollView,
   Switch as RNSwitch,
@@ -36,11 +35,13 @@ import {
   IconButton,
   SectionLabel,
 } from "../components";
+import {DialogShell} from "../DialogShell";
 import {DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {InkIcon, type InkIconName} from "../InkIcon";
+import {ScreenHeader} from "../ScreenHeader";
 import {useTheme} from "../theme";
-import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN as CONTENT_BLOCK, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import type {IconName} from "../icons";
 
 /**
@@ -48,12 +49,7 @@ import type {IconName} from "../icons";
  * own horizontal rhythm inside it. The pages' scrollers and the hub's own scroller share it, so
  * every settings screen puts its content in the same box.
  */
-export const CONTENT_COLUMN: ViewStyle = {
-  width: "100%",
-  maxWidth: MAX_CONTENT_WIDTH,
-  alignSelf: "center",
-  paddingHorizontal: 22,
-};
+export const CONTENT_COLUMN: ViewStyle = {...CONTENT_BLOCK, paddingHorizontal: 22};
 
 /** A neutral settings glyph using the hub's existing icon set; [color] is for a disabled row. */
 export function RowIcon({name, inkName, color}: {name: IconName; inkName?: InkIconName; color?: string}) {
@@ -385,65 +381,6 @@ export function SwitchRow({
   );
 }
 
-/** The base of every dialog the settings pages raise: dimmed backdrop, centred card, rounded. */
-export function DialogShell({
-  title,
-  children,
-  actions,
-  onDismiss,
-  scrollBody = false,
-  footer,
-  bodyGap = spacing.m,
-}: {
-  title: string;
-  children: React.ReactNode;
-  actions: React.ReactNode;
-  onDismiss: () => void;
-  scrollBody?: boolean;
-  /** Pinned under the body, scrolling or not: what the reader must reach whatever the body's length. */
-  footer?: React.ReactNode;
-  /** The gap between the title and the body; the disclosure pulls its first heading closer. */
-  bodyGap?: number;
-}) {
-  const {colors} = useTheme();
-  return (
-    <Modal transparent animationType="fade" onRequestClose={onDismiss} visible>
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: spacing.xl,
-        }}
-        onPress={onDismiss}
-      >
-        <Pressable
-          style={{
-          backgroundColor: colors.surface,
-          borderRadius: shape.medium,
-            padding: spacing.xl,
-            width: "100%",
-            maxWidth: 360,
-          }}
-          onPress={(event) => event.stopPropagation()}
-        >
-          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
-          {scrollBody ? (
-            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: bodyGap}}>{children}</ScrollView>
-          ) : (
-            <View style={{marginTop: bodyGap}}>{children}</View>
-          )}
-          {footer}
-          <View style={{flexDirection: "row", justifyContent: "flex-end", marginTop: spacing.l}}>
-            {actions}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 /**
  * A page's own long explanation in a dialog, scrolling when it is longer than the dialog is.
  * What it shows is the page's own text, moved whole rather than rewritten.
@@ -641,32 +578,19 @@ export function SettingsPageScaffold({
   const {width} = useWindowDimensions();
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
-      <View
-        style={{
-          // The Compose top bar is 64 dp tall *below* the status bar. Yoga is border-box, so the
-          // bar's own inset padding would eat into a fixed height instead of sitting above it: the
-          // bar carries the inset and 64 dp on top of it, exactly like the search screens' bars.
-          minHeight: 64 + insets.top,
-          paddingTop: insets.top,
-          flexDirection: "row",
-          alignItems: "center",
-        }}
-      >
-        <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onClose} color={colors.onSurface} />
-        <Text
-          style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        {help != null && <HelpAction paragraphs={help} />}
+      <View style={{paddingTop: insets.top}}>
+        <ScreenHeader
+          title={title}
+          onBack={onClose}
+          trailing={help != null ? <HelpAction paragraphs={help} /> : undefined}
+        />
       </View>
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           CONTENT_COLUMN,
-          {paddingHorizontal: width < 360 ? 16 : 22, paddingBottom: insets.bottom + spacing.l},
+          {paddingHorizontal: contentInsetFor(width), paddingBottom: insets.bottom + spacing.l},
         ]}
       >
         {children}

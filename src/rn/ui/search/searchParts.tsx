@@ -32,7 +32,8 @@ import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {
-  MAX_CONTENT_WIDTH,
+  CONTENT_COLUMN,
+  contentInsetFor,
   PRESS_EASING_REANIMATED,
   shape,
   spacing,
@@ -155,7 +156,7 @@ export function SearchIdlePrompt() {
   const firstSearch = recentSearches.length === 0;
   // The list already insets itself by the screen's own content inset; the drawing takes what is
   // left of that column, up to the width it is drawn for.
-  const inset = width < 360 ? spacing.l : spacing.contentInset;
+  const inset = contentInsetFor(width);
   const artWidth = Math.min(ART_MAX_WIDTH, width - (inset + spacing.l) * 2);
   return (
     <View style={styles.prompt}>
@@ -337,9 +338,7 @@ export function ResultCard({
 
 /** The box a results list puts its rows in: the app's content column, with the screen's rhythm. */
 export const SEARCH_LIST_CONTENT = {
-  width: "100%" as const,
-  maxWidth: MAX_CONTENT_WIDTH,
-  alignSelf: "center" as const,
+  ...CONTENT_COLUMN,
   paddingHorizontal: spacing.l,
   paddingTop: spacing.m,
   paddingBottom: spacing.xxl,

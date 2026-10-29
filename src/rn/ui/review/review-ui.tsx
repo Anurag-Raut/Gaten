@@ -43,9 +43,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {InkIcon} from "../InkIcon";
-import {Icon} from "../components";
+import {Button, Icon} from "../components";
 import {PressableScale} from "../PressableScale";
-import {shape, spacing, typeScale} from "../tokens";
+import {ScreenHeader} from "../ScreenHeader";
+import {spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
 import DeckThumbnail from "./DeckThumbnail";
@@ -247,12 +248,12 @@ export function SourceRow({
 }
 
 /**
- * The compact header of a step inside the flow: the way back, what the screen is, and — when
- * there is one — the count or state that belongs to it. The glyph is the design's 21 dp; its target is
- * Android's own 48 dp, so the arrow sits where the design puts it without being hard to hit.
+ * The header of a step inside the flow: the same shared app bar every pushed screen draws — the way
+ * back, the step's name left-aligned at the app's bar type, and, when there is one, the count that
+ * belongs to it on the trailing edge. Kept as a thin adapter so the flow's call sites read the same
+ * way they always have while the bar itself lives in one place (`ui/ScreenHeader`).
  *
- * The title is centred on the screen: the back button and the count each occupy a 48 dp lane of the
- * row, so the flexed title between them has the screen's own centre.
+ * The screen supplies the top inset; the shared bar handles horizontal safe areas.
  */
 export function SubHeader({
   title,
@@ -265,26 +266,17 @@ export function SubHeader({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={styles.subHeader}>
-      <PressableScale
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={onBack}
-        style={styles.backButton}
-      >
-        <InkIcon name="back" size={21} color={colors.onSurface} />
-      </PressableScale>
-      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.subHeaderTitle, {color: colors.onSurface}]}>
-        {title}
-      </Text>
-      <View style={styles.subHeaderRightLane}>
-        {right != null && (
+    <ScreenHeader
+      title={title}
+      onBack={onBack}
+      trailing={
+        right != null ? (
           <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.onSurfaceVariant}]}>
             {right}
           </Text>
-        )}
-      </View>
-    </View>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -551,7 +543,11 @@ export function DeckRow({
   );
 }
 
-/** The screen's one dominant action: a flat fill at the design's 52 dp and 13 dp radius. */
+/**
+ * The screen's one dominant action: the shared filled `Button` at the design's 52 dp and 13 dp
+ * radius, stretched across its lane. A caller's own geometry — WaniKani's taller 54 dp button, at
+ * its own radius — still wins over the base style.
+ */
 export function FilledAction({
   label,
   onPress,
@@ -564,29 +560,8 @@ export function FilledAction({
   /** A lane's own geometry - WaniKani's taller 54 dp button, at its own radius. */
   style?: StyleProp<ViewStyle>;
 }) {
-  const {colors} = useTheme();
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{disabled: disabled ?? false}}
-      disabled={disabled}
-      onPress={onPress}
-      style={[
-        styles.action,
-        {backgroundColor: disabled ? colors.disabled : colors.actionPrimary},
-        style,
-      ]}
-    >
-      <Text
-        style={[
-          styles.actionLabel,
-          {color: disabled ? colors.onDisabled : colors.onActionPrimary},
-        ]}
-      >
-        {label}
-      </Text>
-    </PressableScale>
+    <Button label={label} onPress={onPress} disabled={disabled} fullWidth style={style} />
   );
 }
 
@@ -885,35 +860,9 @@ const styles = StyleSheet.create({
   sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45},
   sourceValueLabel: {fontSize: 10, lineHeight: 13},
   sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right"},
-  subHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 66,
-    paddingTop: 20,
-    paddingBottom: 10,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    alignItems: "flex-start",
-    justifyContent: "center",
-  },
-  // The title's own padding is symmetric, so it keeps the screen's centre; it also keeps a gap to
-  // the count for the titles that run out of room (a deck name) and ellipsize against it.
-  subHeaderTitle: {
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: spacing.m,
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    textAlign: "center",
-  },
-  // The mirror of the back button's own 48 dp lane, so the title between the two lanes sits on the
-  // screen's centre. A count wider than the lane (a large accessibility font) widens it and shifts
-  // the title rather than letting the two run into each other; the title ellipsizes instead.
-  subHeaderRightLane: {minWidth: 48, flexShrink: 0, alignItems: "flex-end", justifyContent: "center"},
-  subHeaderRight: {fontSize: 11},
+  // The review's own count/state on the shared app bar's trailing edge, in the flow's quiet tone. It
+  // shrinks and ellipsizes rather than pushing the title off at a large font or a long count.
+  subHeaderRight: {fontSize: 11, flexShrink: 1},
   progressArea: {marginTop: 2},
   progressTrack: {height: 2, width: "100%", overflow: "hidden"},
   progressFill: {height: 2},
@@ -949,15 +898,6 @@ const styles = StyleSheet.create({
   metricValue: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
   metricLabel: {fontSize: 12, lineHeight: 16, fontWeight: "600", marginTop: 3},
   metricHint: {fontSize: 11, lineHeight: 15, marginTop: 3},
-  action: {
-    minHeight: 52,
-    borderRadius: shape.button,
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    paddingHorizontal: spacing.xl,
-  },
-  actionLabel: {fontSize: 15, fontWeight: "600", letterSpacing: -0.18},
   footer: {
     paddingHorizontal: spacing.contentInset,
     paddingTop: 17,

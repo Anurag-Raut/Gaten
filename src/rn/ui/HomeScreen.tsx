@@ -31,7 +31,7 @@ import Animated, {
 } from "react-native-reanimated";
 import {Icon} from "./components";
 import {useTheme} from "./theme";
-import {BOTTOM_BAR_HEIGHT, PAGE_EASING_REANIMATED, spacing, typeScale} from "./tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing, typeScale} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
 import {
   SEARCH_LIST_CONTENT,
@@ -71,7 +71,7 @@ export function HomeScreen({
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   const reducedMotion = useReducedMotion();
   const focused = useIsFocused();
   const home = useHomeDashboard();
@@ -352,13 +352,7 @@ export function HomeScreen({
 const styles = StyleSheet.create({
   root: {flex: 1},
   topHeader: {width: "100%"},
-  headerColumn: {
-    width: "100%",
-    maxWidth: 560,
-    alignSelf: "center",
-    paddingTop: spacing.m,
-    paddingBottom: spacing.m,
-  },
+  headerColumn: {...CONTENT_COLUMN, paddingTop: spacing.m, paddingBottom: spacing.m},
   searchRow: {
     width: "100%",
     flexDirection: "row",
@@ -381,7 +375,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.l,
     paddingTop: 0,
-    maxWidth: 560,
+    maxWidth: MAX_CONTENT_WIDTH,
   },
 });
 
