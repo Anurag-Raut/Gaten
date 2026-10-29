@@ -528,14 +528,21 @@ centring rules and search behaviour are specified in
 
 ### 8.5 The result sheet
 
-Keep the **20 dp** dock corner and the **60 % / 45 %** dock fractions — this is a window that
+Keep the **20 dp** dock corner and the **60 %** bottom-dock fraction — this is a window that
 genuinely contains the reading task, not an in-page row card — on `surface` at alpha 1.00, elevation
-0, with one **1 dp `outline` rule on the exposed boundary only** (top for the bottom dock, the
-inner/free edge for a side dock). Content inset is the house 22 dp — `16 dp` below 360 dp of content
-width, and on a side dock (a strip down the edge rather than the width of the screen) — and the
-column caps at 560 dp.
+0, with one **1 dp `outline` rule on the exposed top edge**. Content inset is the house 22 dp —
+`16 dp` below 360 dp of content width — and the column caps at 560 dp.
 
-Inside, there is no intermediate filled card: **grip → header → one body scroller → pinned footer**.
+Held sideways the sheet is one panel in the other shape: it fills the height the window gives it and
+keeps the same centred 560 dp column. A top inset the window reports is reserved above it, so the
+frozen status bar stays visible where the platform reports one; where the window reports none — the
+accessibility-overlay window on the test emulator reports 0 — the panel starts at the display's top
+edge and its toolbar sits in the status-bar band, and no reservation is guaranteed. Its content ends
+with the Anki action, reached by scrolling the entry it belongs to. The landscape side dock, its
+**45 %** fraction and its exposed inner-edge rule are retired with the Compose sheet.
+
+Inside, there is no intermediate filled card: **grip → header → one body scroller → footer** — pinned
+in portrait, the content's own last item in landscape.
 
 - **Grip**: 48 dp band, a 32 × 4 dp handle at radius 2 dp in `onSurfaceVariant` 0.60, fixed width
   while dragging, carrying the accessible dismiss action.

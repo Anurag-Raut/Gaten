@@ -23,6 +23,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   type GestureResponderEvent,
+  type LayoutRectangle,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -104,11 +105,13 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
   const [wanikaniConfigured, setWanikaniConfigured] = useState(false);
   const input = useRef<TextInput>(null);
 
-  // The two snap heights are taken from the physical screen once, not from the live window: the
-  // overlay is a service window, so the IME must not be able to resize the shell and make the
-  // field jump a second time. The landing snap is the same for the entry and every WaniKani page
-  // opened over it, so navigating never changes the sheet's height; only search expands it.
-  const screenHeight = useRef(Dimensions.get("screen").height).current;
+  // The physical display, read once at mount — not the live window, which the IME can resize in this
+  // service window without the phone changing orientation.
+  const screen = useRef(Dimensions.get("screen")).current;
+  const landscape = screen.width > screen.height;
+  const screenHeight = screen.height;
+  // The portrait snaps: the landing height and the search height, the landing one shared by the
+  // entry and every page opened over it.
   const collapsedHeight = Math.round(screenHeight * 0.7);
   const expandedHeight = Math.round(screenHeight * 0.92);
   // One value drives the whole search transition: the shell height, the landing content's fade and
@@ -131,10 +134,11 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
     }
   }, [searchOpen, reducedMotion, searchProgress]);
 
-  // The shell's own height: the landing snap at rest and the expanded snap while searching.
-  const shellStyle = useAnimatedStyle(() => ({
-    height: collapsedHeight + (expandedHeight - collapsedHeight) * searchProgress.value,
-  }));
+  // Landscape fills the shell, so only portrait has a height to animate.
+  const shellStyle = useAnimatedStyle(() => {
+    if (landscape) return {};
+    return {height: collapsedHeight + (expandedHeight - collapsedHeight) * searchProgress.value};
+  });
   // The landing content is pushed out of the way and the search content arrives below the field.
   const landingStyle = useAnimatedStyle(() => ({
     opacity: 1 - searchProgress.value,
@@ -274,18 +278,27 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
         ? `kanji:${reference.character}`
         : `radical:${reference.id}`;
 
-  // The dimmed area above the sheet is the way out. It only dismisses when the tap really landed
-  // above the panel's current top — a tap on the panel's own empty space is inside the sheet and
-  // must not close it — and a search that is up collapses back to the landing before anything
-  // else. Covering the whole screen also keeps the touch from falling through to the app below.
+  // The panel's laid-out rect, in the backdrop's own coordinates — the Pressable fills the backdrop,
+  // so a press's locationX/locationY are read in the same space. Null until the first layout.
+  const panelFrame = useRef<LayoutRectangle | null>(null);
+
+  // The dimmed area around the panel is the way out: a press outside the panel dismisses — or closes
+  // an open search first — while a press on the panel's own blank space never does.
   const onBackdropPress = useCallback(
     (event: GestureResponderEvent) => {
-      const top = screenHeight - (searchOpen ? expandedHeight : collapsedHeight);
-      if (event.nativeEvent.pageY >= top) return;
+      const panel = panelFrame.current;
+      if (panel == null) return;
+      const {locationX, locationY} = event.nativeEvent;
+      const inside =
+        locationX >= panel.x &&
+        locationX <= panel.x + panel.width &&
+        locationY >= panel.y &&
+        locationY <= panel.y + panel.height;
+      if (inside) return;
       if (searchOpen) setSearchOpen(false);
       else bridge.close();
     },
-    [searchOpen, screenHeight, expandedHeight, collapsedHeight],
+    [searchOpen],
   );
 
   // A hidden mode is the surface waiting for its first result, or the panel's own exit: rendering
@@ -303,7 +316,16 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
       <Animated.View
         entering={reducedMotion ? undefined : SlideInDown}
         exiting={reducedMotion ? undefined : SlideOutDown}
-        style={[styles.panel, {backgroundColor: colors.surface}, shellStyle]}
+        onLayout={(event) => {
+          panelFrame.current = event.nativeEvent.layout;
+        }}
+        style={[
+          styles.panel,
+          {backgroundColor: colors.surface},
+          // Landscape fills the shell, clearing the status bar the frozen frame still shows.
+          landscape && {flex: 1, marginTop: insets.top},
+          shellStyle,
+        ]}
       >
         <Animated.View
           style={[styles.layer, landingStyle]}
@@ -352,6 +374,7 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
               source={state.source}
               anki={anki}
               wanikaniConfigured={wanikaniConfigured}
+              landscape={landscape}
               onSelectWord={(index) => {
                 setSearchedEntry(null);
                 setState((s) => ({...s, selected: index}));
@@ -478,7 +501,8 @@ function EmptyState({
 }
 
 /** The entry sheet: word tabs (when the selection resolved several), the shared entry sections, and
- * the Anki footer — the same components the Home word detail renders. */
+ * the Anki footer — the same components the Home word detail renders. Landscape ends the content
+ * with the Anki action instead of pinning it to the panel's bottom. */
 function EntryDetail({
   entry,
   words,
@@ -488,6 +512,7 @@ function EntryDetail({
   source,
   anki,
   wanikaniConfigured,
+  landscape,
   onSelectWord,
   onOpenKanji,
   onSearch,
@@ -502,6 +527,7 @@ function EntryDetail({
   source: string;
   anki: ReturnType<typeof useAnkiExport>;
   wanikaniConfigured: boolean;
+  landscape: boolean;
   onSelectWord: (index: number) => void;
   onOpenKanji: (character: string) => void;
   onSearch: () => void;
@@ -511,6 +537,8 @@ function EntryDetail({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const exportState = anki.exportFor(entry.id);
+  // AddToAnkiBar draws nothing unless AnkiDroid is ready, and the in-flow case must not double its gap.
+  const ankiBarPresent = anki.ankiStatus === "ready";
   return (
     <View style={styles.entryRoot}>
       <View style={[styles.toolbarInner, {borderBottomColor: colors.outlineVariant}]}>
@@ -556,7 +584,11 @@ function EntryDetail({
       )}
       <ScrollView
         style={styles.entryScroll}
-        contentContainerStyle={styles.entryContent}
+        contentContainerStyle={[
+          styles.entryContent,
+          // Landscape: the in-flow bar supplies the last gap, so this one is only for no bar at all.
+          landscape && {paddingBottom: ankiBarPresent ? 0 : insets.bottom + spacing.xl},
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <HeadwordSection hit={entry} />
@@ -568,8 +600,15 @@ function EntryDetail({
             onOpenKanji={onOpenKanji}
           />
         )}
+        {/* The action ends the entry's content instead of pinning to the panel; the wrapper cancels
+            the scroller's padding so the bar stays full-bleed. */}
+        {landscape && (
+          <View style={styles.inlineFooter}>
+            <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />
+          </View>
+        )}
       </ScrollView>
-      <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />
+      {!landscape && <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />}
     </View>
   );
 }
@@ -635,6 +674,7 @@ const styles = StyleSheet.create({
   // CJK label is never clipped by a Text box shorter than the glyph's own metrics.
   tab: {paddingHorizontal: spacing.l, paddingVertical: spacing.s, borderRadius: shape.small},
   entryContent: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.xl, paddingBottom: spacing.xxl},
+  inlineFooter: {marginHorizontal: -spacing.contentInset},
   searchedFrom: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.m},
   emptyBody: {flex: 1, paddingBottom: spacing.xxl},
   emptyGroup: {
