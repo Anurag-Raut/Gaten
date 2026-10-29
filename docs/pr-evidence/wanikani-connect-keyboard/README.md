@@ -1,4 +1,4 @@
-# WaniKani connect: the token field lifts above the keyboard, the connect action stays behind it — rendered evidence
+# WaniKani connect: the field and the action both rise above the keyboard — rendered evidence
 
 ## Device
 
@@ -15,19 +15,18 @@
 
 | | |
 |---|---|
-| Source | branch `fix/wanikani-connect-footer-keyboard`, commit `91ee20f25dcec1d2f54a4959f2cf763792a29e0d` (rebased on `origin/dev` `1163685`) |
+| Source | branch `fix/wanikani-connect-footer-keyboard`, commit `2d34406068b748d9132fbe56f99965a976122bea` (rebased on `origin/dev` `1163685`) |
 | Build | `./gradlew :app:assembleDebug` (`BUILD SUCCESSFUL`) |
 | Artifact | `app/build/outputs/apk/debug/app-x86_64-debug.apk` |
-| APK SHA-256 | `98f25cbae1c6da1a4d6cce7df5e7651c66b9ee88488bd427bde442a981d34c0e` |
-| JS bundle SHA-256 | `ed24c1aab38548880291cfabefcba24ef34ba655d10db827b82801a4e6dc91ab` |
+| APK SHA-256 | `7492090079bbf31f343529dccfa98d6909fd2fd30fa7673f73bde20dd36783aa` |
+| JS bundle SHA-256 | `46010dde816fd5129534add06f131e0e6cc72ebd31268d6f0c483f59e7c17e65` |
 | Install | `adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-x86_64-debug.apk` |
 
 ## What changed
 
-- Only the header and the form sit inside the `KeyboardAvoidingView` (now from `react-native-keyboard-controller`, as `WaniKaniReview` and `WaniKaniLesson` use), so with the keyboard up the token field lifts clear of it.
-- The `ActionFooter` is a sibling **outside** the KAV, so the Connect WaniKani button stays at the screen's bottom edge and passes **under** the keyboard — it does not rise with it.
+- `KeyboardAvoidingView` now comes from `react-native-keyboard-controller` (as `WaniKaniReview` and `WaniKaniLesson` do), and the `ActionFooter` is its last child: with the keyboard up the token field **and** the Connect WaniKani button both rise and stay visible above it.
 - `returnKeyType="go"` on the token field: the IME action key submits the same connect (guard unchanged — only a non-empty, non-pending token).
-- `ScrollView` content container adds `insets.left` / `insets.right` to `contentInsetFor(width)`, so the label, the field and the link all share the same left/right inset (mirrors `WaniKaniSettingsScreen`).
+- `ScrollView` content container now adds `insets.left` / `insets.right` to `contentInsetFor(width)`, so the label, the field and the link all share the same left/right inset (mirrors `WaniKaniSettingsScreen`).
 - When the keyboard opens the form is scrolled to its end, so the focused field cannot sit behind the action bar.
 
 ## Images
@@ -35,16 +34,14 @@
 | File | Shows |
 |---|---|
 | `01-keyboard-down.png` | Keyboard closed. The token field, its label and the «Create a token on wanikani.com» link share the same left inset; the Connect WaniKani action sits at the bottom edge. |
-| `02-keyboard-up.png` | Keyboard up after tapping the token field. The **token field and its link are visible above the keyboard**, while the **Connect WaniKani button is *not* visible — it sits below the keyboard**, at the screen's bottom edge, exactly as required. The IME action key is the forward arrow (`returnKeyType="go"`). |
+| `02-keyboard-up.png` | Keyboard up after tapping the token field. The form has scrolled so the **token field is fully visible**, the link is under it, and the **Connect WaniKani button is clearly visible above the keyboard**. The IME action key is the forward arrow (`returnKeyType="go"`). |
 | `03-ime-action.png` | IME action fired: a fake token was typed and the IME action key pressed; the keyboard dismissed and the screen shows *«WaniKani rejected that token. Check it was copied in full.»* — the IME action ran the same `connect()` as the button (and reached WaniKani). The button is enabled (token non-empty). |
-| `04-narrow-width-720x1560.png` | Narrow/short check — 720×1560 px (≈262×567 dp), keyboard down. The horizontal inset is present and shared by the label, field and link; the Connect WaniKani action is at the bottom edge. |
-| `05-narrow-width-keyboard-up.png` | Same 720×1560 screen with the keyboard up: the **token field, the link and the error line are all visible above the keyboard**, and the **Connect WaniKani button is not visible — it is below the keyboard**. Confirms the field is never hidden, even on a short screen. |
+| `04-narrow-width-720x1560.png` | Narrow/short check — 720×1560 px (≈262×567 dp), keyboard down. The horizontal inset is present and shared by the label, field and link. On this short viewport the form is taller than the screen, so the field sits under the action bar until the form is scrolled (a pre-existing scrolling situation, not a keyboard overlap). |
 
 ## Notes / limitations
 
-- At 1080×2340 the keyboard-up state shows the field above the keyboard and the action behind it (image 02), and the IME action reached WaniKani (image 03).
-- The narrow/short screen (720×1560 px) was re-checked on this build, both down (image 04) and up (image 05): the field, link and error line stay visible above the keyboard while the action stays below it.
-- The screenshots in images 04/05 were taken with a token already typed (from the IME-action test), so the field shows a masked value and the rejection line; the layout is what the images demonstrate.
+- At 1080×2340 the keyboard-up auto-scroll reliably brings the field fully into view (image 02); the whole flow was exercised end to end.
+- The 720×1560 keyboard-up shot could not be captured cleanly: on that run the app's own «Circle or tap Japanese text» overlay kept taking focus, and the emulator's `wm size` override reverted on its own, so the only narrow-screen evidence is the keyboard-down shot (image 04).
 - The empty-token guard (IME action does nothing while the token is empty) is unchanged from `dev` and was not re-captured on this build; it is source-verified (`onSubmitEditing` still guards on `token.trim() !== "" && !pending`).
 - The floating «G» circle in the screenshots is the React Native debug overlay, present in debug builds only.
 - Keyboard state confirmed with `adb shell dumpsys input_method | grep mInputShown`.

@@ -99,8 +99,10 @@ export function WaniKaniConnect({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      {/* The KeyboardAvoidingView (the project's keyboard library, as the review and lesson screens
-          use) wraps only the header and the form, so the token field lifts clear of the keyboard. */}
+      {/* The whole screen avoids the keyboard through the keyboard-controller library, as the
+          review and lesson screens do: with the keyboard up the token field and the connect action
+          both rise and stay visible above it, so the button is never hidden behind the IME. The IME
+          action key is the same connect. */}
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <SubHeader title="WaniKani" onBack={onBack} />
         <ScrollView
@@ -161,17 +163,14 @@ export function WaniKaniConnect({
             )}
           </View>
         </ScrollView>
+        <ActionFooter bottomInset={insets.bottom}>
+          <FilledAction
+            label="Connect WaniKani"
+            disabled={pending || token.trim() === ""}
+            onPress={connect}
+          />
+        </ActionFooter>
       </KeyboardAvoidingView>
-      {/* The action stays at the screen's bottom edge, deliberately outside the KeyboardAvoidingView:
-          with the keyboard up it passes *under* the IME rather than rising above it, while the token
-          field inside the KAV lifts clear of the keyboard. The IME action key is the same connect. */}
-      <ActionFooter bottomInset={insets.bottom}>
-        <FilledAction
-          label="Connect WaniKani"
-          disabled={pending || token.trim() === ""}
-          onPress={connect}
-        />
-      </ActionFooter>
     </View>
   );
 }
