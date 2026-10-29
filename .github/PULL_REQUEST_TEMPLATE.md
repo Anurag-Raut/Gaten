@@ -8,9 +8,9 @@
 
 ## Visual evidence
 
-<!-- Required whenever this pull request changes what a screen looks like: a pull
-     request without it does not merge, and is not ready for review. Write
-     "No UI changes" and delete the rest when nothing visual changed. -->
+UI changes require screenshots embedded below. Include a real-app recording for changes to interactions, navigation, or motion.
+
+<!-- No UI changes? Write "No UI changes" and delete the rest. -->
 
 - **UI changed:** <!-- Yes, or "No UI changes". -->
 - **Screenshots:** <!-- Paste the rendered screenshots inline in this body, not a link — the changed screen, before/after where a before exists. -->
