@@ -15,18 +15,18 @@
 
 | | |
 |---|---|
-| Source | branch `fix/wanikani-connect-footer-keyboard`, commit `2d34406068b748d9132fbe56f99965a976122bea` (rebased on `origin/dev` `1163685`) |
+| Source | branch `fix/wanikani-connect-action-rises`, commit `43082b6fb623fa53fa0b0de5483a1a40c6896ee9`, on top of `origin/dev` `de4f894` (the merge of #47) |
 | Build | `./gradlew :app:assembleDebug` (`BUILD SUCCESSFUL`) |
 | Artifact | `app/build/outputs/apk/debug/app-x86_64-debug.apk` |
-| APK SHA-256 | `7492090079bbf31f343529dccfa98d6909fd2fd30fa7673f73bde20dd36783aa` |
-| JS bundle SHA-256 | `46010dde816fd5129534add06f131e0e6cc72ebd31268d6f0c483f59e7c17e65` |
+| APK SHA-256 | `207f3075ef4eccce0631f1c08ca1ff4b6b1bb39ae327de8358096466be33d214` |
+| JS bundle SHA-256 | `44698b771ebd1e50576d86dc8027417dfda6f4c7635bbe863151ae7f9e2f2d96` |
 | Install | `adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-x86_64-debug.apk` |
 
 ## What changed
 
-- `KeyboardAvoidingView` now comes from `react-native-keyboard-controller` (as `WaniKaniReview` and `WaniKaniLesson` do), and the `ActionFooter` is its last child: with the keyboard up the token field **and** the Connect WaniKani button both rise and stay visible above it.
+- `ActionFooter` is now the last child of the `KeyboardAvoidingView` (from `react-native-keyboard-controller`, as `WaniKaniReview` and `WaniKaniLesson` use it): with the keyboard up the token field **and** the Connect WaniKani button both rise and stay visible above it. This supersedes the placement merged in #47, where the footer was a sibling *outside* the KAV and passed under the keyboard.
 - `returnKeyType="go"` on the token field: the IME action key submits the same connect (guard unchanged — only a non-empty, non-pending token).
-- `ScrollView` content container now adds `insets.left` / `insets.right` to `contentInsetFor(width)`, so the label, the field and the link all share the same left/right inset (mirrors `WaniKaniSettingsScreen`).
+- `ScrollView` content container adds `insets.left` / `insets.right` to `contentInsetFor(width)`, so the label, the field and the link all share the same left/right inset (mirrors `WaniKaniSettingsScreen`).
 - When the keyboard opens the form is scrolled to its end, so the focused field cannot sit behind the action bar.
 
 ## Images
@@ -40,8 +40,9 @@
 
 ## Notes / limitations
 
+- `02-keyboard-up.png` was re-captured on `emulator-5554` from the APK built from this branch (hashes above), after tapping the token field; `01`, `03` and `04` were captured from the same source revision (commit `2d34406`, the identical code change) and were not re-shot.
 - At 1080×2340 the keyboard-up auto-scroll reliably brings the field fully into view (image 02); the whole flow was exercised end to end.
 - The 720×1560 keyboard-up shot could not be captured cleanly: on that run the app's own «Circle or tap Japanese text» overlay kept taking focus, and the emulator's `wm size` override reverted on its own, so the only narrow-screen evidence is the keyboard-down shot (image 04).
 - The empty-token guard (IME action does nothing while the token is empty) is unchanged from `dev` and was not re-captured on this build; it is source-verified (`onSubmitEditing` still guards on `token.trim() !== "" && !pending`).
-- The floating «G» circle in the screenshots is the React Native debug overlay, present in debug builds only.
-- Keyboard state confirmed with `adb shell dumpsys input_method | grep mInputShown`.
+- The floating «G» circle seen in earlier runs is the React Native debug overlay, present in debug builds only; it is absent from the captures kept here.
+- Keyboard state confirmed with `adb shell dumpsys input_method | grep mInputShown` (`mInputShown=true` in the keyboard-up capture).
