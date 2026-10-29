@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   dialogParagraph: {fontFamily: "Inter", fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
   empty: {marginTop: spacing.s},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
-  caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: -6, marginBottom: 24},
+  caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.m, marginBottom: 24},
   caughtUpText: {fontFamily: "Inter", fontSize: 12, lineHeight: 17, flex: 1, minWidth: 0},
   skeletonList: {marginTop: spacing.s},
   // The skeleton is the shared row's own geometry: a hairline divider, no card, no fill.
