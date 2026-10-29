@@ -603,11 +603,8 @@ function EntryDetail({
           />
         )}
         {/* The Anki action ends the entry's content in both orientations, so the reader scrolls to
-            it with the entry it belongs to; the wrapper cancels the scroller's horizontal padding so
-            the bar stays full-bleed. */}
-        <View style={styles.inlineFooter}>
-          <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />
-        </View>
+            it with the entry it belongs to, drawn as the entry's own last section. */}
+        <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />
       </ScrollView>
     </View>
   );
@@ -674,7 +671,6 @@ const styles = StyleSheet.create({
   // CJK label is never clipped by a Text box shorter than the glyph's own metrics.
   tab: {paddingHorizontal: spacing.l, paddingVertical: spacing.s, borderRadius: shape.small},
   entryContent: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.xl, paddingBottom: spacing.xxl},
-  inlineFooter: {marginHorizontal: -spacing.contentInset},
   searchedFrom: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.m},
   emptyBody: {flex: 1, paddingBottom: spacing.xxl},
   emptyGroup: {

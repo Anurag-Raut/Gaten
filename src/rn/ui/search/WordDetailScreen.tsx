@@ -5,8 +5,10 @@
  */
 
 /**
- * A focused dictionary entry with expandable spellings and a pinned Anki action. The entry is
- * resolved by id from the shared search store so a restored route never carries stale result data.
+ * A focused dictionary entry with expandable spellings, ending in the Anki action as the content's
+ * own last item — reached by scrolling the entry it belongs to, never a bar pinned to the screen's
+ * bottom (the lookup sheet reads the same way). The entry is resolved by id from the shared search
+ * store so a restored route never carries stale result data.
  */
 import React, {useCallback, useMemo, useRef, useState} from "react";
 import {
@@ -48,11 +50,15 @@ function sectionRule(colors: ThemeColors): string {
 
 export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScreenProps) {
   const {colors} = useTheme();
+  const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
+  const inset = contentInsetFor(width);
   const state = useSearchState();
   const hit = useMemo(() => hitFor(entryId), [state.hits, entryId]);
   const anki = useAnkiExport();
   const exportState = anki.exportFor(entryId);
+  // AddToAnkiBar draws nothing unless AnkiDroid is ready, and the in-flow case must not double its gap.
+  const ankiBarPresent = anki.ankiStatus === "ready";
   const recordedEntryId = useRef<number | null>(null);
   // The WaniKani kanji section is only there when WaniKani can answer for it, so the token's
   // presence is read here rather than assumed. It is stored or forgotten on the WaniKani settings
@@ -113,7 +119,9 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
         style={styles.body}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingHorizontal: contentInsetFor(width)},
+          // The in-flow bar supplies the last gap when it draws; when AnkiDroid is not connected it
+          // draws nothing, so the scroller pads for the screen edge itself.
+          {paddingHorizontal: inset, paddingBottom: ankiBarPresent ? 0 : insets.bottom + spacing.xl},
         ]}
       >
         <HeadwordSection hit={hit} />
@@ -126,8 +134,11 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
             onOpenKanji={onOpenKanji}
           />
         )}
+        {/* The Anki action ends the entry's content, so the reader scrolls to it with the entry it
+            belongs to, drawn as the entry's own last section: its rule, row and action share the
+            section grid the sections above it use. */}
+        <AddToAnkiBar entry={hit} anki={anki} exportState={exportState} />
       </ScrollView>
-      <AddToAnkiBar entry={hit} anki={anki} exportState={exportState} />
     </View>
   );
 }
@@ -317,7 +328,7 @@ export function WordKanjiSection({
   if (characters.length === 0) return null;
 
   return (
-    <View style={styles.kanjiSection}>
+    <View style={[styles.kanjiSection, {borderBottomColor: sectionRule(colors)}]}>
       <View style={styles.kanjiHeading}>
         <Text accessibilityRole="header" style={[typeScale.labelLarge, {color: colors.onSurface}]}>
           {label}
@@ -350,6 +361,7 @@ export function WordKanjiSection({
   );
 }
 
+/** Renders the export deck picker and filled Anki action, preserving export and deck-save states. */
 export function AddToAnkiBar({
   entry,
   anki,
@@ -361,7 +373,6 @@ export function AddToAnkiBar({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
-  const {width} = useWindowDimensions();
   // The deck list is read when the row is opened, not on every render: AnkiDroid's provider is the
   // only source, and the reader may never touch the control.
   const [deckOpen, setDeckOpen] = useState(false);
@@ -371,8 +382,8 @@ export function AddToAnkiBar({
   const [deckError, setDeckError] = useState<string | null>(null);
 
   // The Anki action belongs to a connected AnkiDroid only: without database access there is
-  // nothing to add to and no fallback to offer, so the whole bar stays out of the way rather
-  // than leaving an orphaned deck row or empty footer space behind.
+  // nothing to add to and no fallback to offer, so the whole section stays out of the way rather
+  // than leaving an orphaned deck row or empty space behind.
   if (anki.ankiStatus !== "ready") return null;
 
   const busy = exportState.kind === "checking" || exportState.kind === "busy";
@@ -438,105 +449,112 @@ export function AddToAnkiBar({
   })();
 
   return (
-    <View
-      style={[
-        styles.bar,
-        {
-          backgroundColor: colors.background,
-          borderTopColor: sectionRule(colors),
-          // The design's 24 dp of air under the action, above the bottom inset: this bar is the last
-          // thing on screen, and the button must not sit on the screen's edge.
-          paddingBottom: insets.bottom + spacing.xl,
-        },
-      ]}
-    >
-      <View
-        style={[
-          styles.footerContent,
-          {paddingHorizontal: contentInsetFor(width)},
-        ]}
-      >
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={`Anki deck: ${anki.ankiSettings.deckName}`}
-          accessibilityHint="Changes the deck new cards are added to"
-          accessibilityState={{expanded: deckOpen, disabled: deckLocked}}
-          disabled={deckLocked}
-          onPress={toggleDeckList}
-          style={styles.deckRow}
-        >
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>Anki deck</Text>
-          <View style={styles.deckValue}>
-            <Text style={[typeScale.labelLarge, styles.deckName, {color: colors.onSurface}]}>
-              {anki.ankiSettings.deckName}
-            </Text>
-            {/* 16 dp, the label's own size: at 20 the glyph read taller than the deck name it
-                discloses. The row keeps its 48 dp target — only the glyph is smaller. */}
-            <DisclosureChevron expanded={deckOpen} size={16} color={colors.onSurfaceVariant} />
-          </View>
-        </PressableScale>
-        {/* Measured while clipped and animated open and closed, the way the entry's own disclosures
-            are, so the footer grows instead of jumping; collapsed it takes no touches and stays out
-            of the accessibility tree. Bounded, so a collection with many decks cannot push the
-            action out of the sheet. */}
-        <Collapsible expanded={deckOpen}>
-          <ScrollView
-            style={styles.deckList}
-            contentContainerStyle={styles.deckListContent}
-            // This list can sit inside the entry's own scroller (the lookup sheet's footer is the
-            // content's last item in both orientations). Android needs nested scrolling enabled on
-            // the inner list or it swallows the drag over the list and the entry never scrolls.
-            // Inert where the list is not nested, which is Home.
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
+    // The entry's last section. It draws no rule of its own: the section above always ends on one
+    // (Meanings is unconditional), and the deck row keeps the page's detail-row height and padding,
+    // so it sits on the same rhythm as the rows above it. The 24 dp under the action, above the
+    // bottom inset, keep the button off the screen's edge.
+    <View style={{paddingBottom: insets.bottom + spacing.xl}}>
+      {/* The callers already inset this content: Word details pads its scroller by the page inset,
+          and the lookup sheet's entry content carries the same inset inside its capped panel. The
+          section adds no horizontal padding of its own, so its rule, rows and action share the one
+          page grid. */}
+      <View style={styles.ankiContent}>
+        {/* The row and its list are one group: the list discloses the row, so the section's gap
+            belongs between the group and the action, not on both sides of a collapsed list. */}
+        <View>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={`Anki deck: ${anki.ankiSettings.deckName}`}
+            accessibilityHint="Changes the deck new cards are added to"
+            accessibilityState={{expanded: deckOpen, disabled: deckLocked}}
+            disabled={deckLocked}
+            onPress={toggleDeckList}
+            style={styles.deckRow}
           >
-            {deckLoadFailed ? (
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel="Try reading AnkiDroid's decks again"
-                onPress={loadDecks}
-                style={styles.deckOption}
-              >
-                <Text style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.error}]}>
-                  Could not read AnkiDroid's decks. Try again.
-                </Text>
-              </PressableScale>
-            ) : decks === null ? (
-              <Text style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}>
-                Reading AnkiDroid decks…
+            <Icon name="library_books" size={20} color={colors.onSurfaceVariant} />
+            <Text style={[typeScale.bodyMedium, styles.deckLabel, {color: colors.onSurfaceVariant}]}>
+              Deck
+            </Text>
+            <View style={styles.deckValue}>
+              <Text style={[typeScale.labelLarge, styles.deckName, {color: colors.onSurface}]}>
+                {anki.ankiSettings.deckName}
               </Text>
-            ) : decks.length === 0 ? (
-              <Text style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}>
-                AnkiDroid has no decks to choose from.
-              </Text>
-            ) : (
-              decks.map((deck) => (
+              {/* 16 dp, the label's own size: at 20 the glyph read taller than the deck name it
+                  discloses. The row keeps its 48 dp target — only the glyph is smaller. */}
+              <DisclosureChevron expanded={deckOpen} size={16} color={colors.onSurfaceVariant} />
+            </View>
+          </PressableScale>
+          {/* Measured while clipped and animated open and closed, the way the entry's own
+              disclosures are, so the section grows instead of jumping; collapsed it takes no touches
+              and stays out of the accessibility tree. Bounded, so a collection with many decks
+              cannot push the action out of the sheet. */}
+          <Collapsible expanded={deckOpen}>
+            <ScrollView
+              style={styles.deckList}
+              contentContainerStyle={styles.deckListContent}
+              // This list can sit inside the entry's own scroller (the lookup sheet's section is the
+              // content's last item in both orientations). Android needs nested scrolling enabled on
+              // the inner list or it swallows the drag over the list and the entry never scrolls.
+              // Inert where the list is not nested, which is Home.
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+              showsHorizontalScrollIndicator={false}
+            >
+              {deckLoadFailed ? (
                 <PressableScale
-                  key={deck.id}
                   accessibilityRole="button"
-                  accessibilityState={{
-                    selected: deck.name === anki.ankiSettings.deckName,
-                    disabled: deckLocked,
-                  }}
-                  disabled={deckLocked}
-                  onPress={() => void chooseDeck(deck.name)}
+                  accessibilityLabel="Try reading AnkiDroid's decks again"
+                  onPress={loadDecks}
                   style={styles.deckOption}
                 >
-                  <Text
-                    numberOfLines={1}
-                    style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.onSurface}]}
-                  >
-                    {deck.name}
+                  <Text style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.error}]}>
+                    Could not read AnkiDroid's decks. Try again.
                   </Text>
-                  {deck.name === anki.ankiSettings.deckName && (
-                    <Icon name="check" size={18} color={colors.primary} />
-                  )}
                 </PressableScale>
-              ))
-            )}
-          </ScrollView>
-        </Collapsible>
+              ) : decks === null ? (
+                <Text
+                  style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
+                >
+                  Reading AnkiDroid decks…
+                </Text>
+              ) : decks.length === 0 ? (
+                <Text
+                  style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
+                >
+                  AnkiDroid has no decks to choose from.
+                </Text>
+              ) : (
+                decks.map((deck) => (
+                  <PressableScale
+                    key={deck.id}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: deck.name === anki.ankiSettings.deckName,
+                      disabled: deckLocked,
+                    }}
+                    disabled={deckLocked}
+                    onPress={() => void chooseDeck(deck.name)}
+                    style={styles.deckOption}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        typeScale.bodyMedium,
+                        styles.deckOptionName,
+                        {color: colors.onSurface},
+                      ]}
+                    >
+                      {deck.name}
+                    </Text>
+                    {deck.name === anki.ankiSettings.deckName && (
+                      <Icon name="check" size={18} color={colors.primary} />
+                    )}
+                  </PressableScale>
+                ))
+              )}
+            </ScrollView>
+          </Collapsible>
+        </View>
         <Button
           fullWidth
           disabled={!enabled || deckSaving}
@@ -597,7 +615,9 @@ const styles = StyleSheet.create({
   spellingsSummary: {flexDirection: "row", alignItems: "center", gap: spacing.xs},
   alternatives: {paddingBottom: spacing.l},
   alternativeRow: {minHeight: 40, justifyContent: "center", paddingVertical: spacing.s},
-  kanjiSection: {paddingTop: spacing.xl},
+  // Ends on the section rule like the sections above, so the entry's last boundary is drawn once by
+  // whichever section is last.
+  kanjiSection: {paddingVertical: spacing.xl, borderBottomWidth: 1},
   kanjiHeading: {flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.s},
   kanjiTiles: {flexDirection: "row", flexWrap: "wrap", gap: spacing.m, marginTop: spacing.m},
   kanjiTile: {
@@ -609,9 +629,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   kanjiCharacter: {fontSize: 36, fontWeight: "700"},
-  bar: {borderTopWidth: 1, paddingTop: spacing.m},
-  footerContent: {...CONTENT_COLUMN, gap: spacing.s},
-  deckRow: {minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.m},
+  // The section's own rhythm is the detail rows' (`detailRowContent`): the same 58 dp box with the
+  // same vertical padding, so the deck row does not carry air the rows above it do not.
+  ankiContent: {...CONTENT_COLUMN, gap: spacing.s},
+  deckRow: {minHeight: 58, paddingVertical: spacing.l, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.m},
+  deckLabel: {flex: 1},
   deckValue: {flexDirection: "row", alignItems: "center", gap: spacing.xs, flexShrink: 1},
   deckName: {flexShrink: 1, textAlign: "right"},
   deckList: {maxHeight: 216},
