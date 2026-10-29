@@ -5,8 +5,10 @@
  */
 
 /**
- * A focused dictionary entry with expandable spellings and a pinned Anki action. The entry is
- * resolved by id from the shared search store so a restored route never carries stale result data.
+ * A focused dictionary entry with expandable spellings, ending in the Anki action as the content's
+ * own last item — reached by scrolling the entry it belongs to, never a bar pinned to the screen's
+ * bottom (the lookup sheet reads the same way). The entry is resolved by id from the shared search
+ * store so a restored route never carries stale result data.
  */
 import React, {useCallback, useMemo, useRef, useState} from "react";
 import {
@@ -47,11 +49,15 @@ function sectionRule(colors: ThemeColors): string {
 
 export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScreenProps) {
   const {colors} = useTheme();
+  const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
+  const inset = contentInsetFor(width);
   const state = useSearchState();
   const hit = useMemo(() => hitFor(entryId), [state.hits, entryId]);
   const anki = useAnkiExport();
   const exportState = anki.exportFor(entryId);
+  // AddToAnkiBar draws nothing unless AnkiDroid is ready, and the in-flow case must not double its gap.
+  const ankiBarPresent = anki.ankiStatus === "ready";
   const recordedEntryId = useRef<number | null>(null);
   // The WaniKani kanji section is only there when WaniKani can answer for it, so the token's
   // presence is read here rather than assumed. It is stored or forgotten on the WaniKani settings
@@ -109,7 +115,9 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
         style={styles.body}
         contentContainerStyle={[
           styles.scrollContent,
-          {paddingHorizontal: contentInsetFor(width)},
+          // The in-flow bar supplies the last gap when it draws; when AnkiDroid is not connected it
+          // draws nothing, so the scroller pads for the screen edge itself.
+          {paddingHorizontal: inset, paddingBottom: ankiBarPresent ? 0 : insets.bottom + spacing.xl},
         ]}
       >
         <HeadwordSection hit={hit} />
@@ -121,8 +129,13 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
             onOpenKanji={onOpenKanji}
           />
         )}
+        {/* The Anki action ends the entry's content, so the reader scrolls to it with the entry it
+            belongs to; the wrapper cancels the scroller's horizontal padding so the bar stays
+            full-bleed. */}
+        <View style={{marginHorizontal: -inset}}>
+          <AddToAnkiBar entry={hit} anki={anki} exportState={exportState} />
+        </View>
       </ScrollView>
-      <AddToAnkiBar entry={hit} anki={anki} exportState={exportState} />
     </View>
   );
 }
