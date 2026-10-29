@@ -537,12 +537,12 @@ Held sideways the sheet is one panel in the other shape: it fills the height the
 keeps the same centred 560 dp column. A top inset the window reports is reserved above it, so the
 frozen status bar stays visible where the platform reports one; where the window reports none — the
 accessibility-overlay window on the test emulator reports 0 — the panel starts at the display's top
-edge and its toolbar sits in the status-bar band, and no reservation is guaranteed. Its content ends
-with the Anki action, reached by scrolling the entry it belongs to. The landscape side dock, its
-**45 %** fraction and its exposed inner-edge rule are retired with the Compose sheet.
+edge and its toolbar sits in the status-bar band, and no reservation is guaranteed. The landscape
+side dock, its **45 %** fraction and its exposed inner-edge rule are retired with the Compose sheet.
 
-Inside, there is no intermediate filled card: **grip → header → one body scroller → footer** — pinned
-in portrait, the content's own last item in landscape.
+Inside, there is no intermediate filled card: **grip → header → one body scroller → footer**. The
+Anki action is that footer in both orientations — the content's own last item, reached by scrolling
+the entry it belongs to, never a bar pinned to the panel's bottom.
 
 - **Grip**: 48 dp band, a 32 × 4 dp handle at radius 2 dp in `onSurfaceVariant` 0.60, fixed width
   while dragging, carrying the accessible dismiss action.

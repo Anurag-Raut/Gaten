@@ -374,7 +374,6 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
               source={state.source}
               anki={anki}
               wanikaniConfigured={wanikaniConfigured}
-              landscape={landscape}
               onSelectWord={(index) => {
                 setSearchedEntry(null);
                 setState((s) => ({...s, selected: index}));
@@ -501,8 +500,8 @@ function EmptyState({
 }
 
 /** The entry sheet: word tabs (when the selection resolved several), the shared entry sections, and
- * the Anki footer — the same components the Home word detail renders. Landscape ends the content
- * with the Anki action instead of pinning it to the panel's bottom. */
+ * the Anki footer — the same components the Home word detail renders. The Anki action is the
+ * content's own last item in both orientations, never a bar pinned to the panel's bottom. */
 function EntryDetail({
   entry,
   words,
@@ -512,7 +511,6 @@ function EntryDetail({
   source,
   anki,
   wanikaniConfigured,
-  landscape,
   onSelectWord,
   onOpenKanji,
   onSearch,
@@ -527,7 +525,6 @@ function EntryDetail({
   source: string;
   anki: ReturnType<typeof useAnkiExport>;
   wanikaniConfigured: boolean;
-  landscape: boolean;
   onSelectWord: (index: number) => void;
   onOpenKanji: (character: string) => void;
   onSearch: () => void;
@@ -586,8 +583,9 @@ function EntryDetail({
         style={styles.entryScroll}
         contentContainerStyle={[
           styles.entryContent,
-          // Landscape: the in-flow bar supplies the last gap, so this one is only for no bar at all.
-          landscape && {paddingBottom: ankiBarPresent ? 0 : insets.bottom + spacing.xl},
+          // The in-flow bar supplies the last gap when it draws; when Anki is unavailable the
+          // scroller pads for the screen edge itself.
+          {paddingBottom: ankiBarPresent ? 0 : insets.bottom + spacing.xl},
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -600,15 +598,13 @@ function EntryDetail({
             onOpenKanji={onOpenKanji}
           />
         )}
-        {/* The action ends the entry's content instead of pinning to the panel; the wrapper cancels
-            the scroller's padding so the bar stays full-bleed. */}
-        {landscape && (
-          <View style={styles.inlineFooter}>
-            <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />
-          </View>
-        )}
+        {/* The Anki action ends the entry's content in both orientations, so the reader scrolls to
+            it with the entry it belongs to; the wrapper cancels the scroller's horizontal padding so
+            the bar stays full-bleed. */}
+        <View style={styles.inlineFooter}>
+          <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />
+        </View>
       </ScrollView>
-      {!landscape && <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />}
     </View>
   );
 }
