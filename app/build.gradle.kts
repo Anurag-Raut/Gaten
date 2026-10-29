@@ -214,9 +214,40 @@ val verifyExamplesAsset by tasks.registering {
     }
 }
 
+// The Remembering the Kanji reference asset is generated the same way
+// (tools/build_rtk_db.py), so the same two mistakes are caught.
+val rtkSchemaVersion = 1
+val verifyRtkAsset by tasks.registering {
+    val asset = layout.projectDirectory.file("src/main/assets/db/rtk.sqlite")
+    description = "Fails the build when the generated RTK asset is missing or of another schema version."
+    doLast {
+        val file = asset.asFile
+        if (!file.isFile) {
+            error("Missing app/src/main/assets/db/rtk.sqlite — generate it with: python3 tools/build_rtk_db.py")
+        }
+        val header = ByteArray(64)
+        val read = file.inputStream().use { input -> input.read(header) }
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        val version = if (read == header.size && header.copyOfRange(0, magic.size).contentEquals(magic)) {
+            ((header[60].toLong() and 0xFF) shl 24) or ((header[61].toLong() and 0xFF) shl 16) or
+                ((header[62].toLong() and 0xFF) shl 8) or (header[63].toLong() and 0xFF)
+        } else {
+            -1L
+        }
+        if (version != rtkSchemaVersion.toLong()) {
+            error(
+                "app/src/main/assets/db/rtk.sqlite is of schema version $version, " +
+                    "this build needs $rtkSchemaVersion — regenerate it with: " +
+                    "python3 tools/build_rtk_db.py"
+            )
+        }
+    }
+}
+
 tasks.named("preBuild") {
     dependsOn(verifyDictionaryAsset)
     dependsOn(verifyExamplesAsset)
+    dependsOn(verifyRtkAsset)
 }
 
 // The manga-ocr model (~117 MB) ships in every build, release included: the APK carries it in its

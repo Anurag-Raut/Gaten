@@ -25,6 +25,7 @@ import {Button, Icon, distinctIdeographs} from "../components";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
+import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme, type ThemeColors} from "../theme";
 import {CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
@@ -63,6 +64,9 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
   // presence is read here rather than assumed. It is stored or forgotten on the WaniKani settings
   // page, which this screen returns from, so reading on arrival covers every way it changes.
   const [wanikaniConfigured, setWanikaniConfigured] = useState(false);
+  // Which reference a tap opens. RTK needs no account, so its tiles show even when no token is
+  // stored; WaniKani's still need one, exactly as before.
+  const kanjiReference = useKanjiReferenceSource();
 
   // Save a lookup and refresh Anki's duplicate state whenever the reader returns to this entry.
   useFocusEffect(
@@ -123,8 +127,9 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
         <HeadwordSection hit={hit} />
         <MeaningSection key={hit.id} glosses={hit.glosses} partsOfSpeech={hit.pos} />
         <OtherSpellingsRow primary={hit.primary} spellings={hit.kanji} />
-        {wanikaniConfigured && (
+        {showKanjiStrip(kanjiReference, wanikaniConfigured) && (
           <WordKanjiSection
+            label={kanjiReferenceLabel(kanjiReference)}
             characters={distinctIdeographs(hit.primary)}
             onOpenKanji={onOpenKanji}
           />
@@ -311,9 +316,12 @@ export function OtherSpellingsRow({primary, spellings}: {primary: string; spelli
 
 export function WordKanjiSection({
   characters,
+  label = "WaniKani kanji",
   onOpenKanji,
 }: {
   characters: string[];
+  /** The selected reference's name: WaniKani's kanji, or Remembering the Kanji. */
+  label?: string;
   onOpenKanji: (character: string) => void;
 }) {
   const {colors} = useTheme();
@@ -323,7 +331,7 @@ export function WordKanjiSection({
     <View style={[styles.kanjiSection, {borderBottomColor: sectionRule(colors)}]}>
       <View style={styles.kanjiHeading}>
         <Text accessibilityRole="header" style={[typeScale.labelLarge, {color: colors.onSurface}]}>
-          WaniKani kanji
+          {label}
         </Text>
         <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
           {characters.length} {characters.length === 1 ? "character" : "characters"}
@@ -334,7 +342,7 @@ export function WordKanjiSection({
           <PressableScale
             key={character}
             accessibilityRole="button"
-            accessibilityLabel={`WaniKani details for ${character}`}
+            accessibilityLabel={`${label} details for ${character}`}
             accessibilityHint="Opens the kanji details"
             onPress={() => onOpenKanji(character)}
             style={[

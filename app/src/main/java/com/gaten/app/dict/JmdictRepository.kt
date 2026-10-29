@@ -9,13 +9,7 @@ package com.gaten.app.dict
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
+import com.gaten.app.data.BundledDatabase
 
 /**
  * One dictionary entry, as stored by the compressed JMdict database bundled in `assets/db`.
@@ -37,22 +31,15 @@ data class DictEntry(
 /**
  * Read-only access to the JMdict database bundled with the app.
  *
- * The database ships uncompressed as `assets/db/jmdict.sqlite` (AGP expands `.gz` assets during
- * asset merge, so the packaged path is always the plain name) and is copied once to
- * `filesDir/jmdict.sqlite` on the first [open]. The copy goes through a temporary file and a
- * rename so a killed process can never leave a half-written database behind, and it is guarded by
- * a [Mutex] so concurrent callers extract exactly once.
+ * The database ships uncompressed as `assets/db/jmdict.sqlite` and is copied once to
+ * `filesDir/jmdict.sqlite` on the first [open] by [BundledDatabase], which also keeps the copied
+ * file in step with the packaged asset when an update ships a new one.
  */
 class JmdictRepository private constructor(private val db: SQLiteDatabase) {
 
     companion object {
         private const val ASSET_PATH = "db/jmdict.sqlite"
         private const val DB_FILE_NAME = "jmdict.sqlite"
-        private const val TEMP_FILE_NAME = "jmdict.sqlite.tmp"
-
-        /** SQLite file header: 16-byte magic, page size at 16, database page count at 28. */
-        private const val SQLITE_HEADER_SIZE = 100
-        private val SQLITE_MAGIC = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
 
         /**
          * Ranks matches for one surface form. `common` first, then kana-only headwords, then the
@@ -107,103 +94,16 @@ class JmdictRepository private constructor(private val db: SQLiteDatabase) {
         // the table is `names(term, rank, kind, gloss)`.
         private const val NAME_LOOKUP_SQL = "SELECT kind, gloss FROM names WHERE term = ?"
 
-        /** Serialises extraction so two concurrent [open] calls never write the same file twice. */
-        private val extractionMutex = Mutex()
-
         /**
          * Copies `assets/db/jmdict.sqlite` to `context.filesDir` if needed (idempotent, safe under
-         * concurrent calls) and opens the result read-only.
+         * concurrent calls) and opens the result read-only. The extraction and the version check
+         * live in [BundledDatabase], shared with the other bundled databases.
          *
-         * @throws IOException when the asset is missing or the extracted file cannot be installed.
+         * @throws java.io.IOException when the asset is missing or the extracted file cannot be installed.
          */
-        suspend fun open(context: Context): JmdictRepository = withContext(Dispatchers.IO) {
-            val target = File(context.filesDir, DB_FILE_NAME)
-            extractionMutex.withLock { ensureExtracted(context, target) }
-            JmdictRepository(
-                SQLiteDatabase.openDatabase(target.path, null, SQLiteDatabase.OPEN_READONLY)
-            )
-        }
-
-        /**
-         * True when the extracted copy is byte-identical to the packaged asset, judged from the
-         * 100-byte SQLite header both share (page size, page count, change counter and
-         * `user_version`).
-         *
-         * Without this the copy in `filesDir` would be trusted forever: an app update shipping a
-         * newer JMdict asset kept the previous database, and a query against a table the new code
-         * expects (`names`) threw `no such table`. The asset is deflated inside the APK, so this
-         * compares headers rather than `openFd().length`, and it stays a 100-byte read either way.
-         */
-        private fun matchesAsset(context: Context, file: File): Boolean {
-            val copied = readHeader(file) ?: return false
-            val packaged = try {
-                context.assets.open(ASSET_PATH).use { readHeader(it) }
-            } catch (e: IOException) {
-                null
-            } ?: return false
-            return copied.contentEquals(packaged)
-        }
-
-        /** The first [SQLITE_HEADER_SIZE] bytes of [file], or null when it is shorter than that. */
-        private fun readHeader(file: File): ByteArray? = try {
-            file.inputStream().use { readHeader(it) }
-        } catch (e: IOException) {
-            null
-        }
-
-        private fun readHeader(input: java.io.InputStream): ByteArray? {
-            val header = ByteArray(SQLITE_HEADER_SIZE)
-            var read = 0
-            while (read < header.size) {
-                val n = input.read(header, read, header.size - read)
-                if (n <= 0) return null
-                read += n
-            }
-            return header
-        }
-
-        private fun ensureExtracted(context: Context, target: File) {
-            if (isUsableDatabase(target) && matchesAsset(context, target)) return
-
-            val temp = File(target.parentFile, TEMP_FILE_NAME)
-            try {
-                context.assets.open(ASSET_PATH).use { input ->
-                    FileOutputStream(temp).use { out -> input.copyTo(out) }
-                }
-                if (!temp.renameTo(target) && !(target.delete() && temp.renameTo(target))) {
-                    throw IOException("Could not move ${temp.path} to ${target.path}")
-                }
-            } finally {
-                if (temp.exists()) temp.delete()
-            }
-        }
-
-        /**
-         * True when [file] holds a complete SQLite database: correct magic, and a length equal to
-         * the size declared by its own header (page size x page count). A truncated or interrupted
-         * extraction fails this check and is simply re-extracted.
-         */
-        private fun isUsableDatabase(file: File): Boolean {
-            if (!file.isFile || file.length() < SQLITE_HEADER_SIZE) return false
-            val header = ByteArray(SQLITE_HEADER_SIZE)
-            try {
-                file.inputStream().use { input ->
-                    if (input.read(header) != SQLITE_HEADER_SIZE) return false
-                }
-            } catch (e: IOException) {
-                return false
-            }
-            if (!header.copyOfRange(0, SQLITE_MAGIC.size).contentEquals(SQLITE_MAGIC)) return false
-
-            val rawPageSize = ((header[16].toInt() and 0xFF) shl 8) or (header[17].toInt() and 0xFF)
-            // A page size of 1 encodes 65536, which does not fit in the 16-bit field.
-            val pageSize = if (rawPageSize == 1) 65536L else rawPageSize.toLong()
-            val pageCount = ((header[28].toLong() and 0xFF) shl 24) or
-                ((header[29].toLong() and 0xFF) shl 16) or
-                ((header[30].toLong() and 0xFF) shl 8) or
-                (header[31].toLong() and 0xFF)
-            return pageSize * pageCount == file.length()
-        }
+        suspend fun open(context: Context): JmdictRepository = JmdictRepository(
+            BundledDatabase.openReadOnly(context, ASSET_PATH, DB_FILE_NAME)
+        )
     }
 
     /**

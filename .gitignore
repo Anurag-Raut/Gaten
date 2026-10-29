@@ -23,6 +23,11 @@ app/src/main/assets/db/jmdict.sqlite
 # Generated example sentences: build it with tools/build_examples_db.py
 app/src/main/assets/db/examples.sqlite
 
+# Generated Remembering the Kanji reference: build it with tools/build_rtk_db.py.
+# Generated rather than committed because the bundled prose is third-party content whose
+# redistribution rights have not been cleared (docs/jp-prototype/rtk/DATA.md).
+app/src/main/assets/db/rtk.sqlite
+
 # manga-ocr model: fetched by the build into the assets every variant bundles, or by
 # tools/fetch_manga_ocr.sh. ~117 MB of weights, gitignored like the dictionary databases.
 app/src/main/assets/manga-ocr/

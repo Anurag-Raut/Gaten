@@ -228,16 +228,20 @@ python3 tools/build_jmdict_db.py
 # 2. Generate the example-sentence asset (stdlib only; downloads the Tanaka Corpus, SHA-256 pinned).
 python3 tools/build_examples_db.py
 
-# 3. Install the JavaScript dependencies.
+# 3. Generate the Remembering the Kanji asset (stdlib only; downloads one pinned final.csv, SHA-256
+#    pinned). See the redistribution checkpoint in docs/jp-prototype/rtk/DATA.md.
+python3 tools/build_rtk_db.py
+
+# 4. Install the JavaScript dependencies.
 npm install
 
-# 4. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
+# 5. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
 ./gradlew :app:assembleDebug
 ```
 
-Both database assets (`app/src/main/assets/db/jmdict.sqlite` and
-`app/src/main/assets/db/examples.sqlite`) are generated and gitignored, so the build fails early with
-a clear message if either builder was skipped.
+All three database assets (`app/src/main/assets/db/jmdict.sqlite`,
+`app/src/main/assets/db/examples.sqlite` and `app/src/main/assets/db/rtk.sqlite`) are generated and
+gitignored, so the build fails early with a clear message if any builder was skipped.
 
 For publishing a build from `dev` to Google Play internal testers, follow the
 [internal testing release instructions](.github/DEPLOYMENT.md).
@@ -354,6 +358,30 @@ WaniKani pages are an unofficial third-party reference: Gaten is not affiliated 
 WaniKani, and no WaniKani content is bundled in the APK or exported to Anki — each page is fetched
 through the public API when the reader asks, and cached on that device.
 
+## Remembering the Kanji reference (offline)
+
+Kanjis do not have to go through WaniKani. **Settings → Study → Kanji reference** chooses between
+**WaniKani** (the default, exactly as before) and **Remembering the Kanji**, which answers every kanji
+page from a dataset bundled with the app. The choice is stored on the device, applies immediately to
+every surface that opens kanji details — the word page, the accessibility lookup overlay and the
+Anki review answer side — and only changes what a reference page shows. The WaniKani connection has
+its own settings page; reviews, lessons, analytics and the stored token are not touched.
+
+Remembering the Kanji needs no account, token, network connection or additional download, and it
+works the first time the app is opened. A kanji page shows the RTK keyword, Heisig's story, the
+Heisig primitive comment when the dataset carries one, and the first Kanji Koohii community mnemonic
+with its author and date; **View other stories** expands the rest in place. Emphasis in the source
+prose is preserved, and a kanji the dataset does not carry says **Not available in Remembering the
+Kanji** instead of showing an empty page.
+
+The dataset covers 2,991 kanji from the [Remembering the Kanji stories
+extract](https://github.com/Arthur944/remembering-the-kanji-stories): 2,182 carry a Heisig story, 132
+a primitive comment, and every row at least one community story. `tools/build_rtk_db.py` pins one
+`final.csv` revision by commit and SHA-256, builds an indexed SQLite asset, and records the
+provenance in `docs/jp-prototype/rtk/DATA.md`. The asset is generated at build time and gitignored,
+never committed: it repackages third-party prose whose redistribution rights have **not** been
+cleared, which is a stated release checkpoint before a store build may bundle it.
+
 ## Reviewing in Gaten
 
 There is no Review tab: the bottom navigation is **Home / Analytics / Settings**, and studying is a
@@ -445,6 +473,9 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 - `wanikani/` — the optional WaniKani client: the token (Keystore-encrypted, stored off the backup
   set), the API calls to `api.wanikani.com` under the account's level entitlement, and the on-device
   cache of subjects and radical images.
+- `rtk/` — the offline Remembering the Kanji reference: indexed lookup by character
+  (`RtkRepository`), the mnemonic column's decode, and the stored choice of which reference a kanji
+  page shows (`KanjiReferenceSource` / `KanjiReferencePreference`).
 - `dict/` — offline dictionary: SQLite access (`JmdictRepository`), typed-word search
   (`DictionarySearch`), OCR word scanning (`WordScanner`) and deinflection (`Deinflector`).
 - `data/` — `BitmapRepository`, the in-memory hand-off of the captured screenshot.
@@ -462,8 +493,9 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 - `ui/theme/` — the palette, `ThemePreferences` (the stored dark/light and accent choices the
   overlay, the floating bubble and the RN theme bridge read) and `LauncherIcon` (the launcher entry
   those choices switch).
-- `tools/` — `build_jmdict_db.py`, which builds the dictionary asset, and `fetch_manga_ocr.sh`,
-  which fetches model assets used by local builds.
+- `tools/` — `build_jmdict_db.py`, `build_examples_db.py` and `build_rtk_db.py`, which build the
+  bundled database assets, and `fetch_manga_ocr.sh`, which fetches model assets used by local
+  builds.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
 
 ## Privacy
@@ -553,6 +585,12 @@ documented here rather than left implicit.
   its [public API](https://docs.api.wanikani.com/20170710) under WaniKani's own terms when the reader
   connects a token. Nothing from WaniKani is bundled with the app: each kanji or radical page is
   fetched on request and cached on the reader's device, and Gaten is not affiliated with WaniKani.
+- **Remembering the Kanji reference data** — keywords and stories from *Remembering the Kanji* by
+  James W. Heisig, and community mnemonics from [Kanji Koohii](https://kanji.koohii.com/), as
+  extracted by [Arthur944/remembering-the-kanji-stories](https://github.com/Arthur944/remembering-the-kanji-stories).
+  The asset is generated at build time from one pinned revision (`docs/jp-prototype/rtk/DATA.md`)
+  and is not committed. **Redistribution rights for this text have not been cleared**; publishing a
+  build that bundles it is a release blocker to resolve first.
 - **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
   lines and is available as an alternative reader.
 - **Stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,

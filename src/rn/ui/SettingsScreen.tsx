@@ -22,6 +22,7 @@ import {LookupSettingsScreen} from "./settings/LookupSettingsScreen";
 import {RecognitionSettingsScreen} from "./settings/RecognitionSettingsScreen";
 import {AnkiSettingsScreen} from "./settings/AnkiSettingsScreen";
 import {WaniKaniSettingsScreen} from "./settings/WaniKaniSettingsScreen";
+import {KanjiReferenceSettingsScreen} from "./settings/KanjiReferenceSettingsScreen";
 import {AppearanceSettingsScreen} from "./settings/AppearanceSettingsScreen";
 import {AboutScreen} from "./settings/AboutScreen";
 
@@ -53,6 +54,8 @@ export function SettingsPageScreen({page}: {page: SettingsPageName}) {
       return <AnkiSettingsScreen onClose={onClose} isCurrentDestination={isCurrentDestination} />;
     case "wanikani":
       return <WaniKaniSettingsScreen onClose={onClose} />;
+    case "reference":
+      return <KanjiReferenceSettingsScreen onClose={onClose} />;
     case "appearance":
       return <AppearanceSettingsScreen onClose={onClose} />;
     default:

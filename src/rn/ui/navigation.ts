@@ -74,6 +74,7 @@ export const SETTINGS_PAGES = [
   "recognition",
   "anki",
   "wanikani",
+  "reference",
   "appearance",
   "about",
 ] as const;

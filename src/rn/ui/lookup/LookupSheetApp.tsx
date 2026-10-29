@@ -66,6 +66,7 @@ import {
   WordKanjiSection,
 } from "../search/WordDetailScreen";
 import {SearchKanjiScreen, SearchRadicalScreen} from "../search/ReferenceScreen";
+import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useAnkiExport} from "../search/useAnkiExport";
 import {distinctIdeographs} from "../components";
 import type {SearchResult} from "../../native/GatenDict";
@@ -533,6 +534,8 @@ function EntryDetail({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  // The chosen reference decides whether the kanji tiles have anywhere to go and what they say.
+  const kanjiReference = useKanjiReferenceSource();
   const exportState = anki.exportFor(entry.id);
   // AddToAnkiBar draws nothing unless AnkiDroid is ready, and the in-flow case must not double its gap.
   const ankiBarPresent = anki.ankiStatus === "ready";
@@ -592,8 +595,9 @@ function EntryDetail({
         <HeadwordSection hit={entry} />
         <MeaningSection glosses={entry.glosses} partsOfSpeech={entry.pos} />
         <OtherSpellingsRow primary={entry.primary} spellings={entry.kanji} />
-        {wanikaniConfigured && (
+        {showKanjiStrip(kanjiReference, wanikaniConfigured) && (
           <WordKanjiSection
+            label={kanjiReferenceLabel(kanjiReference)}
             characters={distinctIdeographs(entry.primary)}
             onOpenKanji={onOpenKanji}
           />

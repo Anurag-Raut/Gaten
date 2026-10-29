@@ -56,6 +56,8 @@ import {useTheme, type Theme} from "./theme";
 import {OutlinedButton} from "./settings/settings-components";
 import {DialogShell} from "./DialogShell";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
+import {RtkKanjiPanel} from "./rtk/RtkKanjiPanel";
+import {kanjiReferenceLabel, useKanjiReferenceSource} from "./kanjiReference";
 import {stepDepth, type ReviewFailure, type ReviewStep} from "./review/review-store";
 import {reviewActions, useReview} from "./review/useReview";
 import {StepTransition} from "./review/StepTransition";
@@ -492,6 +494,9 @@ function AnkiSession({
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
   const card = session.card;
+  // The same choice the reference pages read: a kanji tapped during review opens whichever
+  // reference the reader selected, with no account needed for Remembering the Kanji.
+  const kanjiReference = useKanjiReferenceSource();
   // The note's own sentence is the example source: it is already on the device, so the answer never
   // waits on a network and stays readable with no connection at all.
   // The corpus is the example source; the note's own sentence is the fallback for a word the
@@ -665,7 +670,7 @@ function AnkiSession({
             }}
           >
             <Text style={[typeScale.titleSmall, styles.waniKaniTitle, {color: colors.onSurface}]}>
-              WaniKani kanji
+              {kanjiReferenceLabel(kanjiReference)}
             </Text>
             <KanjiStrip
               characters={kanji}
@@ -684,36 +689,48 @@ function AnkiSession({
               >
                 {expandedKanji == null ? null : (
                   <View style={styles.detailsWidth}>
-                    <WaniKaniPanel
-                      target={{kind: "kanji", character: expandedKanji}}
-                      showBack={false}
-                      scrollable={false}
-                      compact={false}
-                      embedded
-                      onRadical={onRadical}
-                    />
-                    {/* One level deeper: the radical is a page opened inside the kanji's
-                        page, so the kanji panel above stands still while it slides in. */}
-                    <View style={styles.radicalSlot}>
-                      <StepTransition
-                        pageKey={String(expandedRadical ?? "none")}
-                        forward={expandedRadical != null}
-                        sizing="wrap"
-                      >
-                        {expandedRadical == null ? null : (
-                          <View style={styles.radicalIndent}>
-                            <WaniKaniPanel
-                              target={{kind: "radical", id: expandedRadical}}
-                              showBack={false}
-                              scrollable={false}
-                              compact={false}
-                              embedded
-                              onRadical={onRadical}
-                            />
-                          </View>
-                        )}
-                      </StepTransition>
-                    </View>
+                    {kanjiReference === "rtk" ? (
+                      // RTK has no radicals, so there is no level below its page to open.
+                      <RtkKanjiPanel
+                        character={expandedKanji}
+                        showBack={false}
+                        scrollable={false}
+                        embedded
+                      />
+                    ) : (
+                      <>
+                        <WaniKaniPanel
+                          target={{kind: "kanji", character: expandedKanji}}
+                          showBack={false}
+                          scrollable={false}
+                          compact={false}
+                          embedded
+                          onRadical={onRadical}
+                        />
+                        {/* One level deeper: the radical is a page opened inside the kanji's
+                            page, so the kanji panel above stands still while it slides in. */}
+                        <View style={styles.radicalSlot}>
+                          <StepTransition
+                            pageKey={String(expandedRadical ?? "none")}
+                            forward={expandedRadical != null}
+                            sizing="wrap"
+                          >
+                            {expandedRadical == null ? null : (
+                              <View style={styles.radicalIndent}>
+                                <WaniKaniPanel
+                                  target={{kind: "radical", id: expandedRadical}}
+                                  showBack={false}
+                                  scrollable={false}
+                                  compact={false}
+                                  embedded
+                                  onRadical={onRadical}
+                                />
+                              </View>
+                            )}
+                          </StepTransition>
+                        </View>
+                      </>
+                    )}
                   </View>
                 )}
               </StepTransition>

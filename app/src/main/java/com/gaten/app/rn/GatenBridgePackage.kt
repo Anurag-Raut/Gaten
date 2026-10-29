@@ -23,6 +23,7 @@ class GatenBridgePackage : ReactPackage {
             GatenDictModule(reactContext),
             GatenAnkiModule(reactContext),
             GatenWaniKaniModule(reactContext),
+            GatenRtkModule(reactContext),
             GatenThemeModule(reactContext),
             GatenHapticsModule(reactContext),
             GatenAppInfoModule(reactContext),
