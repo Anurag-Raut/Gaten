@@ -475,6 +475,11 @@ export function AddToAnkiBar({
           <ScrollView
             style={styles.deckList}
             contentContainerStyle={styles.deckListContent}
+            // This list can sit inside the entry's own scroller (the lookup sheet's footer is the
+            // content's last item in both orientations). Android needs nested scrolling enabled on
+            // the inner list or it swallows the drag over the list and the entry never scrolls.
+            // Inert where the list is not nested, which is Home.
+            nestedScrollEnabled
             showsVerticalScrollIndicator={false}
             showsHorizontalScrollIndicator={false}
           >
