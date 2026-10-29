@@ -1,0 +1,13 @@
+# current head e7276069 — one 15 s take: bubble tap triggers the overlay, a tap ~0.5 s later
+# (inside Scanning) is queued, replayed, and resolves to the same line 4 as the earlier control.
+# Fixture: Gaten Home, 猫 under "Recently looked up". Device emulator-5554 (API 34 x86_64).
+1793280622.056 15121 15121 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793280622.157 15121 15121 D Gaten   : Overlay window added for a 1080x2340 capture (+101 ms since the trigger)
+1793280622.182 15121 15121 D Gaten   : Frozen frame on screen (+126 ms since the trigger)
+1793280622.595 15121 15121 D Gaten   : Tap queued while the screen index is still building
+1793280623.118 15121 15232 D Gaten   : Early screen scan ready in 970 ms
+1793280623.120 15121 15121 D Gaten   : Screen scan ready in 910 ms (26 lines)
+1793280623.145 15121 15121 D Gaten   : Replaying the queued tap
+1793280623.145 15121 15121 D Gaten   : Tap hit line 4
+1793280623.986 15121 15121 D Gaten   : Tap complete in 840 ms
+# measured on the device clock: bubble tap -> Trigger accepted = 0.018 s (earlier build baseline 0.161-0.174 s)

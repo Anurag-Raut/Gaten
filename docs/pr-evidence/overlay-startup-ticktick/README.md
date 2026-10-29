@@ -143,3 +143,29 @@ Not claimed: faster OCR, or any change to index timing (737–869 ms scans in th
 - The timing tables above and the UI-pass screenshots were captured on **earlier builds** (the
   native-only fixed APK `e51280d9…`, native changes uncommitted). The queued-tap patch changes no RN
   UI code, so those screenshots still describe the current UI; the timings were not re-taken here.
+
+## Current head spot-check — `e7276069`
+
+The native code on this head is **byte-identical** to the combined build the sections above were
+captured on, so they still describe this head's behaviour and this is a bounded spot-check rather than
+a re-run of every scenario. How that was checked: the three upstream commits (`7d12ac4..7e02486`)
+touch only `src/rn/**` and `docs/**` — no `app/` file at all, i.e. no Kotlin/native code — and each
+patched file's `sha256` matches the verified worktree:
+`FloatingTriggerButton.kt 9d9d7713007a60fd…6d176b54`, `LookupOverlay.kt c78d7d4c22eb97ff…4f6310e9`,
+`GatenAccessibilityService.kt ac90c3fdfe247d0a…4a40e4b`.
+
+One 15 s `adb screenrecord` (`head41-bubble-queued.mp4`), Gaten Home foreground (猫 under "Recently
+looked up"), `emulator-5554` (API 34 x86_64), this head's APK `sha256 59c356af…` — the bubble tap
+triggers the overlay, then a tap ~0.5 s later, inside Scanning, is queued and replayed:
+
+- `Trigger accepted` **0.018 s** after the bubble tap, measured on the device clock (the earlier
+  build's baseline was 0.161–0.174 s).
+- `Overlay window added` +101 ms → `Frozen frame on screen` +126 ms.
+- `Tap queued while the screen index is still building` → `Screen scan ready in 910 ms (26 lines)` →
+  `Replaying the queued tap` → `Tap hit line 4` → `Tap complete in 840 ms`.
+- `head41-sheet.png` — the replayed tap's sheet: 猫 / ねこ・ネコ / "Cat (esp. the domestic cat, Felis
+  catus), feline", i.e. the same line and entry as the earlier control.
+
+Log window: `head41-clip.log`. A first take with the second tap at ~0.2 s is deliberately **not**
+offered as evidence: it landed before the overlay's UI was composed (its log has no `Tap …` line), so
+it shows only the bubble-tap half.
