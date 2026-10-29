@@ -31,6 +31,7 @@ import {
   View,
 } from "react-native";
 import {GestureHandlerRootView} from "react-native-gesture-handler";
+import {ReactNativeGrabRoot, ReactNativeGrabSurface} from "react-native-grab";
 import Animated, {
   Easing,
   FadeIn,
@@ -293,134 +294,136 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
   if (state.mode === "hidden") return null;
 
   return (
-    <View style={styles.backdrop} pointerEvents="box-none">
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        accessible={false}
-        importantForAccessibility="no"
-        onPress={onBackdropPress}
-      />
-      <Animated.View
-        entering={reducedMotion ? undefined : SlideInDown}
-        exiting={reducedMotion ? undefined : SlideOutDown}
-        style={[styles.panel, {backgroundColor: colors.surface}, shellStyle]}
-      >
+    <ReactNativeGrabSurface active style={styles.flex} pointerEvents="box-none">
+      <View style={styles.backdrop} pointerEvents="box-none">
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessible={false}
+          importantForAccessibility="no"
+          onPress={onBackdropPress}
+        />
         <Animated.View
-          style={[styles.layer, landingStyle]}
-          pointerEvents={searchOpen ? "none" : "auto"}
-          accessibilityElementsHidden={searchOpen}
-          importantForAccessibility={searchOpen ? "no-hide-descendants" : "auto"}
+          entering={reducedMotion ? undefined : SlideInDown}
+          exiting={reducedMotion ? undefined : SlideOutDown}
+          style={[styles.panel, {backgroundColor: colors.surface}, shellStyle]}
         >
-          {reference != null ? (
-            <Animated.View
-              key={referenceKey}
-              entering={reducedMotion ? undefined : FadeIn.duration(170)}
-              exiting={reducedMotion ? undefined : FadeOut.duration(120)}
-              style={styles.flex}
-            >
-              {reference.kind === "kanji" ? (
-                <SearchKanjiScreen
-                  character={reference.character}
-                  onBack={closeReference}
-                  onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
-                  showSettings={false}
-                  overlay
-                />
-              ) : (
-                <SearchRadicalScreen
-                  id={reference.id}
-                  onBack={closeReference}
-                  onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
-                  showSettings={false}
-                  overlay
-                />
-              )}
-            </Animated.View>
-          ) : displayedEntry == null ? (
-            <EmptyState
-              kind={state.emptyKind}
-              source={state.source}
-              onSearch={() => setSearchOpen(true)}
-            />
-          ) : (
-            <EntryDetail
-              entry={displayedEntry}
-              words={state.words}
-              selected={state.selected}
-              searched={searchedEntry != null}
-              searchedQuery={searchedQuery}
-              source={state.source}
-              anki={anki}
-              wanikaniConfigured={wanikaniConfigured}
-              onSelectWord={(index) => {
-                setSearchedEntry(null);
-                setState((s) => ({...s, selected: index}));
-              }}
-              onOpenKanji={(character) => setReferences((s) => [...s, {kind: "kanji", character}])}
-              onSearch={() => setSearchOpen(true)}
-              onSelectAgain={() => bridge.selectAgain()}
-              onClose={() => bridge.close()}
-            />
-          )}
-        </Animated.View>
-
-        <Animated.View
-          style={[StyleSheet.absoluteFill, searchLayerStyle]}
-          pointerEvents={searchOpen ? "auto" : "none"}
-          accessibilityElementsHidden={!searchOpen}
-          importantForAccessibility={searchOpen ? "auto" : "no-hide-descendants"}
-        >
-          <KeyboardAvoidingView behavior="padding" style={styles.flex}>
-            <View style={[styles.toolbar, {borderBottomColor: colors.outlineVariant}]}>
-              <IconButton
-                name="arrow_back"
-                accessibilityLabel="Back to lookup"
-                onPress={() => setSearchOpen(false)}
+          <Animated.View
+            style={[styles.layer, landingStyle]}
+            pointerEvents={searchOpen ? "none" : "auto"}
+            accessibilityElementsHidden={searchOpen}
+            importantForAccessibility={searchOpen ? "no-hide-descendants" : "auto"}
+          >
+            {reference != null ? (
+              <Animated.View
+                key={referenceKey}
+                entering={reducedMotion ? undefined : FadeIn.duration(170)}
+                exiting={reducedMotion ? undefined : FadeOut.duration(120)}
+                style={styles.flex}
+              >
+                {reference.kind === "kanji" ? (
+                  <SearchKanjiScreen
+                    character={reference.character}
+                    onBack={closeReference}
+                    onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
+                    showSettings={false}
+                    overlay
+                  />
+                ) : (
+                  <SearchRadicalScreen
+                    id={reference.id}
+                    onBack={closeReference}
+                    onOpenRadical={(id) => setReferences((s) => [...s, {kind: "radical", id}])}
+                    showSettings={false}
+                    overlay
+                  />
+                )}
+              </Animated.View>
+            ) : displayedEntry == null ? (
+              <EmptyState
+                kind={state.emptyKind}
+                source={state.source}
+                onSearch={() => setSearchOpen(true)}
               />
-              <Text style={[typeScale.titleLarge, styles.toolbarTitle, {color: colors.onSurface}]}>
-                Search dictionary
-              </Text>
-              <IconButton
-                name="close"
-                accessibilityLabel="Close lookup"
-                onPress={() => bridge.close()}
-              />
-            </View>
-            <View style={styles.fieldWrap}>
-              <SearchField
-                inputRef={input}
-                query={searchState.query}
-                queryLimited={searchState.queryLimited}
-                onChangeQuery={lookupSearch.onQueryChange}
-                onFocus={() => bridge.setTextEntryActive(true)}
-                onBlur={() => bridge.setTextEntryActive(false)}
-                onSearch={() => {
-                  input.current?.blur();
-                  lookupSearch.searchNow();
+            ) : (
+              <EntryDetail
+                entry={displayedEntry}
+                words={state.words}
+                selected={state.selected}
+                searched={searchedEntry != null}
+                searchedQuery={searchedQuery}
+                source={state.source}
+                anki={anki}
+                wanikaniConfigured={wanikaniConfigured}
+                onSelectWord={(index) => {
+                  setSearchedEntry(null);
+                  setState((s) => ({...s, selected: index}));
                 }}
+                onOpenKanji={(character) => setReferences((s) => [...s, {kind: "kanji", character}])}
+                onSearch={() => setSearchOpen(true)}
+                onSelectAgain={() => bridge.selectAgain()}
+                onClose={() => bridge.close()}
               />
-            </View>
-            <FlatList<SearchRow>
-              data={searchRowsData}
-              keyExtractor={(row) => row.key}
-              renderItem={({item}) => <SearchRowItem row={item} onOpen={pickSearched} />}
-              ItemSeparatorComponent={SearchRowSeparator}
-              contentContainerStyle={[
-                SEARCH_LIST_CONTENT,
-                {paddingBottom: spacing.xxl + insets.bottom},
-              ]}
-              ListHeaderComponent={searchState.query.length === 0 ? <SearchIdlePrompt /> : null}
-              ListEmptyComponent={
-                searchState.query.length > 0 && searchNotice != null ? searchNotice : null
-              }
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              showsVerticalScrollIndicator={false}
-            />
-          </KeyboardAvoidingView>
+            )}
+          </Animated.View>
+
+          <Animated.View
+            style={[StyleSheet.absoluteFill, searchLayerStyle]}
+            pointerEvents={searchOpen ? "auto" : "none"}
+            accessibilityElementsHidden={!searchOpen}
+            importantForAccessibility={searchOpen ? "auto" : "no-hide-descendants"}
+          >
+            <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+              <View style={[styles.toolbar, {borderBottomColor: colors.outlineVariant}]}>
+                <IconButton
+                  name="arrow_back"
+                  accessibilityLabel="Back to lookup"
+                  onPress={() => setSearchOpen(false)}
+                />
+                <Text style={[typeScale.titleLarge, styles.toolbarTitle, {color: colors.onSurface}]}>
+                  Search dictionary
+                </Text>
+                <IconButton
+                  name="close"
+                  accessibilityLabel="Close lookup"
+                  onPress={() => bridge.close()}
+                />
+              </View>
+              <View style={styles.fieldWrap}>
+                <SearchField
+                  inputRef={input}
+                  query={searchState.query}
+                  queryLimited={searchState.queryLimited}
+                  onChangeQuery={lookupSearch.onQueryChange}
+                  onFocus={() => bridge.setTextEntryActive(true)}
+                  onBlur={() => bridge.setTextEntryActive(false)}
+                  onSearch={() => {
+                    input.current?.blur();
+                    lookupSearch.searchNow();
+                  }}
+                />
+              </View>
+              <FlatList<SearchRow>
+                data={searchRowsData}
+                keyExtractor={(row) => row.key}
+                renderItem={({item}) => <SearchRowItem row={item} onOpen={pickSearched} />}
+                ItemSeparatorComponent={SearchRowSeparator}
+                contentContainerStyle={[
+                  SEARCH_LIST_CONTENT,
+                  {paddingBottom: spacing.xxl + insets.bottom},
+                ]}
+                ListHeaderComponent={searchState.query.length === 0 ? <SearchIdlePrompt /> : null}
+                ListEmptyComponent={
+                  searchState.query.length > 0 && searchNotice != null ? searchNotice : null
+                }
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+              />
+            </KeyboardAvoidingView>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
-    </View>
+      </View>
+    </ReactNativeGrabSurface>
   );
 }
 
@@ -581,13 +584,15 @@ export function LookupSheetApp({sessionId}: {sessionId?: string} = {}) {
   const [searchStore] = useState(() => store.createSearchStore());
   return (
     <GestureHandlerRootView style={styles.flex}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <store.SearchStoreContext.Provider value={searchStore}>
-            <LookupSheetRoot sessionId={sessionId} />
-          </store.SearchStoreContext.Provider>
-        </ThemeProvider>
-      </SafeAreaProvider>
+      <ReactNativeGrabRoot pointerEvents="box-none">
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <store.SearchStoreContext.Provider value={searchStore}>
+              <LookupSheetRoot sessionId={sessionId} />
+            </store.SearchStoreContext.Provider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </ReactNativeGrabRoot>
     </GestureHandlerRootView>
   );
 }

@@ -231,7 +231,7 @@ python3 tools/build_examples_db.py
 # 3. Install the JavaScript dependencies.
 npm install
 
-# 4. Build the debug APK (debug builds load JS from Metro: run `npm start` before launching).
+# 4. Build a standalone debug APK with bundled JavaScript.
 ./gradlew :app:assembleDebug
 ```
 
@@ -241,6 +241,29 @@ a clear message if either builder was skipped.
 
 For publishing a build from `dev` to Google Play internal testers, follow the
 [internal testing release instructions](.github/DEPLOYMENT.md).
+
+### Selecting UI for an agent
+
+[React Native Grab](https://github.com/callstackincubator/react-native-grab) is available when
+running a development bundle from Metro. Build and install a Metro-enabled debug APK instead of
+the standalone APK above:
+
+```sh
+./gradlew :app:installDebug -PuseMetro=true
+adb reverse tcp:8081 tcp:8081
+npm start
+```
+
+Keep Metro running, launch Gaten, then open the React Native Dev Menu (shake the phone or run
+`adb shell input keyevent 82`) and choose **React Native Grab**. Use the selection control to
+pick an element and copy its context to the **computer's clipboard**. Paste that context into
+your agent chat and describe the change you want. On Linux, the computer running Metro needs
+`xclip` or `xsel` and access to a desktop clipboard.
+
+Selection covers the app's native-stack screens, settings dialogs and the React Native lookup
+sheet. Native Compose content, including the capture/lasso layer, is outside Grab's scope.
+Grab supplies element and source context; add your written annotation/change request in the chat.
+Release and standalone debug APKs use production-mode JavaScript, where Grab is a no-op.
 
 ## Stylized-text model (manga-ocr)
 

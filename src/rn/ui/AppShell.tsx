@@ -43,6 +43,7 @@ import type {
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 import {useReducedMotion} from "react-native-reanimated";
+import {ReactNativeGrabScreen} from "react-native-grab";
 import {useTheme} from "./theme";
 import {BottomBar} from "./BottomBar";
 import {HomeScreen} from "./HomeScreen";
@@ -296,9 +297,13 @@ const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const AnalyticsStack = createNativeStackNavigator<AnalyticsStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
+function grabScreenLayout({children}: {children: React.ReactNode}) {
+  return <ReactNativeGrabScreen>{children}</ReactNativeGrabScreen>;
+}
+
 function HomeTabStack() {
   return (
-    <HomeStack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
+    <HomeStack.Navigator screenOptions={STACK_SCREEN_OPTIONS} screenLayout={grabScreenLayout}>
       <HomeStack.Screen name="HomeTab" component={HomeRoute} />
       <HomeStack.Screen name="Review" component={ReviewRoute} />
       <HomeStack.Screen name="Word" component={HomeWordRoute} />
@@ -311,7 +316,7 @@ function HomeTabStack() {
 
 function AnalyticsTabStack() {
   return (
-    <AnalyticsStack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
+    <AnalyticsStack.Navigator screenOptions={STACK_SCREEN_OPTIONS} screenLayout={grabScreenLayout}>
       <AnalyticsStack.Screen name="AnalyticsTab" component={AnalyticsRoute} />
       <AnalyticsStack.Screen name="SettingsPage" component={SettingsPageRoute} />
     </AnalyticsStack.Navigator>
@@ -320,7 +325,7 @@ function AnalyticsTabStack() {
 
 function SettingsTabStack() {
   return (
-    <SettingsStack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
+    <SettingsStack.Navigator screenOptions={STACK_SCREEN_OPTIONS} screenLayout={grabScreenLayout}>
       <SettingsStack.Screen name="SettingsTab" component={SettingsTab} />
       <SettingsStack.Screen name="SettingsPage" component={SettingsPageRoute} />
     </SettingsStack.Navigator>

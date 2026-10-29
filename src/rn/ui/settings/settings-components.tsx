@@ -29,6 +29,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
+import {ReactNativeGrabSurface} from "react-native-grab";
 import {openAccessibilitySettings, toast} from "../../native/GatenPlatform";
 import {
   Button,
@@ -408,38 +409,40 @@ export function DialogShell({
   const {colors} = useTheme();
   return (
     <Modal transparent animationType="fade" onRequestClose={onDismiss} visible>
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: spacing.xl,
-        }}
-        onPress={onDismiss}
-      >
+      <ReactNativeGrabSurface active style={{flex: 1}}>
         <Pressable
           style={{
-          backgroundColor: colors.surface,
-          borderRadius: shape.medium,
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            alignItems: "center",
+            justifyContent: "center",
             padding: spacing.xl,
-            width: "100%",
-            maxWidth: 360,
           }}
-          onPress={(event) => event.stopPropagation()}
+          onPress={onDismiss}
         >
-          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
-          {scrollBody ? (
-            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: bodyGap}}>{children}</ScrollView>
-          ) : (
-            <View style={{marginTop: bodyGap}}>{children}</View>
-          )}
-          {footer}
-          <View style={{flexDirection: "row", justifyContent: "flex-end", marginTop: spacing.l}}>
-            {actions}
-          </View>
+          <Pressable
+            style={{
+            backgroundColor: colors.surface,
+            borderRadius: shape.medium,
+              padding: spacing.xl,
+              width: "100%",
+              maxWidth: 360,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
+            {scrollBody ? (
+              <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: bodyGap}}>{children}</ScrollView>
+            ) : (
+              <View style={{marginTop: bodyGap}}>{children}</View>
+            )}
+            {footer}
+            <View style={{flexDirection: "row", justifyContent: "flex-end", marginTop: spacing.l}}>
+              {actions}
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </ReactNativeGrabSurface>
     </Modal>
   );
 }

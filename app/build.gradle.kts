@@ -128,9 +128,11 @@ react {
     // Adds an implementation dependency on every npm module autolinking found (settings-side
     // autolinkLibrariesFromCommand has already included those projects).
     autolinkLibrariesWithApp()
-    // Bundle debug too: the host loads assets://index.android.bundle unconditionally, and a
-    // Metro dev server is optional, not a launch requirement.
-    debuggableVariants.set(emptyList())
+    // Standalone debug APKs keep their bundled JS. Opt into Metro's development bundle for
+    // Fast Refresh, Dev Menu tools and React Native Grab with -PuseMetro=true.
+    debuggableVariants.set(
+        if (providers.gradleProperty("useMetro").orNull == "true") listOf("debug") else emptyList()
+    )
 }
 
 // ABI-specific version codes for F-Droid and multi-APK support
