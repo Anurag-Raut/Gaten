@@ -37,12 +37,20 @@
 | `02-keyboard-up.png` | Keyboard up after tapping the token field. The form has scrolled so the **token field is fully visible**, the link is under it, and the **Connect WaniKani button is clearly visible above the keyboard**. The IME action key is the forward arrow (`returnKeyType="go"`). |
 | `03-ime-action.png` | IME action fired: a fake token was typed and the IME action key pressed; the keyboard dismissed and the screen shows *«WaniKani rejected that token. Check it was copied in full.»* — the IME action ran the same `connect()` as the button (and reached WaniKani). The button is enabled (token non-empty). |
 | `04-narrow-width-720x1560.png` | Narrow/short check — 720×1560 px (≈262×567 dp), keyboard down. The horizontal inset is present and shared by the label, field and link. On this short viewport the form is taller than the screen, so the field sits under the action bar until the form is scrolled (a pre-existing scrolling situation, not a keyboard overlap). |
+| `05-narrow-width-keyboard-up.png` | Same 720×1560 screen, keyboard up after tapping the token field: the field and the link are visible and the **Connect WaniKani button sits fully above the keyboard**. Confirms the action rises even on a short screen. |
+
+## Motion
+
+| File | Shows |
+|---|---|
+| `06-keyboard-rise.mp4` | Narrow 720×1560 screen: the field is focused and the keyboard rises; the form scrolls and **the Connect WaniKani button settles above the keyboard**, never under it. Recorded from the same build with `adb shell screenrecord --size 720x1560`; trimmed to ≈7.5 s. |
 
 ## Notes / limitations
 
 - `02-keyboard-up.png` was re-captured on `emulator-5554` from the APK built from this branch (hashes above), after tapping the token field; `01`, `03` and `04` were captured from the same source revision (commit `2d34406`, the identical code change) and were not re-shot.
 - At 1080×2340 the keyboard-up auto-scroll reliably brings the field fully into view (image 02); the whole flow was exercised end to end.
-- The 720×1560 keyboard-up shot could not be captured cleanly: on that run the app's own «Circle or tap Japanese text» overlay kept taking focus, and the emulator's `wm size` override reverted on its own, so the only narrow-screen evidence is the keyboard-down shot (image 04).
-- The empty-token guard (IME action does nothing while the token is empty) is unchanged from `dev` and was not re-captured on this build; it is source-verified (`onSubmitEditing` still guards on `token.trim() !== "" && !pending`).
+- The narrow 720×1560 keyboard-up state, missed in the first capture pass, was captured later from the same APK (`05-narrow-width-keyboard-up.png`, `06-keyboard-rise.mp4`): the field and the action both clear the keyboard. The earlier attempt failed only because the app's «Circle or tap Japanese text» overlay kept taking focus and the `wm size` override reverted; a fresh navigation run with the override in place worked.
+- The empty-token guard was exercised on the device: with the field empty the IME action key dismisses the keyboard and does nothing else — no request is made, no message appears, and the Connect WaniKani button stays disabled.
 - The floating «G» circle seen in earlier runs is the React Native debug overlay, present in debug builds only; it is absent from the captures kept here.
 - Keyboard state confirmed with `adb shell dumpsys input_method | grep mInputShown` (`mInputShown=true` in the keyboard-up capture).
+- `05-narrow-width-keyboard-up.png` (`a5d7f04b6c6c2beae176312a839e50846826cba0d8bcc73b19ca0989ec4cf081`) and `06-keyboard-rise.mp4` (`0c8288c1a23974b5b51bc6a04cbcae3c8743a910257bcddec3f5e0165004742e`) were added in a documentation-only follow-up after #48 was merged into `dev` (`2069265`). They come from the same installed APK as the rest of this evidence (`207f3075ef4eccce0631f1c08ca1ff4b6b1bb39ae327de8358096466be33d214`), which the merge did not change.
