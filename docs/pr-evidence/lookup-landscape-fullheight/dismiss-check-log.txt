@@ -1,0 +1,63 @@
+Dismissal re-check — lookup sheet backdrop press
+===============================================
+
+Build under test (unchanged since the captures above)
+  APK     app/build/outputs/apk/debug/app-x86_64-debug.apk, 298,000,245 B
+  SHA-256 de73fbf814023f4559ac571de83e2b8900215295eece8c75466dd95222132b9e
+          host file and on-device /data/app/~~pNq526J1Amf8QZ8UNj9LZQ==/com.gaten-PRHZgsh3KTeDnIwqBQc0cA==/base.apk
+          re-hashed after this run: identical, so every observation below is the build the other
+          captures were taken from.
+
+Device  emulator-5554 (AVD Gaten_Lookup_Review), 1080x2340 @ 440 dpi, portrait unless noted.
+        Rotation was driven with `settings put system user_rotation`; the end state is restored
+        (user_rotation=0, accelerometer_rotation=1).
+Method  adb only: `am broadcast -a com.gaten.action.TRIGGER_LOOKUP -p com.gaten`, `input tap`,
+        `screencap`, `screenrecord`, `logcat -s Gaten`.
+        No agent-device helper attached: no snapshot-helper process on the host or the device, and
+        `dumpsys accessibility` reported `Bound services: ... Service[label=Gaten ...]` for the
+        whole session (UiAutomation suppression was not in play).
+
+Why the earlier "did not dismiss" reading was not a defect
+---------------------------------------------------------
+The earlier presses were not attributed to the panel's own bounds, so a press that landed inside
+the panel (or before a result existed, when no sheet is mounted and a tap on the frozen screen is
+an ordinary lasso tap) reads the same as a press that failed. Re-run against the panel geometry
+measured from `12`/`14` — portrait panel top y=702, landscape panel x 400..1939 — with a press
+inside the panel as the negative control.
+
+| Orientation | Press (px)              | Expected      | Observed                                                            |
+|-------------|-------------------------|---------------|---------------------------------------------------------------------|
+| portrait    | inside panel (250,1100) | no dismissal  | no `Overlay window removed`; screen byte-identical (md5 2bd7fdfe…)  |
+| portrait    | above panel (540,300)   | dismiss       | `Media resume…` + `Overlay window removed (resumed=true)`            |
+| landscape   | inside panel (1700,900) | no dismissal  | 0 `Overlay window removed` lines                                    |
+| landscape   | side gutter (150,540)   | dismiss       | `Media resume…` + `Overlay window removed (resumed=true)`            |
+
+The portrait pair is `16-lookup-dismiss-portrait.mp4` (sheet up at ~8 s and ~11 s after the inside
+press, app with no overlay from ~15 s); the landscape pass is `17-lookup-dismiss-landscape.mp4`
+(sheet up, then the gutter press at ~9 s clears it).
+
+Log excerpts (`adb logcat -v time -s Gaten`), transcribed from the runs
+---------------------------------------------------------------------
+portrait, 18:21 — trigger, selection tap, then inside press (no line), then the outside press:
+  18:21:45.274 D/Gaten: Overlay window added for a 1080x2340 capture (+98 ms since the trigger)
+  18:21:48.697 D/Gaten: Tap hit line 2
+  18:21:53.962 D/Gaten: Media resume: sending a media play key event
+  18:21:53.979 D/Gaten: Overlay window removed (resumed=true)
+
+landscape, 18:22 — trigger, selection tap, then the gutter press:
+  18:22:17.611 D/Gaten: Overlay window added for a 2340x1080 capture (+82 ms since the trigger)
+  18:22:21.051 D/Gaten: Tap hit line 2
+  18:22:21.322 D/Gaten: Tap complete in 271 ms
+  18:22:24.061 D/Gaten: Media resume: sending a media play key event
+  18:22:24.074 D/Gaten: Overlay window removed (resumed=true)
+
+Earlier passes in the same session, same APK:
+  18:17:37.827 D/Gaten: Overlay window removed (resumed=true)   # portrait, press above the panel
+  18:18:19.062 D/Gaten: Overlay window removed (resumed=true)   # landscape, press in the gutter
+
+Note on one aborted attempt
+---------------------------
+A first portrait recording was discarded: the overlay had been left open by an aborted command, so
+the trigger broadcast that was meant to open it *toggled it closed* ("Lookup panel was open -
+closing it") and the following presses landed on the app behind. The re-run above started from a
+verified-closed state (no `TYPE_ACCESSIBILITY_OVERLAY` window in `dumpsys window`).
