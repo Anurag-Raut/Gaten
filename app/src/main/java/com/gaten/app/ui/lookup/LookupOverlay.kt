@@ -201,6 +201,9 @@ fun LookupOverlay(
     var closing by remember { mutableStateOf(false) }
     var phase by remember { mutableStateOf(Phase.Selecting) }
     var points by remember { mutableStateOf(emptyList<Offset>()) }
+    // A tap that lands before the screen index exists: the latest one is kept and replayed through
+    // the ordinary indexed path once the index arrives, so the reader's first touch is not dropped.
+    var pendingTap by remember { mutableStateOf<Offset?>(null) }
     var frozenBox by remember { mutableStateOf<Rect?>(null) }
     var result by remember { mutableStateOf<LookupResult?>(null) }
     // The lookup session the displayed result belongs to, and the anchor box (view px) its dock
@@ -447,6 +450,7 @@ fun LookupOverlay(
 
     fun close() {
         lookupJob?.cancel()
+        pendingTap = null
         if (closing) return
         closing = true
     }
@@ -564,12 +568,19 @@ fun LookupOverlay(
         val live = screen
         val bmp = screenshot
         if (bmp == null || live == null) {
-            // No index to hit-test against. While the screen is still being read the rail already
-            // says so; an index that never arrived leaves the circle as the only way in, and saying
-            // "circle or tap" there would promise a lookup the tap cannot deliver.
-            if (scanState == ScanState.Unavailable) showNotice(instruction(scanState))
+            // No index yet: keep the latest tap while the screen is still being read, and spend it
+            // when the index never arrives, where the circle is the only way in.
+            if (scanState == ScanState.Scanning) {
+                pendingTap = at
+                Log.d(TAG, "Tap queued while the screen index is still building")
+            } else {
+                pendingTap = null
+                showNotice(instruction(scanState))
+            }
             return
         }
+        // Any tap that really ran supersedes a buffered one.
+        pendingTap = null
         // The finger is in view pixels; the index, and everything it is hit-tested against, is in
         // the capture's pixels.
         val tapped = mapping.toBitmap(at.x, at.y)
@@ -627,6 +638,7 @@ fun LookupOverlay(
         if (closing) return
         lookupJob?.cancel()
         frozenBox = null
+        pendingTap = null
         phase = Phase.Selecting
         sheetState.targetState = false
         // Asking for another selection discards everything this lookup had shown: the typed entry and
@@ -636,6 +648,20 @@ fun LookupOverlay(
         // The instruction comes back with the state it belongs to, over the outgoing sheet: the
         // reader who just asked for another selection should not have to guess the gesture again.
         showNotice(instruction(scanState))
+    }
+
+    // Replays the tap buffered before the index existed, through the same indexed `onTap`, so its
+    // line and phrase resolve identically; consumes it once, and only for an index that holds lines
+    // while the overlay is still selecting. A still-scanning index is left untouched.
+    LaunchedEffect(scanState) {
+        val settled = scanState
+        if (settled == ScanState.Scanning) return@LaunchedEffect
+        val at = pendingTap ?: return@LaunchedEffect
+        pendingTap = null
+        if (settled !is ScanState.Ready || settled.screen.lines.isEmpty()) return@LaunchedEffect
+        if (phase != Phase.Selecting || closing) return@LaunchedEffect
+        Log.d(TAG, "Replaying the queued tap")
+        onTap(at)
     }
 
     // Fade in on open and fade out on close, so the overlay never pops. The frozen capture is not
@@ -661,6 +687,8 @@ fun LookupOverlay(
                 // back, so the rail is never left blank just because a gesture ended.
                 onLassoStart = {
                     hideInstruction()
+                    // A lasso takes over the gesture: a tap buffered before this must not fire later.
+                    pendingTap = null
                     points = listOf(it)
                 },
                 onLassoUpdate = { points = points + it },
