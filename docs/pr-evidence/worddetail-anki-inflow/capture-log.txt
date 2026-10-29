@@ -1,0 +1,63 @@
+# Word details — Anki action in the entry content: capture log
+#
+# Everything below ran from the worktree root on branch fix/worddetail-anki-inflow
+# (base origin/dev 1163685) with the emulator-5554 AVD Gaten_Lookup_Review.
+#
+# 1. Build + install
+node_modules/.bin/tsc --noEmit -p tsconfig.json                     # clean
+./gradlew :app:assembleDebug                                        # BUILD SUCCESSFUL in 2m 37s; 281 actionable tasks
+sha256sum app/build/outputs/apk/debug/app-x86_64-debug.apk
+#   3dbb93bae638fe6dd92ba58ac047213c8ecb2d356bde2ff71dc33802fb7c8449
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-x86_64-debug.apk
+#   Performing Streamed Install / Success
+adb -s emulator-5554 shell pm path com.gaten
+#   package:/data/app/~~0O_UAvJutAirc_TVk-klNg==/com.gaten-9ugz2W1pc5yWdxYrwEqCzw==/base.apk
+adb -s emulator-5554 shell "sha256sum /data/app/~~0O_UAvJutAirc_TVk-klNg==/com.gaten-9ugz2W1pc5yWdxYrwEqCzw==/base.apk"
+#   3dbb93bae638fe6dd92ba58ac047213c8ecb2d356bde2ff71dc33802fb7c8449  (matches the built APK)
+unzip -p app/build/outputs/apk/debug/app-x86_64-debug.apk assets/index.android.bundle | sha256sum
+#   5d5b11e9d44f4f716d30241398ee909875b4c94e0767f723df9086c79c46ca2a
+#   (bundle regenerated 21:08, after the 21:06 source edit; debug variants are bundled, not Metro-served)
+
+# 2. Device
+adb -s emulator-5554 shell getprop ro.build.version.sdk        # 34
+adb -s emulator-5554 shell wm size                             # Physical size: 1080x2340
+adb -s emulator-5554 shell wm density                          # Physical density: 440
+adb -s emulator-5554 shell settings get system font_scale      # 0.94
+adb -s emulator-5554 shell "cmd uimode night"                  # Night mode: no
+adb -s emulator-5554 shell settings get secure enabled_accessibility_services
+#   com.gaten/com.gaten.app.GatenAccessibilityService   (unchanged throughout)
+adb -s emulator-5554 shell pm list packages | grep anki        # com.ichi2.anki
+adb -s emulator-5554 shell dumpsys package com.gaten | grep com.ichi2.anki.permission
+#   com.ichi2.anki.permission.READ_WRITE_DATABASE: granted=true, flags=[ USER_SET]   -> ankiStatus "ready"
+
+# 3. Navigation  (fixture: Home search for "toru" -> 取る, all 18 meanings expanded so the
+#    content is unambiguously taller than the viewport)
+adb -s emulator-5554 shell monkey -p com.gaten -c android.intent.category.LAUNCHER 1
+adb -s emulator-5554 shell input tap 366 407      # focus the Home search field
+adb -s emulator-5554 shell input text "toru"
+adb -s emulator-5554 shell input tap 447 1041     # the 取る result
+adb -s emulator-5554 shell input tap 344 1596     # "View all meanings (18)" -> 18 of 18
+#  (an earlier fixture, 猫 via Home -> Recently looked up, showed the same shape and the
+#   "Already in Anki" label; the deck label is read from Anki as before)
+
+# 4. Captures
+#  scroll the entry back to the very top, then:
+adb -s emulator-5554 exec-out screencap -p > 01-entry-top.png
+#    top of the entry: no Anki deck row or action pinned at the screen bottom; the last line is a
+#    meaning row running off the bottom edge, so the action sits at the end of the scroller.
+adb -s emulator-5554 shell screenrecord --time-limit 14 /sdcard/wd-scroll.mp4 &
+#  12 x `input swipe 540 1600 540 700 220` scrolling to the end, then:
+adb -s emulator-5554 exec-out screencap -p > 02-entry-end-anki-inline.png
+#    end of the entry: Part of speech -> Anki deck row -> "Add to Anki" as the last content, with the
+#    bar's own bottom gap clear below the button.
+adb -s emulator-5554 pull /sdcard/wd-scroll.mp4 03-scroll-to-end.mp4
+#   1080x2340 h264, 9.118 s: the deck row and action travel up with the content.
+#  Control, same screen before expanding the meanings: the "Add to Anki" button was clipped by the
+#  screen's bottom edge at the top of the entry, and swiping moved the whole bar up by the scroll
+#  distance — both impossible for the old pinned sibling bar.
+
+# 5. Stability
+adb -s emulator-5554 logcat -d | grep -ci "FATAL EXCEPTION"   # 0
+adb -s emulator-5554 logcat -d | grep -iE "com.gaten" | grep -iE "fatal|exception"
+#   only WindowManager "dispatchAppVisibility ... EXITING" warnings for com.gaten/MainActivity at
+#   app teardown; no process-level exception during navigation.
