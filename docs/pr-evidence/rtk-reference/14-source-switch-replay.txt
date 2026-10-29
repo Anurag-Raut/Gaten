@@ -1,0 +1,15 @@
+context platform=android device="Gaten Lookup Review" kind=emulator theme=unknown
+open "com.gaten"
+press 540 1340
+press 540 511
+press 540 731
+back
+press 358 2187
+press 540 424
+type "utsu"
+press 540 1831
+press 142 1803
+scroll "down"
+press 540 2100
+scroll "down"
+close

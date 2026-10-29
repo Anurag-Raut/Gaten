@@ -29,6 +29,8 @@ All captures are from the same APK. The device had no WaniKani account, so every
 | `11-settings-after-restart.png` | Settings hub after force-stopping and relaunching the app: **Kanji reference - Remembering the Kanji**, i.e. the choice survived the restart. |
 | `12-anki-review-rtk-strip.png` | The Anki review answer side: the note's kanji strip is labelled **Remembering the Kanji** and needs no WaniKani token. |
 | `13-anki-review-rtk-panel.png` | Tapping that tile opens the RTK page inline in the review card (猫, keyword `cat`, Heisig story) - the third kanji surface follows the same setting. |
+| `14-source-switch-and-rtk-page.mp4` | The recorded interaction (50 s, 540x1170): Settings hub -> Kanji reference -> switch WaniKani then Remembering the Kanji -> Home -> search `utsu` -> open 鬱 -> tap its kanji tile -> RTK page -> expand the remaining stories. This is the navigation and motion evidence. |
+| `14-source-switch-replay.txt` | The `agent-device` replay script for that same run; the device was driven through `agent-device` (`agent-device replay docs/pr-evidence/rtk-reference/14-source-switch-replay.txt`). |
 
 `09` and `10` are the same word and the same build, one setting change apart, and are the clearest single piece of evidence that the preference controls the reference.
 
