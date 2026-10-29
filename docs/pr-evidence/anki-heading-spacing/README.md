@@ -24,6 +24,7 @@ Copies in this directory, SHA-256:
 | File | SHA-256 |
 |---|---|
 | `anki-all-clear-fixed.png` | `f43384c1d2de0091eff75806fd8d467a7e13c0650aa78b7bd7f4160aa90d4678` |
+| `reported-before.jpg` | `09e79f0bb3281046ba3b62081022832de17c300c307cb8a468edcb8d763e1193` |
 | `anki-all-clear-arrival.mp4` | `35c3a42d4d539ab3347ed78f59cedd5798cfe8b3eebbe24765d8de8b03fc52d6` |
 | `fixture-state-before.txt` | `459046d6442b9974e2012e66be5f548075913c27e35567c280534e42f56e6f1c` |
 | `fixture-state-after-restore.txt` | `53fd9397b1ccf412598b392fb4e3c6cd3ffe1589cbefad2b4f84c81ffdfe92da` |
@@ -46,6 +47,12 @@ change touches; nothing else on the screen changed shape.
 `-6` was also off the spacing ladder (`docs/Gaten_Ink_Design_Language_v1.md` §4). `spacing.m` (12)
 lands the gap at ≈ 25 dp, inside the app's own title→content rhythm (the shared `ScreenSubtitle` uses
 `marginTop: 11`).
+
+`reported-before.jpg` is the image from the bug report, kept unmodified: 1272x2772 on the reporter's
+own device, dark theme. `anki-all-clear-fixed.png` is 1080x2340 on the emulator named above, light
+theme. They are **not** a same-conditions pixel comparison — different device, density and theme.
+What the pair shows is the measured gap, both taken with the same ink-band method: 24 px = 6.9 dp
+before, 68 px = 24.7 dp after.
 
 `anki-all-clear-arrival.mp4` is Home → Anki card → deck picker arriving at the fixed state.
 `adb screenrecord` encodes a frame only when the screen changes, so the clip has few frames; the still
