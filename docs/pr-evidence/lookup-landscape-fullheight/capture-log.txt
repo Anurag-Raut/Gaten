@@ -1,15 +1,15 @@
-Lookup sheet landscape — capture log (this branch's own build)
-=============================================================
+Lookup sheet — full height (landscape) and the Anki action in the entry content (both)
+=====================================================================================
 
 Build under test
-  Branch  fix/lookup-landscape-fullheight @ 1b7b2b6b99bc262e7db487c4f6d631aa875fa5c7
-          (base dev 7e02486e346a164d38443f61f1055ce6e96d811b)
+  Branch  fix/lookup-landscape-fullheight @ 368f51d53084436d8e5aa0c901f8e74f32c4c135
+          (base dev 0ac0e403b9020a5e0f56e156dda2aa02900e0db2)
   APK     app/build/outputs/apk/debug/app-x86_64-debug.apk, 294,648,986 B
-  SHA-256 d24568eabbf66253fc0a2a40f8df99d8d262101b802b724ca23e9e45fb570c46
-          host file and the installed /data/app/~~0T5A1604KhbyQih9ibqjMA==/com.gaten-…/base.apk
+  SHA-256 dc9b975bd94debeee374c3685bc942a593acdaf27e7a0c0c137716e4c6537ebb
+          host file and the installed /data/app/~~mh-EmTaQ-wkxj_nniB-sDQ==/com.gaten-…/base.apk
           both hashed in this session: identical.
-  Bundle  assets/index.android.bundle SHA-256 493e14d9… (contains this change; the pre-fix baseline
-          bundle does not contain the `inlineFooter` marker this change adds).
+  Bundle  assets/index.android.bundle SHA-256 6734c79959fe9fff0482f8db8d234e1877c28d9ddd2b3c1042d5ab59d81e8208
+          (contains the `inlineFooter` marker this change relies on).
 
 Device  emulator-5554, AVD Gaten_Lookup_Review (pixel_5, API 34, x86_64), 1080x2340 @ 440 dpi,
         font scale 0.94, light theme. Portrait at the start and restored at the end
@@ -21,51 +21,45 @@ Fixture Gaten Home -> Recently looked up -> 猫 word detail (no typing; no searc
 Commands (adb only; no agent-device helper, service bound throughout)
   adb install -r app/build/outputs/apk/debug/app-x86_64-debug.apk
   adb shell am start -n com.gaten/.app.MainActivity
-  adb shell am broadcast -a com.gaten.action.TRIGGER_LOOKUP -p com.gaten     # opens (or toggles)
-  adb shell input tap <x> <y>            # 01 used 112,447 (the 猫 line)
-                                         # 02/03 used 581,493 (the ねこ・ネコ line)
-  adb shell input swipe 1170 950 1170 300 600   # x2, the entry scroller in landscape
+  adb shell am broadcast -a com.gaten.action.TRIGGER_LOOKUP -p com.gaten      # opens (or toggles)
+  adb shell input tap 164 582            # portrait: the readings line ねこ・ネコ
+  adb shell input swipe 540 2100 540 850 450   # x5, the portrait entry scroller
+  adb shell input tap 512 491            # landscape: the readings line ねこ・ネコ
+  adb shell input swipe 1170 950 1170 250 400  # x6, the landscape entry scroller
   adb exec-out screencap -p > <file>.png
-  adb shell screenrecord --time-limit 34 /sdcard/clip-landscape-primary.mp4
-  adb shell screenrecord --time-limit 20 /sdcard/clip-landscape-dismiss.mp4
+  adb shell screenrecord --time-limit 22 /sdcard/lp_portrait_scroll.mp4
+  adb shell input tap 1500 800           # landscape dismissal control: inside the panel
+  adb shell input tap 150 540            # landscape dismissal: the side gutter
   adb logcat -v time -s Gaten
 
 Panel geometry measured from the stills (2.75 px/dp)
-  portrait  01 : panel x 0..1079 (full width), y 701..2339      -> the 70 % portrait snap
-  landscape 02 : panel x 400..1939 (1540 px = 560 dp), y 0..1079 -> the full window height
-  landscape 03 : identical to 02 (only the scrolled content differs)
+  portrait  01/02 : panel x 0..1079 (full width), y 701..2339       -> the 70 % portrait snap
+  landscape 03/04 : panel x 400..1939 (1540 px = 560 dp), y 0..1080  -> the full window height
   Landscape gutters are 145 dp of dimmed frozen frame on each side.
 
 Log excerpts (transcribed from `adb logcat -v time -s Gaten` during the session)
-  portrait, 18:52
-    18:52:20.041 Overlay window added for a 1080x2340 capture (+106 ms since the trigger)
-    18:52:23.456 Tap hit line 2
-    18:52:23.817 Tap complete in 359 ms
-    18:52:43.829 Media resume: sending a media play key event
-    18:52:43.842 Overlay window removed (resumed=true)          # press above the panel
+  portrait, 19:13:56  — the take behind 01/02/05
+    19:13:56.173 Overlay window added for a 1080x2340 capture (+98 ms since the trigger)
+    19:13:57.082 Early screen scan ready in 919 ms
+    19:13:57.085 Screen scan ready in 845 ms (18 lines)
+    19:13:58.595 Tap hit line 3
+    19:13:59.327 Tap complete in 732 ms
 
-  landscape, 18:55 — one discarded take first
-    18:53:40.979 Mapping: bitmap 2340x1080, view 2340x1080, origin (0, 0), scale 1.0x1.0
-    18:53:41.426 Screen scan ready in 401 ms (7 lines)
-    18:53:44.398 Tap missed: no text box within 66 px            # a tap on the 猫 glyph
-    …that take was discarded: the isolated 猫 glyph is not in the landscape index, so the readings
-    line ねこ・ネコ is the tap target.
+  landscape, 19:14:35 — the take behind 03/04
+    19:14:35.302 Overlay window added for a 2340x1080 capture (+90 ms since the trigger)
+    19:14:35.705 Early screen scan ready in 412 ms
+    19:14:35.705 Screen scan ready in 347 ms (7 lines)
+    19:14:42.071 Tap hit line 2
+    19:14:42.417 Tap complete in 346 ms
 
-  landscape, 18:55 — the take behind 02/03/04/05
-    18:55:14.155 Screen scan ready in 451 ms (7 lines)
-    18:55:17.086 Tap hit line 2
-    18:55:17.473 Tap complete in 387 ms
-    (two swipes, no log lines)
-    18:55:53.x  press inside the panel (1714,298) -> no line at all
-    18:55:55.980 Media resume: sending a media play key event
-    18:55:55.996 Overlay window removed (resumed=true)          # press in the side gutter (150,540)
-
-Negative control
-  After the inside-panel press: `grep -c 'Overlay window removed'` = 0, and the post-press still was
-  byte-identical to 03-landscape-anki-inline.png (both md5 aee6cd2213830fed52b59e2c413a7762).
+  landscape dismissal, 19:15 — inside control then the gutter
+    19:15:0x    press inside the panel (1500,800) -> 0 x "Overlay window removed"; the deck
+                selector opened over the panel (see 06-landscape-inside-tap-content.png)
+    19:15:11.969 Media resume: sending a media play key event
+    19:15:11.990 Overlay window removed (resumed=true)          # press in the side gutter (150,540)
 
 Device state restored after the pass
   user_rotation=0, accelerometer_rotation=1, wm size 1080x2340, font_scale 0.94,
   enabled_accessibility_services = com.gaten/com.gaten.app.GatenAccessibilityService (enabled,
-  bound), no accessibility-overlay window, Gaten MainActivity in the foreground, the /sdcard clips
+  bound), no accessibility-overlay window, Gaten MainActivity in the foreground, the /sdcard clip
   deleted. No app data cleared, no settings changed beyond the rotation toggles above.
