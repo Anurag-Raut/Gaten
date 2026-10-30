@@ -48,6 +48,7 @@ import {
 import {SubjectBadge, TaskLabel} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
+import {romajiToHiragana} from "./wanikani-romaji";
 import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
 import type {WaniKaniSession} from "./review-store";
 
@@ -130,6 +131,7 @@ export function WaniKaniReview({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
   const item = session.items[session.index];
@@ -189,7 +191,7 @@ export function WaniKaniReview({
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           style={styles.screen}
-          contentContainerStyle={styles.question}
+          contentContainerStyle={[styles.question, {paddingBottom: footerHeight + spacing.xl}]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.reviewContent, {paddingHorizontal: contentInset}]}>
@@ -214,32 +216,13 @@ export function WaniKaniReview({
                 <TaskLabel task={reading ? "reading" : "meaning"} />
               </View>
             </View>
-            {session.items.length > 1 && session.items.length <= 10 && (
-              <View style={[styles.batchRow, {borderTopColor: colors.outlineVariant}]}>
-                <Text style={[styles.batchLabel, {color: colors.onSurfaceVariant}]}>Review this batch</Text>
-                <View style={styles.batchDots}>
-                  {session.items.map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.batchDot,
-                        {
-                          borderColor: index <= session.index ? colors.accent : colors.outlineVariant,
-                          backgroundColor: index < session.index ? colors.accent : "transparent",
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
-              </View>
-            )}
             <View style={styles.answerField}>
               <AnswerInput
                 ref={inputRef}
                 key={`${session.index}:${session.part}`}
                 value={session.entry}
-                onChangeText={onEntry}
-                placeholder={reading ? "Type the reading" : "Type the meaning"}
+                onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
+                placeholder={reading ? "こたえ" : "Type the meaning"}
                 selectionColor={colors.accent}
                 editable={!busy && session.phase === "answering"}
                 autoFocus
@@ -317,31 +300,30 @@ export function WaniKaniReview({
             )}
           </View>
         </ScrollView>
-        <ActionFooter bottomInset={insets.bottom} style={[styles.footer, {paddingBottom: 15 + insets.bottom}]}>
-          {failed ? (
-            <FilledAction
-              label={session.authRejected ? "Reconnect" : "Send again"}
-              disabled={busy}
-              onPress={session.authRejected ? onBack : onRetrySubmit}
-              style={styles.primaryAction}
-            />
-          ) : reviewed ? (
-            <FilledAction label="Continue" onPress={onContinue} style={styles.primaryAction} />
-          ) : (
-            <FilledAction
-              label="Check answer"
-              disabled={busy || submitting || session.entry.trim() === ""}
-              onPress={onCheck}
-              style={styles.primaryAction}
-            />
-          )}
-          {submitting && (
-            <View style={styles.busy}>
-              <BusyRow message="Saving to WaniKani…" />
-            </View>
-          )}
-        </ActionFooter>
       </KeyboardAvoidingView>
+      {/* Keep the action beneath the keyboard; its Done key submits the answer. */}
+      <ActionFooter bottomInset={insets.bottom} onHeightChange={setFooterHeight}>
+        {failed ? (
+          <FilledAction
+            label={session.authRejected ? "Reconnect" : "Send again"}
+            disabled={busy}
+            onPress={session.authRejected ? onBack : onRetrySubmit}
+          />
+        ) : reviewed ? (
+          <FilledAction label="Continue" onPress={onContinue} />
+        ) : (
+          <FilledAction
+            label="Check answer"
+            disabled={busy || submitting || session.entry.trim() === ""}
+            onPress={onCheck}
+          />
+        )}
+        {submitting && (
+          <View style={styles.busy}>
+            <BusyRow message="Saving to WaniKani…" />
+          </View>
+        )}
+      </ActionFooter>
     </View>
   );
 }
@@ -359,22 +341,6 @@ const styles = StyleSheet.create({
   promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},
   promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500"},
   taskPillWrap: {marginTop: spacing.m},
-  batchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 13,
-    borderTopWidth: 1,
-  },
-  batchLabel: {fontSize: 12, lineHeight: 16},
-  batchDots: {flexDirection: "row", alignItems: "center"},
-  batchDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1,
-    marginStart: 7,
-  },
   answerField: {position: "relative", width: "100%", marginTop: spacing.s},
   revealRow: {
     flexDirection: "row",
@@ -397,8 +363,4 @@ const styles = StyleSheet.create({
   contextEnglish: {fontSize: 12, lineHeight: 17, marginTop: spacing.xs},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},
-  // The approved WaniKani footer: 16 dp sides, 12 dp top, 15 dp above the safe area, and a 54 dp
-  // button at radius 15. Lane-specific so the Anki review keeps the shared 52/13 defaults.
-  footer: {paddingHorizontal: spacing.l, paddingTop: spacing.m},
-  primaryAction: {minHeight: 54, borderRadius: 15},
 });

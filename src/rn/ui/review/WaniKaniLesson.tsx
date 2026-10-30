@@ -14,7 +14,7 @@
  * rather than a review, which is what moves it into the review queue. Each subject is started the
  * moment its quiz is passed, so leaving mid-batch keeps what was already finished.
  */
-import React from "react";
+import React, {useState} from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -38,6 +38,7 @@ import {
 import {SubjectBadge, TaskLabel} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
+import {romajiToHiragana} from "./wanikani-romaji";
 import type {WaniKaniLessonSession} from "./review-store";
 import type {WaniKaniLessonItem} from "../../native/GatenWaniKani";
 
@@ -147,6 +148,7 @@ export function WaniKaniLesson({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
   const teaching = session.phase === "teaching";
@@ -179,7 +181,7 @@ export function WaniKaniLesson({
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           style={styles.screen}
-          contentContainerStyle={styles.body}
+          contentContainerStyle={[styles.body, {paddingBottom: footerHeight + spacing.xl}]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.content, {paddingHorizontal: contentInset}]}>
@@ -212,8 +214,8 @@ export function WaniKaniLesson({
                   <AnswerInput
                     key={`${session.quizIndex}:${session.part}`}
                     value={session.entry}
-                    onChangeText={onEntry}
-                    placeholder={reading ? "Type the reading" : "Type the meaning"}
+                    onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
+                    placeholder={reading ? "こたえ" : "Type the meaning"}
                     selectionColor={colors.accent}
                     editable={!busy && !starting && !failed}
                     autoFocus
@@ -250,36 +252,34 @@ export function WaniKaniLesson({
             )}
           </View>
         </ScrollView>
-        <ActionFooter bottomInset={insets.bottom} style={[styles.footer, {paddingBottom: 15 + insets.bottom}]}>
-          {teaching ? (
-            <FilledAction
-              label={lastCard ? "Start quiz" : "Next"}
-              disabled={busy}
-              onPress={onNext}
-              style={styles.primaryAction}
-            />
-          ) : failed ? (
-            <FilledAction
-              label={session.authRejected ? "Reconnect" : "Send again"}
-              disabled={busy}
-              onPress={session.authRejected ? onBack : onRetrySubmit}
-              style={styles.primaryAction}
-            />
-          ) : (
-            <FilledAction
-              label="Check answer"
-              disabled={busy || starting || session.entry.trim() === ""}
-              onPress={onCheck}
-              style={styles.primaryAction}
-            />
-          )}
-          {starting && (
-            <View style={styles.busy}>
-              <BusyRow message="Saving to WaniKani…" />
-            </View>
-          )}
-        </ActionFooter>
       </KeyboardAvoidingView>
+      {/* Keep the action beneath the keyboard; its Done key submits the answer. */}
+      <ActionFooter bottomInset={insets.bottom} onHeightChange={setFooterHeight}>
+        {teaching ? (
+          <FilledAction
+            label={lastCard ? "Start quiz" : "Next"}
+            disabled={busy}
+            onPress={onNext}
+          />
+        ) : failed ? (
+          <FilledAction
+            label={session.authRejected ? "Reconnect" : "Send again"}
+            disabled={busy}
+            onPress={session.authRejected ? onBack : onRetrySubmit}
+          />
+        ) : (
+          <FilledAction
+            label="Check answer"
+            disabled={busy || starting || session.entry.trim() === ""}
+            onPress={onCheck}
+          />
+        )}
+        {starting && (
+          <View style={styles.busy}>
+            <BusyRow message="Saving to WaniKani…" />
+          </View>
+        )}
+      </ActionFooter>
     </View>
   );
 }
@@ -306,7 +306,4 @@ const styles = StyleSheet.create({
   answerField: {position: "relative", width: "100%"},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
   busy: {marginTop: spacing.s},
-  // The approved WaniKani footer geometry; Anki keeps the shared 52/13 defaults.
-  footer: {paddingHorizontal: spacing.l, paddingTop: spacing.m},
-  primaryAction: {minHeight: 54, borderRadius: 15},
 });
