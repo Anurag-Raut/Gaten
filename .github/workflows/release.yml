@@ -65,6 +65,17 @@ jobs:
         if: steps.examples-cache.outputs.cache-hit != 'true'
         run: python3 tools/build_examples_db.py
 
+      - name: Cache the generated RTK database
+        id: rtk-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/assets/db/rtk.sqlite
+          key: rtk-${{ hashFiles('tools/build_rtk_db.py') }}
+
+      - name: Build the RTK database
+        if: steps.rtk-cache.outputs.cache-hit != 'true'
+        run: python3 tools/build_rtk_db.py
+
       - name: Cache the bundled manga-ocr model
         uses: actions/cache@v4
         with:
