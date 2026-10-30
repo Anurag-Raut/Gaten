@@ -491,6 +491,7 @@ function AnkiSession({
 }) {
   const {colors} = theme;
   const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
   const card = session.card;
@@ -622,7 +623,7 @@ function AnkiSession({
           scrollY.current = e.nativeEvent.contentOffset.y;
         }}
         scrollEventThrottle={16}
-        contentContainerStyle={styles.deckSpace}
+        contentContainerStyle={[styles.deckSpace, {paddingBottom: footerHeight + spacing.xl}]}
       >
         <View
           style={[
@@ -742,7 +743,7 @@ function AnkiSession({
 
       {/* Pinned: the honest notes, then the one action the reader has right now. It carries the
           navigation-bar inset itself, so the row sits clear of the gesture band. */}
-      <ActionFooter bottomInset={insets.bottom}>
+      <ActionFooter bottomInset={insets.bottom} onHeightChange={setFooterHeight}>
         {session.revealed && card.typedAnswer && (
           <>
             <Text style={[typeScale.bodySmall, styles.note, {color: colors.onSurfaceVariant}]}>

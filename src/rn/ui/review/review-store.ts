@@ -22,6 +22,7 @@
  * Nothing here is left in a component, and nothing here hides anything in the shell: a pushed page is
  * full-screen with no bottom bar by the shell's own rule, so the flow does not have to ask for it.
  */
+import {romajiToHiragana} from "./wanikani-romaji";
 import * as Anki from "../../native/GatenAnki";
 import * as WaniKani from "../../native/GatenWaniKani";
 import {getAnkiDecks, loadAnkiDecks} from "../anki/useAnkiDecks";
@@ -1051,7 +1052,7 @@ class ReviewStore {
         if (session.part === "reading") {
           // A reading is compared in kana: what the reader typed is handed to the converter, so a
           // romaji answer is judged as the reading it spells rather than as its letters.
-          const kana = await WaniKani.readingAnswer(typed);
+          const kana = await WaniKani.readingAnswer(romajiToHiragana(typed, true));
           correct = item.readings.includes(kana);
         } else {
           const answer = normalizeMeaning(typed);
@@ -1305,7 +1306,7 @@ class ReviewStore {
         const typed = session.entry.trim();
         let correct: boolean;
         if (session.part === "reading") {
-          const kana = await WaniKani.readingAnswer(typed);
+          const kana = await WaniKani.readingAnswer(romajiToHiragana(typed, true));
           correct = item.readings.includes(kana);
         } else {
           const answer = normalizeMeaning(typed);

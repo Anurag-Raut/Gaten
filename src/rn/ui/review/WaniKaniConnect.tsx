@@ -53,6 +53,7 @@ export function WaniKaniConnect({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
   const [token, setToken] = useState("");
@@ -86,10 +87,7 @@ export function WaniKaniConnect({
   const pending = busy || connecting;
   const scrollRef = useRef<ScrollView>(null);
 
-  // The action bar is pinned under the form, so with the keyboard up the focused field can sit
-  // partly behind it: once the keyboard has settled, the form is scrolled to its end so the field
-  // and the link under it stay above the action, which the KeyboardAvoidingView has lifted into
-  // view. A no-op when the form already fits.
+  // Once the keyboard settles, scroll the token field and its link into view.
   useEffect(() => {
     const sub = Keyboard.addListener("keyboardDidShow", () => {
       scrollRef.current?.scrollToEnd({animated: true});
@@ -110,6 +108,7 @@ export function WaniKaniConnect({
           style={styles.screen}
           contentContainerStyle={[
             styles.body,
+            {paddingBottom: footerHeight + spacing.xl},
             {paddingLeft: insets.left + contentInset, paddingRight: insets.right + contentInset},
           ]}
           keyboardShouldPersistTaps="handled"
@@ -162,10 +161,8 @@ export function WaniKaniConnect({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      {/* The action stays at the screen's bottom edge, deliberately outside the KeyboardAvoidingView:
-          with the keyboard up it passes *under* the IME rather than rising above it, while the token
-          field inside the KAV lifts clear of the keyboard. The IME action key is the same connect. */}
-      <ActionFooter bottomInset={insets.bottom}>
+      {/* The floating action stays beneath the keyboard; Done also connects. */}
+      <ActionFooter bottomInset={insets.bottom} onHeightChange={setFooterHeight}>
         <FilledAction
           label="Connect WaniKani"
           disabled={pending || token.trim() === ""}

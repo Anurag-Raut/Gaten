@@ -557,7 +557,7 @@ export function FilledAction({
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  /** A lane's own geometry - WaniKani's taller 54 dp button, at its own radius. */
+  /** Optional layout adjustment for an action. */
   style?: StyleProp<ViewStyle>;
 }) {
   return (
@@ -565,32 +565,21 @@ export function FilledAction({
   );
 }
 
-/**
- * The actions pinned above the system navigation: one hairline, the screen's own canvas behind them,
- * and the reader's gesture inset inside the padding. Nothing here scrolls, so a control the reader
- * needs is never under the keyboard or the gesture bar.
- */
+/** Floating actions above the gesture area; the surrounding space lets content and touches through. */
 export function ActionFooter({
   children,
   bottomInset,
-  style,
+  onHeightChange,
 }: {
   children: React.ReactNode;
   bottomInset: number;
-  style?: StyleProp<ViewStyle>;
+  onHeightChange: (height: number) => void;
 }) {
-  const {colors} = useTheme();
   return (
     <View
-      style={[
-        styles.footer,
-        {
-          backgroundColor: colors.background,
-          borderTopColor: colors.outlineVariant,
-          paddingBottom: spacing.s + bottomInset,
-        },
-        style,
-      ]}
+      pointerEvents="box-none"
+      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
+      style={[styles.footer, {paddingBottom: spacing.s + bottomInset}]}
     >
       {children}
     </View>
@@ -899,9 +888,12 @@ const styles = StyleSheet.create({
   metricLabel: {fontSize: 12, lineHeight: 16, fontWeight: "600", marginTop: 3},
   metricHint: {fontSize: 11, lineHeight: 15, marginTop: 3},
   footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: spacing.contentInset,
     paddingTop: 17,
-    borderTopWidth: 1,
     width: "100%",
   },
   ratingRow: {flexDirection: "row", width: "100%"},
