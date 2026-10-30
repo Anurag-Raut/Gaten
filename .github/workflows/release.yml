@@ -91,13 +91,14 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           trap 'rm -f "$KEYSTORE_FILE"' EXIT
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
           # The old CI used its own run counter; start above those existing Play codes.
           version_code=$((1000 + GITHUB_RUN_NUMBER))
           echo "Building internal test with versionCode=$version_code"
-          ./gradlew :app:assembleRelease -PversionCode="$version_code"
-          ./gradlew :app:bundleRelease -PplayBundle=true -PversionCode="$version_code"
+          ./gradlew :app:assembleRelease --stacktrace -PversionCode="$version_code"
+          ./gradlew :app:bundleRelease --stacktrace -PplayBundle=true -PversionCode="$version_code"
 
       - name: Save signed APKs
         uses: actions/upload-artifact@v4
