@@ -66,7 +66,6 @@ import {
   type SettingsStackParamList,
 } from "./navigation";
 import * as ShellBridge from "../native/GatenShell";
-import * as Haptics from "../native/GatenHaptics";
 import {reviewStore} from "./review/review-store";
 import * as searchStore from "./search/searchStore";
 
@@ -118,7 +117,7 @@ function openKanji(navigation: HomeStackNavigation, character: string): void {
     navigation.goBack();
     return;
   }
-  Haptics.play("tick");
+  // No tick here: the tile the reader tapped is a control of its own and plays one (PressableScale).
   if (top.name === "Kanji" || top.name === "Radical") {
     navigation.replace("Kanji", {character});
   } else {
@@ -139,7 +138,7 @@ function openRadical(navigation: HomeStackNavigation, id: number): void {
     navigation.goBack();
     return;
   }
-  Haptics.play("tick");
+  // Same as the kanji: the radical row the reader tapped plays its own tick.
   if (top.name === "Radical" || top.name === "Kanji") {
     navigation.replace("Radical", {id});
   } else {

@@ -38,6 +38,7 @@ import {
 import {DialogShell} from "../DialogShell";
 import {DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
+import * as GatenHaptics from "../../native/GatenHaptics";
 import {InkIcon, type InkIconName} from "../InkIcon";
 import {ScreenHeader} from "../ScreenHeader";
 import {useTheme} from "../theme";
@@ -366,7 +367,12 @@ export function SwitchRow({
       </View>
       <RNSwitch
         value={value}
-        onValueChange={onValueChange}
+        // The switch is the control, so it plays the tick here rather than each screen doing it in
+        // its own handler; a disabled switch never reports a change and so never ticks.
+        onValueChange={(next) => {
+          void GatenHaptics.play("tick").catch(() => {});
+          onValueChange(next);
+        }}
         disabled={disabled}
         accessibilityLabel={title}
         accessibilityHint={summary}
@@ -484,7 +490,7 @@ export function LookupModeDisclosureDialog({
         // Pinned rather than a child of the scrolling body: the four groups are longer than any
         // phone, and an acknowledgement the reader cannot reach makes "Open settings" look broken
         // instead of gated.
-        <Pressable
+        <PressableScale
           accessibilityRole="checkbox"
           accessibilityState={{checked: agreed}}
           onPress={() => setAgreed(!agreed)}
@@ -512,7 +518,7 @@ export function LookupModeDisclosureDialog({
           >
             I understand how this permission is used
           </Text>
-        </Pressable>
+        </PressableScale>
       }
     >
       {DISCLOSURE_BLOCKS.map((block, index) => (

@@ -56,7 +56,6 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
 import * as ThemeBridge from "../native/GatenTheme";
-import * as Haptics from "../native/GatenHaptics";
 import {FLOATING_BAR_ELEVATION, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
 import {Icon} from "./components";
 import type {IconName} from "./icons";
@@ -714,10 +713,10 @@ export function BottomBar({
             inputRange={inputRange}
             onPress={() => {
               if (index === state.index) {
-                // An already-selected tab is a no-op: no tick, no navigation.
+                // An already-selected tab is a no-op: no navigation. The press still ticks, like
+                // every other control's.
                 return;
               }
-              Haptics.play("tick");
               navigation.navigate(route.name);
               cancelAnimation(capsule);
               capsule.value = 0;

@@ -23,7 +23,6 @@
  */
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +35,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {CONTENT_COLUMN, contentInsetFor, spacing} from "../tokens";
 import {useTheme} from "../theme";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
+import {PressableScale} from "../PressableScale";
 import {
   ActionFooter,
   AnswerInput,
@@ -243,7 +243,7 @@ export function WaniKaniReview({
             )}
             {session.feedback != null && (
               <>
-                <Pressable
+                <PressableScale
                   accessibilityRole="button"
                   accessibilityState={{expanded: revealed}}
                   accessibilityLabel={revealed ? "Hide answer" : "Show answer"}
@@ -254,14 +254,14 @@ export function WaniKaniReview({
                     {revealed ? "Hide answer" : "Show answer"}
                   </Text>
                   <DisclosureChevron expanded={revealed} size={20} color={colors.onSurfaceVariant} />
-                </Pressable>
+                </PressableScale>
                 <Collapsible expanded={revealed}>
                   {tabs.length > 1 && (
                     <View style={[styles.tabRow, {borderBottomColor: colors.outlineVariant}]}>
                       {tabs.map((tab) => {
                         const selected = tab === activeTab;
                         return (
-                          <Pressable
+                          <PressableScale
                             key={tab}
                             accessibilityRole="tab"
                             accessibilityState={{selected}}
@@ -280,7 +280,7 @@ export function WaniKaniReview({
                               {DETAIL_TAB_LABELS[tab]}
                             </Text>
                             {selected && <View style={[styles.tabUnderline, {backgroundColor: colors.accent}]} />}
-                          </Pressable>
+                          </PressableScale>
                         );
                       })}
                     </View>

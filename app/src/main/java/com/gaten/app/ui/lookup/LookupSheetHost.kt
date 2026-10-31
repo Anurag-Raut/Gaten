@@ -45,6 +45,19 @@ object LookupSheetHost {
         fun stop()
     }
 
+    /**
+     * The sheet surface the reader can see right now, if an overlay session is open.
+     *
+     * Haptics are performed through a view that belongs to the window on screen: the overlay is that
+     * window while a lookup is up, and the main activity may not even be alive when the lookup was
+     * triggered from another app. Read from the modules thread, so it is volatile.
+     */
+    @Volatile
+    private var visible: View? = null
+
+    /** The visible sheet surface, or null when no overlay session is open. */
+    fun currentView(): View? = visible
+
     /** What the sheet can ask the overlay to do. */
     interface Actions {
         fun onClose()
@@ -91,14 +104,19 @@ object LookupSheetHost {
             override fun stop() {
                 if (stopped) return
                 stopped = true
+                if (visible === view) visible = null
                 surface.stop()
                 ReactHostLifecycle.onSheetSessionClosed()
             }
-        }.also { GatenLookupSheetModule.attach(hostActions) }
+        }.also {
+            visible = view
+            GatenLookupSheetModule.attach(hostActions)
+        }
     }
 
     /** The surface was stopped and taken down; forget the session's actions. */
     fun close() {
+        visible = null
         GatenLookupSheetModule.detach()
     }
 
