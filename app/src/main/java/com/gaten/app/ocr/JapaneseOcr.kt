@@ -27,8 +27,8 @@ data class OcrLine(val text: String, val bounds: Box)
 /**
  * On-device Japanese OCR for a single cropped box.
  *
- * ML Kit finds lines and their boxes. The selected reader is either ML Kit itself or manga-ocr;
- * when manga-ocr is selected, its failure falls back to ML Kit. Every path that reads a box — the
+ * ML Kit finds lines and their boxes. Manga OCR recognizes selected text; lookup failures
+ * are reported without substituting ML Kit text. Every path that reads a box — the
  * overlay's index line by line, and a circle's whole selection — reads it through
  * [readLineWithMangaOcr], so they crop and read it exactly the same way.
  */
@@ -77,8 +77,7 @@ object JapaneseOcr {
 
     /**
      * Reads one box with manga-ocr: the crop [OcrPreprocess] builds, through [MangaOcrEngine]. Null
-     * when the model is not installed or the read failed — the caller keeps ML Kit's text, which is
-     * the point of the fallback.
+     * when the model is not installed or the read failed; the lookup caller reports a retry error.
      *
      * A circle passes the exact crop it cut out of the capture as both [bitmap] and [bounds], so
      * [OcrPreprocess]'s padding is clamped to that crop's edge and the read cannot reach the lines
@@ -90,7 +89,6 @@ object JapaneseOcr {
         bounds: Box,
         priority: MangaOcrEngine.Priority = MangaOcrEngine.Priority.FOREGROUND
     ): String? {
-        if (!RecognitionPreference.isMangaOcrEnabled(context)) return null
         MangaOcrModel.installBundledIfPresent(context)
         if (!MangaOcrModel.isInstalled(context)) return null
         val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null

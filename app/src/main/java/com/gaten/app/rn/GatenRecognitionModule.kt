@@ -12,7 +12,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.gaten.app.ocr.RecognitionPreference
 
-/** Reads and stores the user's selected OCR reader. */
+/** Reports the required OCR reader and rejects legacy attempts to disable it. */
 class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
@@ -29,7 +29,10 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setMangaOcrEnabled(enabled: Boolean, promise: Promise) {
-        RecognitionPreference.setMangaOcrEnabled(reactApplicationContext, enabled)
+        if (!enabled) {
+            promise.reject("MANGA_OCR_REQUIRED", "Manga OCR is required for text recognition.")
+            return
+        }
         promise.resolve(null)
     }
 

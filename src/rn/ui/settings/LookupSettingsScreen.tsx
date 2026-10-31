@@ -51,7 +51,7 @@ const HELP_PARAGRAPHS = [
   "The Quick Settings tile can be switched off here and removed in Android's Quick Settings editor.",
   "Map a key to the broadcast action shown in Key Mapper.",
   "Notification access lets Gaten control media sessions. Without it, some players may ignore media keys. Gaten resumes playback after a normal lookup dismissal; media stays paused after an interruption.",
-  "Japanese recognition and dictionary lookup run on this device. Manga OCR is recommended for manga pages and handles stylized lettering and varied layouts that Google ML Kit may miss. Google ML Kit is an alternative for standard Japanese text. The Manga OCR model is included with Gaten, prepared on first lookup, and works offline.",
+  "Japanese recognition and dictionary lookup run on this device. Every lookup uses Manga OCR to recognize text. Google ML Kit locates text for selection; its readings are not used as lookup answers. The Manga OCR model is included with Gaten, prepared on first lookup, and works offline.",
   "WaniKani is an optional online reference. Its content is not included in Anki exports.",
   "With AnkiDroid access, Add to Anki writes a card. Grant access in Anki cards, where card layout and deck settings live.",
 ];
