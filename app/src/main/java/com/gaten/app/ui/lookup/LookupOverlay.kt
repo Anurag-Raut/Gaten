@@ -74,7 +74,6 @@ import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
 import com.gaten.app.ocr.MangaOcrEngine
-import com.gaten.app.ocr.RecognitionPreference
 import com.gaten.app.ocr.ScanState
 import com.gaten.app.ocr.ScreenHits
 import com.gaten.app.ocr.ScreenLineReader
@@ -106,11 +105,7 @@ private const val TAG = "Gaten"
 /** How far from a visible text box a tap may land and still hit it, converted to bitmap px. */
 private val TapTolerance = 24.dp
 
-/**
- * Lines a circle waits for after reading its crop; beyond three the wait would be longer than
- * the answer is worth, and the rest keep their indexed text.
- */
-private const val MAX_GESTURE_LINES = 3
+
 
 /**
  * How long the RN sheet surface stays mounted after it is told to hide, so the panel's own
@@ -160,8 +155,8 @@ private data class RailNotice(val text: Int, val glyph: RailGlyph? = null, val t
  * On open the whole capture is detected and read once by ML Kit, in the background; the overlay is
  * usable the moment that index exists, and manga-ocr then reads its lines behind it
  * ([ScreenLineReader]), replacing each one's text as it lands. Both gestures read
- * their exact crop first: the tapped line's bounds or the circle's selection. The index supplements
- * that reading, restricted to the tapped line or the lines covered by the circle. Words are
+ * their crop with Manga OCR: the whole tapped line or the circle's selection. Only that
+ * reading supplies lookup text and words; the index supplies selection geometry. Words are
  * tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is opened once
  * and kept warm for the whole overlay lifetime.
  */
@@ -382,12 +377,10 @@ fun LookupOverlay(
         }
     }
 
-    // ML Kit's index is ready instantly. When Manga OCR is selected, the reader replaces each
-    // line's text in that index as it reads; with ML Kit selected, skip the background reader.
+    // ML Kit supplies the initial geometry; Manga OCR improves the index in the background.
     val scannedScreen = (scanState as? ScanState.Ready)?.screen
-    val mangaOcrEnabled = RecognitionPreference.isMangaOcrEnabled(context)
-    val reader = remember(scannedScreen, screenshot, mangaOcrEnabled) {
-        if (scannedScreen == null || screenshot == null || !mangaOcrEnabled) {
+    val reader = remember(scannedScreen, screenshot) {
+        if (scannedScreen == null || screenshot == null) {
             null
         } else {
             ScreenLineReader(
@@ -469,19 +462,6 @@ fun LookupOverlay(
 
     BackHandler { close() }
 
-    /**
-     * The index with [lineIndices] read by manga-ocr: waits for those lines (bounded by the
-     * reader's own timeout, so a gesture always gets an answer) and re-prioritises the rest of the
-     * screen from there. The rest keeps ML Kit's text.
-     */
-    suspend fun readGestureLines(from: ScreenText, lineIndices: List<Int>): ScreenText {
-        val active = reader ?: return from
-        val touched = lineIndices.distinct().take(MAX_GESTURE_LINES)
-        for (lineIndex in touched) active.read(lineIndex)
-        active.prefetch(prefetchOrder(active.text.value, fromLine = touched.firstOrNull()))
-        return active.text.value
-    }
-
     /** Turn a finished lasso into a lookup; degenerate gestures are ignored. */
     fun startLookup() {
         if (closing) return
@@ -506,43 +486,11 @@ fun LookupOverlay(
         sheetState.targetState = false
         val startedAt = SystemClock.elapsedRealtime()
         lookupJob = scope.launch {
-            // One identity per lookup: the primary and the final publication belong to the same
-            // session, so the sheet keyed on it survives both without resetting its state.
+            // Keep the sheet state tied to this lookup session.
             val session = Any()
             val outcome = try {
                 val repo = awaitRepo()
-                val selection = Box(
-                    bitmapBox.left.toInt(),
-                    bitmapBox.top.toInt(),
-                    bitmapBox.right.toInt(),
-                    bitmapBox.bottom.toInt()
-                )
-                // The circle is read from its own crop inside runLookup, index or no index, before
-                // anything else. The lines it touched are handed over as a callback and read only
-                // once the crop is in, so the answer never waits on the lines beside it; which
-                // lines those are comes from the index as it stands, and the spans themselves are
-                // resolved again inside runLookup, because a line that has been read no longer has
-                // the same offsets.
-                val live = screen
-                Log.d(TAG, "Circle path: crop read (index ${if (live == null) "unavailable" else "ready"})")
-                val lookup = runLookup(
-                    context, bmp, bitmapBox, repo,
-                    cache = cropCache,
-                    onPrimary = { primary ->
-                        withContext(Dispatchers.Main.immediate) {
-                            currentCoroutineContext().ensureActive()
-                            val failure = (repoState as? RepoState.Failed)?.message
-                            result = if (failure == null) primary else primary.copy(error = failure)
-                            displayedResultSession = session
-                            resultAnchor = box
-                            phase = Phase.Result
-                            sheetState.targetState = true
-                            Log.d(TAG, "Circle primary ready in ${SystemClock.elapsedRealtime() - startedAt} ms")
-                        }
-                    }
-                ) {
-                    live?.let { readGestureLines(it, ScreenHits.linesInSelection(it, selection)) }
-                }
+                val lookup = runLookup(context, bmp, bitmapBox, repo, cache = cropCache)
                 val failure = (repoState as? RepoState.Failed)?.message
                 if (failure != null) lookup.copy(error = failure) else lookup
             } catch (e: CancellationException) {
@@ -601,7 +549,6 @@ fun LookupOverlay(
         // Select the entire visible box immediately, including while OCR is running.
         val line = live.lines[lineIndex]
         val selection = line.bounds
-        val phrase = tapPhraseCrop(live, lineIndex, x, y)
         val anchorBox = mapping.toView(selection)
         // Give the outline and clear region breathing room without changing the OCR crop.
         frozenBox = anchorBox.inflate(tapOutlinePaddingPx)
@@ -614,9 +561,8 @@ fun LookupOverlay(
             val session = Any()
             val outcome = try {
                 val repo = awaitRepo()
-                // Keep this snapshot throughout the crop, correction and distance ranking;
-                // background line reads must not shift the phrase's text offsets midway.
-                val lookup = runTapLookup(context, bmp, line, phrase, x, y, repo, cropCache)
+                // Freeze geometry for ranking while Manga OCR reads the whole selected line.
+                val lookup = runTapLookup(context, bmp, line, x, y, repo, cropCache)
                 val failure = (repoState as? RepoState.Failed)?.message
                 if (failure != null) lookup.copy(error = failure) else lookup
             } catch (e: CancellationException) {

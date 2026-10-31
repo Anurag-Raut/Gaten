@@ -20,7 +20,6 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
-import * as GatenRecognition from "../../native/GatenRecognition";
 import type {AnkiStatus} from "../../native/GatenAnki";
 import type {SettingsPageName} from "../navigation";
 import {useKanjiReferenceSource} from "../kanjiReference";
@@ -48,7 +47,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const {width} = useWindowDimensions();
 
   const [lookupMode, setLookupMode] = useState(false);
-  const [mangaOcrEnabled, setMangaOcrEnabled] = useState(true);
   const [ankiStatus, setAnkiStatus] = useState<AnkiStatus>("notInstalled");
   const [ankiDeck, setAnkiDeck] = useState<string | null>(null);
   const [wanikaniConnected, setWanikaniConnected] = useState(false);
@@ -70,9 +68,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
     const readAll = () => {
       void GatenAppInfo.isLookupModeActive().then((v) => {
         if (!cancelled) setLookupMode(v);
-      });
-      void GatenRecognition.isMangaOcrEnabled().then((v) => {
-        if (!cancelled) setMangaOcrEnabled(v);
       });
       void GatenAnki.status().then((v) => {
         if (!cancelled) setAnkiStatus(v);
@@ -129,7 +124,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               icon="text_snippet"
               inkIcon="text"
               title="Text recognition"
-              value={mangaOcrEnabled ? "Manga OCR" : "Google ML Kit"}
+              value="Manga OCR"
               onPress={() => onOpenPage("recognition")}
             />
           </SettingsGroup>
