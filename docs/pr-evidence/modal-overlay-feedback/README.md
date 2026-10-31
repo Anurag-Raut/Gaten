@@ -34,9 +34,12 @@ remove-target pull. Everything here is from this tree's own debug build on a ded
 | `09-lookup-frozen-frame.png` | The accessibility overlay after `am broadcast -a com.gaten.action.TRIGGER_LOOKUP -p com.gaten`: the frozen frame with the "Reading screen…" chip |
 | `10-lookup-sheet.png` | The lookup **sheet** opened by a circular lasso around 取る in that frozen frame: the overlay's own entry, the 取る/撮る tabs, the headword and the meanings |
 | `11-lookup-sheet-examples.png` | The same sheet scrolled: the kanji tile, **Example sentences** and the `Add to Anki` action — the overlay is as complete as the full page |
+| `12-anki-press-frames.png` | Frame strip of `03`: the `Add to Anki` button band at rest, held, exporting and `Added` |
+| `13-floating-frames.png` | Frame strip of `05`: left dock → drag → right dock → drag onto the remove target → removed |
 
-`03`, `04-anki-pressed-frame`, `05`, `06`–`08` are the interaction and motion evidence; the remaining
-files are stills of the live surfaces.
+`03`, `04-anki-pressed-frame`, `05`, `06`–`08` are the interaction and motion evidence, and `12`/`13`
+are frame strips of the two recordings so the motion is visible without a player; the remaining files
+are stills of the live surfaces.
 
 ## Measurements
 
