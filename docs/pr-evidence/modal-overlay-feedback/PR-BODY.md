@@ -56,8 +56,17 @@ The floating trigger docked, then drawn onto the remove target, then removed:
 
 - **Interaction, navigation or motion:**
 
-  - Add to Anki, press down → up → added: [03-anki-press.mp4](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/03-anki-press.mp4)
-  - Floating trigger, dock on release and the pull onto the remove target: [05-floating-dock-and-drop.mp4](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/05-floating-dock-and-drop.mp4)
+  Add to Anki, press down → up → added:
+
+  <video src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/03-anki-press.mp4" controls></video>
+
+  [03-anki-press.mp4](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/03-anki-press.mp4) (if the player above does not render, the link opens the file; it serves as a download)
+
+  Floating trigger, dock on release and the pull onto the remove target:
+
+  <video src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/05-floating-dock-and-drop.mp4" controls></video>
+
+  [05-floating-dock-and-drop.mp4](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/05-floating-dock-and-drop.mp4) (same; `raw.githubusercontent.com` serves the MP4 as `application/octet-stream`, so GitHub does not build a player for a repository file — the links are direct and play or download in the browser)
 
 - **Source:** commit `675e9677db98312ef882fcf0eb4981cce042fd25` on `orchestrate-deepseek-subagents`, whose `git diff 935e05cf60b61179b575466419f2ba534290d607 675e9677…` hashes to `b80b381a2d0e989bce278ef9c52f9392aa4ed3c7e988c98ce59ea9d58cbf76ad` — the working-tree diff this build and these captures were taken from. The captures and the APK predate that commit and came from the same file contents; nothing was rebuilt from the commit. Built with `./gradlew :app:assembleDebug` (`BUILD SUCCESSFUL`); `app-x86_64-debug.apk` SHA-256 `226b3429ff28f9945b764d7ff2acfaa57571eb07cdccd09cb16fecbcbc4b703d`, its `assets/index.android.bundle` SHA-256 `78ee442b1673b991aafd435059b8c4b525af0670167819b0ced9c621892b4efa`. Device: `emulator-5556`, AVD `Gaten_Evidence_Overlay` (pixel_5, API 34, x86_64, 1080×2340 @ 440 dpi, light theme) — a separate instance from the shared `emulator-5554`. Not exercised: dark theme, other text scales, landscape for the bubble, a WaniKani-connected kanji section, the Quick Settings tile, and physical vibration (no emulator can prove it).
 - **Assets:** `docs/pr-evidence/modal-overlay-feedback/` — the stills and both recordings, with a README naming the source commit and its diff hash, the APK and bundle hashes, the device, the build command, the per-frame measurements, the tool limitation below, and the limitations.
