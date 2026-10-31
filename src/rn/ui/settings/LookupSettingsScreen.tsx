@@ -42,6 +42,9 @@ const TRIGGER_LOOKUP_ACTION = "com.gaten.action.TRIGGER_LOOKUP";
 /** The installed package a key remapper scopes the trigger broadcast to. */
 const TRIGGER_LOOKUP_PACKAGE = "com.gaten";
 
+/** The manifest receiver class for a broadcast addressed directly to the lookup trigger. */
+const TRIGGER_LOOKUP_CLASS = "com.gaten.app.LookupTriggerReceiver";
+
 /** The API that can be asked to put the tile in Quick Settings in place (requestAddTileService). */
 const ADD_TILE_API = 33;
 
@@ -316,7 +319,7 @@ function tileSummary(added: boolean, enabled: boolean, addTileAvailable: boolean
 
 /**
  * Optional hardware-key instructions: the row itself expands — its value says what a tap does — into
- * the broadcast action and package a key remapper sends, each in monospace with a copy button, plus
+ * the broadcast action, package and receiver class, each in monospace with a copy button, plus
  * the target mode Key Mapper expects.
  */
 function KeyMapperRow() {
@@ -370,7 +373,26 @@ function KeyMapperRow() {
             />
           </View>
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
-            In Key Mapper use Send intent with Broadcast receiver as the target.
+            Receiver class
+          </Text>
+          <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
+            <Text
+              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
+            >
+              {TRIGGER_LOOKUP_CLASS}
+            </Text>
+            <IconButton
+              name="content_copy"
+              accessibilityLabel="Copy the receiver class"
+              compact
+              onPress={() => {
+                void GatenPlatform.copyToClipboard(TRIGGER_LOOKUP_CLASS);
+              }}
+            />
+          </View>
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
+            In Key Mapper use Send intent with Broadcast receiver as the target. Fill in Action,
+            Package and Class using the values above.
           </Text>
         </View>
       </Collapsible>
