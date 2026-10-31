@@ -10,7 +10,7 @@
  * bottom (the lookup sheet reads the same way). The entry is resolved by id from the shared search
  * store so a restored route never carries stale result data.
  */
-import React, {useCallback, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -23,7 +23,7 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
 import {Button, Icon, distinctIdeographs} from "../components";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
-import {PressableScale} from "../PressableScale";
+import {PressableScale, heldTone} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme, type ThemeColors} from "../theme";
@@ -134,6 +134,7 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
             onOpenKanji={onOpenKanji}
           />
         )}
+        <ExampleSentencesSection term={hit.primary} />
         {/* The Anki action ends the entry's content, so the reader scrolls to it with the entry it
             belongs to, drawn as the entry's own last section: its rule, row and action share the
             section grid the sections above it use. */}
@@ -361,6 +362,83 @@ export function WordKanjiSection({
   );
 }
 
+/**
+ * The bundled Tanaka Corpus's sentences for `term`, shortest first — read from the on-device
+ * corpus, never the network. The word detail page and the lookup sheet's entry both render this,
+ * so the overlay offers the same detail as the full page. Three states: the lookup is unanswered
+ * (a muted line, not an empty section), no sentence carries the word, or the sentences themselves.
+ */
+export function ExampleSentencesSection({term}: {term: string}) {
+  const {colors} = useTheme();
+  const [examples, setExamples] = useState<GatenDict.SentenceExample[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setExamples(null);
+    setFailed(false);
+    if (term.length === 0) {
+      setExamples([]);
+      return;
+    }
+    void GatenDict.lookupExamples(term)
+      .then((found) => {
+        if (!cancelled) setExamples(found);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setFailed(true);
+          console.warn("Could not read example sentences", error);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [term]);
+
+  return (
+    <View style={[styles.examplesSection, {borderBottomColor: sectionRule(colors)}]}>
+      <Text accessibilityRole="header" style={[typeScale.labelLarge, {color: colors.onSurface}]}>
+        Example sentences
+      </Text>
+      {failed ? (
+        // A read failure is not an empty corpus: it says so, and what to do, rather than claiming
+        // the word has no examples.
+        <Text style={[typeScale.bodyMedium, styles.examplesState, {color: colors.error}]}>
+          Could not read example sentences. Reopen the word to try again.
+        </Text>
+      ) : examples === null ? (
+        <Text style={[typeScale.bodyMedium, styles.examplesState, {color: colors.onSurfaceVariant}]}>
+          Finding examples…
+        </Text>
+      ) : examples.length === 0 ? (
+        <Text style={[typeScale.bodyMedium, styles.examplesState, {color: colors.onSurfaceVariant}]}>
+          No example sentences found for this word.
+        </Text>
+      ) : (
+        <View style={styles.examplesList}>
+          {examples.map((example, index) => (
+            <View
+              key={`${index}-${example.japanese}`}
+              style={[
+                styles.exampleRow,
+                index > 0 && {borderTopWidth: 1, borderTopColor: colors.outlineVariant},
+              ]}
+            >
+              <Text style={[typeScale.bodyLarge, {color: colors.onSurface}]}>{example.japanese}</Text>
+              <Text
+                style={[typeScale.bodySmall, styles.exampleEnglish, {color: colors.onSurfaceVariant}]}
+              >
+                {example.english}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 /** Renders the export deck picker and filled Anki action, preserving export and deck-save states. */
 export function AddToAnkiBar({
   entry,
@@ -559,6 +637,12 @@ export function AddToAnkiBar({
           fullWidth
           disabled={!enabled || deckSaving}
           label={busy ? undefined : buttonLabel}
+          // The one control that travels: the Add action sinks and takes a held tone while it is
+          // pressed, on top of the tick every button plays. Disabled, it does neither.
+          pressDrop={{
+            from: colors.actionPrimary,
+            to: heldTone(colors.actionPrimary, colors.onActionPrimary),
+          }}
           leading={
             busy ? (
               <ActivityIndicator size="small" color={colors.onActionPrimary} />
@@ -629,6 +713,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   kanjiCharacter: {fontSize: 36, fontWeight: "700"},
+  examplesSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
+  examplesState: {marginTop: spacing.m},
+  examplesList: {marginTop: spacing.s},
+  exampleRow: {paddingVertical: spacing.l},
+  exampleEnglish: {marginTop: spacing.xs},
   // The section's own rhythm is the detail rows' (`detailRowContent`): the same 58 dp box with the
   // same vertical padding, so the deck row does not carry air the rows above it do not.
   ankiContent: {...CONTENT_COLUMN, gap: spacing.s},

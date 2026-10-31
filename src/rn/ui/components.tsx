@@ -26,9 +26,8 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import {PressableScale} from "./PressableScale";
+import {PressableScale, type PressDrop} from "./PressableScale";
 import {ICON_PATHS, type IconName} from "./icons";
-import * as GatenHaptics from "../native/GatenHaptics";
 import {useTheme} from "./theme";
 import {
   CARD_ELEVATION,
@@ -281,6 +280,7 @@ export function Button({
   fullWidth = false,
   leading = null,
   accessibilityLabel,
+  pressDrop,
   style,
 }: {
   label?: string;
@@ -290,6 +290,8 @@ export function Button({
   fullWidth?: boolean;
   leading?: React.ReactNode;
   accessibilityLabel?: string;
+  /** Pressed-state travel for the few actions the design sinks; see [PressDrop]. */
+  pressDrop?: PressDrop;
   style?: StyleProp<ViewStyle>;
 }) {
   const {colors} = useTheme();
@@ -333,6 +335,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{disabled}}
+      pressDrop={pressDrop}
       style={[container, style]}
     >
       {leading}
@@ -453,10 +456,8 @@ export function distinctIdeographs(word: string): string[] {
 /**
  * The horizontally scrolling kanji chips under a word: one chip per ideograph of the headword.
  *
- * A tap plays the Tick haptic per [haptic]: "always" ticks on every press, "onOpen" only when the
- * tapped character is not the selected one (the review screen, where tapping the open kanji closes
- * it silently), and "none" never ticks — the mode a screen uses when the shell owns the Tick,
- * because only the shell knows whether a tap opens something new or closes it.
+ * Each chip is a control and ticks like every other one (see [PressableScale]); the strip adds no
+ * haptic of its own.
  *
  * The strip brings all of its own vertical spacing — 8 dp above the label and 4 dp below it — as the
  * Kotlin's does, so a caller puts nothing between it and what is above.
@@ -466,13 +467,11 @@ export function KanjiStrip({
   selected = null,
   onKanji,
   label = "WaniKani kanji",
-  haptic = "always",
 }: {
   characters: string[];
   selected?: string | null;
   onKanji: (character: string) => void;
   label?: string | null;
-  haptic?: "always" | "onOpen" | "none";
 }) {
   const {colors} = useTheme();
   if (characters.length === 0) {
@@ -500,12 +499,7 @@ export function KanjiStrip({
             key={character}
             character={character}
             selected={character === selected}
-            onPress={() => {
-              if (haptic === "always" || (haptic === "onOpen" && character !== selected)) {
-                void GatenHaptics.play("tick").catch(() => {});
-              }
-              onKanji(character);
-            }}
+            onPress={() => onKanji(character)}
           />
         ))}
       </ScrollView>

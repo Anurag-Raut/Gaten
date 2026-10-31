@@ -46,7 +46,6 @@ import {Collapsible, DisclosureChevron} from "./Collapsible";
 import * as Anki from "../native/GatenAnki";
 import {downloadAnkiDroid} from "./anki/anki-actions";
 import * as GatenDict from "../native/GatenDict";
-import * as GatenHaptics from "../native/GatenHaptics";
 import * as GatenWaniKani from "../native/GatenWaniKani";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
@@ -241,21 +240,9 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             expandedRadical={review.expandedRadical}
             onBack={leave}
             onReveal={() => reviewActions.reveal()}
-            onGrade={(ease) => {
-              // Submitting a rating changes the state of the card, so it ticks — the same tick a
-              // chip's selection gets, not a firmer one.
-              void GatenHaptics.play("tick").catch(() => {});
-              reviewActions.grade(step, ease);
-            }}
+            onGrade={(ease) => reviewActions.grade(step, ease)}
             onKanji={(character) => reviewActions.toggleKanji(character)}
-            onRadical={(id) => {
-              // One tick per *selection*: opening a radical the reader was not already on.
-              // Tapping the open one closes it, and a close is not a selection.
-              if (id !== review.expandedRadical) {
-                void GatenHaptics.play("tick").catch(() => {});
-              }
-              reviewActions.toggleRadical(id);
-            }}
+            onRadical={(id) => reviewActions.toggleRadical(id)}
             onCloseDetails={() => reviewActions.closeDetails()}
           />
         ) : step.kind === "wkConnect" ? (
@@ -678,7 +665,6 @@ function AnkiSession({
               selected={expandedKanji}
               onKanji={onKanji}
               label={null}
-              haptic="onOpen"
             />
             {/* The details move as pages, with the slide every other page change uses; the one
                 thing animated besides the slide is the size, so the strip above never jumps. */}
@@ -768,7 +754,8 @@ function AnkiSession({
           </PressableScale>
         )}
         {!session.revealed ? (
-          // The reveal is an ordinary tap: the flash is what it gives back, so it gets no tick.
+          // The reveal is an ordinary control: the flash answers the tap, and the tick every button
+          // plays rides with it.
           <FilledAction label="Show answer" disabled={busy} onPress={onReveal} />
         ) : (
           <RatingBar

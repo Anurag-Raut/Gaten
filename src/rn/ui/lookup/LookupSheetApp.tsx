@@ -60,6 +60,7 @@ import {
 import {SearchNotice} from "../search/SearchScreen";
 import {
   AddToAnkiBar,
+  ExampleSentencesSection,
   HeadwordSection,
   MeaningSection,
   OtherSpellingsRow,
@@ -555,7 +556,7 @@ function EntryDetail({
           contentContainerStyle={styles.tabs}
         >
           {words.map((word, index) => (
-            <Pressable
+            <PressableScale
               key={`${word.surface}-${index}`}
               accessibilityRole="button"
               accessibilityState={{selected: index === selected}}
@@ -573,7 +574,7 @@ function EntryDetail({
               >
                 {word.entries[0]?.primary ?? word.surface}
               </Text>
-            </Pressable>
+            </PressableScale>
           ))}
         </ScrollView>
       )}
@@ -602,6 +603,9 @@ function EntryDetail({
             onOpenKanji={onOpenKanji}
           />
         )}
+        {/* The same corpus section the word detail page carries, so the overlay's entry is exactly
+            as complete as the full page it mirrors. */}
+        <ExampleSentencesSection key={entry.id} term={entry.primary} />
         {/* The Anki action ends the entry's content in both orientations, so the reader scrolls to
             it with the entry it belongs to, drawn as the entry's own last section. */}
         <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />

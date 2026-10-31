@@ -57,9 +57,9 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   }, [dark]);
 
   const selectAccent = (accent: Accent) => {
-    // A tap that lands on the accent already chosen changes nothing and gets no tick for it.
+    // A tap that lands on the accent already chosen changes nothing — but it is still a control
+    // press, so it still ticks; the tick comes from the swatch itself.
     if (accent === theme.accent) return;
-    void GatenHaptics.play("tick").catch(() => {});
     theme.setAccent(accent);
   };
 
@@ -78,7 +78,6 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
     if (next === soundsEnabled) return;
     setSoundsEnabled(next);
     void GatenHaptics.setSoundsEnabled(next).catch(() => {});
-    void GatenHaptics.play("tick").catch(() => {});
   };
 
   return (

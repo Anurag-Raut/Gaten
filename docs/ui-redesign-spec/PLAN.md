@@ -118,7 +118,7 @@ New `ui/Feedback.kt`: two functions — `haptic(kind)` and `sound(kind)` — bac
 | Action | Haptic | Sound (default off) |
 |---|---|---|
 | Tab switch | tick (`CONTEXT_CLICK`) | — |
-| Row/button press | none (visual scale only) | — |
+| Row/button press | tick (with the pressed fade; the Add-to-Anki action sinks and takes a held tone) | — |
 | Toggle/selection change | tick | — |
 | Lookup → dictionary hit | light (`CONTEXT_TICK`) | — |
 | Add to Anki success | confirm (`LONG_PRESS`) | `feedback_added` |
@@ -129,7 +129,7 @@ New `ui/Feedback.kt`: two functions — `haptic(kind)` and `sound(kind)` — bac
 Rules: everything goes through `LocalHapticFeedback` / `performHapticFeedback` (respects
 the phone's haptic settings); sound gated by one new preference
 `FeedbackPreferences.soundsEnabled` (default false) with a row in Appearance → Feedback.
-No vibration on dialogs, no sound on ordinary taps.
+No vibration for a dialog's own appearance or for a scrim dismiss — but its buttons tick like every other button. No sound on ordinary taps.
 
 ## 3. Per-screen specification
 

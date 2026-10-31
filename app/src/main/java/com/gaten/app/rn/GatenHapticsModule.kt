@@ -6,7 +6,7 @@
 
 package com.gaten.app.rn
 
-import android.app.Activity
+import android.view.View
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -14,16 +14,19 @@ import com.gaten.app.ui.Feedback
 import com.gaten.app.ui.FeedbackHaptic
 import com.gaten.app.ui.FeedbackPreferences
 import com.gaten.app.ui.FeedbackSound
+import com.gaten.app.ui.lookup.LookupSheetHost
 
 /**
  * The app's touch feedback, for the RN screens.
  *
  * [Feedback] plays its haptics through the view that is on screen — the tick and the tap belong to
- * the same window — so the module holds one instance per current activity and rebuilds it when the
- * activity changes, releasing the previous one. The cues behind the sounds live in
- * [FeedbackPreferences]'s `gaten_settings`, the same file every other pref is kept in, and a
- * reader who turned sounds off never allocates the pool, exactly as [Feedback] was written to
- * behave.
+ * the same window — so the module holds one instance per view it has played through and rebuilds it
+ * when that view changes, releasing the previous one. The view is the lookup sheet's own surface
+ * while the accessibility overlay is up (the overlay, not an activity, owns that window — and the
+ * main activity may not even exist when a lookup was triggered from another app), and the current
+ * activity's window otherwise. The cues behind the sounds live in [FeedbackPreferences]'s
+ * `gaten_settings`, the same file every other pref is kept in, and a reader who turned sounds off
+ * never allocates the pool, exactly as [Feedback] was written to behave.
  *
  * [play]'s kinds are [FeedbackHaptic]'s and [FeedbackSound]'s names, lowercased: `tick`,
  * `lookup` and `confirm` are haptics; `added` and `done` are the two sound cues.
@@ -37,32 +40,41 @@ class GatenHapticsModule(
 
     override fun getName(): String = NAME
 
-    /** The feedback instance and the activity whose window its haptics come from. */
+    /** The feedback instance and the view whose window its haptics come from. */
     private var feedback: Feedback? = null
-    private var owner: Activity? = null
+    private var ownerView: View? = null
+
+    /**
+     * The view feedback must come from: the lookup sheet's surface while the accessibility overlay
+     * is up, otherwise the current activity's window. A view that is not attached to a window yet —
+     * the sheet's surface exists before it is added, and an activity's window may be coming down —
+     * cannot feel a haptic, so it is passed over rather than swallowing the request. Null when
+     * neither is usable.
+     */
+    private fun visibleView(): View? =
+        LookupSheetHost.currentView()?.takeIf { it.isAttachedToWindow }
+            ?: getCurrentActivity()?.window?.decorView?.takeIf { it.isAttachedToWindow }
 
     /**
      * Plays [kind]: a haptic for `tick`, `lookup` or `confirm`, a sound cue for `added` or `done`
      * — the sound only when the reader has sounds on, which [Feedback] checks itself. Rejects with
      * `E_FEEDBACK_KIND` for a kind that is not one of the five, and with `E_NO_WINDOW` when there
-     * is no activity window to feel the haptic through.
+     * is no visible window to feel the haptic through.
      */
     @ReactMethod
     fun play(kind: String, promise: Promise) {
-        val activity: Activity? = getCurrentActivity()
-        val window = activity?.window
-        if (activity == null || window == null) {
+        val view = visibleView()
+        if (view == null) {
             promise.reject(CODE_NO_WINDOW, "No window to deliver feedback through")
             return
         }
-        val view: android.view.View = window.decorView
-        val instance = feedback?.takeIf { owner === activity } ?: Feedback(
+        val instance = feedback?.takeIf { ownerView === view } ?: Feedback(
             view,
             reactApplicationContext
         ).also {
             feedback?.release()
             feedback = it
-            owner = activity
+            ownerView = view
         }
         when (kind.lowercase()) {
             "tick" -> instance.haptic(FeedbackHaptic.Tick)
@@ -95,7 +107,7 @@ class GatenHapticsModule(
     override fun invalidate() {
         feedback?.release()
         feedback = null
-        owner = null
+        ownerView = null
     }
 
     companion object {

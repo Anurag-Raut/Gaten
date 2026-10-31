@@ -32,6 +32,8 @@ import android.widget.ImageView
 import androidx.compose.animation.core.Easing
 import androidx.compose.ui.graphics.toArgb
 import com.gaten.app.R
+import com.gaten.app.ui.Feedback
+import com.gaten.app.ui.FeedbackHaptic
 import com.gaten.app.ui.theme.AccentRoles
 import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.NeutralRoles
@@ -75,6 +77,13 @@ private const val DISMISS_BOTTOM_MARGIN_DP = 32
 
 /** Extra room around the drop target, so a bubble dragged near it still counts as a drop. */
 private const val DISMISS_SLOP_DP = 20
+
+/**
+ * How near the remove target a dragged bubble starts being drawn toward it, in dp. The pull is
+ * strongest at the target's centre and gone at this radius, so a finger coming near the target
+ * carries the bubble onto it and a release there is a drop.
+ */
+private const val DISMISS_ATTRACT_DP = 96f
 
 /** How much the drop target grows while a dragged bubble is over it; it never changes colour. */
 private const val DISMISS_HOT_SCALE = 1.15f
@@ -129,9 +138,18 @@ private const val GONE_TIMEOUT_MS = 150L
  * "different". The bubble's own disk answers a tap the same way: it grows and comes straight back down,
  * with its colours untouched. The lookup is fired on the tap itself, not at the end of that shrink:
  * an accepted capture takes the bubble off screen in the same pass, so the shrink is never drawn for
- * it, and waiting the animation out only added its duration to every lookup. The drag and the clamp
- * are not animations — they answer a finger — and the service takes the windows down outright before
- * a capture.
+ * it, and waiting the animation out only added its duration to every lookup. The drag, the clamp and
+ * the pull toward the target are not animations — they answer a finger — and the service takes the
+ * windows down outright before a capture.
+ *
+ * A release docks the bubble to the nearer vertical edge, at the height it was let go at: the dock is
+ * the one motion on the drag path, a short glide on the shared easing, and the docked position is
+ * what is stored, so the bubble always rests where it can be seen and touched. A finger near the
+ * remove target draws the bubble toward it while still down — the pull recomputed from the finger on
+ * every move, never accumulated — so a release there is a drop and moving away lets the bubble back.
+ * Each touch gives one tick through the app's shared haptics, which respect the phone's own haptic
+ * setting: a tap at the press, and a removal on the single dismissal path, whether the reader dropped
+ * the bubble on the target or activated the target itself.
  */
 class FloatingTriggerButton(
     private val context: Context,
@@ -201,6 +219,16 @@ class FloatingTriggerButton(
     /** Whatever is writing the target circle's over-it scale, and the scale it is at now. */
     private var dismissScaleAnimator: ValueAnimator? = null
     private var dismissScale = 1f
+
+    /** Whatever is writing a release's dock to the nearer edge. */
+    private var snapAnimator: ValueAnimator? = null
+
+    /**
+     * What gives a touch its tick: the bubble disk on screen, wrapped in the app's shared haptics so
+     * a tap, a drop on the remove target and the target's own activation all respect the phone's own
+     * haptic setting. Rebuilt with each bubble, since haptics come from the view on screen.
+     */
+    private var feedback: Feedback? = null
 
     /** True from the start of a bubble fade out until the control is gone or asked for again. */
     private var fadingOut = false
@@ -313,6 +341,7 @@ class FloatingTriggerButton(
         stopDismissAlpha()
         stopDismissScale()
         stopBubbleScale()
+        stopSnap()
         fadingOut = false
         val bubble = view
         val target = dismissView
@@ -322,6 +351,8 @@ class FloatingTriggerButton(
         dismissParams = null
         bubbleView = null
         dismissCircle = null
+        feedback?.release()
+        feedback = null
         bubble?.let { removeWindow(it) }
         target?.let { removeWindow(it) }
     }
@@ -523,6 +554,9 @@ class FloatingTriggerButton(
             setOnClickListener { onTrigger() }
         }
         bubbleView = circle
+        // The tick's source: this disk is the view on screen for every touch the reader makes here.
+        // Any previous instance went with the previous bubble in removeNow.
+        feedback = Feedback(circle, context)
         return FrameLayout(context).apply {
             // Transparent, and exactly the grown disk's size: the ring the tap's scale grows into.
             minimumWidth = bubbleWindowPx
@@ -667,16 +701,18 @@ class FloatingTriggerButton(
 
     /**
      * Moves the showing bubble back inside the display, for a rotation or a resize that left its
-     * position outside the new one, and re-centres a target that is up on the new display. The
-     * window manager clips the frame it draws, but the position kept here is what the next drag
-     * moves on from: off-display, that drag only resumes once the finger has travelled back past the
-     * clipped distance.
+     * position outside the new one, re-docks it to the nearer edge, and re-centres a target that is
+     * up on the new display. The window manager clips the frame it draws, but the position kept here
+     * is what the next drag moves on from: off-display, that drag only resumes once the finger has
+     * travelled back past the clipped distance. A docked bubble keeps its edge across the change, and
+     * a position stored mid-screen by an older build comes back to one this class can keep.
      */
     fun reclampToDisplay() = onMain {
+        stopSnap()
         val layoutParams = params
         val root = view
         if (layoutParams != null && root != null) {
-            val (x, y) = clampToDisplay(layoutParams.x to layoutParams.y)
+            val (x, y) = snappedToEdge(clampToDisplay(layoutParams.x to layoutParams.y))
             if (x != layoutParams.x || y != layoutParams.y) {
                 layoutParams.x = x
                 layoutParams.y = y
@@ -710,6 +746,63 @@ class FloatingTriggerButton(
     }
 
     /**
+     * A position with the bubble docked to the nearer vertical edge — [EDGE_MARGIN_DP] inside it, on
+     * whichever side of the display's middle it was released — at the height it was let go at. The
+     * height is clamped like a drag's, so a docked bubble is always one the reader can see and touch.
+     */
+    private fun snappedToEdge(position: Pair<Int, Int>): Pair<Int, Int> {
+        val metrics = context.resources.displayMetrics
+        val maxY = (metrics.heightPixels - bubbleWindowPx).coerceAtLeast(0)
+        val right = (metrics.widthPixels - bubbleWindowPx - edgeMarginPx).coerceAtLeast(edgeMarginPx)
+        val centre = position.first + bubbleWindowPx / 2
+        val x = if (centre < metrics.widthPixels / 2) edgeMarginPx.coerceAtMost(right) else right
+        return x to position.second.coerceIn(0, maxY)
+    }
+
+    /**
+     * Docks a released bubble to the nearer edge, gliding it there over [Motion.SHORT] on the shared
+     * easing, and stores the docked position at once — the resting place is the dock whether or not
+     * the glide finishes, so a process death mid-glide restores the dock rather than the drop. A new
+     * touch stops the glide and takes the bubble from where it stands.
+     */
+    private fun dockToEdge() {
+        val layoutParams = params ?: return
+        val root = view ?: return
+        val (x, y) = snappedToEdge(layoutParams.x to layoutParams.y)
+        TriggerPreferences.setFloatingButtonPosition(context, x, y)
+        stopSnap()
+        if (layoutParams.x == x && layoutParams.y == y) return
+        layoutParams.y = y
+        if (layoutParams.x == x) {
+            windowManager.updateViewLayout(root, layoutParams)
+            return
+        }
+        val animator = ValueAnimator.ofInt(layoutParams.x, x).apply {
+            duration = Motion.SHORT.toLong()
+            setInterpolator(TimeInterpolator { Motion.emphasized.transform(it) })
+            addUpdateListener { animation ->
+                layoutParams.x = animation.animatedValue as Int
+                windowManager.updateViewLayout(root, layoutParams)
+            }
+        }
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                if (snapAnimator !== animation) return
+                snapAnimator = null
+            }
+        })
+        snapAnimator = animator
+        animator.start()
+    }
+
+    /** Stops whatever is writing a release's dock, so the next touch moves on from where it stands. */
+    private fun stopSnap() {
+        val running = snapAnimator ?: return
+        snapAnimator = null
+        running.cancel()
+    }
+
+    /**
      * Press handling, kept on the bubble's own bounds: past the touch slop the press becomes a drag,
      * the remove target comes up, and the bubble's window follows the finger. Movement is the whole
      * test — a timer on top of it only adds a second way for a press on this bubble to do nothing at
@@ -718,10 +811,11 @@ class FloatingTriggerButton(
      *
      * A press grows the bubble and the drag lets it back down: once the finger is moving the window,
      * the position is the feedback and the size has nothing left to say. A tap's feedback is that
-     * same grow-and-shrink, and the lookup waits for the shrink to finish so the capture cannot cut
-     * it short. While the finger is over the target, the target says so; a release there removes the
-     * bubble, and a release anywhere else only stores its new position. A cancellation never
-     * removes it.
+     * same grow-and-shrink, plus one tick; the lookup fires on the release itself, not at the end of
+     * that shrink, so an accepted capture is never held back by it. Coming near the target draws the
+     * bubble toward it and grows the target, so a release there is a drop; a release anywhere else
+     * docks the bubble to the nearer edge. A cancellation never removes the bubble and never turns
+     * the preference off.
      */
     private fun handleTouch(touched: View, event: MotionEvent): Boolean {
         val layoutParams = params ?: return false
@@ -729,6 +823,9 @@ class FloatingTriggerButton(
         if (fadingOut) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // A finger on a bubble that is still gliding to its dock takes it over: the drag
+                // starts from where it stands, not from where the glide was headed.
+                stopSnap()
                 downRawX = event.rawX
                 downRawY = event.rawY
                 downX = layoutParams.x
@@ -747,11 +844,13 @@ class FloatingTriggerButton(
                     showDismiss()
                 }
                 if (dragging) {
-                    val (x, y) = clampToDisplay(downX + dx.toInt() to downY + dy.toInt())
+                    val (x, y) = attractedToDismiss(
+                        clampToDisplay(downX + dx.toInt() to downY + dy.toInt())
+                    )
                     layoutParams.x = x
                     layoutParams.y = y
                     windowManager.updateViewLayout(root, layoutParams)
-                    val over = isOverDismiss(event.rawX, event.rawY)
+                    val over = isOverDismiss()
                     if (over != overDismiss) {
                         overDismiss = over
                         animateDismissScale(over)
@@ -766,15 +865,13 @@ class FloatingTriggerButton(
                     animateBubbleScale(false)
                     if (dropped) {
                         // The reader dropped the bubble on the remove target: the same dismissal the
-                        // target's own activation performs, so the preference, the fade and the
-                        // settings-page notification all take the one path.
+                        // target's own activation performs, so the preference, the fade, the tick
+                        // and the settings-page notification all take the one path.
                         dismissByReader()
                     } else {
                         animateDismissScale(false)
-                        TriggerPreferences.setFloatingButtonPosition(
-                            context, layoutParams.x, layoutParams.y
-                        )
                         hideDismiss()
+                        dockToEdge()
                     }
                 } else {
                     // The lookup fires on the tap itself. An accepted capture hides the bubble in the
@@ -784,6 +881,9 @@ class FloatingTriggerButton(
                     // screen is off or locked, or the tap just closes an open panel — which is the
                     // case it exists for; the press grow while the finger is held is unchanged.
                     animateBubbleScale(false)
+                    // One tick at the press. The overlay's own tick comes later, when a result is
+                    // published, so the two are separate moments rather than one doubled cue.
+                    feedback?.haptic(FeedbackHaptic.Tick)
                     onTrigger()
                 }
             }
@@ -792,33 +892,63 @@ class FloatingTriggerButton(
                 animateBubbleScale(false)
                 overDismiss = false
                 if (dragging) {
+                    // A gesture the system took away still ends with the bubble resting: it docks
+                    // like a release, but never removes the control or moves the preference.
                     animateDismissScale(false)
-                    TriggerPreferences.setFloatingButtonPosition(
-                        context, layoutParams.x, layoutParams.y
-                    )
                     hideDismiss()
+                    dockToEdge()
                 }
             }
         }
         return true
     }
 
-    /** Whether the finger that is dragging the bubble is over the remove target. */
-    private fun isOverDismiss(rawX: Float, rawY: Float): Boolean {
-        val target = dismissParams ?: return false
-        return rawX >= target.x - dismissSlopPx &&
-            rawX <= target.x + dismissWindowPx + dismissSlopPx &&
-            rawY >= target.y - dismissSlopPx &&
-            rawY <= target.y + dismissWindowPx + dismissSlopPx
+    /**
+     * The position a dragged bubble is drawn at: its own, or — within [DISMISS_ATTRACT_DP] of the
+     * remove target — eased toward it, so a finger coming near the target carries the bubble with it
+     * and a release there is a drop. The pull is recomputed from the finger on every move, never
+     * accumulated, so moving away lets the bubble back to the finger. A convex blend of two points
+     * already inside the display stays inside it.
+     */
+    private fun attractedToDismiss(position: Pair<Int, Int>): Pair<Int, Int> {
+        val target = dismissParams ?: return position
+        val radius = DISMISS_ATTRACT_DP * density
+        val centreX = position.first + bubbleWindowPx / 2f
+        val centreY = position.second + bubbleWindowPx / 2f
+        val targetX = target.x + dismissWindowPx / 2f
+        val targetY = target.y + dismissWindowPx / 2f
+        val distance = hypot(targetX - centreX, targetY - centreY)
+        if (distance >= radius) return position
+        val pull = 1f - distance / radius
+        return (centreX + (targetX - centreX) * pull - bubbleWindowPx / 2f).toInt() to
+            (centreY + (targetY - centreY) * pull - bubbleWindowPx / 2f).toInt()
     }
 
     /**
-     * The reader removed the floating control: write the preference off and let the ordinary hide
-     * fade it away. Only the floating-button preference moves — lookup mode and the Quick Settings
-     * tile are separate switches and stay as they were. The Screen lookup settings page reads this
-     * preference, so switching Floating button back on shows the bubble again.
+     * Whether the bubble the finger is dragging now overlaps the remove target, with
+     * [DISMISS_SLOP_DP] of slack. Read from the bubble's own drawn rectangle, not the finger's: the
+     * drag's pull can put the bubble on the target with the finger a little outside it, and a drop
+     * has to follow what the reader can see.
+     */
+    private fun isOverDismiss(): Boolean {
+        val target = dismissParams ?: return false
+        val layoutParams = params ?: return false
+        return layoutParams.x <= target.x + dismissWindowPx + dismissSlopPx &&
+            layoutParams.x + bubbleWindowPx >= target.x - dismissSlopPx &&
+            layoutParams.y <= target.y + dismissWindowPx + dismissSlopPx &&
+            layoutParams.y + bubbleWindowPx >= target.y - dismissSlopPx
+    }
+
+    /**
+     * The reader removed the floating control: give one confirming tick, write the preference off
+     * and let the ordinary hide fade it away. Only the floating-button preference moves — lookup
+     * mode and the Quick Settings tile are separate switches and stay as they were. The Screen
+     * lookup settings page reads this preference, so switching Floating button back on shows the
+     * bubble again. This is the one dismissal path — a drop on the target and the target's own
+     * activation both arrive here — so the tick fires exactly once for either.
      */
     private fun dismissByReader() {
+        feedback?.haptic(FeedbackHaptic.Confirm)
         TriggerPreferences.setFloatingButtonEnabled(context, false)
         // The Screen lookup page, if it is open, re-reads the switch from this notification; the
         // service owns the bridge, so the button only reports the dismissal.

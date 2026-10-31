@@ -20,7 +20,6 @@ import {AppState, Platform, Text, View} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenTrigger from "../../native/GatenTrigger";
-import * as GatenHaptics from "../../native/GatenHaptics";
 import {IconButton} from "../components";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -161,7 +160,6 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
    * foregrounding — so a reader who does not enable Gaten is not shown as if they had.
    */
   const toggleLookupMode = (next: boolean) => {
-    void GatenHaptics.play("tick").catch(() => {});
     if (next) {
       requestLookupMode();
       return;
@@ -187,7 +185,6 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
   };
 
   const toggleFloating = (next: boolean) => {
-    void GatenHaptics.play("tick").catch(() => {});
     setFloatingEnabled(next);
     void GatenTrigger.setFloatingButtonEnabled(next).catch(() => {});
     // The bubble only exists while lookup mode is on, so switching it on without lookup mode is
@@ -201,7 +198,6 @@ export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
    * in, while a cancelled request stays off. Off never removes a tile — Android's editor owns that.
    */
   const toggleTile = (next: boolean) => {
-    void GatenHaptics.play("tick").catch(() => {});
     if (!next || tileAdded) {
       void GatenTrigger.setTileEnabled(next)
         .then(readTileState)
