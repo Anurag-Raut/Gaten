@@ -118,7 +118,7 @@ New `ui/Feedback.kt`: two functions — `haptic(kind)` and `sound(kind)` — bac
 | Action | Haptic | Sound (default off) |
 |---|---|---|
 | Tab switch | tick (`CONTEXT_CLICK`) | — |
-| Row/button press | tick (with the pressed fade; the Add-to-Anki action sinks and takes a held tone) | — |
+| Row/button press | tick (with the pressed fade; the Add-to-Anki action scales down while held, back up on release, and takes a held tone) | — |
 | Toggle/selection change | tick | — |
 | Lookup → dictionary hit | light (`CONTEXT_TICK`) | — |
 | Add to Anki success | confirm (`LONG_PRESS`) | `feedback_added` |

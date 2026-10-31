@@ -26,7 +26,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import {PressableScale, type PressDrop} from "./PressableScale";
+import {PressableScale, type PressScale} from "./PressableScale";
 import {ICON_PATHS, type IconName} from "./icons";
 import {useTheme} from "./theme";
 import {
@@ -280,7 +280,7 @@ export function Button({
   fullWidth = false,
   leading = null,
   accessibilityLabel,
-  pressDrop,
+  pressScale,
   style,
 }: {
   label?: string;
@@ -290,8 +290,8 @@ export function Button({
   fullWidth?: boolean;
   leading?: React.ReactNode;
   accessibilityLabel?: string;
-  /** Pressed-state travel for the few actions the design sinks; see [PressDrop]. */
-  pressDrop?: PressDrop;
+  /** Scale down on press, back up on release, with a held fill; see [PressScale]. */
+  pressScale?: PressScale;
   style?: StyleProp<ViewStyle>;
 }) {
   const {colors} = useTheme();
@@ -335,7 +335,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{disabled}}
-      pressDrop={pressDrop}
+      pressScale={pressScale}
       style={[container, style]}
     >
       {leading}

@@ -637,9 +637,8 @@ export function AddToAnkiBar({
           fullWidth
           disabled={!enabled || deckSaving}
           label={busy ? undefined : buttonLabel}
-          // The one control that travels: the Add action sinks and takes a held tone while it is
-          // pressed, on top of the tick every button plays. Disabled, it does neither.
-          pressDrop={{
+          // Scale down while held and back up on release, alongside the held tone and click haptic.
+          pressScale={{
             from: colors.actionPrimary,
             to: heldTone(colors.actionPrimary, colors.onActionPrimary),
           }}

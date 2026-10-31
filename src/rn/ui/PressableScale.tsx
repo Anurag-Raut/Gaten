@@ -6,7 +6,7 @@
 
 /**
  * Shared Ink press feedback: a quiet opacity change, a tick from the phone, with a visible keyboard
- * focus ring — and, for the few controls the design moves instead of just dimming, a drop.
+ * focus ring. The Anki action also scales down while held and returns to full size on release.
  */
 import React, {useState} from "react";
 import {
@@ -28,14 +28,13 @@ import {useTheme} from "./theme";
 
 const PRESSED_OPACITY = 0.72;
 const PRESS_MS = 100;
-/** How far a `pressDrop` control travels down while it is held. */
-const PRESS_DROP_DP = 2;
+/** Held scale for the Anki action; release restores its full size. */
+const PRESSED_SCALE = 0.98;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-/** A control that travels: it sinks [distance] dp and eases its fill from [from] to [to] while held. */
-export interface PressDrop {
-  distance?: number;
+/** A control that scales down and eases its fill from [from] to [to] while held. */
+export interface PressScale {
   /** The resting fill, so the colour eases back to it on release. */
   from: string;
   /** The fill while held. */
@@ -80,15 +79,15 @@ interface PressableScaleProps extends Omit<PressableProps, "style"> {
   style?: StyleProp<ViewStyle>;
   /** Draw the accent focus ring; off for controls whose platform focus highlight is unwanted. */
   showFocusRing?: boolean;
-  /** The pressed-state travel, for the controls the design sinks rather than dims. */
-  pressDrop?: PressDrop;
+  /** Scale and fill feedback for the Anki action. */
+  pressScale?: PressScale;
 }
 
 export function PressableScale({
   style,
   children,
   showFocusRing = true,
-  pressDrop,
+  pressScale,
   disabled,
   onPress,
   onPressIn,
@@ -101,7 +100,7 @@ export function PressableScale({
   const [focused, setFocused] = useState(false);
   const reducedMotion = useReducedMotion();
   const opacity = useSharedValue(1);
-  const drop = useSharedValue(0);
+  const progress = useSharedValue(0);
 
   const settle = (pressed: boolean) => {
     const to = pressed ? PRESSED_OPACITY : 1;
@@ -109,24 +108,24 @@ export function PressableScale({
       duration: PRESS_MS,
       easing: PRESS_EASING_REANIMATED,
     });
-    if (pressDrop) {
+    if (pressScale) {
       const next = pressed ? 1 : 0;
-      drop.value = reducedMotion ? next : withTiming(next, {
+      progress.value = reducedMotion ? next : withTiming(next, {
         duration: PRESS_MS,
         easing: PRESS_EASING_REANIMATED,
       });
     }
   };
   const pressStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    ...(pressDrop == null
+    opacity: disabled ? 1 : opacity.value,
+    ...(pressScale == null || disabled
       ? null
       : {
-          transform: [{translateY: drop.value * (pressDrop.distance ?? PRESS_DROP_DP)}],
+          transform: [{scale: reducedMotion ? 1 : 1 + progress.value * (PRESSED_SCALE - 1)}],
           backgroundColor: interpolateColor(
-            drop.value,
+            progress.value,
             [0, 1],
-            [pressDrop.from, pressDrop.to],
+            [pressScale.from, pressScale.to],
           ),
         }),
   }));
