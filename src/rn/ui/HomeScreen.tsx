@@ -284,8 +284,14 @@ export function HomeScreen({
                 >
                   <PressableScale
                     accessibilityRole="button"
-                    accessibilityLabel="Cancel search"
-                    onPress={exitSearch}
+                    accessibilityLabel={searchState.query.length > 0 ? "Clear search" : "Cancel search"}
+                    onPress={() => {
+                      if (store.getSearchState().query.length > 0) {
+                        store.onQueryChange("");
+                      } else {
+                        exitSearch();
+                      }
+                    }}
                     style={[styles.cancelSearch, {borderColor: colors.outlineVariant}]}
                   >
                     <Icon name="close" size={20} color={colors.accent} />
