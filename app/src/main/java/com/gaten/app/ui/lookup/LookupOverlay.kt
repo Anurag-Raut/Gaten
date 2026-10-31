@@ -191,6 +191,7 @@ fun LookupOverlay(
     val tapTolerancePx = with(LocalDensity.current) {
         (TapTolerance.toPx() / mapping.minScale).roundToInt()
     }
+    val tapOutlinePaddingPx = with(LocalDensity.current) { 6.dp.toPx() }
     // The overlay's fade and the sheet's slide are coordinated through these two transition
     // states: dismissals await the real transitions (a MutableTransitionState's currentState only
     // settles once every nested enter/exit child — the sheet's animateEnterExit slide included —
@@ -602,7 +603,8 @@ fun LookupOverlay(
         val selection = line.bounds
         val phrase = tapPhraseCrop(live, lineIndex, x, y)
         val anchorBox = mapping.toView(selection)
-        frozenBox = anchorBox
+        // Give the outline and clear region breathing room without changing the OCR crop.
+        frozenBox = anchorBox.inflate(tapOutlinePaddingPx)
         lookupJob?.cancel()
         phase = Phase.Scanning
         sheetState.targetState = false
