@@ -37,32 +37,32 @@ Entry detail and touch feedback, in four parts:
 Word details — the new Example sentences section, after the Remembering the Kanji section and before
 the Anki action:
 
-![Word details, entry end](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/02-worddetail-end.png)
+<img width="440" alt="Word details, entry end" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/02-worddetail-end.png">
 
 The lookup **overlay** (the sheet over a frozen frame), the same entry with the kanji tile, the
 example sentences and the Add to Anki action:
 
-![Lookup sheet, examples and kanji](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/11-lookup-sheet-examples.png)
+<img width="440" alt="Lookup sheet, examples and kanji" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/11-lookup-sheet-examples.png">
 
 The overlay's entry head and the frozen frame it was opened from:
 
-![Lookup sheet entry](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/10-lookup-sheet.png)
-![Frozen frame](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/09-lookup-frozen-frame.png)
+<img width="440" alt="Lookup sheet entry" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/10-lookup-sheet.png">
+<img width="440" alt="Frozen frame" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/09-lookup-frozen-frame.png">
 
 The floating trigger docked, then drawn onto the remove target, then removed:
 
-![Docked to the nearer edge](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/06-floating-docked-right.png)
-![Pulled onto the remove target](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/07-floating-pulled-to-target.png)
+<img width="440" alt="Docked to the nearer edge" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/06-floating-docked-right.png">
+<img width="440" alt="Pulled onto the remove target" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/07-floating-pulled-to-target.png">
 
 - **Interaction, navigation or motion:** recorded on the device. GitHub builds no inline player for a video that lives in the repository, so each clip is a direct link below, with a frame strip of the same recording so its motion is visible on this page.
 
   `Add to Anki`, press down → held → released → added — [03-anki-press.mp4](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/03-anki-press.mp4):
 
-  ![Add to Anki press frames](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/12-anki-press-frames.png)
+  <img width="620" alt="Add to Anki press frames" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/12-anki-press-frames.png">
 
   Floating trigger, dock on release and the pull onto the remove target — [05-floating-dock-and-drop.mp4](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/05-floating-dock-and-drop.mp4):
 
-  ![Floating trigger frames](https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/13-floating-frames.png)
+  <img width="880" alt="Floating trigger frames" src="https://github.com/Anurag-Raut/Gaten/raw/orchestrate-deepseek-subagents/docs/pr-evidence/modal-overlay-feedback/13-floating-frames.png">
 
 - **Source:** commit `675e9677db98312ef882fcf0eb4981cce042fd25` on `orchestrate-deepseek-subagents`, whose `git diff 935e05cf60b61179b575466419f2ba534290d607 675e9677…` hashes to `b80b381a2d0e989bce278ef9c52f9392aa4ed3c7e988c98ce59ea9d58cbf76ad` — the working-tree diff this build and these captures were taken from. The captures and the APK predate that commit and came from the same file contents; nothing was rebuilt from the commit. Built with `./gradlew :app:assembleDebug` (`BUILD SUCCESSFUL`); `app-x86_64-debug.apk` SHA-256 `226b3429ff28f9945b764d7ff2acfaa57571eb07cdccd09cb16fecbcbc4b703d`, its `assets/index.android.bundle` SHA-256 `78ee442b1673b991aafd435059b8c4b525af0670167819b0ced9c621892b4efa`. Device: `emulator-5556`, AVD `Gaten_Evidence_Overlay` (pixel_5, API 34, x86_64, 1080×2340 @ 440 dpi, light theme) — a separate instance from the shared `emulator-5554`. Not exercised: dark theme, other text scales, landscape for the bubble, a WaniKani-connected kanji section, the Quick Settings tile, and physical vibration (no emulator can prove it).
 - **Assets:** `docs/pr-evidence/modal-overlay-feedback/` — the stills and both recordings, with a README naming the source commit and its diff hash, the APK and bundle hashes, the device, the build command, the per-frame measurements, the tool limitation below, and the limitations.
