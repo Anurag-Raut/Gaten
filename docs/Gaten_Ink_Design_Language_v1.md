@@ -7,7 +7,7 @@
 | Area | Current rule |
 | --- | --- |
 | Visual language | Quiet, mostly monochrome pages; flat rows, whitespace and 1 dp separators establish hierarchy. |
-| Home | Gaten heading → search → Daily streak → Anki and WaniKani rows → Recently looked up. The service rows are the study actions; there is no separate Start studying button. |
+| Home | Gaten wordmark → search → Daily streak → Anki and WaniKani rows → Recently looked up. The service rows are the study actions; there is no separate Start studying button. |
 | Analytics | One page, no source switcher: Anki → WaniKani → Study activity → Accuracy → Level progress, with no cards at all — hairline-separated sections, paired figures split by a single vertical rule, unboxed charts. |
 | Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
 | Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
@@ -125,7 +125,7 @@ Do not infer current UI typography from a historical preview or an attribution-r
 
 | Shared role | Size / line height | Weight | Letter spacing |
 | --- | --- | --- | --- |
-| Brand heading | 35 / 38 | 700 | -1.85 |
+| Brand wordmark | artwork, 38 dp line box | — | traced |
 | Page heading | 35 / 44 | 700 | -1.85 |
 | Section heading / settings app-bar title | 17 / 22 | 700 | -0.57 |
 | Row title | 15 / 20 | 700 | -0.45 |
@@ -196,6 +196,10 @@ Resting order: **Gaten → search → Daily streak → Anki → WaniKani → Rec
 There is no separate filled study CTA and no optional split-card variant in the current baseline.
 
 The header has 12 dp top/bottom padding; the brand adds 11 dp above and 20 dp below.
+The brand is the approved Gaten wordmark artwork (`GatenWordmark`), drawn at the brand role's
+38 dp line box in the ink the supplied light or dark wordmark file uses — chosen from
+`useTheme().dark`, so it follows light/dark alone and never one of the accents — and the header
+keeps its height; it is not a text role and does not scale with the system font size.
 Search uses a minimum 52 dp neutral shell, 14 dp radius, 15 dp horizontal padding,
 13 dp icon/input gap, and placeholder **猫, ねこ, neko...**. Its 2 dp border is transparent
 at rest and accent-colored on focus. Focus starts through the reader's action.

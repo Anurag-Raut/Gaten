@@ -10,7 +10,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   StyleSheet,
-  Text,
   TextInput,
   View,
   useWindowDimensions,
@@ -33,6 +32,7 @@ import {Icon} from "./components";
 import {useTheme} from "./theme";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing, typeScale} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
+import {GatenWordmark} from "./home/GatenWordmark";
 import {
   SEARCH_LIST_CONTENT,
   SearchIdlePrompt,
@@ -254,15 +254,18 @@ export function HomeScreen({
         <View style={styles.topHeader}>
           <Animated.View style={[styles.headerColumn, {paddingHorizontal: contentInset}]} layout={layoutTransition}>
             {!searchMode && (
-              <Animated.Text
+              <Animated.View
+                accessible
+                accessibilityRole="header"
+                accessibilityLabel="Gaten"
                 entering={searchTransitioned.current
                   ? FadeInUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)
                   : undefined}
                 exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
-                style={[typeScale.brand, styles.brand, {color: colors.onSurface}]}
+                style={styles.brand}
               >
-                Gaten
-              </Animated.Text>
+                <GatenWordmark height={typeScale.brand.lineHeight} />
+              </Animated.View>
             )}
             <Animated.View style={styles.searchRow} layout={layoutTransition}>
               <Animated.View style={styles.searchField} layout={layoutTransition}>

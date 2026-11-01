@@ -7,9 +7,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  -->
 
-<!-- Light app theme: white background, black G, independent of device theme. -->
+<!-- Light app theme: the flat white ground and its dark ink, independent of device theme. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_light_background"/>
     <foreground android:drawable="@drawable/ic_launcher_light_foreground"/>
-    <monochrome android:drawable="@drawable/ic_launcher_light_foreground"/>
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>
 </adaptive-icon>

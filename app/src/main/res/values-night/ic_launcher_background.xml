@@ -8,6 +8,6 @@
  -->
 
 <resources>
-    <!-- System mode: black background in the device's dark theme. -->
-    <color name="ic_launcher_background">#000000</color>
+    <!-- System mode, dark: the flat ground the approved icon draws its light ink on. -->
+    <color name="ic_launcher_background">#101114</color>
 </resources>
