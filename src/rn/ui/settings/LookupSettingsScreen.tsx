@@ -22,7 +22,7 @@ import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenTrigger from "../../native/GatenTrigger";
 import {IconButton} from "../components";
 import {useTheme} from "../theme";
-import {spacing, typeScale} from "../tokens";
+import {APP_FONT, spacing, typeScale} from "../tokens";
 import {
   SettingsPageScaffold,
   SettingsRow,
@@ -337,7 +337,7 @@ function KeyMapperRow() {
           </Text>
           <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
             <Text
-              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
+              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1}]}
             >
               {TRIGGER_LOOKUP_ACTION}
             </Text>
@@ -355,7 +355,7 @@ function KeyMapperRow() {
           </Text>
           <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
             <Text
-              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
+              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1}]}
             >
               {TRIGGER_LOOKUP_PACKAGE}
             </Text>
@@ -373,7 +373,7 @@ function KeyMapperRow() {
           </Text>
           <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.xs}}>
             <Text
-              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1, fontFamily: "monospace"}]}
+              style={[typeScale.bodySmall, {color: colors.onSurface, flex: 1}]}
             >
               {TRIGGER_LOOKUP_CLASS}
             </Text>

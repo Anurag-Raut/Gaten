@@ -32,7 +32,7 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {CONTENT_COLUMN, contentInsetFor, spacing} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, spacing} from "../tokens";
 import {useTheme} from "../theme";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
@@ -338,8 +338,8 @@ const styles = StyleSheet.create({
   reviewContent: CONTENT_COLUMN,
   hero: {alignItems: "center", marginTop: spacing.m, marginBottom: spacing.m},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
-  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},
-  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500"},
+  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500", fontFamily: APP_FONT},
+  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500", fontFamily: APP_FONT},
   taskPillWrap: {marginTop: spacing.m},
   answerField: {position: "relative", width: "100%", marginTop: spacing.s},
   revealRow: {
@@ -349,18 +349,18 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderTopWidth: 1,
   },
-  revealLabel: {fontSize: 13, lineHeight: 18, fontWeight: "700"},
+  revealLabel: {fontSize: 13, lineHeight: 18, fontWeight: "700", fontFamily: APP_FONT},
   tabRow: {flexDirection: "row", alignItems: "stretch", minHeight: 50, borderBottomWidth: 1},
   tabCell: {flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center"},
-  tabLabel: {fontSize: 12, lineHeight: 16},
+  tabLabel: {fontSize: 12, lineHeight: 16, fontFamily: APP_FONT},
   tabUnderline: {position: "absolute", bottom: 0, width: "70%", height: 3, borderRadius: 2},
   detailBlock: {paddingVertical: spacing.l},
-  detailLabel: {fontSize: 12, lineHeight: 16, fontWeight: "700"},
+  detailLabel: {fontSize: 12, lineHeight: 16, fontWeight: "700", fontFamily: APP_FONT},
   detailLabelSpaced: {marginTop: spacing.l},
-  detailText: {fontSize: 14, lineHeight: 23, marginTop: spacing.xs},
-  detailJapanese: {fontSize: 27, lineHeight: 34, marginTop: spacing.xs},
+  detailText: {fontSize: 14, lineHeight: 23, marginTop: spacing.xs, fontFamily: APP_FONT},
+  detailJapanese: {fontSize: 27, lineHeight: 34, marginTop: spacing.xs, fontFamily: APP_FONT},
   contextSpaced: {marginTop: spacing.l},
-  contextEnglish: {fontSize: 12, lineHeight: 17, marginTop: spacing.xs},
-  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
+  contextEnglish: {fontSize: 12, lineHeight: 17, marginTop: spacing.xs, fontFamily: APP_FONT},
+  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m, fontFamily: APP_FONT},
   busy: {marginTop: spacing.s},
 });

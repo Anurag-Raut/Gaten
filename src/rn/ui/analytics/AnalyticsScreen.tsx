@@ -37,6 +37,7 @@ import {useIsFocused} from "@react-navigation/native";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
+import {TabHeading} from "../TabHeading";
 import {useTheme} from "../theme";
 import {
   AnalyticsEmpty,
@@ -361,25 +362,25 @@ function Header({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={styles.headerRow}>
-      <View style={styles.headerHeading}>
-        <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>Analytics</Text>
-        <Text
-          numberOfLines={1}
-          style={[typeScale.description, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
+    <View style={styles.header}>
+      <View style={styles.headerRow}>
+        <TabHeading label="Analytics" color={colors.onSurface} style={styles.headerHeading} />
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Refresh the numbers"
+          accessibilityState={{disabled: busy}}
+          onPress={onRefresh}
+          style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
         >
-          {updated ?? (busy ? "Updating…" : "No data yet")}
-        </Text>
+          <Icon name="refresh" size={22} color={busy ? colors.onSurfaceVariant : colors.accent} />
+        </PressableScale>
       </View>
-      <PressableScale
-        accessibilityRole="button"
-        accessibilityLabel="Refresh the numbers"
-        accessibilityState={{disabled: busy}}
-        onPress={onRefresh}
-        style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
+      <Text
+        numberOfLines={1}
+        style={[typeScale.description, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
       >
-        <Icon name="refresh" size={22} color={busy ? colors.onSurfaceVariant : colors.accent} />
-      </PressableScale>
+        {updated ?? (busy ? "Updating…" : "No data yet")}
+      </Text>
     </View>
   );
 }
@@ -1002,10 +1003,11 @@ const styles = StyleSheet.create({
   // The dismiss target is exactly the content's own box: it adds no height or width of its own, so a
   // tap in the page's empty space still reaches it while every child control keeps its own touch.
   contentDismiss: {width: "100%"},
+  // Home's header starts at 12 dp of column padding + 11 dp above the wordmark; Settings uses 23 too.
+  header: {marginTop: 23},
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: spacing.xl,
     gap: spacing.l,
   },
   headerHeading: {flex: 1},

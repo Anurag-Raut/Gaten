@@ -10,6 +10,7 @@ import android.content.Context
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -17,6 +18,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
+import com.gaten.app.R
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -69,6 +71,37 @@ class GatenCardWebView(context: Context) : FrameLayout(context) {
 
             @Deprecated("Deprecated in Java")
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
+
+            /**
+             * The card is drawn in the app's own face, so the injected `@font-face` rules ask for it
+             * over the reserved [FONT_HOST], and this is the only thing that answers: a request whose
+             * scheme, host and path name one of [FONT_RESOURCES] is served from that bundled face,
+             * and every other request is left to the WebView, whose network loads are off. A card
+             * therefore cannot reach the network through a font, and no host or path it writes is
+             * ever read — the map is a closed list, not a lookup into the APK.
+             *
+             * The URL is built on the JS side (`cardDocument` in ReviewScreen.tsx), which carries
+             * the same host and file names.
+             */
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest
+            ): WebResourceResponse? {
+                val url = request.url ?: return null
+                if (url.scheme != "https" || url.host != FONT_HOST) return null
+                val resource = FONT_RESOURCES[url.path] ?: return null
+                // The document is loaded with no base URL, so its origin is opaque and the font
+                // fetch is cross-origin: `@font-face` is refused unless the response allows it, even
+                // though the bytes never leave the process.
+                return WebResourceResponse(
+                    "font/ttf",
+                    null,
+                    200,
+                    "OK",
+                    mapOf("Access-Control-Allow-Origin" to "*"),
+                    resources.openRawResource(resource)
+                )
+            }
 
             /**
              * The document's height is reported as soon as the WebView has it laid out — the commit
@@ -212,6 +245,24 @@ class GatenCardWebView(context: Context) : FrameLayout(context) {
 
         /** The native event name; the JS prop is `onCardHeight`. */
         const val EVENT_TOP_CARD_HEIGHT = "topCardHeight"
+
+        /**
+         * The reserved host the card's `@font-face` rules name. It is never resolved: the WebView's
+         * network loads are off, and [WebViewClient.shouldInterceptRequest] answers it from
+         * [FONT_RESOURCES]. `.invalid` is reserved by RFC 2606 and can never be a real host.
+         */
+        private const val FONT_HOST = "fonts.gaten.invalid"
+
+        /**
+         * The face each path the card asks for is: the four bundled IBM Plex Sans JP weights, in the
+         * same 400/500/600/700 steps the app's own type scale uses. Anything else is not answered.
+         */
+        private val FONT_RESOURCES = mapOf(
+            "/plex-400.ttf" to R.font.ibm_plex_sans_jp_regular,
+            "/plex-500.ttf" to R.font.ibm_plex_sans_jp_medium,
+            "/plex-600.ttf" to R.font.ibm_plex_sans_jp_semibold,
+            "/plex-700.ttf" to R.font.ibm_plex_sans_jp_bold,
+        )
     }
 }
 

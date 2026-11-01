@@ -34,7 +34,7 @@ import type {
 import {Button, Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
-import {CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 
 /** What was tapped: a kanji by its character, or a radical by its WaniKani subject id. */
 export type WaniKaniTarget =
@@ -614,10 +614,10 @@ const styles = StyleSheet.create({
   scrollContent: CONTENT_COLUMN,
   // Match the landing lookup modal's hierarchy: the hero glyph and the gloss use the same roles
   // the shared entry sections do, so a WaniKani page reads as the same sheet.
-  heroGlyph: {fontSize: 36, fontWeight: "700"},
-  meaningGloss: {fontSize: 29, fontWeight: "700"},
-  readingValue: {fontSize: 18},
-  componentGlyph: {fontSize: 24, fontWeight: "600"},
+  heroGlyph: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  meaningGloss: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
+  readingValue: {fontSize: 18, fontFamily: APP_FONT},
+  componentGlyph: {fontSize: 24, fontWeight: "600", fontFamily: APP_FONT},
   hero: {
     alignSelf: "center",
     borderRadius: shape.medium,

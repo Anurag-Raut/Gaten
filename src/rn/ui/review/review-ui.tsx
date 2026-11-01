@@ -46,7 +46,7 @@ import {InkIcon} from "../InkIcon";
 import {Button, Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
-import {spacing, typeScale} from "../tokens";
+import {APP_FONT, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
 import DeckThumbnail from "./DeckThumbnail";
@@ -843,15 +843,15 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   sourceMain: {flex: 1, minWidth: 0, marginStart: 14},
-  sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4},
+  sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4, fontFamily: APP_FONT},
   sourceStatus: {marginTop: 5},
   sourceSide: {alignItems: "flex-end", marginStart: spacing.m},
-  sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45},
-  sourceValueLabel: {fontSize: 10, lineHeight: 13},
-  sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right"},
+  sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45, fontFamily: APP_FONT},
+  sourceValueLabel: {fontSize: 10, lineHeight: 13, fontFamily: APP_FONT},
+  sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right", fontFamily: APP_FONT},
   // The review's own count/state on the shared app bar's trailing edge, in the flow's quiet tone. It
   // shrinks and ellipsizes rather than pushing the title off at a large font or a long count.
-  subHeaderRight: {fontSize: 11, flexShrink: 1},
+  subHeaderRight: {fontSize: 11, flexShrink: 1, fontFamily: APP_FONT},
   progressArea: {marginTop: 2},
   progressTrack: {height: 2, width: "100%", overflow: "hidden"},
   progressFill: {height: 2},
@@ -873,20 +873,20 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   studyMain: {flex: 1, minWidth: 0},
-  studyTitle: {fontWeight: "700", letterSpacing: -0.25},
-  studySubline: {fontSize: 12, lineHeight: 16, marginTop: 3},
-  studyExtra: {fontSize: 11, lineHeight: 15, marginTop: 3},
+  studyTitle: {fontWeight: "700", letterSpacing: -0.25, fontFamily: APP_FONT},
+  studySubline: {fontSize: 12, lineHeight: 16, marginTop: 3, fontFamily: APP_FONT},
+  studyExtra: {fontSize: 11, lineHeight: 15, marginTop: 3, fontFamily: APP_FONT},
   studyTrailing: {alignItems: "flex-end", marginStart: spacing.s},
-  studyCount: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
-  studyCountLabel: {fontSize: 10, lineHeight: 13, marginTop: 1},
+  studyCount: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8, fontFamily: APP_FONT},
+  studyCountLabel: {fontSize: 10, lineHeight: 13, marginTop: 1, fontFamily: APP_FONT},
   metricRow: {flexDirection: "row", alignItems: "flex-start", marginTop: spacing.s},
   metricRowStacked: {flexDirection: "column", gap: spacing.l},
   metric: {flex: 1, minWidth: 0},
   // One vertical hairline between the two figures, as the paired figures elsewhere in the app use.
   metricSpaced: {borderStartWidth: 1, paddingStart: spacing.l, marginStart: spacing.l},
-  metricValue: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
-  metricLabel: {fontSize: 12, lineHeight: 16, fontWeight: "600", marginTop: 3},
-  metricHint: {fontSize: 11, lineHeight: 15, marginTop: 3},
+  metricValue: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8, fontFamily: APP_FONT},
+  metricLabel: {fontSize: 12, lineHeight: 16, fontWeight: "600", marginTop: 3, fontFamily: APP_FONT},
+  metricHint: {fontSize: 11, lineHeight: 15, marginTop: 3, fontFamily: APP_FONT},
   footer: {
     position: "absolute",
     bottom: 0,
@@ -908,12 +908,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.s,
     paddingHorizontal: spacing.xs,
   },
-  ratingName: {fontSize: 12, fontWeight: "600"},
-  ratingInterval: {fontSize: 10, lineHeight: 13, marginTop: 2},
+  ratingName: {fontSize: 12, fontWeight: "600", fontFamily: APP_FONT},
+  ratingInterval: {fontSize: 10, lineHeight: 13, marginTop: 2, fontFamily: APP_FONT},
   input: {
     fontSize: 21,
     lineHeight: 28,
     fontWeight: "700",
+    fontFamily: APP_FONT,
     textAlign: "left",
     width: "100%",
     minHeight: 62,
@@ -926,10 +927,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderRadius: 0,
   },
-  feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17},
+  feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17, fontFamily: APP_FONT},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
   stateMark: {marginBottom: 21},
-  stateTitle: {fontSize: 23, fontWeight: "700", letterSpacing: -0.7, textAlign: "center"},
+  stateTitle: {fontSize: 23, fontWeight: "700", letterSpacing: -0.7, textAlign: "center", fontFamily: APP_FONT},
   stateBody: {marginTop: 14, textAlign: "center"},
   stateNote: {marginTop: spacing.m, textAlign: "center"},
   stateActions: {marginTop: 21, width: "100%", gap: spacing.m},

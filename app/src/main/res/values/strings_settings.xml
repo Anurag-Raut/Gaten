@@ -113,9 +113,9 @@
     <string name="settings_about_attr_ocr">manga-ocr</string>
     <string name="settings_about_attr_mlkit">ML Kit</string>
     <string name="settings_about_attr_wanikani">WaniKani</string>
-    <string name="settings_about_attr_manrope">Manrope typeface</string>
+    <string name="settings_about_attr_plex">IBM Plex typefaces</string>
     <string name="settings_about_attr_wanakana">wanakana</string>
-    <string name="settings_about_manrope">SIL Open Font License 1.1 &#8212; Mikhail Sharanda and the Manrope Project Authors. Bundled to draw Gaten&#8217;s Latin text.</string>
+    <string name="settings_about_plex">SIL Open Font License 1.1 &#8212; IBM Corp. and the Plex Project Authors. Bundled to draw Gaten&#8217;s Latin and Japanese text.</string>
     <string name="settings_about_wanakana">MIT licence &#8212; the Kotlin port of WanaKana. Turns typed romaji into kana for dictionary search.</string>
     <string name="settings_about_dict">JMdict and JMnedict, the dictionary Gaten reads: © EDRDG, CC BY-SA 4.0</string>
     <string name="settings_about_ocr">Bundled recommended stylized-text reader (kha-white, Apache-2.0) run on ONNX Runtime</string>
