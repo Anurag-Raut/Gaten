@@ -50,7 +50,7 @@ import * as GatenWaniKani from "../native/GatenWaniKani";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
-import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "./tokens";
+import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "./tokens";
 import {useTheme, type Theme} from "./theme";
 import {OutlinedButton} from "./settings/settings-components";
 import {DialogShell} from "./DialogShell";
@@ -827,10 +827,38 @@ function CardHtml({
   );
 }
 
+/** The reserved host the card's fonts are served over; `GatenCardWebView.kt` answers it and nothing
+ * else does — the WebView's network loads are off, so the name can never be resolved for real. */
+const CARD_FONT_HOST = "https://fonts.gaten.invalid";
+
+/** The bundled face per weight, matching `GatenCardWebView.FONT_RESOURCES` path for path. */
+const CARD_FONT_FILES: Array<[weight: number, file: string]> = [
+  [400, "plex-400.ttf"],
+  [500, "plex-500.ttf"],
+  [600, "plex-600.ttf"],
+  [700, "plex-700.ttf"],
+];
+
+/**
+ * The card is drawn in the app's own face, the same one every other string in the app uses. The
+ * WebView cannot see the family React Native registered, so each weight is declared here over
+ * [CARD_FONT_HOST] and served from the bundled resources; the family is then stated on the card's
+ * elements with `!important`, beside the ink, so a note type's own `font-family` cannot win. Sizes,
+ * weights, line heights, layout, ruby and the note's own markup are still untouched.
+ */
+function cardFontCss(): string {
+  const faces = CARD_FONT_FILES.map(
+    ([weight, file]) =>
+      `@font-face{font-family:"${APP_FONT}";font-style:normal;font-weight:${weight};` +
+      `src:url("${CARD_FONT_HOST}/${file}") format("truetype")}`
+  ).join("");
+  return faces + `#content,#content *{font-family:"${APP_FONT}" !important}`;
+}
+
 /**
  * The card as a document: AnkiDroid's own shell (`<body class="card cardN">` around `#content`)
  * without its scripts and `file://` stylesheets. The app's own defaults come first, the note type's
- * CSS after them, and one strong ink rule after that.
+ * CSS after them, and one strong ink-and-family rule after that.
  *
  * The card's canvas **and the ink of every element in it** are the theme's, never the note type's.
  * Every Anki template is written for a light page — the shipped default CSS is literally
@@ -843,13 +871,13 @@ function CardHtml({
  * note type's CSS and with `!important`.
  *
  * Replacing a note type's own foreground colours is deliberate: readable text on the app's
- * background is worth more than a template's arbitrary palette, and only `color` is stated — fonts,
- * weights, sizes, line heights, layout, ruby and the note's own markup are untouched, so a card's
- * *structure* is preserved exactly. Backgrounds keep the narrower boundary they had: the content
- * root and its first wrapper are forced transparent, because that is where a note type paints the
- * page-like background meant to cover the card, while anything deeper keeps its colour — a box drawn
- * inside a card is the note type's own formatting, and the app cannot tell a highlight from a page
- * background it should have overridden.
+ * background is worth more than a template's arbitrary palette. The ink and the face are what is
+ * stated (see [cardFontCss]); sizes, weights, line heights, layout, ruby and the note's own markup
+ * are untouched, so a card's *structure* is preserved exactly. Backgrounds keep the narrower boundary
+ * they had: the content root and its first wrapper are forced transparent, because that is where a
+ * note type paints the page-like background meant to cover the card, while anything deeper keeps its
+ * colour — a box drawn inside a card is the note type's own formatting, and the app cannot tell a
+ * highlight from a page background it should have overridden.
  *
  * This is the move AnkiDroid's own night mode makes (`body.night_mode { color: white;
  * background-color: black }`), with the app's own ink and paper instead of black and applied to the
@@ -878,9 +906,10 @@ function cardDocument(
     // card, not just its root. A template written for a light page colours its fields itself — this
     // deck paints its expression nearly black and its sentence grey — and a colour stated on a
     // descendant beats anything inherited, which is why stating the ink on the roots alone left the
-    // card unreadable once the canvas followed the theme. Only `color` is stated: fonts, weights,
-    // sizes, layout, ruby and the note's own markup are untouched, and backgrounds are left alone.
-    `<style>#content,#content *{color:${onSurface} !important}</style></head>` +
+    // card unreadable once the canvas followed the theme. The ink and the family are stated; sizes,
+    // weights, line heights, layout, ruby, backgrounds and the note's own markup are left alone.
+    `<style>#content,#content *{color:${onSurface} !important}` +
+    `${cardFontCss()}</style></head>` +
     `<body class="card card${ord + 1}"><div id="content" dir="auto">${stripMediaTags(html)}</div></body></html>`
   );
 }
@@ -1203,7 +1232,7 @@ const styles = StyleSheet.create({
   // The answer's headword block mirrors the question side, which centres the front word: the
   // expression and its reading are centred together, and the meaning below stays left-aligned.
   answerHeadword: {textAlign: "center"},
-  answerReading: {marginTop: spacing.xs, fontSize: 17, lineHeight: 24, fontWeight: "400"},
-  answerMeaning: {marginTop: spacing.m, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: "Inter"},
+  answerReading: {marginTop: spacing.xs, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
+  answerMeaning: {marginTop: spacing.m, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
   gapS: {height: spacing.s},
 });

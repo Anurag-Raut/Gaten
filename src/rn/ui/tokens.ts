@@ -99,25 +99,32 @@ export const PRESS_EASING_REANIMATED = ReanimatedEasing.bezier(...PRESS_EASING);
  */
 export const EXIT_EASING_REANIMATED = ReanimatedEasing.bezier(0.4, 0, 1, 1);
 
-/** Inter is bundled for Latin text; Japanese glyphs use the platform font fallback. */
-const INTER = "Inter";
+/**
+ * The bundled face the whole app is drawn in, Latin and Japanese alike. IBM Plex Sans JP carries
+ * IBM Plex's Latin design alongside the Japanese glyphs, so a mixed string stays in one face with no
+ * per-script split — the same arrangement the Compose type scale uses
+ * (`app/src/main/java/com/gaten/app/ui/theme/Type.kt`). A glyph the face does not carry still falls
+ * back to the platform's own, as any font does.
+ * The name is registered in `MainApplication`; it is not a system family.
+ */
+export const APP_FONT = "IBM Plex Sans JP";
 
 /** Shared text roles from docs/Gaten_Ink_Design_Language_v1.md. Display roles retain Japanese reading sizes. */
 export const typeScale = {
-  displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500"},
-  displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500"},
-  brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
-  headlineSmall: {fontSize: 35, lineHeight: 44, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
-  titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: INTER},
-  titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
-  titleSmall: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
-  bodyLarge: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: INTER},
-  bodyMedium: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: INTER},
-  description: {fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: INTER},
-  bodySmall: {fontSize: 12, lineHeight: 17, fontWeight: "400", fontFamily: INTER},
-  labelLarge: {fontSize: 15, lineHeight: 20, letterSpacing: -0.2, fontWeight: "600", fontFamily: INTER},
-  labelMedium: {fontSize: 12, lineHeight: 18, fontWeight: "600", fontFamily: INTER},
-  labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: INTER},
-  navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: INTER},
-  metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: INTER},
+  displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500", fontFamily: APP_FONT},
+  displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500", fontFamily: APP_FONT},
+  brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: APP_FONT},
+  headlineSmall: {fontSize: 35, lineHeight: 44, letterSpacing: -1.85, fontWeight: "700", fontFamily: APP_FONT},
+  titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: APP_FONT},
+  titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: APP_FONT},
+  titleSmall: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: APP_FONT},
+  bodyLarge: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: APP_FONT},
+  bodyMedium: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: APP_FONT},
+  description: {fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: APP_FONT},
+  bodySmall: {fontSize: 12, lineHeight: 17, fontWeight: "400", fontFamily: APP_FONT},
+  labelLarge: {fontSize: 15, lineHeight: 20, letterSpacing: -0.2, fontWeight: "600", fontFamily: APP_FONT},
+  labelMedium: {fontSize: 12, lineHeight: 18, fontWeight: "600", fontFamily: APP_FONT},
+  labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: APP_FONT},
+  navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: APP_FONT},
+  metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: APP_FONT},
 } satisfies Record<string, TextStyle>;

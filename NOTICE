@@ -44,11 +44,21 @@ Copyright (c) Microsoft Corporation
 Licence: MIT
 https://onnxruntime.ai/
 
-Manrope (bundled variable font)
--------------------------------
-Copyright 2018 The Manrope Project Authors
-Licence: SIL Open Font License 1.1 (bundled in assets/licenses/Manrope-OFL.txt)
-https://github.com/googlefonts/manrope
+IBM Plex Sans JP (bundled typeface)
+-----------------------------------
+Copyright (c) 2017 IBM Corp. with Reserved Font Name "Plex"
+Licence: SIL Open Font License 1.1 (bundled in assets/licenses/IBMPlexSansJP-OFL.txt)
+https://github.com/IBM/plex
+Four weights (400/500/600/700) from google/fonts, drawing every Latin and Japanese string in the app.
+
+Poppins SemiBold (tab-heading outlines)
+---------------------------------------
+The Analytics and Settings headings draw the letters the approved Gaten wordmark does not carry
+(A, S, l, y, i, c, s, g) from Poppins SemiBold outlines, scaled and stroked to the wordmark's metrics
+by docs/pr-evidence/tab-heading-typography/build-glyphs.py. No Poppins font file is bundled.
+Copyright 2020 The Poppins Project Authors
+Licence: SIL Open Font License 1.1 (bundled in assets/licenses/Poppins-OFL.txt)
+https://github.com/google/fonts/tree/main/ofl/poppins
 
 wanakana-kt (romaji to kana in the search box)
 ---------------------------------------------

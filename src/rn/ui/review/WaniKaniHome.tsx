@@ -23,7 +23,7 @@ import {DialogShell} from "../DialogShell";
 import {Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
-import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {MetricPair, useAnalyticsEntrance} from "../analytics/ink";
 import type {WaniKaniHubState} from "./review-store";
@@ -375,11 +375,11 @@ const styles = StyleSheet.create({
   // The bar's one trailing button, drawn as the analytics page draws its own: a quiet circular chip,
   // not a bare icon.
   refresh: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
-  subtitle: {fontFamily: "Inter", fontSize: 12, lineHeight: 17, marginTop: spacing.s},
+  subtitle: {fontFamily: APP_FONT, fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   updating: {marginTop: 4},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
   caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: 22},
-  caughtUpText: {fontFamily: "Inter", fontSize: 12, lineHeight: 17, flex: 1, minWidth: 0},
+  caughtUpText: {fontFamily: APP_FONT, fontSize: 12, lineHeight: 17, flex: 1, minWidth: 0},
   // The Today heading row: the caption's own text stretches, the help target stands beside it, and
   // the row carries the one hairline the SectionCaption used to draw alone. The caption sits on the
   // rule's own baseline — bottom-aligned — so the text keeps the 12 dp gap every other caption has
@@ -393,11 +393,11 @@ const styles = StyleSheet.create({
   },
   todayCaption: {flex: 1, marginTop: 0, marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0},
   todayMetrics: {marginTop: 12},
-  dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14},
-  dialogParagraph: {fontFamily: "Inter", fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
-  notice: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, marginTop: spacing.m, marginBottom: spacing.xs},
+  dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14, fontFamily: APP_FONT},
+  dialogParagraph: {fontFamily: APP_FONT, fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
+  notice: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: spacing.m, marginBottom: spacing.xs},
   // The page's own footnote: the design's 11 dp muted line, one spacing step under the last row.
-  caveat: {fontFamily: "Inter", fontSize: 11, lineHeight: 15, marginTop: spacing.m},
+  caveat: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: spacing.m},
   // The skeleton is the shared row's own geometry: 48 dp holder, 12 dp gap, one 1 dp divider.
   row: {
     flexDirection: "row",

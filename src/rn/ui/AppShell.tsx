@@ -44,6 +44,7 @@ import type {
 } from "@react-navigation/native-stack";
 import {useReducedMotion} from "react-native-reanimated";
 import {useTheme} from "./theme";
+import {APP_FONT} from "./tokens";
 import {BottomBar} from "./BottomBar";
 import {HomeScreen} from "./HomeScreen";
 import {AnalyticsScreen} from "./analytics/AnalyticsScreen";
@@ -444,10 +445,10 @@ export function AppShell() {
         notification: colors.primary,
       },
       fonts: {
-        regular: {fontFamily: "Inter", fontWeight: "400"},
-        medium: {fontFamily: "Inter", fontWeight: "500"},
-        bold: {fontFamily: "Inter", fontWeight: "700"},
-        heavy: {fontFamily: "Inter", fontWeight: "700"},
+        regular: {fontFamily: APP_FONT, fontWeight: "400"},
+        medium: {fontFamily: APP_FONT, fontWeight: "500"},
+        bold: {fontFamily: APP_FONT, fontWeight: "700"},
+        heavy: {fontFamily: APP_FONT, fontWeight: "700"},
       },
     };
   }, [colors, dark]);

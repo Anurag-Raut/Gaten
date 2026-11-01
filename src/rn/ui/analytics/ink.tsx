@@ -54,7 +54,7 @@ import Animated, {
 } from "react-native-reanimated";
 import {PressableScale} from "../PressableScale";
 import {useTheme, type ThemeColors} from "../theme";
-import {PRESS_EASING_REANIMATED, spacing, typeScale} from "../tokens";
+import {APP_FONT, PRESS_EASING_REANIMATED, spacing, typeScale} from "../tokens";
 import {formatCount, type HeatmapCell} from "./model";
 import type {Artwork} from "./illustrations";
 
@@ -1660,8 +1660,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 1.2,
     textTransform: "uppercase",
+    fontFamily: APP_FONT,
   },
-  metricHero: {fontSize: 34, lineHeight: 38, fontWeight: "700", letterSpacing: -1.5},
+  metricHero: {fontSize: 34, lineHeight: 38, fontWeight: "700", letterSpacing: -1.5, fontFamily: APP_FONT},
   metricCaption: {marginTop: 5},
   metricNote: {marginTop: 8},
   metricPair: {flexDirection: "row", alignItems: "flex-start"},
@@ -1758,7 +1759,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  ringValue: {fontWeight: "700"},
+  ringValue: {fontWeight: "700", fontFamily: APP_FONT},
   ringCaption: {marginTop: 1},
   // Spread across the width the distribution bar above spans, so a count sits under the segment it
   // names; the gaps only matter once the row wraps at a larger type scale.

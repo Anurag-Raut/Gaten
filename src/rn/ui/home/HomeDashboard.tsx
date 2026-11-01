@@ -10,7 +10,7 @@ import {useTheme} from "../theme";
 import {Icon} from "../components";
 import {Collapsible} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
-import {shape, spacing, typeScale} from "../tokens";
+import {APP_FONT, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import type {HomeDashboardData} from "./useHomeDashboard";
 import {
@@ -663,8 +663,14 @@ const styles = StyleSheet.create({
   },
   streakCopy: {flex: 1, minWidth: 0},
   streakTitle: {flexShrink: 1},
-  streakTotal: {minWidth: 88, alignItems: "flex-end", justifyContent: "center", gap: 3},
-  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "700"},
+  streakTotal: {
+    minWidth: 88,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "flex-end",
+    gap: 3,
+  },
+  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "700", fontFamily: APP_FONT},
   streakTotalLabel: {textAlign: "right"},
   weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 20},
   weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: spacing.s},
@@ -699,9 +705,9 @@ const styles = StyleSheet.create({
   // Once the outcome drops below the header, the count needs to travel with the chevron on the
   // trailing edge instead of stretching the full row and reading as a second title.
   serviceCountLineScaled: {flex: 0, flexShrink: 1, marginStart: "auto", justifyContent: "flex-end"},
-  serviceCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700"},
+  serviceCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700", fontFamily: APP_FONT},
   serviceCountLabel: {flexShrink: 1},
-  serviceAction: {fontSize: 13, lineHeight: 18, fontWeight: "600"},
+  serviceAction: {fontSize: 13, lineHeight: 18, fontWeight: "600", fontFamily: APP_FONT},
   serviceDetail: {flexShrink: 1},
   recentSection: {marginTop: 34},
   recentHeading: {
@@ -731,7 +737,7 @@ const styles = StyleSheet.create({
   emptyRecent: {flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 16, paddingBottom: 16},
   emptyIcon: {width: 39, height: 39, borderRadius: shape.empty, alignItems: "center", justifyContent: "center"},
   emptyCopy: {flex: 1, minWidth: 0},
-  emptyTitle: {fontSize: 13, lineHeight: 18, fontWeight: "700", textAlign: "center"},
+  emptyTitle: {fontSize: 13, lineHeight: 18, fontWeight: "700", textAlign: "center", fontFamily: APP_FONT},
   emptyMessage: {marginTop: 4},
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},

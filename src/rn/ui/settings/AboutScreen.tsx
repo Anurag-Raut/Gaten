@@ -34,7 +34,7 @@ const MLKIT_TERMS_URL = "https://developers.google.com/ml-kit/terms";
 const WANIKANI_URL = "https://www.wanikani.com/";
 const GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html";
 const CIRCLETOSEARCH_URL = "https://github.com/AKS-Labs/CircleToSearch";
-const MANROPE_URL = "https://github.com/googlefonts/manrope";
+const PLEX_URL = "https://github.com/IBM/plex";
 const WANAKANA_URL = "https://github.com/esnaultdev/wanakana-kt";
 
 export function AboutScreen({onClose}: {onClose: () => void}) {
@@ -103,9 +103,9 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         />
         <SettingsRow
           icon="public"
-          title="Manrope typeface"
-          summary="Bundled typeface · SIL OFL 1.1 · Mikhail Sharanda and Manrope Project Authors"
-          onPress={() => open(MANROPE_URL)}
+          title="IBM Plex Sans JP"
+          summary="Bundled typeface · SIL OFL 1.1 · IBM Corp. and the Plex Project Authors"
+          onPress={() => open(PLEX_URL)}
         />
         <SettingsRow
           icon="public"

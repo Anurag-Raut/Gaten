@@ -27,7 +27,7 @@ import {PressableScale, heldTone} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme, type ThemeColors} from "../theme";
-import {CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
@@ -667,7 +667,7 @@ const styles = StyleSheet.create({
   body: {flex: 1},
   scrollContent: {...CONTENT_COLUMN, paddingTop: spacing.xl, paddingBottom: spacing.xl},
   headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
-  wordTitle: {fontSize: 36, fontWeight: "700"},
+  wordTitle: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
   reading: {...typeScale.bodyMedium, marginTop: spacing.s},
   metadata: {...typeScale.bodyMedium, marginTop: spacing.m},
   meaningSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  kanjiCharacter: {fontSize: 36, fontWeight: "700"},
+  kanjiCharacter: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
   examplesSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
   examplesState: {marginTop: spacing.m},
   examplesList: {marginTop: spacing.s},

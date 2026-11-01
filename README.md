@@ -570,8 +570,9 @@ documented here rather than left implicit.
 - **Gaten** is licensed under the **GNU GPL v3.0 or later** (see `LICENSE`), and is derived from
   [CircleToSearch](https://github.com/AKS-Labs/CircleToSearch) by AKS-Labs. See `NOTICE` for the
   full third-party attribution list.
-- **Latin typeface** — [Manrope](https://github.com/googlefonts/manrope), SIL Open Font License 1.1;
-  the font and licence are bundled with the app.
+- **Typeface** — [IBM Plex Sans JP](https://github.com/IBM/plex), SIL Open Font License 1.1; the
+  four bundled weights (400/500/600/700) draw every Latin and Japanese string in the app, and the
+  licence is bundled with them.
 - **Romaji conversion** — [wanakana-kt](https://github.com/esnaultdev/wanakana-kt) 1.1.1, MIT.
 - **Dictionary data** — JMdict and JMnedict © Electronic Dictionary Research and Development Group
   (EDRDG), used under

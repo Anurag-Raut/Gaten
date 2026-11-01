@@ -50,19 +50,21 @@ class MainApplication : Application(), ReactApplication {
 
     override fun onCreate() {
         super.onCreate()
-        // Manrope under the name JS asks for: `tokens.ts` names the family "Manrope" on every role
-        // except the two display steps (which the Kotlin type scale draws in the system face).
+        // IBM Plex Sans JP under the name JS asks for: `tokens.ts` names the family on every role in
+        // the type scale, so every string in the app — Latin or Japanese — is drawn in it.
         //
-        // It is registered rather than named directly because `res/font/manrope.xml` is what carries
-        // the weights: its three entries pin the bundled variable font to wght 400/500/600, and
-        // React Native resolves a text's weight against a registered family's own entries —
+        // It is registered rather than named directly because `res/font/ibm_plex_sans_jp.xml` is what
+        // carries the weights: its four entries name the bundled 400/500/600/700 faces, and React
+        // Native resolves a text's weight against a registered family's own entries —
         // `ReactFontManager` hands the requested weight to `Typeface.create`, which a bare .ttf is
         // not asked about. The name is resolved through this registration alone; it is not a system
         // family. Registered before the first surface exists, so the first frame a screen draws
         // already has the face, and a missing family costs the face, never a crash.
-        ReactFontManager.getInstance().addCustomFont(this, "Manrope", R.font.manrope)
-        // Inter is scoped to the screenshot-matched home service and streak cards.
-        ReactFontManager.getInstance().addCustomFont(this, "Inter", R.font.inter)
+        //
+        // The JP faces carry IBM Plex's Latin design as well as the Japanese glyphs, so a mixed
+        // string stays in one face. A glyph the face does not carry still falls back to the
+        // platform's own, as any font does.
+        ReactFontManager.getInstance().addCustomFont(this, "IBM Plex Sans JP", R.font.ibm_plex_sans_jp)
         // The launcher tile is the stored theme choice as the home screen sees it: the manifest's
         // alias entries, and LauncherIcon puts the app on the right one.
         LauncherIcon.install(this)

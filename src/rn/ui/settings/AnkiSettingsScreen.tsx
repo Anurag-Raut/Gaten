@@ -43,7 +43,7 @@ import {reviewStore} from "../review/review-store";
 import {ScreenHeader} from "../ScreenHeader";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
-import {contentInsetFor, spacing, typeScale} from "../tokens";
+import {APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {
   CONTENT_COLUMN,
   FieldLabel,
@@ -750,7 +750,6 @@ function TemplateEditor({
           minHeight: 36,
           maxHeight: 96,
           textAlignVertical: "top",
-          fontFamily: "monospace",
         }}
       />
     </View>

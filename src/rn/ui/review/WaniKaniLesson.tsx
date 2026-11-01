@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {
   ActionFooter,
@@ -294,16 +294,16 @@ const styles = StyleSheet.create({
   content: CONTENT_COLUMN,
   hero: {alignItems: "center", marginTop: spacing.l, marginBottom: spacing.xl},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
-  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500"},
-  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500"},
+  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500", fontFamily: APP_FONT},
+  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500", fontFamily: APP_FONT},
   taskPillWrap: {marginTop: spacing.m},
   section: {marginTop: spacing.xl},
   sectionTitle: {marginBottom: spacing.s},
-  answerLine: {fontSize: 20, lineHeight: 28, fontWeight: "600"},
+  answerLine: {fontSize: 20, lineHeight: 28, fontWeight: "600", fontFamily: APP_FONT},
   mnemonic: {marginTop: spacing.m},
   example: {marginTop: spacing.m},
   exampleEnglish: {marginTop: 2},
   answerField: {position: "relative", width: "100%"},
-  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m},
+  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m, fontFamily: APP_FONT},
   busy: {marginTop: spacing.s},
 });

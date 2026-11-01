@@ -24,7 +24,7 @@ import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
-import {CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import {EmphasizedText} from "./richText";
 
 export interface RtkKanjiPanelProps {
@@ -349,8 +349,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   scrollContent: CONTENT_COLUMN,
-  heroGlyph: {fontSize: 36, fontWeight: "700"},
-  keyword: {fontSize: 29, fontWeight: "700"},
+  heroGlyph: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  keyword: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
   sourceLabel: {marginTop: spacing.xs},
   sectionBlock: {paddingVertical: spacing.s, gap: spacing.xs},
   sectionRule: {borderBottomWidth: 1},

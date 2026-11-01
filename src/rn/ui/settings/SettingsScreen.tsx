@@ -14,7 +14,7 @@
  * stated, and the page that owns it is where it is asked for.
  */
 import React, {useEffect, useState} from "react";
-import {AppState, ScrollView, Text, View, useWindowDimensions} from "react-native";
+import {AppState, ScrollView, View, useWindowDimensions} from "react-native";
 import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
@@ -24,7 +24,8 @@ import type {AnkiStatus} from "../../native/GatenAnki";
 import type {SettingsPageName} from "../navigation";
 import {useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme} from "../theme";
-import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing, typeScale} from "../tokens";
+import {TabHeading} from "../TabHeading";
+import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
 
 /** What the Anki row says under its name: the page's own business, or AnkiDroid's other two states. */
@@ -108,9 +109,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
         >
           {/* One confident heading with room to breathe above it, then nothing but rows. */}
           <View style={{marginTop: 23}}>
-            <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
-              Settings
-            </Text>
+            <TabHeading label="Settings" color={colors.onSurface} />
           </View>
           <SettingsGroup title="Lookup" style={{marginTop: 22}}>
             <SettingsRow
