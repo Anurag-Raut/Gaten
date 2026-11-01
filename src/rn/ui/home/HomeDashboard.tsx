@@ -567,8 +567,7 @@ function RecentLookupRow({
 }) {
   const {colors} = useTheme();
   const {fontScale} = useWindowDimensions();
-  // A narrow gloss column truncates the definition once the type grows, so larger text moves the
-  // gloss under the word and lets it wrap in full instead of clipping it.
+  // Larger text moves the definition below the word to give it more room to wrap.
   const stacked = fontScale > 1.2;
   const reading = hit.kana[0] ?? "";
   const gloss = hit.glosses[0] ?? "";
@@ -595,7 +594,6 @@ function RecentLookupRow({
       </View>
       {gloss ? (
         <Text
-          numberOfLines={stacked ? undefined : 2}
           style={[
             typeScale.bodySmall,
             styles.lookupGloss,
@@ -726,8 +724,8 @@ const styles = StyleSheet.create({
   },
   lookupRowStacked: {flexDirection: "column", alignItems: "stretch", gap: spacing.xs},
   lookupWord: {flex: 1, minWidth: 0},
-  lookupGloss: {maxWidth: "34%", textAlign: "right"},
-  lookupGlossStacked: {maxWidth: "100%", textAlign: "left"},
+  lookupGloss: {width: "34%", textAlign: "right"},
+  lookupGlossStacked: {width: "100%", textAlign: "left"},
   noRecentLookups: {alignItems: "center", marginTop: 20, paddingBottom: spacing.m},
   emptyArtwork: {width: "100%", maxWidth: 340, marginBottom: spacing.m},
   emptyRecent: {flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 16, paddingBottom: 16},
