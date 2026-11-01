@@ -89,7 +89,9 @@ function StreakBanner({
   return (
     <View style={[styles.streakCard, {borderBottomColor: colors.outlineVariant}]}>
       <View style={styles.streakTop}>
-        <StreakFlameMark />
+        <View style={styles.streakFlame}>
+          <StreakFlameMark />
+        </View>
         <View style={styles.streakCopy}>
           <Text
             accessibilityLabel="Daily streak. Anki study days follow your collection's rollover."
@@ -99,7 +101,7 @@ function StreakBanner({
           </Text>
         </View>
         <View style={styles.streakTotal}>
-          <Text style={[styles.streakCount, {color: colors.accent}]}>{streakDaysLabel}</Text>
+          <Text style={[typeScale.titleMedium, {color: colors.accent}]}>{streakDaysLabel}</Text>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[typeScale.bodySmall, styles.streakTotalLabel, {color: muted}]}>days</Text>
         </View>
       </View>
@@ -670,7 +672,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 3,
   },
-  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "700", fontFamily: APP_FONT},
+  // The flame's own box is 24 × 28 in a 38 dp row; its mass sits low, so it reads centred a couple of
+  // dp under the title it labels. The nudge is the wrapper's, not the artwork's.
+  streakFlame: {transform: [{translateY: -2}]},
   streakTotalLabel: {textAlign: "right"},
   weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 20},
   weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: spacing.s},
