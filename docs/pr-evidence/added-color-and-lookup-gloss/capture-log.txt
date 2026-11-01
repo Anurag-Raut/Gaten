@@ -1,0 +1,58 @@
+Capture log — Added-button fill and the recent-lookup gloss
+==========================================================
+
+Host: linux x64, worktree /home/Qui/.paseo/worktrees/1t28llpl/macho-crocodile
+Device: emulator-5554, AVD Gaten_Evidence_Overlay (sdk_gphone64_x86_64, API 34, 1080x2340 @ 440 dpi)
+Driver: agent-device 0.21.31; touches via UiAutomation
+
+1. Both APKs from the one worktree
+   git checkout -- src/rn/ui/PressableScale.tsx src/rn/ui/home/HomeDashboard.tsx
+   ./gradlew :app:assembleDebug            # BUILD SUCCESSFUL in 2m 11s (282 tasks)
+   cp app/build/outputs/apk/debug/app-x86_64-debug.apk /tmp/gaten-evidence/base-x86_64-debug.apk
+   # restore the two working-tree files
+   ./gradlew :app:assembleDebug            # BUILD SUCCESSFUL in 14s (43 executed)
+   cp app/build/outputs/apk/debug/app-x86_64-debug.apk /tmp/gaten-evidence/head-x86_64-debug.apk
+
+   base APK  296478332 B  sha256 8866dadd5fc206e6ff545cd44585302d7edf89cdfc2385db765c811688c80e34
+   head APK  299852363 B  sha256 19f5dfcd2f7fc30dc3fe01f9b8671283090dedc17483d495247b05e39322328e
+   base bundle sha256 d7de3bd6b4d4f190a1553197da07d86b6053b2a8be340b3215414ebf6a31b13b
+   head bundle sha256 815b2d397d7772ecf45a69e0f68b63e2317c1cdd802bedc65c7d990a81508833
+
+2. Fixture reset before each run (fresh AnkiDroid collection, so the add is a first-time add)
+   adb shell am force-stop com.ichi2.anki
+   adb shell pm clear com.ichi2.anki
+   adb shell appops set com.ichi2.anki MANAGE_EXTERNAL_STORAGE allow
+   adb shell appops set com.ichi2.anki LEGACY_STORAGE allow
+   adb shell rm -rf /storage/emulated/0/AnkiDroid
+   adb install -r -d /tmp/gaten-evidence/<build>-x86_64-debug.apk
+
+3. Drive, per build (base then head)
+   agent-device open com.gaten --foreground
+   agent-device screenshot --out {before,after}-02-recent-lookups.png     # Home
+   agent-device press @ref(row 取る) --settle
+   agent-device scroll bottom --settle
+   agent-device record start {before,after}-anki-press.mp4 --scope device
+   agent-device press 'role=button label="Add to Anki"'
+   agent-device wait duration 7000                                        # celebrating -> "Added"
+   agent-device screenshot --out {before,after}-01-worddetail-added.png
+   agent-device record stop
+
+   Both runs used the same steps, the same word (取る, opened from Home ▸ Recently looked up) and the
+   same 7 s settle before the still, so the two stills show the same label ("Added", disabled) and
+   differ only in the button's fill.
+
+4. Measure the fill (mean of a text-free band, 200x60 px at x 100..300, y 2110..2170)
+   before-01-worddetail-added.png   91 82 208     (#5B52D0, accent family, frozen release animation)
+   after-01-worddetail-added.png    233 233 237   (#E9E9ED = colors.disabled)
+   Earlier base runs of the same steps froze at 67 56 202 (#4338CA = actionPrimary).
+
+5. Derived stills
+   magick {before,after}-01-worddetail-added.png -crop 1000x130+40+2075 +repage {before,after}-03-anki-button.png
+   magick {before,after}-03-anki-button.png -append before-after-anki-button.png
+   magick {before,after}-02-recent-lookups.png -crop 1000x420+40+1470 +repage {before,after}-04-recent-rows.png
+   magick {before,after}-04-recent-rows.png -append before-after-recent-rows.png
+
+   before-anki-press.mp4 18.7 s; after-anki-press.mp4 14.7 s (screenrecord encodes only on change)
+
+6. Type check on the head
+   ./node_modules/.bin/tsc --noEmit   -> clean
