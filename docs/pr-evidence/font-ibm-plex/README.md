@@ -1,8 +1,11 @@
 # Final visuals: Plex typography, branded tab headings, single-line streak
 
-Source commit **`60aaa5a`** — `feat(ui): unify Plex typography and branded tab headings` (branch
-`fix/tab-heading-brand-typography`, based on `dev` at `188608c`). Every capture here was taken from
-that commit's build.
+Branch `fix/tab-heading-brand-typography`, based on `dev` at `188608c`. Two source commits are in
+play, and each capture names its own:
+
+- **`2b9d009`** `fix(ui): match streak count size and align flame` — Home, light and dark.
+- **`60aaa5a`** `feat(ui): unify Plex typography and branded tab headings` — Analytics, Settings, and
+  the dictionary lookup, none of which that later commit touches.
 
 ## Captures
 
@@ -15,13 +18,14 @@ that commit's build.
 
 What they show:
 
-- **Home** — the approved wordmark with both accent marks, unchanged; and the streak's `0` and `days`
-  on one row, right-aligned on the same line as "Daily streak".
+- **Home** — the approved wordmark with both accent marks, unchanged; and the streak's `0` drawn in the
+  same 15 sp role as "Daily streak" with the smaller `days` beside it, both on one baseline row at the
+  trailing edge, and the flame lifted 2 dp so it reads centred with the title.
 - **Analytics / Settings** — the two titles drawn as the wordmark's own lettering, not type.
 - **Lookup** — the mixed-script case: Japanese headwords and readings (`猫`, `ねこ・ネコ`,
   `猫可愛がり`) beside Latin glosses and part-of-speech labels, all in IBM Plex Sans JP.
 
-## What the commit contains
+## What the two commits contain
 
 1. **IBM Plex Sans JP everywhere.** One bundled family covers Latin and Japanese, in both React Native
    (`APP_FONT` on every `typeScale` role, the navigation theme, and the 46 local styles that named no
@@ -31,14 +35,20 @@ What they show:
 2. **Branded tab headings.** `TabHeading` draws Analytics and Settings as the wordmark's own lettering:
    `a`, `e`, `n`, `t` are the wordmark's contours, the letters it lacks are matching outlines, and the
    row scales with the reader's font scale and wraps between letters.
-3. **Streak on one line.** `styles.streakTotal` is a `row` with `baseline` alignment and `flex-end`
-   justification, so the number and `days` share the trailing column's row.
+3. **Streak row.** `styles.streakTotal` is a `row` with `baseline` alignment and `flex-end`
+   justification, so the number and `days` share the trailing column's row; the number draws in
+   `typeScale.titleMedium` — the same role as "Daily streak" — in the accent colour, and the flame's
+   wrapper carries a 2 dp lift.
 
 ## Source
 
-- **APK:** `app/build/outputs/apk/debug/app-x86_64-debug.apk`,
-  `sha256 fe9b7ba2e7d11b1ff10d4fa046d61df0fb25133cc8cce5089ee2ec518dcb0a5f`, 304 MB, installed with
-  `adb install -r` (`lastUpdateTime=2026-11-01 21:54:25`).
+- **Home captures:** `app/build/outputs/apk/debug/app-x86_64-debug.apk`,
+  `sha256 18f8fbb6cbfea613c64b9bc5287291d39e501f625d6810fe9fee7e3d3a1ab64a`, installed with
+  `adb install -r` (`lastUpdateTime=2026-11-01 21:59:58`) — the build of `2b9d009`.
+- **The other five screens:** the same path at
+  `sha256 fe9b7ba2e7d11b1ff10d4fa046d61df0fb25133cc8cce5089ee2ec518dcb0a5f`, installed
+  `2026-11-01 21:54:25` — the build of `60aaa5a`. `2b9d009` touches only Home's streak row, so those
+  screens are unchanged by it.
 - **Build:** `ANDROID_HOME=/home/Qui/Android/Sdk ./gradlew :app:assembleDebug` — BUILD SUCCESSFUL.
 - **Device:** AVD `Gaten_Analytics_Capture` — Pixel 7 profile, Android 34 (`google_apis`, x86_64),
   1080x2340 @ 440 dpi, launched with `-gpu host`.
@@ -47,7 +57,7 @@ What they show:
 ## Checks
 
 `npx tsc --noEmit` passed, `node --test tests/analytics.test.cjs` 23/23, `git diff --check` clean, and
-`:app:assembleDebug` BUILD SUCCESSFUL — all on `60aaa5a`.
+`:app:assembleDebug` BUILD SUCCESSFUL — on both `60aaa5a` and `2b9d009`.
 
 ## Limits
 

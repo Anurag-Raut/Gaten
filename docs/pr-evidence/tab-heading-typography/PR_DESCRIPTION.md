@@ -1,6 +1,6 @@
 ## Changes
 
-Three related UI changes on `fix/tab-heading-brand-typography` (source `60aaa5a`):
+Three related UI changes on `fix/tab-heading-brand-typography` (sources `60aaa5a`, then `2b9d009`):
 
 1. **IBM Plex Sans JP everywhere.** One bundled family now covers Latin and Japanese in both React
    Native (`tokens.ts`'s `APP_FONT`, every `typeScale` role, the navigation theme, and the 46 local
@@ -13,8 +13,10 @@ Three related UI changes on `fix/tab-heading-brand-typography` (source `60aaa5a`
    lettering instead of type: `a`, `e`, `n`, `t` are the wordmark's own contours, the letters it does
    not carry are matching outlines, the row scales with the reader's font scale and wraps between
    letters, and the title stays one accessibility heading. Home's wordmark is unchanged.
-3. **Streak on one line.** `styles.streakTotal` is now a row with baseline alignment, so `0` and
-   `days` sit together at the trailing edge on the same line as "Daily streak".
+3. **Streak row.** `styles.streakTotal` is now a row with baseline alignment, so `0` and `days` sit
+   together at the trailing edge on the same line as "Daily streak"; the number draws in the same
+   `typeScale.titleMedium` role as that title (accent coloured, `days` stays smaller), and the flame's
+   wrapper carries a 2 dp lift so it reads centred with the title.
 
 ## Visual evidence
 
@@ -43,13 +45,17 @@ The lettering against the approved wordmark (specimen, not an app capture):
 ![Lettering specimen, light](docs/pr-evidence/tab-heading-typography/heading-lettering-light.png)
 
 - **Interaction, navigation or motion:** No interaction, navigation or motion behaviour changed.
-- **Source:** Branch `fix/tab-heading-brand-typography`, source commit `60aaa5a`, based on `dev`
-  `188608c`. AVD `Gaten_Analytics_Capture` (Pixel 7, Android 34 `google_apis` x86_64, 1080x2340 @
-  440 dpi, `-gpu host`, `-gpu swiftshader_indirect` returns black screencaps on this host). Built with
-  `ANDROID_HOME=/home/Qui/Android/Sdk ./gradlew :app:assembleDebug`; the screenshots came from
+- **Source:** Branch `fix/tab-heading-brand-typography`, sources `60aaa5a` (typography, headings,
+  streak row) then `2b9d009` (streak count size, flame lift), based on `dev` `188608c`. AVD
+  `Gaten_Analytics_Capture` (Pixel 7, Android 34 `google_apis` x86_64, 1080x2340 @ 440 dpi, `-gpu
+  host`; `-gpu swiftshader_indirect` returns black screencaps on this host). Built with
+  `ANDROID_HOME=/home/Qui/Android/Sdk ./gradlew :app:assembleDebug`. The Home captures came from
   `app/build/outputs/apk/debug/app-x86_64-debug.apk`,
-  `sha256 fe9b7ba2e7d11b1ff10d4fa046d61df0fb25133cc8cce5089ee2ec518dcb0a5f`. Not exercised: physical
-  devices, tablets, and any screen other than Home, Analytics, Settings and a dictionary lookup.
+  `sha256 18f8fbb6cbfea613c64b9bc5287291d39e501f625d6810fe9fee7e3d3a1ab64a`; the Analytics, Settings and
+  lookup captures came from the earlier `60aaa5a` build of the same tree,
+  `sha256 fe9b7ba2e7d11b1ff10d4fa046d61df0fb25133cc8cce5089ee2ec518dcb0a5f` (`2b9d009` touches only
+  Home's streak row). Not exercised: physical devices, tablets, and any screen other than Home,
+  Analytics, Settings and a dictionary lookup.
 - **Assets:** `docs/pr-evidence/font-ibm-plex/` — the six screen captures and the lookup;
   `docs/pr-evidence/tab-heading-typography/` — the lettering specimens and narrow/large-font runs, and
   `build-glyphs.py`, which regenerates the heading glyph module.
@@ -61,10 +67,12 @@ The lettering against the approved wordmark (specimen, not an app capture):
 ## Verification
 
 - **Steps and result:** Built and installed the APK, then opened Home, Analytics and Settings and the
-  dictionary, and captured each screen in light and dark (the lookup in dark). The Home capture shows
-  the streak's `0` and `days` on one row beside "Daily streak"; the lookup shows Japanese and Latin in
-  one face. The heading lettering was separately exercised at 320 dp and 196 dp with font scale 1.5.
-  Device overrides used for those runs were restored afterwards.
+  dictionary, and captured each screen in light and dark (the lookup in dark). The Home captures — the
+  later `2b9d009` build — show `0` at the same size as "Daily streak" with the smaller `days` beside it
+  on one baseline row at the trailing edge, and the flame lifted so it reads centred with the title.
+  The lookup shows Japanese and Latin in one face. The heading lettering was separately exercised at
+  320 dp and 196 dp with font scale 1.5. Device overrides used for those runs were restored
+  afterwards.
 - **Checks:** `npx tsc --noEmit` passed; `node --test tests/analytics.test.cjs` passed (23/23);
   `git diff --check` clean; `:app:assembleDebug` BUILD SUCCESSFUL. The built bundle carries
   `"IBM Plex Sans JP"` and the card font host and no `Manrope`; the dex carries the reserved host and
