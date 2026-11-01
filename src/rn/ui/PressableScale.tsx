@@ -118,15 +118,18 @@ export function PressableScale({
   };
   const pressStyle = useAnimatedStyle(() => ({
     opacity: disabled ? 1 : opacity.value,
-    ...(pressScale == null || disabled
+    ...(pressScale == null
       ? null
       : {
-          transform: [{scale: reducedMotion ? 1 : 1 + progress.value * (PRESSED_SCALE - 1)}],
-          backgroundColor: interpolateColor(
-            progress.value,
-            [0, 1],
-            [pressScale.from, pressScale.to],
-          ),
+          transform: [{scale: disabled || reducedMotion ? 1 : 1 + progress.value * (PRESSED_SCALE - 1)}],
+          // Animated fills persist when omitted, so explicitly restore the disabled background.
+          backgroundColor: disabled
+            ? colors.disabled
+            : interpolateColor(
+                progress.value,
+                [0, 1],
+                [pressScale.from, pressScale.to],
+              ),
         }),
   }));
 
