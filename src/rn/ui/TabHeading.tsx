@@ -7,7 +7,7 @@
 import React from "react";
 import {StyleProp, useWindowDimensions, View, ViewStyle} from "react-native";
 import Svg, {Path} from "react-native-svg";
-import {TAB_HEADING_GLYPHS, TAB_HEADING_METRICS} from "./tabHeadingGlyphs";
+import {brandHeadingScale, TAB_HEADING_GLYPHS, TAB_HEADING_METRICS} from "./tabHeadingGlyphs";
 
 /** The two titles this lettering exists for; every glyph below is one of their letters. */
 export type TabHeadingLabel = "Analytics" | "Settings";
@@ -36,8 +36,8 @@ export function TabHeading({
   style?: StyleProp<ViewStyle>;
 }) {
   const {fontScale} = useWindowDimensions();
-  const {cap, capDp, boxTop, boxBottom, gap, lineHeightDp} = TAB_HEADING_METRICS;
-  const scale = (capDp * fontScale) / cap;
+  const {boxTop, boxBottom, gap, lineHeightDp} = TAB_HEADING_METRICS;
+  const scale = brandHeadingScale(fontScale);
   const lineHeight = lineHeightDp * fontScale;
   const letters = [...label];
 
