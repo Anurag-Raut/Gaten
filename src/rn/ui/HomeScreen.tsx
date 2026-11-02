@@ -88,9 +88,10 @@ export function HomeScreen({
   const restored = useRef(false);
   const searchTransitioned = useRef(false);
   const motionDuration = reducedMotion ? 0 : SEARCH_TRANSITION_MS;
-  const layoutTransition = LinearTransition
-    .duration(motionDuration)
-    .easing(PAGE_EASING_REANIMATED);
+  // Keep startup layout adjustments instant; animate only after search is activated.
+  const layoutTransition = searchMode || searchTransitioned.current
+    ? LinearTransition.duration(motionDuration).easing(PAGE_EASING_REANIMATED)
+    : undefined;
 
   /** Restores the shared search list's last position after a Home tab remount. */
   const restoreScroll = () => {
