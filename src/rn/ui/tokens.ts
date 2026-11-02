@@ -91,7 +91,6 @@ const INTER = "Inter";
 export const typeScale = {
   displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500"},
   displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500"},
-  brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
   headlineSmall: {fontSize: 35, lineHeight: 44, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
   titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: INTER},
   titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},

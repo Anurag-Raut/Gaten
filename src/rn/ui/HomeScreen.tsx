@@ -257,7 +257,7 @@ export function HomeScreen({
                   ? FadeInUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)
                   : undefined}
                 exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
-                style={[typeScale.brand, styles.brand, {color: colors.onSurface}]}
+                style={[typeScale.headlineSmall, styles.brand, {color: colors.onSurface}]}
               >
                 Gaten
               </Animated.Text>
