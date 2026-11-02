@@ -8,21 +8,18 @@
  -->
 
 <!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+   Data extraction rules for API 31+ (backup_rules.xml covers API 30 and below).
+
+   The manga-ocr weights are ~117 MB under filesDir/manga-ocr and are downloaded on demand, so they
+   are excluded from both cloud backup and device transfer: restoring or transferring them would only
+   waste quota on files the app can fetch again (and would leave a half-written set if the transfer is
+   partial).
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="manga-ocr" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="manga-ocr" />
     </device-transfer>
-    -->
 </data-extraction-rules>

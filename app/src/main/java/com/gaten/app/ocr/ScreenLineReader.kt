@@ -30,20 +30,20 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Reads the lines of one screen with manga-ocr, one at a time, and hands out better text as it
- * arrives.
+ * Reads the lines of one screen with the selected recognition engine, one at a time, and hands out
+ * better text as it arrives.
  *
  * The overlay's index is ML Kit's — boxes, lines and a first reading — and it is built instantly so
  * the overlay is usable at once. This class is what happens next: every line is read in the
  * background (see [prefetchOrder]) and [text] republishes the index with each line's text replaced
  * as it lands. A gesture asks for the lines it touched with [read], which waits for them and falls
- * back to ML Kit's text when Manga OCR is unavailable, fails, or takes longer than [timeoutMillis] —
- * the reader must never be the reason a tap does nothing.
+ * back to ML Kit's text when the selected engine is unavailable, fails, or takes longer than
+ * [timeoutMillis] — the reader must never be the reason a tap does nothing.
  *
- * Every line ML Kit found is offered to the model, whatever script it read it in: a line read as
- * Latin can still be stylized Japanese. The line's final text is what decides whether it stays in
- * the index — manga-ocr's reading, or ML Kit's own text when the model is unavailable — and a line with no
- * Japanese in it is dropped ([withDroppedLine]) as soon as that is known.
+ * Every line ML Kit found is offered to the selected engine, whatever script ML Kit read it in: a
+ * line read as Latin can still be stylized Japanese. The line's final text is what decides whether
+ * it stays in the index — the engine's reading, or ML Kit's own text when the engine is unavailable
+ * — and a line with no Japanese in it is dropped ([withDroppedLine]) as soon as that is known.
  *
  * One line is read at a time ([mutex]): there is one model and one phone. A request for a line
  * already read, or being read, joins that read instead of starting a second one, and [close] — when

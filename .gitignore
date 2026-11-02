@@ -28,8 +28,9 @@ app/src/main/assets/db/examples.sqlite
 # redistribution rights have not been cleared (docs/jp-prototype/rtk/DATA.md).
 app/src/main/assets/db/rtk.sqlite
 
-# manga-ocr model: fetched by the build into the assets every variant bundles, or by
-# tools/fetch_manga_ocr.sh. ~117 MB of weights, gitignored like the dictionary databases.
+# manga-ocr weights: no longer fetched by the build or bundled — the app downloads them on demand
+# (ocr/MangaOcrModel.kt) and the build excludes this directory from packaging. This entry just keeps
+# a stale ~117 MB local copy out of history.
 app/src/main/assets/manga-ocr/
 
 # Device evidence screenshots stay out of history

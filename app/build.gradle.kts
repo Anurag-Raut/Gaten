@@ -5,11 +5,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// Explicit: in a build script `java` is the Java plugin's extension, not a package.
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URI
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -48,6 +43,14 @@ android {
         androidResources {
             localeFilters += "en"
         }
+    }
+
+    androidResources {
+        // The manga-ocr weights are downloaded on demand now (ocr/MangaOcrModel.kt), never bundled.
+        // A stale copy can still sit in `src/main/assets/manga-ocr` (the old fetch task wrote it, and
+        // it is gitignored), so exclude the directory from packaging: "<dir>name" matches a directory
+        // name in aapt's ignore pattern. The existing pattern (AGP's own defaults, if any) is kept.
+        ignoreAssetsPattern = listOfNotNull(ignoreAssetsPattern, "<dir>manga-ocr").joinToString(":")
     }
 
     buildTypes {
@@ -250,82 +253,10 @@ tasks.named("preBuild") {
     dependsOn(verifyRtkAsset)
 }
 
-// The manga-ocr model (~117 MB) ships in every build, release included: the APK carries it in its
-// assets and the app copies it out on first use, so there is no download and no import step. The
-// weights are gitignored, so Gradle fetches the three files into `src/main/assets/manga-ocr` before
-// the assets are merged; once they are there the task is up to date and a rebuild is free. The same
-// bytes the settings catalog lists, so a downloaded model and the bundled one are interchangeable.
-val mangaOcrAssets = layout.projectDirectory.dir("src/main/assets/manga-ocr")
-
-/** Streams [url] into [target] through a temp file, following redirects (Hugging Face serves 307s). */
-fun downloadFollowingRedirects(url: String, target: File) {
-    val temp = File(target.parentFile, "${target.name}.part")
-    var current = URI(url).toURL()
-    var redirects = 0
-    while (true) {
-        val connection = (current.openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects = false
-            connectTimeout = 30_000
-            readTimeout = 120_000
-            setRequestProperty("User-Agent", "gaten-gradle")
-        }
-        connection.connect()
-        val code = connection.responseCode
-        if (code in 300..399) {
-            val location = connection.getHeaderField("Location")
-            connection.disconnect()
-            if (location == null) error("HTTP $code from $current without a Location header")
-            if (++redirects > 5) error("too many redirects for $url")
-            current = current.toURI().resolve(location).toURL()
-            continue
-        }
-        if (code != 200) {
-            connection.disconnect()
-            error("HTTP $code from $current")
-        }
-        connection.inputStream.use { input -> temp.outputStream().use { input.copyTo(it) } }
-        connection.disconnect()
-        break
-    }
-    if (!temp.renameTo(target)) {
-        target.delete()
-        if (!temp.renameTo(target)) error("cannot move ${temp.path} to ${target.path}")
-    }
-}
-
-val fetchMangaOcrModel by tasks.registering {
-    val targetDir = mangaOcrAssets.asFile
-    val downloads = mapOf(
-        "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/encoder_model_int8.onnx" to "encoder.onnx",
-        "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/decoder_model_int8.onnx" to "decoder.onnx",
-        "https://huggingface.co/kha-white/manga-ocr-base/resolve/main/vocab.txt" to "vocab.txt"
-    )
-    description = "Downloads the manga-ocr ONNX model into ${mangaOcrAssets.asFile.relativeTo(projectDir)} so every build can bundle it."
-    // Nothing to do while every file is there, so a rebuild after the first fetch is free.
-    outputs.upToDateWhen { downloads.values.all { File(targetDir, it).isFile } }
-    doLast {
-        targetDir.mkdirs()
-        for ((url, name) in downloads) {
-            val file = File(targetDir, name)
-            if (file.isFile && file.length() > 0) {
-                logger.lifecycle("manga-ocr: $name is already there, skipping")
-                continue
-            }
-            logger.lifecycle("manga-ocr: downloading $url")
-            try {
-                downloadFollowingRedirects(url, file)
-            } catch (e: Exception) {
-                error("Could not download $url: ${e.message} — remove ${targetDir.path} and retry, or use tools/fetch_manga_ocr.sh")
-            }
-            logger.lifecycle("manga-ocr: wrote $name (${file.length() / 1024 / 1024} MB)")
-        }
-    }
-}
-
-// Every variant carries the model, so fetch before any asset merge.
-tasks.matching { it.name == "preBuild" }.configureEach {
-    dependsOn(fetchMangaOcrModel)
-}
+// The manga-ocr weights are no longer bundled: the app downloads them on demand from the settings
+// screen (ocr/MangaOcrModel.kt). Any stale copy left in `src/main/assets/manga-ocr` by the old
+// `fetchMangaOcrModel` task is excluded from packaging by the `androidResources.ignoreAssetsPattern`
+// entry in the `android {}` block above, so an ignored local copy can never ship.
 
 dependencies {
     // ReactActivity (via ReactActivityDelegate) requires an AppCompat theme; the RN bridge
@@ -379,8 +310,9 @@ dependencies {
     // pages, nothing here.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
-    // ONNX Runtime Mobile, for the manga-ocr second pass (ocr/MangaOcrEngine.kt). The library asks
-    // for INTERNET in its manifest, which the app manifest removes; the weights themselves are
-    // bundled in every build (see fetchMangaOcrModel above).
+    // ONNX Runtime Mobile, for the manga-ocr second pass (ocr/MangaOcrEngine.kt) and the optional
+    // PP-OCRv6 crop engines (ocr/PpOcrEngine.kt). The library asks for INTERNET in its manifest; no
+    // weights are bundled — every model is downloaded on demand over Wi-Fi and verified
+    // (ocr/PpOcrModel.kt, ocr/MangaOcrModel.kt).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
 }

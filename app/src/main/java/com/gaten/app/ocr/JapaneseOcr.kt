@@ -27,10 +27,12 @@ data class OcrLine(val text: String, val bounds: Box)
 /**
  * On-device Japanese OCR for a single cropped box.
  *
- * ML Kit finds lines and their boxes. Manga OCR recognizes selected text; lookup failures
- * are reported without substituting ML Kit text. Every path that reads a box — the
- * overlay's index line by line, and a circle's whole selection — reads it through
- * [readLineWithMangaOcr], so they crop and read it exactly the same way.
+ * ML Kit finds lines and their boxes. The reader's selected mode recognizes them: Manga OCR by
+ * default, or one of the two PP-OCRv6 engines ([RecognitionMode]). Every engine is downloaded on
+ * demand in Settings and never ships in the app, so a read can only use an installed one. Every
+ * path that reads a box — the overlay's index line by line, and a circle's whole selection — reads
+ * it through [readLineWithMangaOcr], so they crop and route the same way. The name stays for the
+ * callers; it now selects the engine rather than always running manga-ocr.
  */
 object JapaneseOcr {
     private const val TAG = "GatenOcr"
@@ -76,12 +78,18 @@ object JapaneseOcr {
     }
 
     /**
-     * Reads one box with manga-ocr: the crop [OcrPreprocess] builds, through [MangaOcrEngine]. Null
-     * when the model is not installed or the read failed; the lookup caller reports a retry error.
+     * Reads one box with the selected mode: [RecognitionMode.MANGA_OCR] uses Manga OCR,
+     * [RecognitionMode.PP_MEDIUM] and [RecognitionMode.PP_MANGA] the PP-OCRv6 engines.
+     *
+     * A PP read falls back to Manga OCR on exactly these triggers: the engine is not installed, the
+     * read fails, or its output is blank, a placeholder, or holds no Japanese. A non-empty Japanese
+     * misread is kept as it is — PP can be confidently wrong. When neither the selected engine nor
+     * the Manga OCR fallback is installed, nothing runs and the caller tells the reader to download
+     * a model; otherwise a failed read keeps the existing retry error.
      *
      * A circle passes the exact crop it cut out of the capture as both [bitmap] and [bounds], so
-     * [OcrPreprocess]'s padding is clamped to that crop's edge and the read cannot reach the lines
-     * beside the selection.
+     * the padding is clamped to that crop's edge and the read cannot reach the lines beside the
+     * selection.
      */
     suspend fun readLineWithMangaOcr(
         context: Context,
@@ -89,7 +97,29 @@ object JapaneseOcr {
         bounds: Box,
         priority: MangaOcrEngine.Priority = MangaOcrEngine.Priority.FOREGROUND
     ): String? {
-        MangaOcrModel.installBundledIfPresent(context)
+        val mode = RecognitionPreference.mode(context)
+        val ppEngine = mode.ppEngine()
+        if (ppEngine != null) {
+            val reading = readWithPpOcr(context, bitmap, bounds, ppEngine, priority)
+            if (!OcrLinePolicy.isUnreadable(reading.orEmpty()) &&
+                JapaneseText.isJapaneseLine(reading.orEmpty())
+            ) {
+                return reading
+            }
+        }
+        return readWithMangaOcr(context, bitmap, bounds, priority)
+    }
+
+    /**
+     * The Manga OCR read: the grayscale crop [OcrPreprocess] builds. Null when the model is not
+     * installed — lookups never download, so a missing model is reported, not fetched.
+     */
+    private suspend fun readWithMangaOcr(
+        context: Context,
+        bitmap: Bitmap,
+        bounds: Box,
+        priority: MangaOcrEngine.Priority
+    ): String? {
         if (!MangaOcrModel.isInstalled(context)) return null
         val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
         try {
@@ -98,6 +128,59 @@ object JapaneseOcr {
             // Recognition's synchronous native calls have finished before it returns or cancels.
             if (crop !== bitmap) crop.recycle()
         }
+    }
+
+    /**
+     * The optional PP-OCR read: the padded line box in its original RGB pixels, because PP-OCR's
+     * recognizers take color and resize internally — unlike manga-ocr's grayscale 224-square.
+     * Null when the engine is not installed, the crop cannot be cut, or inference fails.
+     */
+    private suspend fun readWithPpOcr(
+        context: Context,
+        bitmap: Bitmap,
+        bounds: Box,
+        engine: PpOcrModel.Engine,
+        priority: MangaOcrEngine.Priority
+    ): String? {
+        // Cheap check first: an uninstalled engine never allocates a crop it cannot use.
+        if (!PpOcrModel.isInstalled(context, engine)) return null
+        val crop = rgbCrop(bitmap, bounds) ?: return null
+        return try {
+            // PpOcrEngine counts its own use against OcrModels' idle clock.
+            PpOcrEngine.recognize(context, crop, engine, priority)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "PP-OCR (${engine.id}) inference failed", e)
+            null
+        } catch (e: OutOfMemoryError) {
+            Log.w(TAG, "PP-OCR (${engine.id}) ran out of memory", e)
+            null
+        } finally {
+            if (crop !== bitmap) crop.recycle()
+        }
+    }
+
+    /**
+     * The padded, clamped line box in its original colors and resolution. [OcrPreprocess.cropFor]
+     * supplies the same geometry the manga crop uses; its scale is deliberately not applied — PP-OCR
+     * resizes the line itself and a pre-upscaled crop only adds work.
+     */
+    private fun rgbCrop(bitmap: Bitmap, bounds: Box): Bitmap? = try {
+        val crop = OcrPreprocess.cropFor(bounds, bitmap.width, bitmap.height)
+        if (crop.left == 0 && crop.top == 0 &&
+            crop.width == bitmap.width && crop.height == bitmap.height
+        ) {
+            bitmap
+        } else {
+            Bitmap.createBitmap(bitmap, crop.left, crop.top, crop.width, crop.height)
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "PP-OCR crop failed for $bounds", e)
+        null
+    } catch (e: OutOfMemoryError) {
+        Log.w(TAG, "PP-OCR crop ran out of memory for $bounds", e)
+        null
     }
 
     /**

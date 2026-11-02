@@ -21,6 +21,9 @@ import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.JapaneseText
 import com.gaten.app.ocr.OcrLinePolicy
 import com.gaten.app.ocr.OcrRepair
+import com.gaten.app.ocr.PpOcrModel
+import com.gaten.app.ocr.RecognitionMode
+import com.gaten.app.ocr.RecognitionPreference
 import com.gaten.app.ocr.ScreenLine
 import com.gaten.app.ocr.withText
 import kotlinx.coroutines.Dispatchers
@@ -42,9 +45,10 @@ data class LookupResult(
 private val NO_LOOKUP: (String) -> List<DictEntry> = { emptyList() }
 
 /**
- * Screenshot-scoped cache for raw manga-ocr readings. Calls for the same crop join one read;
+ * Screenshot-scoped cache for raw recognition readings. Calls for the same crop join one read;
  * failed, cancelled, and null reads are removed so a later lookup can retry. Create one instance
- * per screenshot and call [setModelRevision] when the installed model changes.
+ * per screenshot and call [setModelRevision] when the selected engine or an installed model
+ * changes, so a result read by one engine is never served after a switch.
  */
 internal class ExactCropOcrCache(
     modelRevision: String = "default",
@@ -120,7 +124,7 @@ internal class ExactCropOcrCache(
     }
 }
 
-/** Reads the drawn selection with Manga OCR; detector text never supplies lookup results. */
+/** Reads the drawn selection with the selected recognizer; detector text never supplies results. */
 internal suspend fun runLookup(
     context: Context,
     screenshot: Bitmap,
@@ -133,16 +137,73 @@ internal suspend fun runLookup(
     val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
     val reading = readExactCrop(context, crop, box, cache)
     return withContext(Dispatchers.Default) {
-        mangaLookupResult(reading, if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) })
+        mangaLookupResult(
+            reading,
+            if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) },
+            lookupUnreadableMessage(context)
+        )
     }
 }
 
 /** Rejects failed recognition instead of silently answering from the detector's text. */
-internal fun mangaLookupResult(reading: String?, lookup: (String) -> List<DictEntry>): LookupResult {
+internal fun mangaLookupResult(
+    reading: String?,
+    lookup: (String) -> List<DictEntry>,
+    error: String = unreadableMessage(RecognitionMode.MANGA_OCR)
+): LookupResult {
     if (acceptedReading(reading) == null) {
-        return LookupResult("", emptyList(), "Manga OCR could not read this text. Please select it again.")
+        return LookupResult("", emptyList(), error)
     }
     return mergeLookup(reading, null, lookup)
+}
+
+/**
+ * What a failed read tells the reader.
+ *
+ * With a viable engine — the selected one installed, or the Manga OCR fallback installed — a failed
+ * read keeps the retry wording: Manga OCR when it is the selected engine and ran, text recognition
+ * otherwise (a PP engine, or a fallback that may have been either engine).
+ *
+ * With neither installed, nothing ran and retrying is pointless, so the message points at Settings:
+ * "download this engine or choose an installed engine" when some other engine is already installed
+ * (the reader must pick it; there is no automatic reroute), and "no OCR model is installed" when the
+ * device has none.
+ *
+ * Pure, so every branch is unit-tested.
+ */
+internal fun unreadableMessage(
+    mode: RecognitionMode,
+    selectedInstalled: Boolean = true,
+    mangaInstalled: Boolean = true,
+    anyEngineInstalled: Boolean = true
+): String {
+    if (selectedInstalled || mangaInstalled) {
+        return if (mode == RecognitionMode.MANGA_OCR && selectedInstalled) {
+            "Manga OCR could not read this text. Please select it again."
+        } else {
+            "Text recognition could not read this text. Please select it again."
+        }
+    }
+    return if (anyEngineInstalled) {
+        "Download this engine or choose an installed engine in Settings › Text recognition."
+    } else {
+        "No OCR model is installed. Download one in Settings › Text recognition."
+    }
+}
+
+/** [unreadableMessage] for the selected mode read from [context], with install state probed. */
+private fun lookupUnreadableMessage(context: Context): String {
+    val mode = RecognitionPreference.mode(context)
+    val pp = mode.ppEngine()
+    val selectedInstalled = if (pp == null) {
+        MangaOcrModel.isInstalled(context)
+    } else {
+        PpOcrModel.isInstalled(context, pp)
+    }
+    val mangaInstalled = MangaOcrModel.isInstalled(context)
+    val anyInstalled = mangaInstalled ||
+        PpOcrModel.Engine.entries.any { PpOcrModel.isInstalled(context, it) }
+    return unreadableMessage(mode, selectedInstalled, mangaInstalled, anyInstalled)
 }
 
 /** Reads an already-cut bitmap with the same foreground OCR and screenshot cache for both gestures. */
@@ -162,7 +223,7 @@ private suspend fun readExactCrop(
     }
 }
 
-/** Reads the entire tapped line with Manga OCR, then ranks its words nearest the tap. */
+/** Reads the entire tapped line with the selected recognizer, then ranks words nearest the tap. */
 internal suspend fun runTapLookup(
     context: Context,
     screenshot: Bitmap,
@@ -180,19 +241,21 @@ internal suspend fun runTapLookup(
     val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
     val reading = readExactCrop(context, crop, box, cache)
     tapLookupResult(line, reading, x, y,
-        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) })
+        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) },
+        error = lookupUnreadableMessage(context))
 }
 
-/** Uses only Manga OCR text; the index supplies geometry for ordering, never dictionary words. */
+/** Uses only recognized text; the index supplies geometry for ordering, never dictionary words. */
 internal fun tapLookupResult(
     line: ScreenLine,
     reading: String?,
     x: Int,
     y: Int,
     lookup: (String) -> List<DictEntry>,
-    maxWords: Int = 24
+    maxWords: Int = 24,
+    error: String = unreadableMessage(RecognitionMode.MANGA_OCR)
 ): LookupResult {
-    val text = acceptedReading(reading) ?: return mangaLookupResult(reading, lookup)
+    val text = acceptedReading(reading) ?: return mangaLookupResult(reading, lookup, error)
     val cachedLookup = memoizedLookup(lookup)
     val corrected = line.withText(OcrRepair.repair(text, cachedLookup))
     if (maxWords <= 0) return LookupResult(corrected.text, emptyList())
@@ -208,10 +271,27 @@ internal fun mergePrimary(primary: LookupResult, supplement: LookupResult, maxWo
         words = (primary.words + supplement.words).distinctBy { it.surface }.take(maxWords)
     )
 
-private fun modelRevision(context: Context): String = MangaOcrModel.Slot.entries.joinToString("|") { slot ->
-    val file = MangaOcrModel.file(context, slot)
-    "${file.path}:${file.length()}:${file.lastModified()}"
-}
+/**
+ * The key that decides whether a cached crop reading is still current: the selected mode and the
+ * installed files behind every engine. Switching engines, or re-downloading a PP model, therefore
+ * invalidates the exact-crop cache instead of serving a reading from the previous engine.
+ *
+ * Pure, so the composition is unit-tested.
+ */
+internal fun recognitionRevision(
+    mode: RecognitionMode,
+    mangaRevision: String,
+    ppRevision: String
+): String = "${mode.id}|$mangaRevision|pp:$ppRevision"
+
+private fun modelRevision(context: Context): String = recognitionRevision(
+    RecognitionPreference.mode(context),
+    MangaOcrModel.Slot.entries.joinToString("|") { slot ->
+        val file = MangaOcrModel.file(context, slot)
+        "${file.path}:${file.length()}:${file.lastModified()}"
+    },
+    PpOcrModel.revision(context)
+)
 
 /**
  * The circle's answer, assembled: the crop reading first, the index's own words behind it.
@@ -251,7 +331,7 @@ fun mergeLookup(
 
 /**
  * The crop reading when it is a reading at all: not blank, not one of the model's placeholders, and
- * Japanese — the decoder writes Japanese, so a reading without any is noise the sheet must not show
+ * Japanese — the recognizer writes Japanese, so a reading without any is noise the sheet must not show
  * and the dictionary must not be handed.
  *
  * Deliberately not [OcrLinePolicy.acceptsMangaText]: the whole selection is one line, so there is

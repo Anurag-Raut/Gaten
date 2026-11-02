@@ -37,6 +37,38 @@ ML Kit Text Recognition (Japanese)
 © Google LLC
 Licence: Google ML Kit terms of service
 https://developers.google.com/ml-kit/terms
+Used on-device to find the lines and their boxes; its reading of a line is the fallback.
+
+manga-ocr (default text recognition)
+------------------------------------
+By kha-white, through the int8 ONNX export by onnx-community; vocabulary from kha-white/manga-ocr-base.
+Licence: Apache License 2.0
+https://github.com/kha-white/manga-ocr
+https://huggingface.co/onnx-community/manga-ocr-base-ONNX
+https://huggingface.co/kha-white/manga-ocr-base
+Not bundled: the reader downloads the encoder, decoder and vocabulary on demand and verifies them by
+size and SHA-256. The Apache License 2.0 text is bundled at
+assets/licenses/manga-ocr-Apache-2.0.txt.
+
+PP-OCRv6 recognition models (optional, downloaded on demand)
+------------------------------------------------------------
+PP-OCRv6_medium_rec_onnx, by PaddlePaddle.
+Licence: Apache License 2.0
+https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx
+(revision 50c7eacafc52fa7bcf4194e8cd08e46f8558504b)
+
+PP-OCRv6_manga (manga_rec_v0.2), by Kellenok, a fine-tune of PaddlePaddle/PP-OCRv6_small_rec.
+Licence: Apache License 2.0
+https://huggingface.co/Kellenok/PP-OCRv6_manga
+(revision 02af751fcea728fba69ee421a95838f3e549daa2)
+
+ppocrv6_dict.txt, from PaddlePaddle/PaddleOCR (the shared dictionary of both recognizers).
+Licence: Apache License 2.0
+https://github.com/PaddlePaddle/PaddleOCR
+(revision b03f46425e8ff4442b268ce449e3eef758146cd4)
+
+Not bundled: the reader downloads these files on demand and verifies them by size and SHA-256. The
+Apache License 2.0 text is bundled at assets/licenses/PP-OCRv6-Apache-2.0.txt.
 
 ONNX Runtime (inference engine)
 -------------------------------

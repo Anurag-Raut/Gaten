@@ -212,7 +212,7 @@ const DISCLOSURE_BLOCKS: {heading: string; lines: string[]}[] = [
   {
     heading: "Optional connections",
     lines: [
-      "The included Manga OCR model is prepared automatically on first lookup.",
+      "No OCR model is included. Recognition models download only when you press Download and confirm, then work offline; mobile data may incur charges.",
       "WaniKani connects only when you add a token.",
       "The token is checked with wanikani.com.",
       "A tapped kanji requests its reference page.",

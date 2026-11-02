@@ -2,6 +2,10 @@
 
 ## Design reference
 
+- [Text recognition engines](ocr-engines.md) — current: the recognition engines Gaten reads a line
+  with — the manga-ocr default and the two PP-OCRv6 recognizers (Medium, Manga v0.2), all downloaded
+  on demand — with their pinned upstream sources and SHA-256, graph shapes, preprocessing, limits, the
+  on-demand download confirmation and the fallback behaviour.
 - [Analytics plan and decisions](analytics/PLAN.md) — current: the single-page sections, the data
   contract behind every figure, the accent-only colour roles for all seven accents in both modes, the
   state model, the limits and the verification captures.

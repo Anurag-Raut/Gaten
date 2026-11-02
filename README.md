@@ -19,18 +19,18 @@ Gaten*).
 3. **Detect** — as soon as the overlay opens, ML Kit finds the lines on the whole screen and indexes
    each one with a box per character for hit testing. Those boxes are not drawn: only your own
    selection is highlighted, so the frozen screen stays uncluttered.
-4. **Read** — Manga OCR (the default, bundled reader) reads those lines in the background and
-   replaces each one's text as it lands, biggest boxes first. Google ML Kit can be selected instead.
-   ML Kit's own reading stays for any line Manga OCR cannot read: a failure or an answer slower than 2.5 s.
+4. **Read** — the selected recognition engine (Manga OCR by default; it or a PP-OCRv6 engine can be
+   chosen in Settings) reads those lines in the background and replaces each one's text as it
+   lands, biggest boxes first. A line it cannot read falls back to Manga OCR, and then to ML Kit's
+   own reading: a failure or an answer slower than 2.5 s.
 5. **Tap or circle** — tap text to select its entire indexed line and all its words, or circle some text.
    A tap highlights the whole box immediately and answers from the index, reading only that line.
    The lasso trail is visible only while drawing and disappears on finger lift; the selected region
    stays marked while the lookup runs and the result is shown.
-   A circle always crops the exact rectangle that was drawn and attempts manga-ocr on it — index or no index,
-   Japanese in the index or not — when Manga OCR is selected — and the index lines the loop actually
-   covered then add the words they hold behind that reading, deduplicated. With Google ML Kit selected,
-   the answer comes from the detected index lines, or ML Kit's reading of the crop before the index
-   exists. The rest of the screen keeps being read behind the result.
+   A circle always crops the exact rectangle that was drawn and reads it with the selected engine —
+   index or no index, Japanese in the index or not — and the index lines the loop actually covered
+   then add the words they hold behind that reading, deduplicated. The rest of the screen keeps being
+   read behind the result.
 6. **Repair** — common OCR confusions are fixed against the dictionary before lookup (ー/一,
    カ/力, ロ/口, 猫/描 and similar), only where that makes the dictionary match more of the line.
 7. **Dictionary** — the text is scanned for words (with deinflection) against a bundled SQLite
@@ -246,42 +246,61 @@ gitignored, so the build fails early with a clear message if any builder was ski
 For publishing a build from `dev` to Google Play internal testers, follow the
 [internal testing release instructions](.github/DEPLOYMENT.md).
 
-## Stylized-text model (manga-ocr)
+## Text recognition engines
 
-ML Kit finds the lines for selection. **Manga OCR is the default reader**; Google ML Kit can be
-selected to read standard Japanese text. Manga OCR handles stylized fonts — outlined video-thumbnail
-text, hand-lettered manga lettering — which is exactly what
-[manga-ocr](https://github.com/kha-white/manga-ocr) (a ViT encoder plus a BERT decoder, run on
-[ONNX Runtime](https://onnxruntime.ai/)) is trained on. With the model installed it is offered every
-when selected, it is offered every line ML Kit found, whatever script ML Kit read it in — a line it read as Latin can still be stylized
-Japanese — and the line's final text decides whether it stays: a line with no Japanese in it is
-dropped, so Latin and digit lines do not stay on screen as text. A circle does not depend on any of
-that: when Manga OCR is selected, it crops the rectangle it was drawn around and attempts manga-ocr
-on that, whatever the index found elsewhere on the screen.
+ML Kit locates the text: it finds the lines for selection and indexes each one with a box per
+character for hit-testing. It does not read them for lookup. A recognition engine turns each line
+box's crop into text, and one of three can be chosen in **Settings → Text recognition**:
+
+- **Manga OCR** — the default reader and the fallback for the other two:
+  [manga-ocr](https://github.com/kha-white/manga-ocr), a ViT encoder plus a BERT decoder run on
+  [ONNX Runtime](https://onnxruntime.ai/), trained on exactly the stylized text ML Kit misreads —
+  outlined video-thumbnail text, hand-lettered manga lettering. 116.6 MB.
+- **PP-OCRv6 Medium** — PaddlePaddle's
+  [PP-OCRv6_medium_rec](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx) ONNX (76.6 MB),
+  for ordinary screen and novel text.
+- **PP-OCRv6 Manga v0.2** — the
+  [manga_rec_v0.2](https://huggingface.co/Kellenok/PP-OCRv6_manga) fine-tune (21.2 MB) for manga
+  lettering, stylized fonts and outlined thumbnail text.
+
+There is no automatic image classifier: the engine is the reader's manual choice. None of the three
+ships with the app; a fresh install has nothing to read with until at least one engine — the one you
+want, or Manga OCR for the fallback — is downloaded. Pressing **Download** opens a confirmation with
+the model's name and size (Wi-Fi recommended; mobile data charges may apply); confirming fetches the
+engine's files once, over whatever connection the device has, verifies each by size and SHA-256
+against a pinned upstream revision, and it works offline from then on. Selecting the engine alone
+downloads nothing, nothing is downloaded automatically, and an engine already present is kept and
+reused, so the upgrade does not re-download it. A PP-OCRv6 engine that is not installed, fails, or
+returns nothing usable falls back to Manga OCR; a confident misread is not detected. All three engines
+are recognition only — the line boxes always come from ML Kit — and they read one line at a time, so a
+selection spanning several lines, or vertical text, may read badly with a PP engine. The exact
+sources, hashes, input shapes and limits are in [docs/ocr-engines.md](docs/ocr-engines.md).
+
+Whichever engine reads a line, the line's final text decides whether it stays: a line with no
+Japanese in it is dropped, so Latin and digit lines do not stay on screen as text. A circle does not
+depend on the index: Gaten crops the exact rectangle that was drawn and reads it with the selected
+engine, whatever the index found elsewhere on the screen, and the index lines the loop actually
+covered then add the words they hold behind that reading, deduplicated.
 
 Nothing waits for it. The overlay is usable as soon as ML Kit's index exists; the lines are then read
 in the background, biggest boxes first, and a tap waits only for the line it touched — one, usually,
 at 2.5 s at the very worst. A circle's crop is read before the lines it covered are, so the answer
-never queues behind them. Any line it cannot read (a failure, a timeout, or a runaway answer)
-keeps ML Kit's text, and the rest of the screen keeps being read behind the result sheet, so the next
-gesture usually needs no wait at all. With Google ML Kit selected, Manga OCR is skipped and ML Kit's
-index readings are used directly.
+never queues behind them. Any line it cannot read (a failure, a timeout, or a runaway answer) keeps
+ML Kit's text for that line, and the rest of the screen keeps being read behind the result sheet, so
+the next gesture usually needs no wait at all.
 
 The engines are not kept for the life of the process. Once no lookup has used them for 90 seconds —
 or when the system asks for memory, or when the accessibility service is torn down — Gaten releases
-them (manga-ocr's ONNX sessions and ML Kit's Japanese recognizer). The next lookup builds them again
-from local files or APK assets; the first Manga OCR lookup may take longer while the bundled model
-is extracted.
+them (the selected recognizer's ONNX session and ML Kit's Japanese recognizer). The next lookup
+builds them again from the installed local files.
 Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
 The memory reduction has not been measured on the current version.
 
-The manga-ocr int8 model is ~117 MB and is **bundled in every build**. Gradle fetches the three
-weights into `app/src/main/assets/manga-ocr/` before the assets are merged; the app extracts them
-to private storage only when Manga OCR is selected and a lookup runs. This keeps startup and the
-Google ML Kit option free of model extraction and ONNX session initialization. Both readers work
-offline. **Settings → Text recognition** lets readers switch between Manga OCR (recommended) and
-Google ML Kit. No model import or download is needed. `tools/fetch_manga_ocr.sh [dir]` can fetch the
-same model for local development.
+None of the three selectable recognition engines bundle their weights: the APK carries none of them,
+and all three are downloaded on demand from pinned revisions and then run offline. ML Kit's
+text-detection model is still included — detection is unchanged. Installed files are kept out of
+cloud backup and device transfer. `tools/fetch_manga_ocr.sh [dir]` can still fetch the Manga OCR
+files for local development.
 
 ## Optional WaniKani reference pages
 
@@ -460,14 +479,17 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 
 - `.` (root package) — app entry points: main screen, lookup overlay, trigger receiver, Quick
   Settings tile, accessibility service.
-- `ocr/` — on-device OCR: ML Kit Japanese as detector and fallback reader, the full-screen text index
-  (`ScreenText*`, `ScreenHits`) and
-  `OcrRepair`. The reader is `ScreenLineReader` (the per-session cache that replaces each line's text
-  as manga-ocr reads it, and drops the lines whose final text has no Japanese), `MangaOcrModel`
-  (where the model lives), `MangaOcrEngine` (running it), `OcrPreprocess` (the crop), `OcrModels`
-  (when the OCR engines are released) and `OcrLinePolicy` (when an answer is kept).
-  `RecognitionPreference` stores the selected reader; the app's network code is the optional
-  WaniKani client in `wanikani/`.
+- `ocr/` — on-device OCR. ML Kit Japanese finds the lines and is the fallback reading, and the
+  full-screen text index (`ScreenText*`, `ScreenHits`) and `OcrRepair` live here. Recognition is one
+  of three engines, none of them bundled: `MangaOcrModel` / `MangaOcrEngine` (with `OcrPreprocess`
+  for its crop) and the PP-OCRv6 pair `PpOcrModel` / `PpOcrEngine` (with `PpOcrGeometry`,
+  `PpOcrPreprocess`, `PpOcrCtc` and `PpOcrVocabulary`). `RecognitionPreference` stores the selected
+  `RecognitionMode`; `ScreenLineReader` is the per-session cache that replaces each line's text as
+  the engine reads it and drops the lines whose final text has no Japanese; `OcrModels` releases the
+  engines when idle; `OcrLinePolicy` decides when an answer is kept. The OCR engines are the one part
+  of `ocr/` that reaches the network: all three are downloaded on demand, manually. See
+  [docs/ocr-engines.md](docs/ocr-engines.md). The app's other network code is the optional WaniKani
+  client in `wanikani/`.
 - `anki/` — AnkiDroid export plus deck, tags, field-mapping and card-template preferences, and the
   provider reader behind the in-app review screen (queue, rendered card HTML, rating).
 - `wanikani/` — the optional WaniKani client: the token (Keystore-encrypted, stored off the backup
@@ -500,9 +522,18 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 
 ## Privacy
 
-Reading is offline and stays offline. Gaten makes optional network requests only for WaniKani,
-started by the reader and never in the background:
+Reading is offline and stays offline. Gaten makes optional network requests only when the reader asks
+for them; there are no automatic or periodic fetches:
 
+- **OCR models**, only when the reader presses **Download** for one of the three engines in
+  **Settings → Text recognition**: a confirmation shows the model's name and size and warns that
+  Wi-Fi is recommended and mobile data charges may apply. Confirming downloads that engine's files
+  once, over whatever connection the device has, from the pinned upstream revision, and verifies each
+  file by size and SHA-256. Nothing is downloaded automatically, and selecting an engine alone
+  downloads nothing; recognition works offline afterwards, and the files are kept off the backup set.
+  A download that has started can keep running if the app is backgrounded, until it finishes or the
+  module is torn down. See
+  [docs/ocr-engines.md](docs/ocr-engines.md).
 - **WaniKani**, once a token is connected: connecting and rechecking send the token to
   `api.wanikani.com` for `GET /user` (the one account call, read only for the subscription's level
   entitlement), and opening a kanji sends that character — a radical, its id, a kanji's composition
@@ -541,8 +572,8 @@ inside that small on-device snapshot. The only write is a review the reader has 
 `POST /reviews` carrying the subject's id and how many times its meaning and reading were answered
 wrongly. No lesson is submitted, and no assignment is changed in any other way.
 
-Nothing else is fetched, and the screenshot never leaves the device: it stays in memory, is never
-uploaded, never shared and never written to disk. Reviewing Anki cards changes nothing here either:
+Apart from those optional model downloads, nothing else is fetched, and the screenshot never leaves
+the device: it stays in memory, is never uploaded, never shared and never written to disk. Reviewing Anki cards changes nothing here either:
 it reads and answers cards through AnkiDroid's own local content provider, on the device, and asks
 AnkiDroid for every scheduling decision. There is no telemetry and no server of Gaten's own: nothing
 about the reader is collected, profiled or sent anywhere, and the Analytics tab draws only the
@@ -592,10 +623,19 @@ documented here rather than left implicit.
   The asset is generated at build time from one pinned revision (`docs/jp-prototype/rtk/DATA.md`)
   and is not committed. **Redistribution rights for this text have not been cleared**; publishing a
   build that bundles it is a release blocker to resolve first.
-- **OCR** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms) detects the
-  lines and is available as an alternative reader.
-- **Stylized-text OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
-  Apache-2.0) through the ONNX export at
+- **Text detection** — [ML Kit](https://developers.google.com/ml-kit/terms) (Google, ML Kit terms)
+  finds the lines and their boxes; its reading of a line is the fallback.
+- **Default OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white, Apache-2.0)
+  through the ONNX export at
   [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),
-  run on [ONNX Runtime](https://onnxruntime.ai/) (Microsoft, MIT). The model files are fetched by the
-  build and bundled with the app.
+  run on [ONNX Runtime](https://onnxruntime.ai/) (Microsoft, MIT). Downloaded by the reader on demand
+  (not bundled) from pinned revisions; the Apache-2.0 text is at
+  `app/src/main/assets/licenses/manga-ocr-Apache-2.0.txt`.
+- **Optional OCR** — [PP-OCRv6](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx)
+  medium recognition (PaddlePaddle, Apache-2.0) and the
+  [PP-OCRv6 Manga v0.2](https://huggingface.co/Kellenok/PP-OCRv6_manga) fine-tune (Kellenok,
+  Apache-2.0), with the shared `ppocrv6_dict.txt` from
+  [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) (Apache-2.0), all run on ONNX
+  Runtime. Both PP engines are recognition only, downloaded by the reader on demand (not bundled) from
+  pinned revisions; the attributions are in `NOTICE` and the Apache-2.0 text is at
+  `app/src/main/assets/licenses/PP-OCRv6-Apache-2.0.txt`.

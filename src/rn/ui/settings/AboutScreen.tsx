@@ -9,9 +9,9 @@
  * anywhere, and who the parts belong to.
  *
  * The two claims here are the app's contract with the reader — the screenshot and the looked-up
- * text stay on the device, and the network is used only for WaniKani when a token is connected.
- * Every attribution is a row that opens the licence or the project it names; with no browser to open, the tap does
- * nothing.
+ * text stay on the device, and the network is used only for WaniKani when a token is connected and
+ * for the OCR model downloads the reader explicitly starts. Every attribution is a row that opens
+ * the licence or the project it names; with no browser to open, the tap does nothing.
  */
 import React, {useEffect, useState} from "react";
 import {Text, View} from "react-native";
@@ -30,6 +30,8 @@ const PRIVACY_POLICY_URL = "https://anurag-raut.github.io/Gaten/privacy/";
 /** Where each attribution and licence lives. Opened in the browser, which may be nowhere. */
 const EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html";
 const MANGA_OCR_URL = "https://github.com/kha-white/manga-ocr";
+const PADDLE_OCR_URL = "https://github.com/PaddlePaddle/PaddleOCR";
+const PP_OCR_MANGA_URL = "https://huggingface.co/Kellenok/PP-OCRv6_manga";
 const MLKIT_TERMS_URL = "https://developers.google.com/ml-kit/terms";
 const WANIKANI_URL = "https://www.wanikani.com/";
 const GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html";
@@ -66,7 +68,7 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
 
       <SettingsGroup title="Privacy" style={{marginTop: spacing.l}}>
         <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, paddingVertical: spacing.m}]}>
-          Lookup and recognition run on this device; screenshots stay here. Optional network use: WaniKani when connected. Nothing else is sent.
+          Lookup and recognition run on this device; screenshots stay here and are never uploaded. Optional network use: WaniKani when connected, and the OCR models you choose to download (any connection works; mobile data may incur charges). Nothing else is sent.
         </Text>
         <SettingsRow
           icon="shield"
@@ -86,8 +88,20 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <SettingsRow
           icon="public"
           title="manga-ocr"
-          summary="Bundled recommended reader by kha-white · Apache-2.0 · ONNX Runtime"
+          summary="On-demand default reader by kha-white · Apache-2.0 · ONNX Runtime"
           onPress={() => open(MANGA_OCR_URL)}
+        />
+        <SettingsRow
+          icon="public"
+          title="PP-OCRv6"
+          summary="Optional recognition models by PaddlePaddle · Apache-2.0 · ONNX Runtime"
+          onPress={() => open(PADDLE_OCR_URL)}
+        />
+        <SettingsRow
+          icon="public"
+          title="PP-OCRv6 Manga v0.2"
+          summary="Manga fine-tune by Kellenok · Apache-2.0"
+          onPress={() => open(PP_OCR_MANGA_URL)}
         />
         <SettingsRow
           icon="public"

@@ -4,56 +4,60 @@
 # Copyright (C) 2026 Anurag Raut
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Downloads the manga-ocr model (the app's second-pass Japanese OCR engine) so it can be pushed to a
-# device and imported from Settings. Development convenience only: the build fetches the same files
-# into app/src/main/assets/manga-ocr/ for every APK, so a normal build already carries them.
+# Fetches the manga-ocr weights for development inspection. The app no longer bundles them: Settings
+# downloads the same three files on demand (ocr/MangaOcrModel.kt), verifying each against the pinned
+# size and SHA-256 below, so this script produces byte-identical files only for inspecting the weights
+# or reproducing a download by hand.
 #
-# The three files are the ones the settings screen asks for:
-#   encoder_model_int8.onnx  onnx-community/manga-ocr-base-ONNX (ViT encoder, int8)
-#   decoder_model_int8.onnx  onnx-community/manga-ocr-base-ONNX (BERT decoder, int8)
-#   vocab.txt                kha-white/manga-ocr-base (character vocabulary)
+# In the app, install the model from Settings > Text recognition > Manga OCR > Download; the settings
+# screen asks before starting the transfer and warns that it may use mobile data.
+#
+# The three files, at the revisions the app pins:
+#   encoder_model_int8.onnx  onnx-community/manga-ocr-base-ONNX @ f9023406bb2f6b17df67bc4a327c56ecd20611f0
+#   decoder_model_int8.onnx  onnx-community/manga-ocr-base-ONNX @ f9023406bb2f6b17df67bc4a327c56ecd20611f0
+#   vocab.txt                kha-white/manga-ocr-base @ aa6573bd10b0d446cbf622e29c3e084914df9741
 #
 # Usage:
 #   tools/fetch_manga_ocr.sh [target-dir]     # default: ./manga-ocr-model
 #
-# Then, with the device connected:
-#   adb push <target-dir>/* /sdcard/Download/
-# and in Gaten: Settings → Stylized-text model → Import model files.
-
 set -euo pipefail
 
 TARGET_DIR="${1:-manga-ocr-model}"
 
-ENCODER_URL="https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/encoder_model_int8.onnx"
-DECODER_URL="https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/decoder_model_int8.onnx"
-VOCAB_URL="https://huggingface.co/kha-white/manga-ocr-base/resolve/main/vocab.txt"
+ONNX_REVISION="f9023406bb2f6b17df67bc4a327c56ecd20611f0"
+ENCODER_URL="https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/$ONNX_REVISION/onnx/encoder_model_int8.onnx"
+DECODER_URL="https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/$ONNX_REVISION/onnx/decoder_model_int8.onnx"
+VOCAB_URL="https://huggingface.co/kha-white/manga-ocr-base/resolve/aa6573bd10b0d446cbf622e29c3e084914df9741/vocab.txt"
+
+# The hashes ocr/MangaOcrModel.kt pins; a file that does not match is not usable.
+ENCODER_SHA256="ddd1af56963093795705fa38da6ce7e6567d1658e7c7359db7e13fcd37dbf279"
+DECODER_SHA256="2e7177d2b0a59f1c612b694ed70c13971bee765cc2b2bc7bc9376e4753652f27"
+VOCAB_SHA256="344fbb6b8bf18c57839e924e2c9365434697e0227fac00b88bb4899b78aa594d"
 
 mkdir -p "$TARGET_DIR"
 
 # curl -L: Hugging Face answers with a 307 to its CDN. --fail: an HTTP error must not leave a
 # truncated file behind, which is why each download goes to a .part file first.
 fetch() {
-    local url="$1" name="$2"
-    if [ -s "$TARGET_DIR/$name" ]; then
-        echo "already there: $TARGET_DIR/$name"
+    local url="$1" name="$2" expected="$3"
+    if [ -s "$TARGET_DIR/$name" ] && echo "$expected  $TARGET_DIR/$name" | sha256sum --check --status 2>/dev/null; then
+        echo "already there and verified: $TARGET_DIR/$name"
         return
     fi
     echo "downloading $url"
     curl --fail --location --progress-bar --output "$TARGET_DIR/$name.part" "$url"
+    echo "$expected  $TARGET_DIR/$name.part" | sha256sum --check --status \
+        || { rm -f "$TARGET_DIR/$name.part"; echo "checksum mismatch for $name" >&2; exit 1; }
     mv "$TARGET_DIR/$name.part" "$TARGET_DIR/$name"
     echo "wrote $TARGET_DIR/$name ($(du -h "$TARGET_DIR/$name" | cut -f1))"
 }
 
-fetch "$ENCODER_URL" "encoder_model_int8.onnx"
-fetch "$DECODER_URL" "decoder_model_int8.onnx"
-fetch "$VOCAB_URL" "vocab.txt"
+fetch "$ENCODER_URL" "encoder.onnx" "$ENCODER_SHA256"
+fetch "$DECODER_URL" "decoder.onnx" "$DECODER_SHA256"
+fetch "$VOCAB_URL" "vocab.txt" "$VOCAB_SHA256"
 
 cat <<EOF
 
-Model files are in $TARGET_DIR. Push them to the device and import them in the app:
-
-  adb push $TARGET_DIR/encoder_model_int8.onnx $TARGET_DIR/decoder_model_int8.onnx $TARGET_DIR/vocab.txt /sdcard/Download/
-
-Then open Gaten, scroll to "Stylized-text model (manga-ocr, optional)" and tap "Import model files",
-picking all three from Download. The names are recognised, so nothing has to be renamed.
+Verified files are in $TARGET_DIR — for development inspection only. Install the model from the app:
+Settings > Text recognition > Manga OCR > Download.
 EOF

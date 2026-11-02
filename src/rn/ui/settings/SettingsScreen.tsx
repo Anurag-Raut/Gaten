@@ -19,8 +19,10 @@ import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenAnki from "../../native/GatenAnki";
+import * as GatenRecognition from "../../native/GatenRecognition";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {AnkiStatus} from "../../native/GatenAnki";
+import type {RecognitionEngine, RecognitionSettings} from "../../native/GatenRecognition";
 import type {SettingsPageName} from "../navigation";
 import {useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme} from "../theme";
@@ -40,6 +42,18 @@ function ankiSummary(status: AnkiStatus): string {
   }
 }
 
+/** The engine's short name for the hub row; the full names live on the recognition page. */
+function recognitionModeLabel(mode: RecognitionEngine): string {
+  switch (mode) {
+    case "medium":
+      return "PP-OCRv6 Medium";
+    case "manga":
+      return "PP-OCRv6 Manga";
+    default:
+      return "Manga OCR";
+  }
+}
+
 export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) => void}) {
   const theme = useTheme();
   const colors = theme.colors;
@@ -48,6 +62,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const {width} = useWindowDimensions();
 
   const [lookupMode, setLookupMode] = useState(false);
+  const [recognitionSettings, setRecognitionSettings] = useState<RecognitionSettings | null>(null);
   const [ankiStatus, setAnkiStatus] = useState<AnkiStatus>("notInstalled");
   const [ankiDeck, setAnkiDeck] = useState<string | null>(null);
   const [wanikaniConnected, setWanikaniConnected] = useState(false);
@@ -69,6 +84,9 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
     const readAll = () => {
       void GatenAppInfo.isLookupModeActive().then((v) => {
         if (!cancelled) setLookupMode(v);
+      });
+      void GatenRecognition.getRecognitionSettings().then((v) => {
+        if (!cancelled) setRecognitionSettings(v);
       });
       void GatenAnki.status().then((v) => {
         if (!cancelled) setAnkiStatus(v);
@@ -92,6 +110,15 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
       subscription.remove();
     };
   }, [isFocused]);
+
+  // The selected engine's name, and whether its model is actually on the device: with every engine
+  // downloaded on demand, the row must not read as if recognition were ready out of the box.
+  const recognitionMode = recognitionSettings?.mode ?? "manga_ocr";
+  const selectedEngine = recognitionSettings?.engines.find(
+    (engine) => engine.id === recognitionMode,
+  );
+  const recognitionSummary =
+    selectedEngine != null && !selectedEngine.installed ? "Model not downloaded" : undefined;
 
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
@@ -123,7 +150,8 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               icon="text_snippet"
               inkIcon="text"
               title="Text recognition"
-              value="Manga OCR"
+              summary={recognitionSummary}
+              value={recognitionModeLabel(recognitionMode)}
               onPress={() => onOpenPage("recognition")}
             />
           </SettingsGroup>
