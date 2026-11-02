@@ -42,3 +42,8 @@ export const TAB_HEADING_METRICS = {
   capDp: 24.5,
   lineHeightDp: 44,
 };
+
+/** Shared artwork scale for the Home wordmark and both tab headings, including system font scaling. */
+export function brandHeadingScale(fontScale: number): number {
+  return (TAB_HEADING_METRICS.capDp * fontScale) / TAB_HEADING_METRICS.cap;
+}

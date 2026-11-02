@@ -30,7 +30,7 @@ import Animated, {
 } from "react-native-reanimated";
 import {Icon} from "./components";
 import {useTheme} from "./theme";
-import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing, typeScale} from "./tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
 import {GatenWordmark} from "./home/GatenWordmark";
 import {
@@ -265,7 +265,7 @@ export function HomeScreen({
                 exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
                 style={styles.brand}
               >
-                <GatenWordmark height={typeScale.brand.lineHeight} />
+                <GatenWordmark />
               </Animated.View>
             )}
             <Animated.View style={styles.searchRow} layout={layoutTransition}>
