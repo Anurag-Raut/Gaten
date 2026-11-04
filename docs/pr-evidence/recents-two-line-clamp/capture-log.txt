@@ -1,0 +1,126 @@
+# Capture log — recents two-line clamp
+
+Everything below ran from this worktree
+(`/home/Qui/.paseo/worktrees/1t28llpl/gaten-recents-clamp`, branch
+`gaten-recents-two-line-clamp`) on 2026-11-04, against AVD `Gaten_Heading_Evidence`
+(`emulator-5554`). `$A` is `$HOME/Android/Sdk/platform-tools/adb -s emulator-5554`.
+
+## Tree and checks
+
+```
+$ ./node_modules/.bin/tsc --noEmit                       # exit 0, no output
+$ git log --oneline -1
+9ea06c9 fix(ui): cap the recent-lookup gloss at two lines
+$ git show --stat HEAD | tail -3
+ src/rn/ui/home/HomeDashboard.tsx | 1 +
+ 1 file changed, 1 insertion(+)
+```
+
+## Base APK (build 1)
+
+```
+$ git checkout e2a537f -- src/rn/ui/home/HomeDashboard.tsx
+$ ANDROID_HOME=$HOME/Android/Sdk ./gradlew :app:assembleDebug
+BUILD SUCCESSFUL in 2m 43s — 281 actionable tasks: 281 executed
+$ cp app/build/outputs/apk/debug/app-x86_64-debug.apk /tmp/gaten-2line/before.apk
+205468244 bytes  sha256 90f85816e7e413cd8a13f97ff2662be04f4d410d85ee8d219f7cb6352452d764
+```
+
+## Head APK (build 2)
+
+```
+$ git checkout 9ea06c9 -- src/rn/ui/home/HomeDashboard.tsx   # working tree clean again
+$ ANDROID_HOME=$HOME/Android/Sdk ./gradlew :app:assembleDebug
+BUILD SUCCESSFUL in 34s — 281 actionable tasks: 43 executed, 238 up-to-date
+$ cp app/build/outputs/apk/debug/app-x86_64-debug.apk /tmp/gaten-2line/after.apk
+208870283 bytes  sha256 406e25ebdc1f6374507e5d290508200273c2b6184cca3c5a1da055e9bb42ee4b
+```
+
+## Unit tests (head)
+
+```
+$ ANDROID_HOME=$HOME/Android/Sdk ./gradlew :app:testDebugUnitTest
+BUILD SUCCESSFUL in 1m 12s — 188 actionable tasks: 13 executed, 175 up-to-date
+```
+
+## Bundle proof (base vs head, inside those APKs)
+
+```
+$ unzip -o before.apk assets/index.android.bundle -d bx
+$ unzip -o after.apk  assets/index.android.bundle -d ax
+$ sha256sum bx/assets/index.android.bundle ax/assets/index.android.bundle
+a46a87bc579b1955afed5cc87d70723004603ac6b0920f869f44942e00ed2c0c  bx/…
+9f1f6a80cdbf6b1dd139a6bb1e0a1d33e504e6bb4521dee0cd016abe6b8c8aae  ax/…
+$ hermesc -b -dump-bytecode <bundle> > <bundle>.hbc.txt     # 592,670 lines each
+$ diff bx.hbc.txt ax.hbc.txt | wc -l
+14
+```
+
+The 14 diff lines are the HBC source hash plus, inside `RecentLookupRow`'s gloss `<Text>`, one extra
+constant entry in the props object literal — `PutOwnBySlotIdx r7, r11, 0` / `r7, r10, 1` become
+`1` / `2` — i.e. `numberOfLines={2}` really is in the shipped head bytecode and really is absent from
+the base one. The string `numberOfLines` is deduplicated in the Hermes string table, so it does not
+appear as a new string.
+
+## Lookups that populate the section
+
+Made once, through Home's own search field, on the installed build; `install -r` keeps them, so both
+builds render the same three rows in the same order (newest first):
+
+| Query typed | Row opened | `recent_lookups` entry |
+|---|---|---|
+| `そくぶん` | 仄聞 | `id 1596500`, 56-char first gloss |
+| `奥` | 奥 | `id 1179320`, 152-char first gloss |
+| `側` | 側 (そば) | `id 1403830`, 140-char first gloss |
+
+```
+$ $A shell run-as com.gaten cat /data/data/com.gaten/shared_prefs/gaten_dictionary_history.xml
+recent_lookups : 1179320 奥/おく, 1596500 仄聞/そくぶん, 1403830 側/そば
+recent_searches: ["奥","そくぶん","側"]
+```
+
+## Stills
+
+Per still: `settings put system font_scale <v>` → `am force-stop com.gaten` →
+`agent-device open com.gaten --serial emulator-5554 --foreground` → 4 s →
+(optional three `input swipe 540 1900 540 1000 300`) →
+`agent-device screenshot --out <tag>.png` → `agent-device snapshot --json > <tag>.ax.json`.
+
+```
+(installed before.apk)
+captured before-01-home-default-text        (font_scale=1.0, top)
+captured before-02-home-text-scale-1.3      (font_scale=1.3, top)
+captured before-03-home-default-text-bottom (font_scale=1.0, bottom)
+captured before-04-home-text-scale-1.3-bottom (font_scale=1.3, bottom)
+
+$ adb install -r -d /tmp/gaten-2line/after.apk
+Success
+
+captured after-01-home-default-text         (font_scale=1.0, top)
+captured after-02-home-text-scale-1.3       (font_scale=1.3, top)
+captured after-03-home-default-text-bottom  (font_scale=1.0, bottom)
+captured after-04-home-text-scale-1.3-bottom (font_scale=1.3, bottom)
+```
+
+Row rects (device px) from the `bottom` stills, which never clip a row:
+
+| Row | 1.0 base | 1.0 head | 1.3 base | 1.3 head |
+|---|---|---|---|---|
+| 奥 / おく | 401 | 159 | 392 | 276 |
+| 仄聞 / そくぶん | 165 | 160 | 277 | 277 |
+| 側 / そば | 444 | 159 | 389 | 273 |
+
+## Device state
+
+```
+avd=Gaten_Heading_Evidence  android=14  sdk=34  abi=x86_64  model=sdk_gphone64_x86_64
+size=1080x2340  density=440  night mode: yes
+font_scale before the run: 1.3   after the run: 1.3
+```
+
+## Composites
+
+`before-after-recent-rows-default-text.png`, `before-after-recent-rows-text-scale-1.3.png` and
+`before-after-home-default-text.png` were built with ImageMagick 7 (`magick`) from the stills above:
+each panel is a `1000x1180+40+<heading_y-40>` crop of a `bottom` still (clamped to the screen), so both
+panels of a pair frame the same region even though the base page scrolls further than the head page.
