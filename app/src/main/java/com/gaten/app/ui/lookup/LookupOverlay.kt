@@ -377,7 +377,7 @@ fun LookupOverlay(
         }
     }
 
-    // ML Kit supplies the initial geometry; Manga OCR improves the index in the background.
+    // ML Kit supplies the initial geometry; the selected engine improves the index in the background.
     val scannedScreen = (scanState as? ScanState.Ready)?.screen
     val reader = remember(scannedScreen, screenshot) {
         if (scannedScreen == null || screenshot == null) {
@@ -386,10 +386,10 @@ fun LookupOverlay(
             ScreenLineReader(
                 screen = scannedScreen,
                 readLine = { line ->
-                    JapaneseOcr.readLineWithMangaOcr(context, screenshot, line.bounds)
+                    JapaneseOcr.readLine(context, screenshot, line.bounds)
                 },
                 readLineBackground = { line ->
-                    JapaneseOcr.readLineWithMangaOcr(
+                    JapaneseOcr.readLine(
                         context, screenshot, line.bounds, MangaOcrEngine.Priority.BACKGROUND
                     )
                 },

@@ -88,13 +88,13 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <SettingsRow
           icon="public"
           title="manga-ocr"
-          summary="On-demand default reader by kha-white · Apache-2.0 · ONNX Runtime"
+          summary="On-demand reader by kha-white · Apache-2.0 · ONNX Runtime"
           onPress={() => open(MANGA_OCR_URL)}
         />
         <SettingsRow
           icon="public"
           title="PP-OCRv6"
-          summary="Optional recognition models by PaddlePaddle · Apache-2.0 · ONNX Runtime"
+          summary="Recommended on-demand recognition models by PaddlePaddle · Apache-2.0 · ONNX Runtime"
           onPress={() => open(PADDLE_OCR_URL)}
         />
         <SettingsRow
@@ -106,7 +106,7 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <SettingsRow
           icon="public"
           title="ML Kit"
-          summary="Google on-device text recognition"
+          summary="Bundled Japanese text recognizer · Google on-device"
           onPress={() => open(MLKIT_TERMS_URL)}
         />
         <SettingsRow

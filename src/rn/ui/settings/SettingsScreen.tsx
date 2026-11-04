@@ -45,6 +45,8 @@ function ankiSummary(status: AnkiStatus): string {
 /** The engine's short name for the hub row; the full names live on the recognition page. */
 function recognitionModeLabel(mode: RecognitionEngine): string {
   switch (mode) {
+    case "ml_kit":
+      return "ML Kit";
     case "medium":
       return "PP-OCRv6 Medium";
     case "manga":
@@ -111,14 +113,15 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
     };
   }, [isFocused]);
 
-  // The selected engine's name, and whether its model is actually on the device: with every engine
-  // downloaded on demand, the row must not read as if recognition were ready out of the box.
-  const recognitionMode = recognitionSettings?.mode ?? "manga_ocr";
+  // The selected engine's name, and whether its model is actually on the device: the bundled ML Kit
+  // is always ready, but a selected downloadable engine that is not installed is read by ML Kit
+  // instead, so the row says so rather than implying no recognition is available.
+  const recognitionMode = recognitionSettings?.mode ?? "ml_kit";
   const selectedEngine = recognitionSettings?.engines.find(
     (engine) => engine.id === recognitionMode,
   );
   const recognitionSummary =
-    selectedEngine != null && !selectedEngine.installed ? "Model not downloaded" : undefined;
+    selectedEngine != null && !selectedEngine.installed ? "Not downloaded · ML Kit reads" : undefined;
 
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>

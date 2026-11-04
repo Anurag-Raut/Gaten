@@ -30,8 +30,8 @@ import kotlin.coroutines.coroutineContext
  * It exists because ML Kit reads stylized fonts — outlined thumbnail text, hand-lettered manga
  * lettering — as the kanji their strokes resemble. This model was trained on exactly that kind of
  * text, so it reads the lines ML Kit found ([ScreenLineReader] for the overlay's index,
- * [JapaneseOcr.readLineWithMangaOcr] for the region path), and ML Kit's own reading is what stays
- * when it cannot.
+ * [JapaneseOcr.readLine] for the region path), and ML Kit's own reading is what stays when it
+ * cannot.
  *
  * Generation is greedy and re-runs the decoder over the whole prefix each step (the exported decoder
  * has no KV cache). That costs a few hundred milliseconds per line on a phone, which is why the

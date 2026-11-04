@@ -1,14 +1,22 @@
 import {NativeModules} from "react-native";
 
-/** Any of the three on-demand engines; also the persisted selected mode. */
-export type RecognitionEngine = "manga_ocr" | "medium" | "manga";
+/**
+ * Any of the selectable engines; also the persisted selected mode. `ml_kit` is bundled with the app
+ * and always installed; `manga_ocr`, `medium` and `manga` are downloaded on demand.
+ */
+export type RecognitionEngine = "ml_kit" | "manga_ocr" | "medium" | "manga";
 
 /** One engine as the settings screen shows it. */
 export interface EngineStatus {
   id: RecognitionEngine;
   name: string;
+  /** The download size in bytes; 0 for the bundled engine, which is never downloaded. */
   downloadBytes: number;
   installed: boolean;
+  /** Bundled with the app: nothing to download, and always installed. */
+  bundled: boolean;
+  /** The one the settings screen marks "Recommended". */
+  recommended: boolean;
 }
 
 export interface RecognitionSettings {

@@ -6,14 +6,15 @@
 
 /**
  * Text recognition: the reader's manual engine choice, and the explicit confirmed downloads that put
- * an engine on the device. No engine ships in the app.
+ * an engine on the device.
  *
- * Three choices, no classifier: Manga OCR (the default), PP-OCRv6 Medium for ordinary screen and
- * novel text, and PP-OCRv6 Manga for stylized lettering and video thumbnails. Every engine downloads
- * only when its own button is pressed — each tap asks for confirmation first, warning that Wi-Fi is
- * recommended and mobile data may incur charges — then works offline. An unavailable engine still
- * selects, and lookups fall back to Manga OCR when it is installed. Whether a download is running is
- * read from the native module, so leaving and returning does not show a download as finished.
+ * Four choices, no classifier. ML Kit is bundled and is the default: it reads out of the box with
+ * nothing to download. The other three — PP-OCRv6 Medium (recommended) for ordinary screen and novel
+ * text, PP-OCRv6 Manga for stylized lettering and video thumbnails, and Manga OCR — download only
+ * when their own button is pressed; each tap asks for confirmation first, warning that Wi-Fi is
+ * recommended and mobile data may incur charges, then works offline. An unavailable engine still
+ * selects, and lookups fall back to the bundled ML Kit. Whether a download is running is read from
+ * the native module, so leaving and returning does not show a download as finished.
  */
 import React, {useEffect, useRef, useState} from "react";
 import {Alert, AppState, Text, View} from "react-native";
@@ -35,13 +36,13 @@ import {
   SettingsPageScaffold,
 } from "./settings-components";
 
-const MANGA_OCR: RecognitionEngine = "manga_ocr";
+const ML_KIT: RecognitionEngine = "ml_kit";
 
 const HELP_PARAGRAPHS = [
-  "Every lookup reads the selection with the engine you choose here. No engine is included with Gaten: each downloads only when you press Download and confirm, then works offline. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
-  "PP-OCRv6 Medium suits ordinary screen and novel text; PP-OCRv6 Manga suits manga lettering, stylized fonts and outlined video thumbnails. The engine is chosen manually — there is no automatic content classifier.",
+  "Every lookup reads the selection with the engine you choose here. Google ML Kit's Japanese recognizer is included with Gaten, so text is read out of the box with nothing to download.",
+  "The other engines are optional and download only when you press Download and confirm, then work offline. PP-OCRv6 Medium is recommended for ordinary screen and novel text; PP-OCRv6 Manga suits manga lettering, stylized fonts and outlined video thumbnails; Manga OCR suits Japanese and stylized text. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
   "PP-OCRv6 engines read a single line at a time. For a multiline selection, or a vertical result that reads poorly, choose Manga OCR.",
-  "Google ML Kit locates the lines; its readings are not used as lookup answers. When a PP-OCRv6 engine cannot read a selection and Manga OCR is installed, Manga OCR reads it instead.",
+  "ML Kit finds the lines in every mode. When a downloaded engine cannot read a selection — it is not installed yet, or its read fails or holds no Japanese — ML Kit reads it instead.",
 ];
 
 /** The pinned download size as decimal MB, matching the size named in the docs and NOTICE. */
@@ -52,38 +53,55 @@ function formatMegabytes(bytes: number): string {
 /** What an engine is for, so the row says more than its name. */
 function engineUse(engine: EngineStatus): string {
   switch (engine.id) {
+    case "ml_kit":
+      return "Japanese text";
     case "medium":
       return "Screen and novels";
     case "manga":
       return "Manga, stylized and thumbnails";
     default:
-      return "Default · Japanese and stylized text";
+      return "Japanese and stylized text";
   }
 }
 
-/** The note under a selected engine that is not installed yet, or null when it is. */
-function engineNote(engine: EngineStatus, engines: EngineStatus[]): string | null {
-  if (engine.installed) return null;
-  const mangaInstalled = engines.some((candidate) => candidate.id === MANGA_OCR && candidate.installed);
-  if (engine.id !== MANGA_OCR && mangaInstalled) {
-    return "Manga OCR fallback while this is not installed.";
-  }
-  const otherInstalled = engines.some((candidate) => candidate.id !== engine.id && candidate.installed);
-  return otherInstalled
-    ? "Not installed. Choose an installed engine or download this one."
-    : "No OCR model is installed. Download one to look up text.";
+/** What is actually on the device: the bundled default, an installed download, or neither. */
+function engineState(engine: EngineStatus): string {
+  if (engine.bundled) return "bundled · works offline";
+  return engine.installed ? "installed · works offline" : "not installed";
+}
+
+/** The note under a selected engine that is not installed: the bundled ML Kit reads meanwhile. */
+const ML_KIT_FALLBACK_NOTE = "Not installed · ML Kit reads text in the meantime.";
+
+/** The "Recommended" marker beside the engine it names. */
+function RecommendedBadge({label}: {label: string}) {
+  const {colors} = useTheme();
+  return (
+    <View
+      style={{
+        backgroundColor: colors.accentSubtle,
+        borderRadius: 6,
+        paddingHorizontal: spacing.s,
+        paddingVertical: 1,
+      }}
+    >
+      <Text style={[typeScale.labelSmall, {color: colors.onPrimaryContainer}]}>{label}</Text>
+    </View>
+  );
 }
 
 /** One selectable engine: title, one-line state, and a check on the selected one. */
 function ModeRow({
   title,
   summary,
+  badge,
   selected,
   disabled,
   onPress,
 }: {
   title: string;
   summary: string;
+  badge?: string;
   selected: boolean;
   disabled?: boolean;
   onPress: () => void;
@@ -93,7 +111,7 @@ function ModeRow({
     <PressableScale
       accessibilityRole="radio"
       accessibilityState={{selected, disabled}}
-      accessibilityLabel={title}
+      accessibilityLabel={badge != null ? `${title}, ${badge}` : title}
       accessibilityHint={summary}
       disabled={disabled}
       onPress={onPress}
@@ -108,7 +126,10 @@ function ModeRow({
     >
       <RowIcon name="text_snippet" />
       <View style={{flex: 1, minWidth: 0}}>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        <View style={{flexDirection: "row", alignItems: "center", gap: spacing.s}}>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+          {badge != null && <RecommendedBadge label={badge} />}
+        </View>
         <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
           {summary}
         </Text>
@@ -121,7 +142,6 @@ function ModeRow({
 /** One engine: the choice row, and its download button while it is not installed. */
 function EngineRow({
   engine,
-  engines,
   selected,
   downloading,
   busy,
@@ -130,7 +150,6 @@ function EngineRow({
   onDownload,
 }: {
   engine: EngineStatus;
-  engines: EngineStatus[];
   selected: boolean;
   downloading: boolean;
   busy: boolean;
@@ -140,15 +159,13 @@ function EngineRow({
 }) {
   const {colors} = useTheme();
   const size = formatMegabytes(engine.downloadBytes);
-  const summary = `${engineUse(engine)} · ${
-    engine.installed ? "installed · works offline" : "not installed"
-  }`;
-  const note = selected ? engineNote(engine, engines) : null;
+  const summary = `${engineUse(engine)} · ${engineState(engine)}`;
   return (
     <View>
       <ModeRow
         title={engine.name}
         summary={summary}
+        badge={engine.recommended ? "Recommended" : undefined}
         selected={selected}
         disabled={disabled}
         onPress={onSelect}
@@ -160,11 +177,11 @@ function EngineRow({
             disabled={downloading || busy || disabled === true}
             onPress={onDownload}
           />
-          {note != null && (
+          {selected && (
             <Text
               style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
             >
-              {note}
+              {ML_KIT_FALLBACK_NOTE}
             </Text>
           )}
         </View>
@@ -321,7 +338,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
     );
   };
 
-  const mode = settings?.mode ?? MANGA_OCR;
+  const mode = settings?.mode ?? ML_KIT;
   const engines = settings?.engines ?? [];
   const busy = requested !== null;
 
@@ -336,7 +353,6 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
           <EngineRow
             key={engine.id}
             engine={engine}
-            engines={engines}
             selected={mode === engine.id}
             downloading={requested === engine.id || nativeDownloading.includes(engine.id)}
             busy={busy && requested !== engine.id}

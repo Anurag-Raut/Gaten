@@ -26,9 +26,10 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The text recognition settings bridge: the selected mode, install state for all three engines
- * (Manga OCR and the two PP-OCRv6 models), and the explicit downloads that put one on the device.
- * No engine ships in the APK.
+ * The text recognition settings bridge: the selected mode, install state for every engine (the
+ * bundled ML Kit and the three downloads — Manga OCR and the two PP-OCRv6 models), and the explicit
+ * downloads that put one on the device. The bundled ML Kit has no download; the other three ship no
+ * weights in the APK.
  *
  * Every call that touches storage runs on [Dispatchers.IO]. The reader confirms each download in the
  * settings UI — which warns that mobile data may incur charges — and the model downloaders
@@ -109,6 +110,13 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
             promise.reject(CODE_INVALID_ENGINE, "Unknown recognition engine: $engineId")
             return
         }
+        if (engine.bundled) {
+            promise.reject(
+                CODE_ALREADY_BUNDLED,
+                "${engineName(engine)} is bundled with Gaten; there is nothing to download."
+            )
+            return
+        }
         val context = reactApplicationContext
         // The reader has already confirmed this tap in the settings UI, which warns about mobile
         // data; the model downloader owns the transfer and its file verification.
@@ -149,6 +157,8 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
             item.putString("name", engineName(engine))
             item.putDouble("downloadBytes", engineBytes(engine).toDouble())
             item.putBoolean("installed", isInstalled(context, engine))
+            item.putBoolean("bundled", engine.bundled)
+            item.putBoolean("recommended", engine.recommended)
             engines.pushMap(item)
         }
         map.putArray("engines", engines)
@@ -160,16 +170,21 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         return map
     }
 
-    /** Display name: the PP catalog's own, or the Manga OCR name. */
-    private fun engineName(engine: RecognitionMode): String =
-        engine.ppEngine()?.displayName ?: MANGA_OCR_NAME
+    /** Display name: the bundled recognizer's, the PP catalog's own, or the Manga OCR name. */
+    private fun engineName(engine: RecognitionMode): String = when (engine) {
+        RecognitionMode.ML_KIT -> ML_KIT_NAME
+        else -> engine.ppEngine()?.displayName ?: MANGA_OCR_NAME
+    }
 
-    /** Expected download size, from whichever model owns the engine. */
-    private fun engineBytes(engine: RecognitionMode): Long =
-        engine.ppEngine()?.approximateDownloadBytes ?: MangaOcrModel.approximateDownloadBytes
+    /** Expected download size, from whichever model owns the engine; nothing for the bundled one. */
+    private fun engineBytes(engine: RecognitionMode): Long = when {
+        engine.bundled -> 0L
+        else -> engine.ppEngine()?.approximateDownloadBytes ?: MangaOcrModel.approximateDownloadBytes
+    }
 
-    /** Installed means the engine's own files are complete; Manga OCR is never bundled. */
+    /** Installed means the engine's own files are complete; the bundled recognizer always is. */
     private fun isInstalled(context: Context, engine: RecognitionMode): Boolean {
+        if (engine.bundled) return true
         val pp = engine.ppEngine()
         return if (pp == null) MangaOcrModel.isInstalled(context)
         else PpOcrModel.isInstalled(context, pp)
@@ -187,13 +202,16 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
 
         private const val MANGA_OCR_NAME = "Manga OCR"
 
-        /** The three engines, in the order the settings screen shows them (Manga OCR first). */
+        private const val ML_KIT_NAME = "ML Kit"
+
+        /** Every engine, in the order the settings screen shows them (the bundled ML Kit first). */
         private val ENGINES = RecognitionMode.entries
 
         private const val CODE_STATUS_FAILED = "RECOGNITION_STATUS_FAILED"
         private const val CODE_INVALID_MODE = "INVALID_RECOGNITION_MODE"
         private const val CODE_SAVE_FAILED = "RECOGNITION_MODE_SAVE_FAILED"
         private const val CODE_INVALID_ENGINE = "INVALID_RECOGNITION_ENGINE"
+        private const val CODE_ALREADY_BUNDLED = "ENGINE_ALREADY_BUNDLED"
         private const val CODE_DOWNLOAD_IN_PROGRESS = "DOWNLOAD_IN_PROGRESS"
         private const val CODE_DOWNLOAD_CANCELLED = "DOWNLOAD_CANCELLED"
         private const val CODE_DOWNLOAD_FAILED = "RECOGNITION_DOWNLOAD_FAILED"

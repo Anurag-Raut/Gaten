@@ -139,17 +139,19 @@ internal suspend fun runLookup(
     return withContext(Dispatchers.Default) {
         mangaLookupResult(
             reading,
-            if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) },
-            lookupUnreadableMessage(context)
+            if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
         )
     }
 }
 
-/** Rejects failed recognition instead of silently answering from the detector's text. */
+/**
+ * Rejects a failed recognition instead of silently answering with an empty result: a reading that
+ * holds no Japanese is no reading, and the reader gets [error] with no words.
+ */
 internal fun mangaLookupResult(
     reading: String?,
     lookup: (String) -> List<DictEntry>,
-    error: String = unreadableMessage(RecognitionMode.MANGA_OCR)
+    error: String = UNREADABLE_READING
 ): LookupResult {
     if (acceptedReading(reading) == null) {
         return LookupResult("", emptyList(), error)
@@ -158,53 +160,15 @@ internal fun mangaLookupResult(
 }
 
 /**
- * What a failed read tells the reader.
+ * What a failed read tells the reader: retry.
  *
- * With a viable engine — the selected one installed, or the Manga OCR fallback installed — a failed
- * read keeps the retry wording: Manga OCR when it is the selected engine and ran, text recognition
- * otherwise (a PP engine, or a fallback that may have been either engine).
- *
- * With neither installed, nothing ran and retrying is pointless, so the message points at Settings:
- * "download this engine or choose an installed engine" when some other engine is already installed
- * (the reader must pick it; there is no automatic reroute), and "no OCR model is installed" when the
- * device has none.
- *
- * Pure, so every branch is unit-tested.
+ * The bundled ML Kit always reads, so every engine failure already ends in an ML Kit reading of the
+ * crop and this message appears only when even that held no Japanese. There is no "download a model"
+ * advice to give and no install state to probe: a missing downloadable engine is not a failure, it
+ * is a fallback.
  */
-internal fun unreadableMessage(
-    mode: RecognitionMode,
-    selectedInstalled: Boolean = true,
-    mangaInstalled: Boolean = true,
-    anyEngineInstalled: Boolean = true
-): String {
-    if (selectedInstalled || mangaInstalled) {
-        return if (mode == RecognitionMode.MANGA_OCR && selectedInstalled) {
-            "Manga OCR could not read this text. Please select it again."
-        } else {
-            "Text recognition could not read this text. Please select it again."
-        }
-    }
-    return if (anyEngineInstalled) {
-        "Download this engine or choose an installed engine in Settings › Text recognition."
-    } else {
-        "No OCR model is installed. Download one in Settings › Text recognition."
-    }
-}
-
-/** [unreadableMessage] for the selected mode read from [context], with install state probed. */
-private fun lookupUnreadableMessage(context: Context): String {
-    val mode = RecognitionPreference.mode(context)
-    val pp = mode.ppEngine()
-    val selectedInstalled = if (pp == null) {
-        MangaOcrModel.isInstalled(context)
-    } else {
-        PpOcrModel.isInstalled(context, pp)
-    }
-    val mangaInstalled = MangaOcrModel.isInstalled(context)
-    val anyInstalled = mangaInstalled ||
-        PpOcrModel.Engine.entries.any { PpOcrModel.isInstalled(context, it) }
-    return unreadableMessage(mode, selectedInstalled, mangaInstalled, anyInstalled)
-}
+internal const val UNREADABLE_READING =
+    "Text recognition could not read this text. Please select it again."
 
 /** Reads an already-cut bitmap with the same foreground OCR and screenshot cache for both gestures. */
 private suspend fun readExactCrop(
@@ -215,8 +179,11 @@ private suspend fun readExactCrop(
 ): String? = withContext(Dispatchers.Default) {
     cache?.setModelRevision(modelRevision(context))
     val started = SystemClock.elapsedRealtime()
+    val bounds = Box(0, 0, crop.width, crop.height)
     val read = suspend {
-        JapaneseOcr.readLineWithMangaOcr(context, crop, Box(0, 0, crop.width, crop.height))
+        // The selected downloadable engine first; the bundled ML Kit reading is the fallback, since
+        // the rectangle cut here may cover text the screen index never held.
+        JapaneseOcr.readLine(context, crop, bounds) ?: JapaneseOcr.readWithMlKit(crop, bounds)
     }
     (if (cache == null) read() else cache.read(box, read)).also {
         Log.d(LOOKUP_TAG, "crop read=${SystemClock.elapsedRealtime() - started}ms")
@@ -241,8 +208,7 @@ internal suspend fun runTapLookup(
     val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
     val reading = readExactCrop(context, crop, box, cache)
     tapLookupResult(line, reading, x, y,
-        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) },
-        error = lookupUnreadableMessage(context))
+        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) })
 }
 
 /** Uses only recognized text; the index supplies geometry for ordering, never dictionary words. */
@@ -253,7 +219,7 @@ internal fun tapLookupResult(
     y: Int,
     lookup: (String) -> List<DictEntry>,
     maxWords: Int = 24,
-    error: String = unreadableMessage(RecognitionMode.MANGA_OCR)
+    error: String = UNREADABLE_READING
 ): LookupResult {
     val text = acceptedReading(reading) ?: return mangaLookupResult(reading, lookup, error)
     val cachedLookup = memoizedLookup(lookup)
