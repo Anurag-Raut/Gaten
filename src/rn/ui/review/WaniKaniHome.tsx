@@ -11,6 +11,11 @@
  * takes the reader to the connection screen. The header's own Refresh control is the one button the
  * page carries; there is no summary line and no count the hub did not confirm.
  *
+ * The two confirmed figures are also drawn, the way Anki's hub draws its own: today's lesson budget
+ * as one bar against the reader's daily goal, and the waiting queues as one distribution bar with
+ * its key. Both come from the same snapshot the rows count from, and both stand down — with the
+ * rows — when nothing is confirmed, work is paused mid-session, or the snapshot says all clear.
+ *
  * While the row the reader acted on is still working, that row says what is happening — Opening
  * reviews…, Opening lessons…, Refreshing — with a spinner, every row goes quiet, and the row's
  * accessibility state is busy. A background re-read does not lock anything: it only adds a quiet
@@ -25,7 +30,14 @@ import {PressableScale} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
-import {MetricPair, useAnalyticsEntrance} from "../analytics/ink";
+import {
+  CountLegend,
+  InlineBar,
+  MetricPair,
+  StackedBar,
+  useAnalyticsEntrance,
+  type DistributionPart,
+} from "../analytics/ink";
 import type {WaniKaniHubState} from "./review-store";
 import type {WaniKaniLearningPreferences} from "../../native/GatenWaniKani";
 import {deriveWaniKaniHub, type HubModuleModel} from "./wanikani-hub-model";
@@ -113,6 +125,9 @@ function HubRowSkeleton({title, minHeight}: {title: string; minHeight: number}) 
   );
 }
 
+/** The accent strengths the available-study bar is drawn from — one hue, two weights. */
+const QUEUE_INTENSITY = [0.2, 0.67] as const;
+
 export function WaniKaniHome({
   hub,
   busy,
@@ -167,10 +182,37 @@ export function WaniKaniHome({
     if (!datedToday) return "Not available for today.";
     return known ? null : "Not tracked yet on this device.";
   };
-  // The analytics page's one-shot entrance: the Today figures sweep in once, when the first of
-  // them is actually known, and never replay on a refresh.
-  const entrance = useAnalyticsEntrance(reviewed != null || learned != null);
-
+  // The two waiting queues as one distribution, from the same snapshot the rows count from: the
+  // accent in two weights, Anki's ready-now bar with one fewer stage. Paused work, a missing
+  // snapshot and a first read still running are nothing to draw — the rows speak for those states —
+  // and a snapshot where nothing waits is the all-clear block, never an empty bar.
+  const queuePaused = hub.pausedReview != null || hub.pausedLesson != null;
+  const queueParts: DistributionPart[] =
+    !busy && !queuePaused && hub.summary != null && hub.connection === "connected"
+      ? [
+          {key: "reviews", label: "Reviews", count: hub.summary.dueNow},
+          {key: "lessons", label: "Lessons", count: hub.summary.lessonsNow},
+        ].map((part, index) => ({
+          ...part,
+          value: String(part.count),
+          color: colors.accent,
+          opacity: QUEUE_INTENSITY[index],
+        }))
+      : [];
+  const queueTotal = queueParts.reduce((sum, part) => sum + part.count, 0);
+  const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
+  // Today's lesson budget against the reader's own daily goal: the bar and its line exist only when
+  // the count and the goal it is measured against are both known for today.
+  const dailyLimit = prefs?.dailyLimit ?? null;
+  const budgetShare =
+    learned != null && dailyLimit != null && dailyLimit > 0 ? learned / dailyLimit : null;
+  const budgetNote = budgetShare == null ? null : `Learned today · ${learned} of ${dailyLimit}`;
+  const budgetLabel =
+    budgetShare == null ? null : `Lesson budget, ${learned} of ${dailyLimit} used today`;
+  // The analytics page's one-shot entrance: the figures sweep in once, when the first of them is
+  // actually known, and never replay on a refresh. The bars wait on the same sweep, so a page whose
+  // only known figures are the queues is not left uncounted.
+  const entrance = useAnalyticsEntrance(reviewed != null || learned != null || queueTotal > 0);
   const pressFor = (model: HubModuleModel) => {
     switch (model.tap) {
       case "reviews":
@@ -330,9 +372,37 @@ export function WaniKaniHome({
                   entrance={entrance}
                 />
               </View>
+              {budgetNote != null && (
+                <View
+                  style={styles.todayBudget}
+                  accessible
+                  accessibilityLabel={budgetLabel ?? undefined}
+                >
+                  <InlineBar share={budgetShare ?? 0} color={colors.accent} entrance={entrance} />
+                  <Text style={[styles.todayBudgetCaption, {color: colors.onSurfaceVariant}]}>
+                    {budgetNote}
+                  </Text>
+                </View>
+              )}
             </>
           )}
           <SectionCaption>Available study</SectionCaption>
+          {queueParts.length > 0 && queueTotal > 0 && (
+            <View style={styles.studyChart}>
+              <StackedBar
+                segments={queueParts}
+                selectedKey={selectedQueue}
+                onSelect={setSelectedQueue}
+                entrance={entrance}
+              />
+              <CountLegend
+                items={queueParts}
+                selectedKey={selectedQueue}
+                onSelect={setSelectedQueue}
+                entrance={entrance}
+              />
+            </View>
+          )}
           {sectionFor(reviews)}
           {sectionFor(lessons)}
           {sharedCaveat != null && (
@@ -393,6 +463,12 @@ const styles = StyleSheet.create({
   },
   todayCaption: {flex: 1, marginTop: 0, marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0},
   todayMetrics: {marginTop: 12},
+  // The lesson budget rides under the Today pair: one bar, then the goal line in the quiet ink.
+  todayBudget: {marginTop: 14},
+  todayBudgetCaption: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: 8},
+  // The distribution rides the caption's own rule: a touch of air above, a step below before the
+  // first row.
+  studyChart: {marginTop: 2, marginBottom: 6},
   dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14, fontFamily: APP_FONT},
   dialogParagraph: {fontFamily: APP_FONT, fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
   notice: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: spacing.m, marginBottom: spacing.xs},
