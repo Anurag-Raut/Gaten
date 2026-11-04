@@ -27,12 +27,14 @@ data class OcrLine(val text: String, val bounds: Box)
 /**
  * On-device Japanese OCR for a single cropped box.
  *
- * ML Kit finds lines and their boxes. The reader's selected mode recognizes them: Manga OCR by
- * default, or one of the two PP-OCRv6 engines ([RecognitionMode]). Every engine is downloaded on
- * demand in Settings and never ships in the app, so a read can only use an installed one. Every
- * path that reads a box — the overlay's index line by line, and a circle's whole selection — reads
- * it through [readLineWithMangaOcr], so they crop and route the same way. The name stays for the
- * callers; it now selects the engine rather than always running manga-ocr.
+ * ML Kit finds lines and their boxes, and is also the bundled recognizer: [RecognitionMode.ML_KIT]
+ * reads with the ML Kit pass the screen index already holds, so a fresh install reads with nothing
+ * to download. [RecognitionMode.MANGA_OCR] and the two PP-OCRv6 engines are downloaded on demand in
+ * Settings and never ship in the app, so a read can only use an installed one; a selected engine
+ * that is missing, fails, or returns blank / placeholder / no-Japanese text falls back to ML Kit.
+ * Every path that reads a box — the overlay's index line by line, and a circle's whole selection —
+ * reads it through [readLine] (or [readWithMlKit] where the index holds no ML Kit reading of the
+ * box), so they crop and route the same way.
  */
 object JapaneseOcr {
     private const val TAG = "GatenOcr"
@@ -78,36 +80,61 @@ object JapaneseOcr {
     }
 
     /**
-     * Reads one box with the selected mode: [RecognitionMode.MANGA_OCR] uses Manga OCR,
-     * [RecognitionMode.PP_MEDIUM] and [RecognitionMode.PP_MANGA] the PP-OCRv6 engines.
+     * Reads one box with the selected mode's downloadable engine: [RecognitionMode.MANGA_OCR] uses
+     * Manga OCR, [RecognitionMode.PP_MEDIUM] and [RecognitionMode.PP_MANGA] the PP-OCRv6 engines.
      *
-     * A PP read falls back to Manga OCR on exactly these triggers: the engine is not installed, the
-     * read fails, or its output is blank, a placeholder, or holds no Japanese. A non-empty Japanese
-     * misread is kept as it is — PP can be confidently wrong. When neither the selected engine nor
-     * the Manga OCR fallback is installed, nothing runs and the caller tells the reader to download
-     * a model; otherwise a failed read keeps the existing retry error.
+     * Returns the reading when the engine produced one worth keeping, and null when it must fall
+     * back to ML Kit: for [RecognitionMode.ML_KIT] there is no engine of its own — the screen index
+     * already holds ML Kit's reading of the box — and for a downloadable engine that is missing,
+     * fails, or returns blank / placeholder / no-Japanese text there is nothing to keep. The index
+     * path keeps ML Kit's own text on null ([ScreenLineReader]); the region path reads the crop with
+     * [readWithMlKit], because the rectangle a circle cut may not be in the index at all.
+     *
+     * A non-empty Japanese misread is kept as it is — an engine can be confidently wrong, and a
+     * wrong-but-Japanese reading is not detectable from its shape.
      *
      * A circle passes the exact crop it cut out of the capture as both [bitmap] and [bounds], so
      * the padding is clamped to that crop's edge and the read cannot reach the lines beside the
      * selection.
      */
-    suspend fun readLineWithMangaOcr(
+    suspend fun readLine(
         context: Context,
         bitmap: Bitmap,
         bounds: Box,
         priority: MangaOcrEngine.Priority = MangaOcrEngine.Priority.FOREGROUND
     ): String? {
         val mode = RecognitionPreference.mode(context)
-        val ppEngine = mode.ppEngine()
-        if (ppEngine != null) {
-            val reading = readWithPpOcr(context, bitmap, bounds, ppEngine, priority)
-            if (!OcrLinePolicy.isUnreadable(reading.orEmpty()) &&
-                JapaneseText.isJapaneseLine(reading.orEmpty())
-            ) {
-                return reading
-            }
+        val engine = mode.ppEngine()
+        val reading = when {
+            engine != null -> readWithPpOcr(context, bitmap, bounds, engine, priority)
+            mode == RecognitionMode.MANGA_OCR -> readWithMangaOcr(context, bitmap, bounds, priority)
+            else -> null
         }
-        return readWithMangaOcr(context, bitmap, bounds, priority)
+        return reading?.takeIf {
+            !OcrLinePolicy.isUnreadable(it) && JapaneseText.isJapaneseLine(it)
+        }
+    }
+
+    /**
+     * The ML Kit reading of [bounds]: the bundled recognizer, and the fallback for a downloadable
+     * engine that read nothing usable.
+     *
+     * The screen index already holds ML Kit's reading of every line it detected, so the index path
+     * does not come here — only a region the index may not cover (a circle or a tap on a line) needs
+     * this re-read. The crop is the padded, clamped line box in its original pixels; ML Kit does its
+     * own preprocessing. Null when the crop cannot be cut or the pass fails, and never a partial
+     * answer: a failed pass is nothing to read, which the caller answers as unreadable.
+     */
+    suspend fun readWithMlKit(bitmap: Bitmap, bounds: Box): String? {
+        val crop = rgbCrop(bitmap, bounds) ?: return null
+        return try {
+            detectLines(crop).takeIf { it.isNotEmpty() }?.joinToString("\n") { it.text }
+        } catch (e: OutOfMemoryError) {
+            Log.w(TAG, "ML Kit crop ran out of memory for $bounds", e)
+            null
+        } finally {
+            if (crop !== bitmap) crop.recycle()
+        }
     }
 
     /**

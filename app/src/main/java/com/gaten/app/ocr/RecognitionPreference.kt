@@ -11,30 +11,43 @@ import android.content.Context
 /**
  * The recognizer every lookup reads with, chosen by the reader.
  *
- * [MANGA_OCR] is the default, [PP_MEDIUM] and [PP_MANGA] the PP-OCRv6 engines: [PP_MEDIUM] suits
- * screen text and novels, [PP_MANGA] suits manga, stylized lettering and video thumbnails. No engine
- * ships in the app — each is an explicit download in Settings that works offline afterwards,
- * and so a mode can be selected before its model is installed. There is no automatic image
- * classifier: the mode is the reader's manual choice, and an unreadable selected engine falls back
- * to Manga OCR at read time when Manga OCR is installed.
+ * [ML_KIT] is the default and always available: its Japanese recognizer is bundled, so a fresh
+ * install reads with nothing to download. [MANGA_OCR], [PP_MEDIUM] and [PP_MANGA] are optional:
+ * each is an explicit download in Settings that works offline afterwards, so a mode can be selected
+ * before its model is installed, and a selected engine that is missing, fails, or returns nothing
+ * usable falls back to ML Kit at read time. [PP_MEDIUM] is the recommended download — it suits
+ * screen text and novels; [PP_MANGA] suits manga, stylized lettering and video thumbnails. There is
+ * no automatic image classifier: the mode is the reader's manual choice.
  */
-enum class RecognitionMode(val id: String) {
+enum class RecognitionMode(
+    val id: String,
+    /** Bundled with the app: nothing to download, and always installed. */
+    val bundled: Boolean = false,
+    /** Shown with a "Recommended" marker in the settings screen. */
+    val recommended: Boolean = false
+) {
+    ML_KIT("ml_kit", bundled = true),
     MANGA_OCR("manga_ocr"),
-    PP_MEDIUM("medium"),
+    PP_MEDIUM("medium", recommended = true),
     PP_MANGA("manga");
 
-    /** The PP-OCR engine this mode reads with, or null for Manga OCR. */
+    /** The PP-OCR engine this mode reads with, or null for the bundled ML Kit and for Manga OCR. */
     fun ppEngine(): PpOcrModel.Engine? = when (this) {
-        MANGA_OCR -> null
+        ML_KIT, MANGA_OCR -> null
         PP_MEDIUM -> PpOcrModel.Engine.MEDIUM
         PP_MANGA -> PpOcrModel.Engine.MANGA
     }
 
     companion object {
-        /** The default mode; its model is downloaded on demand like the others. */
-        val DEFAULT = MANGA_OCR
+        /** The default mode: the bundled ML Kit recognizer, ready on a fresh install. */
+        val DEFAULT = ML_KIT
 
-        /** Unknown or legacy values, including a missing one, mean the default mode. */
+        /**
+         * The persisted value as a mode; a missing, unknown, or retired value (including the old
+         * ML Kit-era keys) means the default. The migration is deliberate: a reader who never chose
+         * an engine had no stored value and moves to ML Kit, the new default, while an explicit
+         * `manga_ocr` / `medium` / `manga` choice is kept so no one's selection changes under them.
+         */
         fun fromId(id: String?): RecognitionMode =
             RecognitionMode.entries.firstOrNull { it.id == id } ?: DEFAULT
     }

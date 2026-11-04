@@ -1,31 +1,35 @@
 # Gaten OCR engines
 
 Status: current, documentation only. Describes the engines that turn a text line into text, their
-pinned sources, limits and licence. All three are downloaded on demand; none ship in the APK. It
-records what was verified from the upstream files and claims no Android or device verification.
+pinned sources, limits and licence. ML Kit is bundled and is the default; the other three are
+downloaded on demand and none of them ship in the APK. It records what was verified from the
+upstream files and claims no Android or device verification.
 
 ## Summary
 
-ML Kit finds *where* the text is (one box per line, one box per character for hit-testing). A
-recognition engine turns each line box's crop into text. There are three, chosen manually in
-**Settings → Text recognition**; there is no automatic image classifier.
+ML Kit finds *where* the text is (one box per line, one box per character for hit-testing) and is
+also the recognizer that ships with Gaten: on a fresh install, with nothing downloaded, lookups read
+with ML Kit's own Japanese text recognition. A downloadable engine turns each line box's crop into
+text and is the reader's manual choice in **Settings → Text recognition**; there is no automatic
+image classifier.
 
 | Engine | Role | Bundled? |
 | --- | --- | --- |
-| Manga OCR (manga-ocr, ViT + BERT, int8 ONNX, 116.6 MB) | Default recognizer, and the fallback for the other two | No, downloaded |
-| PP-OCRv6 Medium (`PP-OCRv6_medium_rec`, 76.6 MB) | Optional: ordinary screen and novel text | No, downloaded |
+| ML Kit (Japanese text recognition, `com.google.mlkit:text-recognition-japanese`) | Default recognizer out of the box, and the fallback for every downloadable engine | Yes |
+| PP-OCRv6 Medium (`PP-OCRv6_medium_rec`, 76.6 MB) | Recommended download: ordinary screen and novel text | No, downloaded |
 | PP-OCRv6 Manga v0.2 (`manga_rec_v0.2`, 21.2 MB) | Optional: manga lettering, stylized fonts, outlined thumbnails | No, downloaded |
+| Manga OCR (manga-ocr, ViT + BERT, int8 ONNX, 116.6 MB) | Optional: Japanese and stylized text | No, downloaded |
 
-None of the three selectable recognition engines bundle their weights; ML Kit's text-detection model
-stays included and detection is unchanged. A fresh install has no recognizer until at least one
-engine is downloaded; the selected engine, or Manga OCR for its fallback, must be present.
+None of the three downloadable engines ships its weights. ML Kit's detection *and* recognition
+models stay included, so a fresh install reads text out of the box; a download only replaces ML
+Kit's reading with a specialized engine where the reader chooses one.
 
 ## Pinned sources
 
 Every file is pinned to one immutable revision and checked by exact size and SHA-256 before it is
 installed. The checksums below match the local files the build previously fetched.
 
-### Manga OCR (default)
+### Manga OCR
 
 | File | Pinned source | Bytes | SHA-256 |
 | --- | --- | --- | --- |
@@ -66,16 +70,21 @@ text; the PP pair instead emits CTC logits that need the blank/repeat collapse.
 
 ## How Gaten uses them
 
-`RecognitionMode` is one of `manga_ocr` (default), `medium`, `manga`. The choice is the reader's;
-there is no classifier. Manga OCR is the default and the fallback: at read time a PP engine that is
-not installed, fails, or returns blank / placeholder / no-Japanese text falls back to Manga OCR,
-which is also what reads every line when `manga_ocr` is selected. Because the PP models are
-recognizers, a fallback only happens when they produce nothing usable, not when they produce
-confident-but-wrong text. If neither the chosen engine nor Manga OCR is installed, there is nothing
-to read until one is downloaded.
+`RecognitionMode` is one of `ml_kit` (default), `manga_ocr`, `medium`, `manga`. The choice is the
+reader's; there is no classifier. ML Kit is bundled and always installed, so it is what a fresh
+install reads with, and it is the fallback for every downloadable engine: at read time an engine
+that is not installed, fails, or returns blank / placeholder / no-Japanese text leaves ML Kit's
+reading in place — the screen index's own reading of the line for the overlay, or a fresh ML Kit
+read of the crop for a circle or a tap, whose rectangle the index may not cover. Because the engines
+are recognizers, a fallback only happens when one produces nothing usable, not when it produces
+confident-but-wrong text. With `ml_kit` selected there is nothing to fall back from: the ML Kit
+reading is the answer.
 
-All three engines download the same way, from the same installer helper, and only from an explicit
-**Download** button; selecting a mode alone never downloads anything.
+PP-OCRv6 Medium is the recommended download; Manga OCR is an ordinary optional engine, no longer
+privileged as the default or the fallback.
+
+All three downloadable engines download the same way, from the same installer helper, and only from
+an explicit **Download** button; selecting a mode alone never downloads anything.
 
 - The download is manual and explicit: a confirmation shows the model's name and size and warns that
   Wi-Fi is recommended and mobile data charges may apply. It runs over whatever connection the device
@@ -89,7 +98,7 @@ All three engines download the same way, from the same installer helper, and onl
   Manga OCR keeps its existing `files/manga-ocr/` location.
 - The installed revision is recorded so a source-revision change is noticed.
 - Nothing is downloaded until the reader presses Download; afterwards every engine runs offline. No
-  import step, and no recognizer weights in the APK.
+  import step, and no recognizer weights in the APK beyond ML Kit's own.
 
 At most one PP engine session is resident: switching between the two PP engines closes the previous
 one. A Manga OCR session can also remain after it has been used as a fallback, until it goes idle.
@@ -131,7 +140,7 @@ up to roughly 12 MB at `T` = 160.
 Not native for either family. PP: a crop taller than wide is rotated a quarter turn
 counter-clockwise before it is fed (`PpOcrGeometry` / `PpOcrPreprocess`), matching the upstream
 reference pipeline (`cv2.ROTATE_90_COUNTERCLOCKWISE`). Manga OCR reads a single line box as cropped.
-Detection always comes from ML Kit.
+Detection always comes from ML Kit, and with `ml_kit` selected so does recognition.
 
 ### Multiline regions
 
@@ -142,7 +151,9 @@ region silently. If a multiline or vertical selection reads badly, try another e
 
 ### Android, ONNX Runtime 1.31, CPU FP32
 
-All three run on the ONNX Runtime Mobile the app uses (`com.microsoft.onnxruntime:onnxruntime-android:1.31.0`).
+The three downloadable engines run on the ONNX Runtime Mobile the app uses
+(`com.microsoft.onnxruntime:onnxruntime-android:1.31.0`). The bundled ML Kit recognizer runs on ML
+Kit's own runtime, which the app already includes for detection.
 
 - ABI: the 1.31.0 AAR ships `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`; Gaten packages `arm64-v8a`,
   `armeabi-v7a` and `x86_64` (`app/build.gradle.kts` split). One FP32 ONNX (the PP files; the Manga
@@ -155,8 +166,11 @@ All three run on the ONNX Runtime Mobile the app uses (`com.microsoft.onnxruntim
 
 ## Attribution and licence
 
-All three engines and both dictionaries are Apache License 2.0.
+The three downloadable engines and both dictionaries are Apache License 2.0; ML Kit is Google's,
+under the ML Kit terms of service.
 
+- ML Kit Japanese text recognition: Google LLC, bundled and used on-device
+  ([ML Kit terms](https://developers.google.com/ml-kit/terms)).
 - Manga OCR: [kha-white/manga-ocr](https://github.com/kha-white/manga-ocr) (Apache-2.0) and its
   int8 ONNX export [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX)
   (Apache-2.0), vocabulary from [kha-white/manga-ocr-base](https://huggingface.co/kha-white/manga-ocr-base)
@@ -167,8 +181,10 @@ All three engines and both dictionaries are Apache License 2.0.
 
 The Apache-2.0 text is bundled at `app/src/main/assets/licenses/PP-OCRv6-Apache-2.0.txt` (PP engines)
 and `app/src/main/assets/licenses/manga-ocr-Apache-2.0.txt` (Manga OCR); the attributions are
-recorded in `NOTICE` and the README credits. Gaten does not redistribute the weights; the reader
-downloads them from the pinned locations above. ONNX Runtime (Microsoft, MIT) is already attributed.
+recorded in `NOTICE` and the README credits. Gaten does not redistribute the downloadable weights;
+the reader downloads them from the pinned locations above. ML Kit's models are bundled through
+Google's own dependency, under the ML Kit terms. ONNX Runtime (Microsoft, MIT) is already
+attributed.
 
 ## Verification
 
@@ -178,16 +194,14 @@ matches the sizes/hashes above and the upstream Hugging Face metadata
 `aa6573bd…`). The PP-OCRv6 ONNX files and dictionary copies were downloaded over HTTPS and hashed
 (all match the pins); each PP graph's input/output names, shapes, IR version, opset and parameter
 count were read with `onnx` (Medium IR 6 / opset 11, ~19.1M parameters; Manga IR 7 / opset 14,
-~5.27M). On the current manual-confirm, any-connection revision: `:app:compileDebugKotlin`,
-`:app:compileDebugUnitTestKotlin` and `:app:mergeDebugAssets` succeeded (BUILD SUCCESSFUL, about
-10 s), `./node_modules/.bin/tsc --noEmit` succeeded, `git diff --check` was clean, the release workflow
-YAML parsed, and the merged assets hold no Manga OCR or PP-OCRv6 ONNX weights along with both
-Apache-2.0 licence texts. The build no longer fetches the Manga OCR weights and the stale source
-weights are excluded.
+~5.27M). On the bundled-ML-Kit, recommended-PP-Medium revision: `./node_modules/.bin/tsc --noEmit`
+succeeded, `:app:compileDebugKotlin`, `:app:compileDebugUnitTestKotlin`,
+`:app:testDebugUnitTest` and `:app:assembleDebug` succeeded, and the merged assets hold no Manga OCR
+or PP-OCRv6 ONNX weights along with both Apache-2.0 licence texts. The build does not fetch any
+recognizer weights; ML Kit's models arrive with its own dependency.
 
-Not done, and not claimed: no Android or device verification — no emulator, no on-device inference
-or timing, no app UI verification. The tests were compiled but not executed, no full APK was built
-locally, and no APK hash is claimed. The authorized release workflow builds and signs the APK and AAB
-remotely; nothing here claims that release or Play publishing has succeeded. No inference was run for
-this revision. The PP `T`-width relation was observed only at multiples of 8; a dynamic-width
-implementation may not hold to it between them.
+Not done, and not claimed here: no on-device inference timing or accuracy comparison between
+engines, and no measured memory figure. The PP `T`-width relation was observed only at multiples of
+8; a dynamic-width implementation may not hold to it between them. The authorized release workflow
+builds and signs the APK and AAB remotely; nothing here claims that release or Play publishing has
+succeeded.
