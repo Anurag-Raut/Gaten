@@ -1,0 +1,18 @@
+--------- beginning of main
+11-04 15:40:45.690  4130  4130 D Gaten   : Trigger broadcast received: com.gaten.action.TRIGGER_LOOKUP
+11-04 15:40:45.693  4130  4130 D Gaten   : Trigger accepted (+0 ms since the trigger)
+11-04 15:40:45.693  4130  4130 D Gaten   : Starting the ordered capture pipeline (fromShade=false, +0 ms since the trigger)
+11-04 15:40:45.693  4130  4130 D Gaten   : performCapture called (+0 ms since the trigger)
+11-04 15:40:45.693  4130  4130 D Gaten   : takeScreenshot requested (+0 ms since the trigger)
+11-04 15:40:45.704  4130  4651 D Gaten   : Screenshot delivered (+12 ms since the trigger)
+11-04 15:40:45.760  4130  4254 D Gaten   : Early screen scan submitted (+67 ms since the trigger)
+11-04 15:40:45.774  4130  4130 D Gaten   : Overlay window added for a 1080x2400 capture (+81 ms since the trigger)
+11-04 15:40:45.782  4130  4130 D Gaten   : Mapping: bitmap 1080x2400, view 1080x2400, origin (0, 0), scale 1.0x1.0
+11-04 15:40:45.807  4130  4130 D Gaten   : Frozen frame on screen (+115 ms since the trigger)
+11-04 15:40:45.885  4130  4130 D Gaten   : Awaiting capture's early screen scan
+11-04 15:40:45.907  4130  4661 D Gaten   : Media pause ran 100 ms after it was requested
+11-04 15:40:45.918  4130  4661 D Gaten   : No notification access - pausing with a media key event instead
+11-04 15:40:49.326  4130  4247 D GatenOcr: Indexed 20 ML Kit lines in 3564 ms
+11-04 15:40:49.328  4130  4247 D Gaten   : Early screen scan ready in 3569 ms
+11-04 15:40:49.331  4130  4130 D Gaten   : Screen scan ready in 3445 ms (20 lines)
+11-04 15:40:49.375  4130  4246 D Gaten   : manga-ocr prefetch finished (20 lines)

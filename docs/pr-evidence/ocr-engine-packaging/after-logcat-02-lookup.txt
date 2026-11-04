@@ -1,0 +1,6 @@
+--------- beginning of main
+11-04 15:40:54.730  4130  4130 D Gaten   : Tap hit line 3
+11-04 15:40:55.209  4130  4254 D GatenLookup: crop read=476ms
+11-04 15:40:55.222  4130  4130 D Gaten   : Tap complete in 491 ms
+11-04 15:41:03.291  4130  4130 D Gaten   : Overlay window removed (resumed=false)
+11-04 15:41:03.292  4130  4247 I GatenOcr: Released the idle OCR models
