@@ -149,7 +149,11 @@ function reviewsModel(hub: WaniKaniHubState, now: number): HubModuleModel {
   }
   const session: WaniKaniSession | null = hub.pausedReview;
   if (session != null) {
-    const remaining = Math.max(0, session.items.length - session.index);
+    // The queue is prompt-ordered, so how much is left is the subjects still owing a prompt, not the
+    // distance to the subject on screen (a reading can bring an earlier subject back into view).
+    const remaining = new Set(
+      session.order.slice(session.cursor).map((prompt) => prompt.index)
+    ).size;
     return {
       ...reviewsRow(
         `${remaining} ${countLabel(remaining, "review left in session", "reviews left in session")}`,

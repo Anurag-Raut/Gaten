@@ -276,7 +276,18 @@ test('one queue failure leaves the other queue actionable', () => {
 });
 
 test('paused review session takes priority and reports remaining queue and progress', () => {
-  const pausedReview = {items: [{}, {}, {}], index: 1, doneParts: 2, totalParts: 6};
+  const pausedReview = {
+    items: [{}, {}, {}],
+    order: [
+      {index: 0, part: 'meaning'}, {index: 0, part: 'reading'},
+      {index: 1, part: 'meaning'}, {index: 1, part: 'reading'},
+      {index: 2, part: 'meaning'}, {index: 2, part: 'reading'},
+    ],
+    cursor: 2,
+    index: 1,
+    doneParts: 2,
+    totalParts: 6,
+  };
   const [reviews] = models(hub({summary: snapshot(), pausedReview}));
   assert.equal(reviews.tap, 'reviews');
   assert.equal(reviews.complete, false);

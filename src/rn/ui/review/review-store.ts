@@ -78,16 +78,27 @@ export interface ReviewCard {
  */
 export interface WaniKaniSession {
   items: WaniKaniReviewItem[];
+  /** The prompts the queue asks, in order; `order[cursor]` is the one on screen. */
+  order: WaniKaniPrompt[];
+  /** How far through `order` the reader is. */
+  cursor: number;
   /** The parts the whole queue asks for: a meaning always, and a reading when the subject has one. */
   totalParts: number;
   /** The parts finished before the one on screen, across the whole queue. */
   doneParts: number;
+  /** The subject on screen and the part of it being asked — `order[cursor]`, kept for the views. */
   index: number;
   part: "meaning" | "reading";
   /** What is in the field right now. */
   entry: string;
+  /** The wrong answers recorded for the subject on screen, which is what its review reports. */
   incorrectMeaning: number;
   incorrectReading: number;
+  /**
+   * The wrong answers recorded for every subject, kept until that subject's review is sent. One
+   * subject's meaning and reading are asked apart, so a miss has to outlive leaving its own prompt.
+   */
+  wrong: {meaning: number; reading: number}[];
   feedback: {tone: "right" | "wrong"; text: string} | null;
   /**
    * True once a part has been answered wrongly and not yet answered correctly: WaniKani asks for the
@@ -96,11 +107,12 @@ export interface WaniKaniSession {
    */
   retrying: boolean;
   /**
-   * `reviewed` is the wrong answer's own stop: the right answer is on screen and the reader must
-   * continue (then type it) before the part can finish. `submitting` and `submitFailed` are the
-   * review being sent; a right answer goes straight there, as WaniKani's own flow does.
+   * `reviewed` is the wrong answer's own stop and `correct` the right answer's: the result is on
+   * screen and the reader continues (the wrong one also types the right answer) before the subject
+   * moves on. `submitting` and `submitFailed` are the review being sent, which a correct answer
+   * reaches when the reader continues from the subject's last part.
    */
-  phase: "answering" | "reviewed" | "submitting" | "submitFailed";
+  phase: "answering" | "correct" | "reviewed" | "submitting" | "submitFailed";
   /** Why the last submission failed, or null when it has not failed — or the token was refused. */
   failure: WaniKaniFailure | null;
   /** True when the submission was refused for the token rather than for the network. */
@@ -324,6 +336,151 @@ function partsOf(item: WaniKaniReviewItem): number {
   return item.readings.length > 0 ? 2 : 1;
 }
 
+/** One prompt of a review session: the subject at `index`, and which part of it is asked. */
+export interface WaniKaniPrompt {
+  index: number;
+  part: "meaning" | "reading";
+}
+
+/**
+ * How far apart, in prompts, a subject's meaning and reading are asked. WaniKani's own queue asks a
+ * subject's two parts one after the other (a gap of one); Gaten spaces them by at least
+ * `REVIEW_PROMPT_MIN_GAP` prompts and never more than `REVIEW_PROMPT_MAX_GAP`, so the same subject
+ * never asks for both back to back.
+ */
+export const REVIEW_PROMPT_MIN_GAP = 5;
+export const REVIEW_PROMPT_MAX_GAP = 10;
+
+/**
+ * The prompts one queue asks with every reading placed exactly [gap] prompts after its meaning.
+ * Meanings are asked in subject order; a reading is asked when its own slot comes round, which makes
+ * the queue a run of meanings, then a run of their readings, and so on.
+ */
+function orderWithGap(parts: number[], gap: number): WaniKaniPrompt[] {
+  const total = parts.reduce((sum, count) => sum + count, 0);
+  const order: WaniKaniPrompt[] = [];
+  const meaningAt: number[] = [];
+  const asked = new Set<number>();
+  let next = 0;
+  while (order.length < total) {
+    const position = order.length;
+    const due = meaningAt.findIndex((at, index) => at + gap === position && !asked.has(index));
+    if (due !== -1) {
+      order.push({index: due, part: "reading"});
+      asked.add(due);
+      continue;
+    }
+    if (next < parts.length) {
+      order.push({index: next, part: "meaning"});
+      if (parts[next] > 1) meaningAt[next] = position;
+      next += 1;
+      continue;
+    }
+    // Short queue: no meaning is left to hold the window open, so the readings still owed are asked
+    // at the earliest positions left — the documented fallback.
+    const owed = parts.findIndex((count, index) => count > 1 && !asked.has(index));
+    order.push({index: owed, part: "reading"});
+    asked.add(owed);
+  }
+  return order;
+}
+
+/** How one order rates: fewest adjacent gaps, then fewest short ones, then the tightest shortest gap. */
+function rateOrder(order: WaniKaniPrompt[]): number[] {
+  const meaningAt = new Map<number, number>();
+  let adjacent = 0;
+  let short = 0;
+  let shortest = Infinity;
+  order.forEach((prompt, position) => {
+    if (prompt.part === "meaning") {
+      meaningAt.set(prompt.index, position);
+      return;
+    }
+    const distance = position - (meaningAt.get(prompt.index) ?? position);
+    if (distance < 2) adjacent += 1;
+    if (distance < REVIEW_PROMPT_MIN_GAP) short += 1;
+    shortest = Math.min(shortest, distance);
+  });
+  return [adjacent, short, shortest];
+}
+
+/** Whether rating [a] beats [b], compared left to right. */
+function ratesBetter(a: number[], b: number[]): boolean {
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return a[index] < b[index];
+  }
+  return false;
+}
+
+/**
+ * The last resort for a reading the queue left no room behind: its meaning is swapped with the
+ * meaning of a subject that has no reading, which needs no room of its own, so the reading gains the
+ * room without its gap leaving the window. A queue with no such meaning ahead of it has no other
+ * order, and the reading follows its meaning directly.
+ */
+function repairAdjacent(order: WaniKaniPrompt[]): WaniKaniPrompt[] {
+  const repaired = order.slice();
+  const hasReading = new Set(
+    repaired.filter((prompt) => prompt.part === "reading").map((prompt) => prompt.index)
+  );
+  const meaningAt = new Map<number, number>();
+  repaired.forEach((prompt, position) => {
+    if (prompt.part === "meaning") meaningAt.set(prompt.index, position);
+  });
+  repaired.forEach((prompt, position) => {
+    if (prompt.part !== "reading") return;
+    const meaning = meaningAt.get(prompt.index);
+    if (meaning == null || position - meaning >= 2) return;
+    let swap = -1;
+    let closest = Infinity;
+    for (let at = 0; at < meaning; at += 1) {
+      const candidate = repaired[at];
+      if (candidate.part !== "meaning" || hasReading.has(candidate.index)) continue;
+      const distance = position - at;
+      if (distance > REVIEW_PROMPT_MAX_GAP || Math.abs(distance - REVIEW_PROMPT_MIN_GAP) >= closest) {
+        continue;
+      }
+      closest = Math.abs(distance - REVIEW_PROMPT_MIN_GAP);
+      swap = at;
+    }
+    if (swap === -1) return;
+    const moved = repaired[swap];
+    repaired[swap] = repaired[meaning];
+    repaired[meaning] = moved;
+    meaningAt.set(repaired[swap].index, swap);
+    meaningAt.set(repaired[meaning].index, meaning);
+  });
+  return repaired;
+}
+
+/**
+ * The prompts a queue asks, in the order they are asked. Every subject's meaning comes first and its
+ * reading is asked at least `REVIEW_PROMPT_MIN_GAP` and at most `REVIEW_PROMPT_MAX_GAP` prompts later,
+ * so the two parts of one subject are never asked next to each other the way WaniKani's own queue
+ * asks them.
+ *
+ * The spacing is a run of meanings then a run of their readings, and the run length is taken from the
+ * window: the length whose tail is either nothing or a whole run keeps every gap in the window, and
+ * the widest shortest gap breaks any remaining tie. A queue too short to hold the window open —
+ * nothing left to ask between the last meaning and the readings still owed — degrades to asking those
+ * readings at the earliest positions left, still never adjacent when the queue has room for that.
+ *
+ * `parts` is one entry per subject: 2 when it has a reading to ask, 1 when it does not.
+ */
+export function buildWaniKaniPromptOrder(parts: number[]): WaniKaniPrompt[] {
+  let best = orderWithGap(parts, REVIEW_PROMPT_MIN_GAP);
+  let bestRate = rateOrder(best);
+  for (let gap = REVIEW_PROMPT_MIN_GAP + 1; gap <= REVIEW_PROMPT_MAX_GAP; gap += 1) {
+    const candidate = orderWithGap(parts, gap);
+    const rate = rateOrder(candidate);
+    if (ratesBetter(rate, bestRate)) {
+      best = candidate;
+      bestRate = rate;
+    }
+  }
+  return repairAdjacent(best);
+}
+
 /**
  * How many lessons one batch teaches before quizzing them: WaniKani's own default lesson batch size.
  * The API lets a client choose, and the account's stored preference is not read here - that would be
@@ -331,17 +488,64 @@ function partsOf(item: WaniKaniReviewItem): number {
  */
 export const LESSON_BATCH_SIZE = 5;
 
-/** A fresh session over [items], at the first part of the first subject. */
+/** A fresh session over [items], at the first prompt of the spaced queue. */
 function startWaniKaniSession(items: WaniKaniReviewItem[]): WaniKaniSession {
+  const order = buildWaniKaniPromptOrder(items.map(partsOf));
+  const first = order[0] ?? {index: 0, part: "meaning" as const};
   return {
     items,
-    totalParts: items.reduce((total, item) => total + partsOf(item), 0),
+    order,
+    cursor: 0,
+    totalParts: order.length,
     doneParts: 0,
-    index: 0,
-    part: "meaning",
+    index: first.index,
+    part: first.part,
     entry: "",
     incorrectMeaning: 0,
     incorrectReading: 0,
+    wrong: items.map(() => ({meaning: 0, reading: 0})),
+    feedback: null,
+    retrying: false,
+    phase: "answering",
+    failure: null,
+    authRejected: false,
+  };
+}
+
+/**
+ * Records one wrong answer against the subject on screen, in both the per-subject tally and that
+ * subject's own counters. The tally is what survives leaving the prompt, so the subject's review
+ * still reports a meaning miss answered several prompts before its reading.
+ */
+function countWrong(
+  session: WaniKaniSession,
+  part: "meaning" | "reading"
+): Pick<WaniKaniSession, "wrong" | "incorrectMeaning" | "incorrectReading"> {
+  const current = session.wrong[session.index] ?? {meaning: 0, reading: 0};
+  const next =
+    part === "reading"
+      ? {meaning: current.meaning, reading: current.reading + 1}
+      : {meaning: current.meaning + 1, reading: current.reading};
+  return {
+    wrong: session.wrong.map((entry, index) => (index === session.index ? next : entry)),
+    incorrectMeaning: next.meaning,
+    incorrectReading: next.reading,
+  };
+}
+
+/** The session moved to `order[cursor]`, carrying that subject's own wrong counts and a clear field. */
+function atPrompt(session: WaniKaniSession, cursor: number, doneParts: number): WaniKaniSession {
+  const prompt = session.order[cursor];
+  const wrong = session.wrong[prompt.index] ?? {meaning: 0, reading: 0};
+  return {
+    ...session,
+    cursor,
+    index: prompt.index,
+    part: prompt.part,
+    doneParts,
+    entry: "",
+    incorrectMeaning: wrong.meaning,
+    incorrectReading: wrong.reading,
     feedback: null,
     retrying: false,
     phase: "answering",
@@ -1029,12 +1233,13 @@ class ReviewStore {
   }
 
   /**
-   * Checks the answer on screen. A correct one finishes the part — and, when the subject asks for a
-   * reading too, moves the reader to it; a wrong one is counted against the part, shows the right
-   * answer, and asks for it to be typed before the subject moves on, which is WaniKani's own rule.
+   * Checks the answer on screen. A wrong one is counted against the part, shows the right answer, and
+   * asks for it to be typed before the subject moves on, which is WaniKani's own rule. A right one
+   * stops with its result on screen — the reader continues with Enter or the footer, and that
+   * continue is where the next prompt is asked and the review is sent.
    *
-   * Nothing is submitted here: the review is sent when every part of the subject is finished, and
-   * never because a part was merely typed.
+   * Nothing is submitted here: the review is sent when the reader continues past the subject's last
+   * part, and never because a part was merely typed.
    */
   wkCheck() {
     const step = this.state.step;
@@ -1065,16 +1270,12 @@ class ReviewStore {
         if (current.kind !== "wkReview") return;
         const live = current.session;
         if (!correct) {
-          const counted =
-            session.part === "reading"
-              ? { incorrectReading: live.incorrectReading + 1 }
-              : { incorrectMeaning: live.incorrectMeaning + 1 };
           this.set({
             step: {
               kind: "wkReview",
               session: {
                 ...live,
-                ...counted,
+                ...countWrong(live, session.part),
                 // The wrong attempt stays on screen, in red, behind its own `reviewed` stop. The card
                 // does not change and nothing is submitted: `wkContinue` only clears the field for the
                 // retry this rule requires. The feedback names no correct answer - that stays behind
@@ -1088,25 +1289,19 @@ class ReviewStore {
           });
           return;
         }
-        // A right answer needs no stop of its own: it moves straight on, exactly as WaniKani's own
-        // flow does - to the reading when one is still to come, or to the review's one submission.
-        if (session.part === "meaning" && item.readings.length > 0) {
-          this.set({
-            step: {
-              kind: "wkReview",
-              session: {
-                ...live,
-                part: "reading",
-                entry: "",
-                retrying: false,
-                feedback: null,
-                doneParts: live.doneParts + 1,
-              },
+        // A right answer stops on its own card with the answer left in the field, so the keyboard
+        // stays up and Enter can continue. The next prompt is not asked until the reader continues.
+        this.set({
+          step: {
+            kind: "wkReview",
+            session: {
+              ...live,
+              retrying: false,
+              phase: "correct",
+              feedback: { tone: "right", text: "✓ Correct" },
             },
-          });
-          return;
-        }
-        this.submitWaniKani();
+          },
+        });
       } finally {
         this.setBusy(false);
       }
@@ -1114,19 +1309,29 @@ class ReviewStore {
   }
 
   /**
-   * Continue after a wrong answer. WaniKani makes the reader type the right answer before the subject
-   * moves on, so this keeps the same card and prompt: it only clears the field for the retry, leaving
-   * the recorded wrong count and the answer hint in place. It never advances the queue - the next
-   * check decides that.
+   * Continues from either stop. After a wrong answer it keeps the same card and prompt and only
+   * clears the field for the retry WaniKani requires, leaving the recorded wrong count and the answer
+   * hint in place. After a right answer it moves to the next prompt — sending the subject's review
+   * first when this was the subject's last part, so a subject is reported once, when it is finished.
    */
   wkContinue() {
     const step = this.state.step;
     if (step.kind !== "wkReview") return;
     const session = step.session;
-    if (session.phase !== "reviewed" || !session.retrying) return;
-    this.set({
-      step: { kind: "wkReview", session: { ...session, phase: "answering", entry: "" } },
-    });
+    if (session.phase === "reviewed" && session.retrying) {
+      this.set({
+        step: { kind: "wkReview", session: { ...session, phase: "answering", entry: "" } },
+      });
+      return;
+    }
+    if (session.phase !== "correct") return;
+    const item = session.items[session.index];
+    // The subject's last part is its reading when it has one, and its meaning when it does not.
+    if (item != null && session.part === "meaning" && item.readings.length > 0) {
+      this.advanceWaniKani(session, session.doneParts + 1);
+      return;
+    }
+    this.submitWaniKani();
   }
 
   /**
@@ -1175,7 +1380,7 @@ class ReviewStore {
         if (this.pausedReview !== pending) return;
         if (result.status === "accepted") {
           invalidateWaniKaniStats();
-          this.advanceWaniKani(pending);
+          this.advanceWaniKani(pending, pending.doneParts + 1);
           return;
         }
         const rejected = result.status === "authRejected" || result.status === "needsToken";
@@ -1208,16 +1413,16 @@ class ReviewStore {
     this.submitWaniKani();
   }
 
-  /** Settles an accepted review into its retained session, navigating only when it is still visible. */
-  private advanceWaniKani(session: WaniKaniSession) {
+  /**
+   * Settles a finished part into its retained session, navigating only when it is still visible.
+   * `doneParts` is the count after this part; the next prompt, and its subject's own wrong counts,
+   * come from the order, so a reading is asked where it was scheduled rather than right after its
+   * meaning.
+   */
+  private advanceWaniKani(session: WaniKaniSession, doneParts: number) {
     if (this.pausedReview !== session) return;
-    const item = session.items[session.index];
-    // One part was just finished. For a subject with a reading, its meaning was already counted when
-    // the screen moved to the reading, so this adds the part that was on screen, not the whole
-    // subject - which is what keeps the progress line from passing its end.
-    const done = session.doneParts + (item == null ? 0 : 1);
-    const next = session.index + 1;
-    if (next >= session.items.length) {
+    const next = session.cursor + 1;
+    if (next >= session.order.length) {
       const visible =
         this.state.step.kind === "wkReview" && this.state.step.session === session;
       this.pausedReview = null;
@@ -1228,20 +1433,7 @@ class ReviewStore {
       }
       return;
     }
-    this.replacePausedReview(session, {
-      ...session,
-      index: next,
-      part: "meaning",
-      entry: "",
-      incorrectMeaning: 0,
-      incorrectReading: 0,
-      feedback: null,
-      retrying: false,
-      doneParts: done,
-      phase: "answering",
-      failure: null,
-      authRejected: false,
-    });
+    this.replacePausedReview(session, atPrompt(session, next, doneParts));
   }
 
   /** Moves from one teaching card to the next; the last card starts the quiz over the batch. */

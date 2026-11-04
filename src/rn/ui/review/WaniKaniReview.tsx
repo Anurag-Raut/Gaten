@@ -138,6 +138,7 @@ export function WaniKaniReview({
   const reading = session.part === "reading";
   const submitting = session.phase === "submitting";
   const reviewed = session.phase === "reviewed";
+  const correct = session.phase === "correct";
   const failed = session.phase === "submitFailed";
 
   const [revealed, setRevealed] = useState(false);
@@ -181,7 +182,7 @@ export function WaniKaniReview({
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <SubHeader
           title="WaniKani"
-          right={`${session.index + 1} of ${session.items.length}`}
+          right={`${session.cursor + 1} of ${session.totalParts}`}
           onBack={onBack}
         />
         <View style={{paddingHorizontal: contentInset}}>
@@ -217,6 +218,9 @@ export function WaniKaniReview({
               </View>
             </View>
             <View style={styles.answerField}>
+              {/* A correct answer holds the card with the answer in the field: the input stays editable
+                  — and so keeps focus and the keyboard — while it is held and while it is sent, and
+                  Enter continues instead of checking again. */}
               <AnswerInput
                 ref={inputRef}
                 key={`${session.index}:${session.part}`}
@@ -224,7 +228,7 @@ export function WaniKaniReview({
                 onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
                 placeholder={reading ? "こたえ" : "Type the meaning"}
                 selectionColor={colors.accent}
-                editable={!busy && session.phase === "answering"}
+                editable={correct || submitting || (!busy && session.phase === "answering")}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -234,7 +238,8 @@ export function WaniKaniReview({
                 accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
                 style={{color: answerColor}}
                 onSubmitEditing={() => {
-                  if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
+                  if (correct) onContinue();
+                  else if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
                 }}
               />
             </View>
@@ -309,7 +314,7 @@ export function WaniKaniReview({
             disabled={busy}
             onPress={session.authRejected ? onBack : onRetrySubmit}
           />
-        ) : reviewed ? (
+        ) : reviewed || correct ? (
           <FilledAction label="Continue" onPress={onContinue} />
         ) : (
           <FilledAction
