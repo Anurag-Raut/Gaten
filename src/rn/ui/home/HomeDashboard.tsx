@@ -596,6 +596,7 @@ function RecentLookupRow({
       </View>
       {gloss ? (
         <Text
+          numberOfLines={2}
           style={[
             typeScale.bodySmall,
             styles.lookupGloss,
