@@ -29,6 +29,7 @@ import {useTheme} from "../theme";
 import {
   ActionFooter,
   AnswerInput,
+  AnswerShake,
   BusyRow,
   Feedback,
   FilledAction,
@@ -154,7 +155,7 @@ export function WaniKaniLesson({
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
   // The answer's own cue, fired on the judgement and not on the renders that follow it; the key it
-  // returns is what a wrong answer's shake is pinned to.
+  // returns is what the answer field's shake is pinned to.
   const shakeKey = useJudgedAnswer(lessonJudgement, session);
   const teaching = session.phase === "teaching";
   const item = teaching ? session.batch[session.teachIndex] : session.batch[session.quizIndex];
@@ -216,32 +217,30 @@ export function WaniKaniLesson({
                   </View>
                 </View>
                 <View style={styles.answerField}>
-                  <AnswerInput
-                    key={`${session.quizIndex}:${session.part}`}
-                    value={session.entry}
-                    onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
-                    placeholder={reading ? "こたえ" : "Type the meaning"}
-                    selectionColor={colors.accent}
-                    editable={!busy && !starting && !failed}
-                    autoFocus
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    returnKeyType="done"
-                    submitBehavior="submit"
-                    accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
-                    style={{color: answerColor}}
-                    onSubmitEditing={() => {
-                      if (session.entry.trim() !== "") onCheck();
-                    }}
-                  />
+                  <AnswerShake shakeKey={shakeKey}>
+                    <AnswerInput
+                      key={`${session.quizIndex}:${session.part}`}
+                      value={session.entry}
+                      onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
+                      placeholder={reading ? "こたえ" : "Type the meaning"}
+                      selectionColor={colors.accent}
+                      editable={!busy && !starting && !failed}
+                      autoFocus
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      returnKeyType="done"
+                      submitBehavior="submit"
+                      accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
+                      style={{color: answerColor}}
+                      onSubmitEditing={() => {
+                        if (session.entry.trim() !== "") onCheck();
+                      }}
+                    />
+                  </AnswerShake>
                 </View>
                 {session.feedback != null && (
-                  <Feedback
-                    tone={session.feedback.tone}
-                    text={session.feedback.text}
-                    shakeKey={shakeKey}
-                  />
+                  <Feedback tone={session.feedback.tone} text={session.feedback.text} />
                 )}
                 {failed && (
                   <Text

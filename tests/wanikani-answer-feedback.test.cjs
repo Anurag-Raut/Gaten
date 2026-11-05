@@ -1,7 +1,8 @@
 /**
- * The answered-prompt cues: which session moves count as a judgement, and which do not. Exercised
- * against the real `wanikani-cue` module rather than a copy of its rules. That module carries only
- * types at runtime, so it loads here with no bridge mocks — the one import it names is erased.
+ * The answered-prompt cues: which session moves count as a judgement, which do not, and how the
+ * answer field's shake is kept to one per wrong answer. Exercised against the real `wanikani-cue`
+ * module rather than a copy of its rules. That module carries only types at runtime, so it loads
+ * here with no bridge mocks — the one import it names is erased.
  */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -31,7 +32,9 @@ function loadTypeScript(relativePath) {
   return module.exports;
 }
 
-const {reviewJudgement, lessonJudgement} = loadTypeScript('src/rn/ui/review/wanikani-cue.ts');
+const {reviewJudgement, lessonJudgement, answerShake} = loadTypeScript(
+  'src/rn/ui/review/wanikani-cue.ts'
+);
 
 /** A review session at one prompt, in whatever state the case asks for. */
 function review(patch = {}) {
@@ -206,4 +209,40 @@ test('a lesson batch advancing to its next subject is not a judgement', () => {
     ),
     null
   );
+});
+
+test('a key already shaken never shakes again, and a cleared key never shakes at all', () => {
+  assert.equal(answerShake(null, '0:meaning:wrong:1'), true);
+  assert.equal(answerShake('0:meaning:wrong:1', '0:meaning:wrong:1'), false);
+  assert.equal(answerShake('0:meaning:wrong:1', '0:meaning:wrong:2'), true);
+  assert.equal(answerShake('0:meaning:wrong:1', null), false);
+  assert.equal(answerShake(null, null), false);
+});
+
+test('the answer field shakes once per wrong answer, on the key the judgement mints', () => {
+  // The screen's own loop: `useJudgedAnswer` sets the key when a judgement fires and leaves it alone
+  // on every other render, and the field shakes when that key is one it has not shaken for.
+  let state = review({entry: 'grove'});
+  let key = null;
+  let shaken = null;
+  const render = (next) => {
+    const judged = reviewJudgement(state, next);
+    state = next;
+    if (judged != null) key = judged.tone === 'wrong' ? judged.key : null;
+    const shakes = answerShake(shaken, key);
+    shaken = key;
+    return shakes;
+  };
+
+  // The wrong answer shakes the field it was typed into...
+  assert.equal(render(review({incorrectMeaning: 1, phase: 'reviewed', feedback: INCORRECT})), true);
+  // ...and neither the render that follows it, nor its Continue, nor the retry typed after either.
+  assert.equal(render(review({incorrectMeaning: 1, phase: 'reviewed', feedback: INCORRECT})), false);
+  assert.equal(render(review({incorrectMeaning: 1, phase: 'answering', feedback: INCORRECT})), false);
+  assert.equal(render(review({incorrectMeaning: 1, phase: 'answering', entry: 'g'})), false);
+  // A second wrong answer on the same prompt shakes again, on its own key.
+  assert.equal(render(review({incorrectMeaning: 2, phase: 'reviewed', feedback: INCORRECT})), true);
+  assert.equal(render(review({incorrectMeaning: 2, phase: 'answering', feedback: INCORRECT})), false);
+  // The right answer that ends the prompt clears the key and never shakes.
+  assert.equal(render(review({incorrectMeaning: 2, phase: 'correct', feedback: CORRECT})), false);
 });

@@ -8,7 +8,7 @@
  * The touch cue one answered WaniKani prompt earns, fired where the judgement is: the session moving
  * into a judged state from an open one. The state the screen first sees is the one it compares
  * against, so mounting onto an already-judged prompt stays silent, and a re-render, a keystroke or
- * the reader's Continue never plays the cue twice. The returned key is what the answer line's shake
+ * the reader's Continue never plays the cue twice. The returned key is what the answer field's shake
  * is pinned to — set for a wrong answer, cleared for a right one.
  */
 import {useEffect, useRef, useState} from "react";

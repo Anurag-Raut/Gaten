@@ -6,7 +6,7 @@
 
 /**
  * What an answered WaniKani prompt owes the reader: the touch cue its judgement earns — a right
- * answer and a wrong one feel different — and the key that pins the answer line's shake to the wrong
+ * answer and a wrong one feel different — and the key that pins the answer field's shake to the wrong
  * one. Both are read from the judgement itself, the session moving into a judged state from an open
  * one, so nothing plays again on a re-render, on a keystroke, or on the reader's Continue.
  */
@@ -84,4 +84,13 @@ export function lessonJudgement(
     return {tone: "right", key: judgementKey(next.quizIndex, next.part, "right", wrongs)};
   }
   return null;
+}
+
+/**
+ * Whether the answer field shakes for [key], the key it last answered being [previous]: yes for a
+ * key that has just arrived, and no for the very key it already shook for — which is what keeps the
+ * shake to one per wrong answer — nor for the null a right answer clears the key to.
+ */
+export function answerShake(previous: string | null, key: string | null): boolean {
+  return key != null && key !== previous;
 }

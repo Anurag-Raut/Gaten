@@ -39,6 +39,7 @@ import {PressableScale} from "../PressableScale";
 import {
   ActionFooter,
   AnswerInput,
+  AnswerShake,
   BusyRow,
   Feedback,
   FilledAction,
@@ -152,7 +153,7 @@ export function WaniKaniReview({
     if (session.phase === "answering" && session.retrying) inputRef.current?.focus();
   }, [session.phase, session.retrying]);
   // The answer's own cue, fired on the judgement and not on the renders that follow it; the key it
-  // returns is what a wrong answer's shake is pinned to.
+  // returns is what the answer field's shake is pinned to.
   const shakeKey = useJudgedAnswer(reviewJudgement, session);
 
   const tabs = useMemo<DetailTab[]>(() => {
@@ -222,34 +223,32 @@ export function WaniKaniReview({
                   Enter continues instead of checking again. It also stays editable while the answer
                   is being checked: a reading is judged through a native call, and disabling the field
                   for that round trip is what dropped the keyboard on every reading but no meaning. */}
-              <AnswerInput
-                ref={inputRef}
-                key={`${session.index}:${session.part}`}
-                value={session.entry}
-                onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
-                placeholder={reading ? "こたえ" : "Type the meaning"}
-                selectionColor={colors.accent}
-                editable={correct || submitting || session.phase === "answering"}
-                autoFocus
-                autoCapitalize="none"
-                autoCorrect={false}
-                spellCheck={false}
-                returnKeyType="done"
-                submitBehavior="submit"
-                accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
-                style={{color: answerColor}}
-                onSubmitEditing={() => {
-                  if (correct) onContinue();
-                  else if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
-                }}
-              />
+              <AnswerShake shakeKey={shakeKey}>
+                <AnswerInput
+                  ref={inputRef}
+                  key={`${session.index}:${session.part}`}
+                  value={session.entry}
+                  onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
+                  placeholder={reading ? "こたえ" : "Type the meaning"}
+                  selectionColor={colors.accent}
+                  editable={correct || submitting || session.phase === "answering"}
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  returnKeyType="done"
+                  submitBehavior="submit"
+                  accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
+                  style={{color: answerColor}}
+                  onSubmitEditing={() => {
+                    if (correct) onContinue();
+                    else if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
+                  }}
+                />
+              </AnswerShake>
             </View>
             {session.feedback != null && (
-              <Feedback
-                tone={session.feedback.tone}
-                text={session.feedback.text}
-                shakeKey={shakeKey}
-              />
+              <Feedback tone={session.feedback.tone} text={session.feedback.text} />
             )}
             {session.feedback != null && (
               <>
