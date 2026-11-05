@@ -683,10 +683,13 @@ export function RatingBar({
 }
 
 /**
- * The field a WaniKani answer is typed into: the design's own line rather than a box. It carries only
- * a bottom stroke - no top, side or rounded border, no focus ring or background - and that stroke is
- * the accent at every state, focused or not, right or wrong. The answer's own text takes the outcome
- * colour; the line stays an action accent.
+ * The field a WaniKani answer is typed into: the design's own line rather than a box - no top, side or
+ * rounded border, no focus ring or background. The answer's own text takes the outcome colour; the
+ * line stays an action accent.
+ *
+ * The line itself is NOT this view's border: [AnswerShake] draws it, in the static view the input
+ * moves inside, which is what lets a wrong answer shake the text without the line moving with it.
+ * Used without that wrapper the input is just the text and its placeholder.
  */
 export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function AnswerInput(
   props,
@@ -699,7 +702,7 @@ export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function 
       {...props}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
       underlineColorAndroid="transparent"
-      style={[styles.input, {color: colors.onSurface, borderBottomColor: colors.accent}, props.style]}
+      style={[styles.input, {color: colors.onSurface}, props.style]}
     />
   );
 });
@@ -722,9 +725,12 @@ export function Feedback({tone, text}: {tone: "right" | "wrong"; text: string}) 
 }
 
 /**
- * The field a WaniKani answer is typed into, and the answer's own text inside it, shaken once when
- * that answer is judged wrong: the thing the reader got wrong moves, and the verdict under it does
- * not.
+ * The answer field: the stroke it sits on, and the answer's own text, shaken once when that answer is
+ * judged wrong.
+ *
+ * Only the text moves. The stroke is this component's own static view - the input is translated
+ * inside it - so the line the reader typed on, and the verdict under it, both hold still while the
+ * thing they got wrong moves: the answer, not the frame around it.
  *
  * It wraps [AnswerInput] rather than the input shaking itself, so the field keeps one identity - and
  * so its focus and keyboard - across the shake. It shakes on [shakeKey] changing to a key it has not
@@ -742,6 +748,7 @@ export function AnswerShake({
   shakeKey: string | null;
   children: React.ReactNode;
 }) {
+  const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const offset = useSharedValue(0);
   const shaken = useRef<string | null>(null);
@@ -762,7 +769,11 @@ export function AnswerShake({
 
   const shake = useAnimatedStyle(() => ({transform: [{translateX: offset.value}]}));
 
-  return <Animated.View style={[styles.answerShake, shake]}>{children}</Animated.View>;
+  return (
+    <View style={[styles.answerStroke, {borderBottomColor: colors.accent}]}>
+      <Animated.View style={[styles.answerShake, shake]}>{children}</Animated.View>
+    </View>
+  );
 }
 
 /**
@@ -960,17 +971,19 @@ const styles = StyleSheet.create({
     fontFamily: APP_FONT,
     textAlign: "left",
     width: "100%",
-    minHeight: 62,
+    // 60 + the 2 dp stroke [AnswerShake] draws under it: the field measures 62 either way.
+    minHeight: 60,
     paddingTop: 9,
     paddingBottom: 7,
     paddingHorizontal: 1,
     borderTopWidth: 0,
     borderLeftWidth: 0,
     borderRightWidth: 0,
-    borderBottomWidth: 2,
+    borderBottomWidth: 0,
     borderRadius: 0,
   },
   feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17, fontFamily: APP_FONT},
+  answerStroke: {width: "100%", borderBottomWidth: 2},
   answerShake: {width: "100%"},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
   stateMark: {marginBottom: 21},
