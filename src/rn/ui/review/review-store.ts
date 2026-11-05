@@ -1246,6 +1246,10 @@ class ReviewStore {
     if (step.kind !== "wkReview") return;
     const session = step.session;
     if (session.phase !== "answering" || session.entry.trim() === "") return;
+    // The field stays editable while the answer is judged, so Enter can arrive again before a
+    // reading's native conversion answers. One answer is checked once, or a wrong one is counted
+    // twice.
+    if (this.state.busy) return;
     const item = session.items[session.index];
     if (item == null) return;
 

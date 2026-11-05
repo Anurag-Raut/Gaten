@@ -220,7 +220,9 @@ export function WaniKaniReview({
             <View style={styles.answerField}>
               {/* A correct answer holds the card with the answer in the field: the input stays editable
                   — and so keeps focus and the keyboard — while it is held and while it is sent, and
-                  Enter continues instead of checking again. */}
+                  Enter continues instead of checking again. It also stays editable while the answer
+                  is being checked: a reading is judged through a native call, and disabling the field
+                  for that round trip is what dropped the keyboard on every reading but no meaning. */}
               <AnswerInput
                 ref={inputRef}
                 key={`${session.index}:${session.part}`}
@@ -228,7 +230,7 @@ export function WaniKaniReview({
                 onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
                 placeholder={reading ? "こたえ" : "Type the meaning"}
                 selectionColor={colors.accent}
-                editable={correct || submitting || (!busy && session.phase === "answering")}
+                editable={correct || submitting || session.phase === "answering"}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
