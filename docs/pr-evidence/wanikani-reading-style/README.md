@@ -1,8 +1,8 @@
 # Primary reading lettering — matches the hero character
 
-Captured for the primary-reading style fix (`fix/heading-kanji-style`). **No picture was captured.**
-The capture was blocked before it could start: the change is only visible inside the WaniKani review
-detail panel, and the account's review queue was exhausted before a reading panel could be opened.
+Captured for the primary-reading style fix (`fix/heading-kanji-style`): the "Primary reading" value in
+the WaniKani review's Reading detail tab now renders with the card's big hero character's lettering
+(medium weight) instead of regular.
 
 ## What changed
 
@@ -22,13 +22,29 @@ One style property, verifiable by diff on `src/rn/ui/review/WaniKaniReview.tsx`:
 was deliberately **not** restyled: the owner's screenshot covers the review's Reading tab only.
 `wanikani-card-ui.tsx` renders no Japanese reading text.
 
-## Why no capture
+## Captures
 
-`ReviewDetails` in `WaniKaniReview.tsx` is the only renderer of `detailJapanese`, and it is reachable
-only from the WaniKani review flow's answer details (Reading tab). During the capture window the
-connected account's hub went from `68 reviews due` to `0 · All caught up · Next in 1 hour 42 min`, so
-no review prompt existed to open the panel against. This pull request is a draft for that reason; it
-becomes ready for review once a queue exists and the before/after captures land here.
+| File | Screen |
+|---|---|
+| `before-reading-tab.png` | Review answer details, **Reading** tab, base style — the reading `せんたん` at regular (400) weight |
+| `after-reading-tab.png` | The same panel with the fix — `せんたん` at medium (500) weight, visibly matching the hero 先端 above it |
+
+Both shots: same subject (Vocabulary 先端, Level 27), same Reading detail panel, same device, taken
+from one Metro dev server in this worktree, before/after by reverting only `detailJapanese`'s
+`...HERO_LETTERING` spread (Fast Refresh equivalent; a clean restart of Metro per pass, see below).
+The weight difference is visible: the after capture's reading ink is heavier than the before
+capture's, while every other text on the panel is unchanged.
+
+**Bundle assertion:** before each capture the served bundle was fetched
+(`index.bundle?platform=android&dev=true&minify=false`) and inspected: the fix pass showed
+`...HERO_LETTERING` inside `detailJapanese`, the base pass showed it absent (plain
+`fontFamily: APP_FONT`). This mattered — this host has no watchman, and Metro otherwise served a
+stale bundle until restarted.
+
+**Nothing was submitted:** the prompt was a meaning prompt; a deliberately wrong meaning
+(`zzzzz wrong answer`) was typed and checked, which only sets the `Incorrect` feedback that makes
+`Show answer` appear. No answer was graded, no review advanced — the queue read `3 reviews due`
+before and after the capture, and `Items reviewed` is unchanged.
 
 ## Revision and environment
 
@@ -36,10 +52,5 @@ becomes ready for review once a queue exists and the before/after captures land 
 |---|---|
 | Code under test | `a2f05b3` — `fix(wanikani): style the primary reading like the hero character`, on top of `origin/dev` `b38ff19` |
 | App | `com.gaten` 0.1.0 debug build (`./gradlew :app:assembleDebug`, BUILD SUCCESSFUL); arm64 APK sha256 `395b2663f6e9e77da112407abcc6f550ca553af07290078206957ceb4328f7e0` |
-| Device | AVD `Gaten_Lookup_Review` → `emulator-5554`, 1080x2340, Android 14 (held, not driven — nothing to capture) |
-
-## Checks actually run
-
-- `npx tsc --noEmit -p tsconfig.json` — clean.
-- `node --test tests/wanikani-romaji.test.cjs tests/wanikani-review-prompt-order.test.cjs` — 6/6 pass.
-- `./gradlew :app:assembleDebug` — BUILD SUCCESSFUL.
+| Device | AVD `Gaten_Lookup_Review` → `emulator-5554`, 1080x2340, Android 14 |
+| Account state | 3 reviews due before and after; nothing answered, nothing submitted |
