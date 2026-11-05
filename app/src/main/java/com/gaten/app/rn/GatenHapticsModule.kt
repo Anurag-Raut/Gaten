@@ -12,6 +12,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.gaten.app.ui.Feedback
 import com.gaten.app.ui.FeedbackHaptic
+import com.gaten.app.ui.FeedbackPattern
 import com.gaten.app.ui.FeedbackPreferences
 import com.gaten.app.ui.FeedbackSound
 import com.gaten.app.ui.lookup.LookupSheetHost
@@ -28,8 +29,9 @@ import com.gaten.app.ui.lookup.LookupSheetHost
  * `gaten_settings`, the same file every other pref is kept in, and a reader who turned sounds off
  * never allocates the pool, exactly as [Feedback] was written to behave.
  *
- * [play]'s kinds are [FeedbackHaptic]'s and [FeedbackSound]'s names, lowercased: `tick`,
- * `lookup` and `confirm` are haptics; `added` and `done` are the two sound cues.
+ * [play]'s kinds are [FeedbackHaptic]'s, [FeedbackPattern]'s and [FeedbackSound]'s names,
+ * lowercased: `tick`, `lookup` and `confirm` are haptics, `right` and `wrong` are the answers' own
+ * vibration patterns, and `added` and `done` are the two sound cues.
  */
 class GatenHapticsModule(
     reactContext: com.facebook.react.bridge.ReactApplicationContext,
@@ -56,10 +58,11 @@ class GatenHapticsModule(
             ?: getCurrentActivity()?.window?.decorView?.takeIf { it.isAttachedToWindow }
 
     /**
-     * Plays [kind]: a haptic for `tick`, `lookup` or `confirm`, a sound cue for `added` or `done`
-     * — the sound only when the reader has sounds on, which [Feedback] checks itself. Rejects with
-     * `E_FEEDBACK_KIND` for a kind that is not one of the five, and with `E_NO_WINDOW` when there
-     * is no visible window to feel the haptic through.
+     * Plays [kind]: a haptic for `tick`, `lookup` or `confirm`, the answers' own vibration pattern
+     * for `right` or `wrong`, a sound cue for `added` or `done` — the sound only when the reader has
+     * sounds on, which [Feedback] checks itself, and the pattern only when the reader has haptics on,
+     * which it also checks. Rejects with `E_FEEDBACK_KIND` for a kind that is not one of the seven,
+     * and with `E_NO_WINDOW` when there is no visible window to deliver feedback through.
      */
     @ReactMethod
     fun play(kind: String, promise: Promise) {
@@ -80,6 +83,8 @@ class GatenHapticsModule(
             "tick" -> instance.haptic(FeedbackHaptic.Tick)
             "lookup" -> instance.haptic(FeedbackHaptic.Lookup)
             "confirm" -> instance.haptic(FeedbackHaptic.Confirm)
+            "right" -> instance.pattern(FeedbackPattern.Right)
+            "wrong" -> instance.pattern(FeedbackPattern.Wrong)
             "added" -> instance.sound(FeedbackSound.Added)
             "done" -> instance.sound(FeedbackSound.Done)
             else -> {

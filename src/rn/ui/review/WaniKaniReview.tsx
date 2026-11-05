@@ -49,6 +49,8 @@ import {SubjectBadge, TaskLabel} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
 import {romajiToHiragana} from "./wanikani-romaji";
+import {reviewJudgement} from "./wanikani-cue";
+import {useJudgedAnswer} from "./useJudgedAnswer";
 import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
 import type {WaniKaniSession} from "./review-store";
 
@@ -155,6 +157,9 @@ export function WaniKaniReview({
   useEffect(() => {
     if (session.phase === "answering" && session.retrying) inputRef.current?.focus();
   }, [session.phase, session.retrying]);
+  // The answer's own cue, fired on the judgement and not on the renders that follow it; the key it
+  // returns is what a wrong answer's shake is pinned to.
+  const shakeKey = useJudgedAnswer(reviewJudgement, session);
 
   const tabs = useMemo<DetailTab[]>(() => {
     const list: DetailTab[] = ["meaning"];
@@ -244,7 +249,11 @@ export function WaniKaniReview({
               />
             </View>
             {session.feedback != null && (
-              <Feedback tone={session.feedback.tone} text={session.feedback.text} />
+              <Feedback
+                tone={session.feedback.tone}
+                text={session.feedback.text}
+                shakeKey={shakeKey}
+              />
             )}
             {session.feedback != null && (
               <>

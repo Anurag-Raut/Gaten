@@ -40,6 +40,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import {InkIcon} from "../InkIcon";
@@ -60,6 +61,10 @@ const ENTER_TRAVEL = 8;
 
 /** How long the progress line takes to reach a new value. */
 const PROGRESS_MS = 180;
+
+/** How far the answer line moves on a wrong answer, and how long each leg of the shake takes. */
+const SHAKE_TRAVEL = 10;
+const SHAKE_STEP_MS = 50;
 
 /** When WaniKani's next reviews come up: a clock time today, and a weekday when it is later. */
 export function nextReviewLabel(at: number): string {
@@ -700,25 +705,55 @@ export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function 
 /**
  * The one line of feedback an answer gets: what happened, and — when the answer was wrong — what the
  * right one was. Colour is never the only signal; the words say it too.
+ *
+ * A wrong answer also moves: the line shakes once, on [Feedback.shakeKey] changing, and holds still
+ * for every other render — a keystroke in the retry it opens, or the correct answer that follows. A
+ * caller that shows a wrong answer it did not just judge — a session resumed as it is — passes no
+ * key, and the line arrives still. The system's reduced-motion setting turns the shake off like every
+ * other motion here; the words and the colour still say what happened.
  */
 export function Feedback({
   tone,
   text,
+  shakeKey = null,
 }: {
   tone: "right" | "wrong";
   text: string;
+  /** Identifies the wrong answer this line reports: a new one shakes, the same one never does. */
+  shakeKey?: string | null;
 }) {
   const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const offset = useSharedValue(0);
+  const shaken = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (tone !== "wrong" || shaken.current === shakeKey) return;
+    shaken.current = shakeKey;
+    if (reducedMotion) {
+      offset.value = 0;
+      return;
+    }
+    offset.value = withSequence(
+      withTiming(-SHAKE_TRAVEL, {duration: SHAKE_STEP_MS, easing: INK_EASING}),
+      withTiming(SHAKE_TRAVEL, {duration: SHAKE_STEP_MS * 2, easing: INK_EASING}),
+      withTiming(0, {duration: SHAKE_STEP_MS, easing: INK_EASING})
+    );
+  }, [tone, shakeKey, reducedMotion, offset]);
+
+  const shake = useAnimatedStyle(() => ({transform: [{translateX: offset.value}]}));
+
   return (
-    <Text
+    <Animated.Text
       accessibilityLiveRegion="polite"
       style={[
         styles.feedback,
         {color: tone === "right" ? colors.success : colors.error},
+        shake,
       ]}
     >
       {text}
-    </Text>
+    </Animated.Text>
   );
 }
 

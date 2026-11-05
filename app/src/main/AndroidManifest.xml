@@ -12,6 +12,12 @@
 
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
 
+    <!-- The answers' own feedback vibrates through the Vibrator service (`ui/Feedback.kt`'s
+         FeedbackPattern), which needs this; the five older cues go through
+         View.performHapticFeedback and would not. It is a normal permission: granted at install,
+         never prompted for. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Reading is offline: the screenshot is recognised on-device, the dictionary is bundled and
          the Anki export is local IPC. INTERNET is here for optional WaniKani (wanikani/) after a
          personal access token is connected on the WaniKani settings screen: connecting or
