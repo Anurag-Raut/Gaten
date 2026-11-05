@@ -51,15 +51,7 @@ import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
 import {romajiToHiragana} from "./wanikani-romaji";
 import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
 import type {WaniKaniSession} from "./review-store";
-
-/** The answer details a review can show, in the order WaniKani itself teaches them. */
-type DetailTab = "meaning" | "reading" | "context";
-
-const DETAIL_TAB_LABELS: Record<DetailTab, string> = {
-  meaning: "Meaning",
-  reading: "Reading",
-  context: "Context",
-};
+import {DETAIL_TAB_LABELS, defaultDetailTab, type DetailTab} from "./wanikani-detail-tabs";
 
 /**
  * The expanded answer behind "Show answer": the meaning or reading the subject carries, its mnemonic,
@@ -146,10 +138,12 @@ export function WaniKaniReview({
   const inputRef = useRef<TextInput>(null);
 
   // A new part or a new subject starts with the answer hidden; the reader opens `Show answer` when
-  // they want it, and a wrong answer never opens it for them.
+  // they want it, and a wrong answer never opens it for them. When they do open it, the details open
+  // on the part being asked — Reading for a reading prompt — and a manual tab choice then holds
+  // until the next subject or part resets the panel.
   useEffect(() => {
     setRevealed(false);
-    setActiveTab("meaning");
+    setActiveTab(defaultDetailTab(session.part, item));
   }, [session.index, session.part]);
   // Continue re-arms the same card; the field it cleared is the one the reader now needs.
   useEffect(() => {
@@ -220,7 +214,9 @@ export function WaniKaniReview({
             <View style={styles.answerField}>
               {/* A correct answer holds the card with the answer in the field: the input stays editable
                   — and so keeps focus and the keyboard — while it is held and while it is sent, and
-                  Enter continues instead of checking again. */}
+                  Enter continues instead of checking again. It also stays editable while the answer
+                  is being checked: a reading is judged through a native call, and disabling the field
+                  for that round trip is what dropped the keyboard on every reading but no meaning. */}
               <AnswerInput
                 ref={inputRef}
                 key={`${session.index}:${session.part}`}
@@ -228,7 +224,7 @@ export function WaniKaniReview({
                 onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
                 placeholder={reading ? "こたえ" : "Type the meaning"}
                 selectionColor={colors.accent}
-                editable={correct || submitting || (!busy && session.phase === "answering")}
+                editable={correct || submitting || session.phase === "answering"}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
