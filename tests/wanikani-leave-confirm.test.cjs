@@ -47,6 +47,13 @@ const stubs = {
 
 const {shouldConfirmLeaving} = loadTypeScript('src/rn/ui/review/review-store.ts', (name) => {
   if (name in stubs) return stubs[name];
+  if (name === './meaning-match') {
+    // The store's answer check, loaded for real rather than stubbed, so this harness follows the
+    // module wherever it goes — the rule under test here never calls it.
+    return loadTypeScript('src/rn/ui/review/meaning-match.ts', () => {
+      throw new Error('Unexpected import: meaning-match');
+    });
+  }
   throw new Error(`Unexpected import: ${name}`);
 });
 
