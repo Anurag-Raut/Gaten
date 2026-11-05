@@ -60,6 +60,12 @@ function loadReviewStore(wk = {}) {
   };
   return loadTypeScript('src/rn/ui/review/review-store.ts', (name) => {
     if (name === './wanikani-romaji') return {romajiToHiragana: (text) => text};
+    if (name === './meaning-match') {
+      // The real rule, so this suite still exercises the store's own answer check.
+      return loadTypeScript('src/rn/ui/review/meaning-match.ts', () => {
+        throw new Error('Unexpected import: meaning-match');
+      });
+    }
     if (name === '../../native/GatenAnki') return {};
     if (name === '../../native/GatenWaniKani') return waniKani;
     if (name === '../anki/useAnkiDecks') {
