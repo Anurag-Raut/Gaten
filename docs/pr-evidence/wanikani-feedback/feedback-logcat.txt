@@ -1,0 +1,56 @@
+The app's own logcat lines — Gaten WaniKani answer cues
+==============================================================================
+
+Source: `adb -s emulator-5554 logcat -d` on 2025-11-05, filtered to the tag the
+native feedback path logs under. Build: commit 738eef2, APK sha256
+84ae9d9eced2d8371c2d0af5530412b899c8c754ac53f69c7d06e74e70353e12 (see README
+'Source').
+
+This is the second trace: it proves the app's own code DECIDED to play a cue, on
+the screen the reader was on. The vibrator rows in `vibrator-trace.txt` prove what
+the platform then played. Neither proves how the pattern feels in a hand.
+
+Both lines below are preserved verbatim, and each is paired with the vibrator row
+that carries the same millisecond, so the two traces are tied to one another and
+not merely adjacent in time.
+
+------------------------------------------------------------------------------
+REVIEW page — the reader's Check-answer on 先端, meaning prompt
+------------------------------------------------------------------------------
+  11-05 20:29:53.693 24887 25058 D Feedback: Feedback pattern Wrong played
+
+Paired platform row (vibrator-trace.txt, 'The same two cues re-fired'):
+  createTime: 11-05 20:29:53.693 … durationMs: 161, status: finished,
+  segments [0,45,70,45] amplitudes [0,200,0,200], opPkg=com.gaten
+
+------------------------------------------------------------------------------
+LESSON quiz — the reader's Check-answer on 妙, meaning prompt
+------------------------------------------------------------------------------
+  11-05 20:31:23.092 24887 25058 D Feedback: Feedback pattern Wrong played
+
+Paired platform row (same section):
+  createTime: 11-05 20:31:23.092 … durationMs: 161, status: finished,
+  segments [0,45,70,45] amplitudes [0,200,0,200], opPkg=com.gaten
+
+------------------------------------------------------------------------------
+The other two Wrong cues, and why the pairs above are the preserved ones
+------------------------------------------------------------------------------
+Four Wrong cues fired in this session: the two recorded (the review clip at
+20:22:21, the lesson clip at 20:25:39) and the two above (20:29:53, 20:31:23).
+
+The line for each of the four was seen live as it was written — the review clip's
+at 20:22:21.382 and the lesson clip's at 20:25:39.441, both `Feedback pattern
+Wrong played` from pid 24887. Only the two above are re-derivable from a dump
+now: `adb logcat -c` between captures cleared the buffer, so the two clip runs'
+lines rolled away before this file was written. Their platform rows did not — the
+vibrator service keeps its own history — and those are in `vibrator-trace.txt`
+under 'The two runs the recordings come from'.
+
+Quoted from those live reads, for completeness, and not offered as an artefact:
+  11-05 20:22:21.382 24887 25058 D Feedback: Feedback pattern Wrong played
+  11-05 20:25:39.441 24887 25058 D Feedback: Feedback pattern Wrong played
+
+The other two lines this path can write, neither of which appeared because the
+sounds preference and the vibrator were both in play:
+  Log.d("Feedback", "Feedback pattern … skipped: haptics are off")
+  Log.d("Feedback", "Feedback pattern … skipped: no vibrator")

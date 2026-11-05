@@ -1,22 +1,58 @@
-Vibrator trace — Gaten WaniKani answer cues (merged build)
+Vibrator trace — Gaten WaniKani answer cues
 ==============================================================================
 
-Source: `adb -s emulator-5554 shell dumpsys vibrator_manager`, captured after the
-Right cue at 19:21 on 2025-11-05. The service keeps a rolling history, so both
-the Wrong row (19:11) and the Right row (19:21) survive in this one dump.
+Source: `adb -s emulator-5554 shell dumpsys vibrator_manager`, dumped after each
+cue on 2025-11-05. The service keeps a rolling history, so every row below lives
+in one dump.
 
-This file proves the app ASKED the platform to play a specific waveform, and
-that the platform played it to completion. It cannot prove how the pattern
-feels in a hand. See README 'What this evidence does not establish'.
+Build: the APK behind these rows was built from commit 738eef2, installed as
+app-x86_64-debug.apk, sha256
+84ae9d9eced2d8371c2d0af5530412b899c8c754ac53f69c7d06e74e70353e12, re-hashed on
+device to the same value. The Right row at the end of this file is older and is
+labelled as older.
+
+This file proves the app ASKED the platform to play a specific waveform, and that
+the platform played it to completion. It cannot prove how the pattern feels in a
+hand. See README 'What this evidence does not establish'.
+
+Every Wrong cue below fires on the same waveform from Feedback.kt: zero-length
+lead-in, 45 ms at 0.78431374 (= 200/255), 70 ms gap, 45 ms again, repeat -1.
+The review page (20:22 and 20:29) and the lesson quiz (20:25 and 20:31) each
+produced it twice, which is what "the cue is wired on both screens" means at the
+platform level rather than something inferred from the shared component.
 
 ------------------------------------------------------------------------------
-WRONG — expected timings [0,45,70,45], amplitudes [0,200,0,200], repeat -1
+The two runs the recordings come from
 ------------------------------------------------------------------------------
-createTime: 11-05 19:11:05.330, startTime: 11-05 19:11:05.331, endTime: 11-05 19:11:05.492, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+REVIEW page — review-wrong-field.mp4, the wrong answer at ~20:22:21
+createTime: 11-05 20:22:21.318, startTime: 11-05 20:22:21.319, endTime: 11-05 20:22:21.383, durationMs: 64, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
+createTime: 11-05 20:22:21.382, startTime: 11-05 20:22:21.383, endTime: 11-05 20:22:21.544, durationMs: 162, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
 
-Reading of the segments: zero-length lead-in, 45 ms at amplitude 0.78431374
-(= 200/255), 70 ms gap, 45 ms at 0.78431374 again. Total 161 ms, repeat -1
-(play once). That is the Wrong waveform from Feedback.kt.
+LESSON quiz — lesson-quiz-wrong.mp4, the wrong answer at ~20:25:39
+createTime: 11-05 20:25:39.418, startTime: 11-05 20:25:39.418, endTime: 11-05 20:25:39.441, durationMs: 23, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
+createTime: 11-05 20:25:39.441, startTime: 11-05 20:25:39.441, endTime: 11-05 20:25:39.601, durationMs: 160, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+
+In both, the row above the cue is the Check-answer button's own platform tick,
+which the cue superseded part-way through — `cancelled_superseded`, at 20:22:21.382
+and 20:25:39.441. The cue does not wait for the tap's tick; it replaces it, which
+is why the Wrong waveform is the row that reaches `finished`. Both rows carry
+opPkg=com.gaten and Usage=TOUCH.
+
+------------------------------------------------------------------------------
+The same two cues re-fired, with the logcat buffer preserved for each
+------------------------------------------------------------------------------
+These are the runs whose app-side lines are quoted in `feedback-logcat.txt`. They
+were fired from the same two screens on the same build, minutes after the
+recordings, so that each cue's `Feedback` line and its platform row are both
+preserved rather than only one of the two.
+
+REVIEW page — 20:29:53
+createTime: 11-05 20:29:53.653, startTime: 11-05 20:29:53.655, endTime: 11-05 20:29:53.693, durationMs: 40, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
+createTime: 11-05 20:29:53.693, startTime: 11-05 20:29:53.693, endTime: 11-05 20:29:53.854, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+
+LESSON quiz — 20:31:23
+createTime: 11-05 20:31:23.068, startTime: 11-05 20:31:23.069, endTime: 11-05 20:31:23.092, durationMs: 24, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
+createTime: 11-05 20:31:23.092, startTime: 11-05 20:31:23.092, endTime: 11-05 20:31:23.252, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
 
 ------------------------------------------------------------------------------
 RIGHT — expected timings [0,35], amplitudes [0,90], repeat -1
@@ -26,28 +62,17 @@ createTime: 11-05 19:21:27.229, startTime: 11-05 19:21:27.230, endTime: 11-05 19
 Reading of the segments: zero-length lead-in, 35 ms at amplitude 0.3529412
 (= 90/255). Total 36 ms, repeat -1. That is the Right waveform.
 
+Provenance: this row is from the earlier run (19:21), on the pre-retarget commit,
+not from the runs above. The right-answer path was not touched by the retarget —
+that change moved a transform from the answer line to the answer field, and the
+cue vocabulary is unchanged — but the row is older, so it is labelled as older
+rather than presented as this build's. No right-answer cue was fired in this
+session: every right answer on the lesson quiz would have completed a part, and
+completing the meaning of a one-part subject starts and reports that subject.
+
 ------------------------------------------------------------------------------
 Context rows in the same history
 ------------------------------------------------------------------------------
-49 Prebaked{effect=TICK, strength=MEDIUM} rows from opPkg=com.gaten sit in
-the same TOUCH history. They are the Check-answer button's own platform tick,
-fired on each press, and they are distinct entries from the two cues above.
-Nearest TICK before each cue:
-  11-05 19:10:18.801  Prebaked TICK
-  11-05 19:11:05.330  Composed (Wrong)
-  11-05 19:20:43.168  Prebaked TICK
-  11-05 19:21:27.229  Composed (Right)
-
-------------------------------------------------------------------------------
-Logcat lines — NOT preserved in this file
-------------------------------------------------------------------------------
-The app's own native path logs one line per cue:
-  Log.d("Feedback", "Feedback pattern Wrong played")
-  Log.d("Feedback", "Feedback pattern Right played")
-and "… skipped: haptics are off" / "… skipped: no vibrator" when a guard fires.
-
-Both lines were observed live during this run (Wrong at 19:11:05, Right at
-19:21:27) but the logcat ring buffer was cleared with `logcat -c` immediately
-before the leave capture, so they are not preserved as an artifact. The dumpsys
-rows above are the preserved trace and the stronger evidence: they record the
-waveform the platform actually played, not only the request.
+Prebaked{effect=TICK, strength=MEDIUM} rows from opPkg=com.gaten sit in the same
+TOUCH history. They are the actions' own platform ticks, fired on each press, and
+they are distinct entries from the cues above.
