@@ -291,6 +291,30 @@ export function stepDepth(step: ReviewStep): number {
   }
 }
 
+/** The steps holding work in progress: the ones backing out of is worth one question first. */
+export type ConfirmableStep = Extract<
+  ReviewStep,
+  { kind: "session" | "wkReview" | "wkLesson" }
+>;
+
+/**
+ * Whether backing out of [step] is worth one question first. A card on screen, a WaniKani review or a
+ * lesson batch is work in progress the reader is in the middle of, so leaving one asks; every other
+ * step — a queue that finished, a hub, a failure being read — is free to leave, because there is
+ * nothing of the reader's on it to walk away from. The answer narrows the step, so a caller's copy for
+ * the question needs a case only for the steps that ask.
+ */
+export function shouldConfirmLeaving(step: ReviewStep): step is ConfirmableStep {
+  switch (step.kind) {
+    case "session":
+    case "wkReview":
+    case "wkLesson":
+      return true;
+    default:
+      return false;
+  }
+}
+
 /** The failure an Anki bridge rejection carried, without any of the provider's internals. */
 function failureOf(error: unknown): { failure: ReviewFailure; detail?: string } {
   if (typeof error !== "object" || error == null) {

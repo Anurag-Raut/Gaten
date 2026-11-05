@@ -18,9 +18,10 @@
  * by `BottomBar`.
  *
  * Motion is the design's own, and only ever the result of something the reader did: a nested screen
- * entering (8 dp horizontally, 70% to full opacity), the progress line moving to its new value, and
- * the press feedback every control in the app already answers with (`PressableScale`). All of it is
- * skipped when the system asks for reduced motion.
+ * entering (8 dp horizontally, 70% to full opacity), the progress line moving to its new value, the
+ * typed answer shaken once when its answer comes back wrong, and the press feedback every control in
+ * the app already answers with (`PressableScale`). All of it is skipped when the system asks for
+ * reduced motion.
  */
 import React, {useEffect, useRef} from "react";
 import {
@@ -40,6 +41,7 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import {InkIcon} from "../InkIcon";
@@ -50,6 +52,7 @@ import {APP_FONT, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
 import DeckThumbnail from "./DeckThumbnail";
+import {answerShake} from "./wanikani-cue";
 
 /** The curve every short Ink transition uses: fast out, settled in — the app's own emphasized one. */
 const INK_EASING = ReanimatedEasing.bezier(0.2, 0, 0, 1);
@@ -60,6 +63,10 @@ const ENTER_TRAVEL = 8;
 
 /** How long the progress line takes to reach a new value. */
 const PROGRESS_MS = 180;
+
+/** How far the typed answer moves on a wrong answer, and how long each leg of the shake takes. */
+const SHAKE_TRAVEL = 10;
+const SHAKE_STEP_MS = 50;
 
 /** When WaniKani's next reviews come up: a clock time today, and a weekday when it is later. */
 export function nextReviewLabel(at: number): string {
@@ -676,10 +683,13 @@ export function RatingBar({
 }
 
 /**
- * The field a WaniKani answer is typed into: the design's own line rather than a box. It carries only
- * a bottom stroke - no top, side or rounded border, no focus ring or background - and that stroke is
- * the accent at every state, focused or not, right or wrong. The answer's own text takes the outcome
- * colour; the line stays an action accent.
+ * The field a WaniKani answer is typed into: the design's own line rather than a box - no top, side or
+ * rounded border, no focus ring or background. The answer's own text takes the outcome colour; the
+ * line stays an action accent.
+ *
+ * The line itself is NOT this view's border: [AnswerShake] draws it, in the static view the input
+ * moves inside, which is what lets a wrong answer shake the text without the line moving with it.
+ * Used without that wrapper the input is just the text and its placeholder.
  */
 export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function AnswerInput(
   props,
@@ -692,33 +702,80 @@ export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function 
       {...props}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
       underlineColorAndroid="transparent"
-      style={[styles.input, {color: colors.onSurface, borderBottomColor: colors.accent}, props.style]}
+      style={[styles.input, {color: colors.onSurface}, props.style]}
     />
   );
 });
 
 /**
  * The one line of feedback an answer gets: what happened, and — when the answer was wrong — what the
- * right one was. Colour is never the only signal; the words say it too.
+ * right one was. Colour is never the only signal; the words say it too. It holds still: the answer
+ * the reader got wrong is what moves, so the verdict that names the mistake stays put and readable.
  */
-export function Feedback({
-  tone,
-  text,
-}: {
-  tone: "right" | "wrong";
-  text: string;
-}) {
+export function Feedback({tone, text}: {tone: "right" | "wrong"; text: string}) {
   const {colors} = useTheme();
   return (
     <Text
       accessibilityLiveRegion="polite"
-      style={[
-        styles.feedback,
-        {color: tone === "right" ? colors.success : colors.error},
-      ]}
+      style={[styles.feedback, {color: tone === "right" ? colors.success : colors.error}]}
     >
       {text}
     </Text>
+  );
+}
+
+/**
+ * The answer field: the stroke it sits on, and the answer's own text, shaken once when that answer is
+ * judged wrong.
+ *
+ * Only the text moves. The stroke is this component's own static view - the input is translated
+ * inside it - so the line the reader typed on, and the verdict under it, both hold still while the
+ * thing they got wrong moves: the answer, not the frame around it.
+ *
+ * It wraps [AnswerInput] rather than the input shaking itself, so the field keeps one identity - and
+ * so its focus and keyboard - across the shake. It shakes on [shakeKey] changing to a key it has not
+ * shaken for, and holds still for every other render: a keystroke in the retry a wrong answer opens,
+ * or the correct answer that follows, which clears the key. A caller showing a wrong answer it did
+ * not just judge - a session resumed as it is - passes no key, and the field arrives still. The
+ * system's reduced-motion setting turns the shake off like every other motion here; the words and
+ * the colour still say what happened.
+ */
+export function AnswerShake({
+  shakeKey,
+  children,
+}: {
+  /** Identifies the wrong answer this field holds: a new one shakes, the same one never does. */
+  shakeKey: string | null;
+  children: React.ReactNode;
+}) {
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const offset = useSharedValue(0);
+  const shaken = useRef<string | null>(null);
+
+  useEffect(() => {
+    const previous = shaken.current;
+    shaken.current = shakeKey;
+    if (!answerShake(previous, shakeKey) || reducedMotion) {
+      offset.value = 0;
+      return;
+    }
+    offset.value = withSequence(
+      withTiming(-SHAKE_TRAVEL, {duration: SHAKE_STEP_MS, easing: INK_EASING}),
+      withTiming(SHAKE_TRAVEL, {duration: SHAKE_STEP_MS * 2, easing: INK_EASING}),
+      withTiming(0, {duration: SHAKE_STEP_MS, easing: INK_EASING})
+    );
+  }, [shakeKey, reducedMotion, offset]);
+
+  const shake = useAnimatedStyle(() => ({transform: [{translateX: offset.value}]}));
+
+  return (
+    <View style={styles.answerStroke}>
+      <Animated.View style={[styles.answerShake, shake]}>{children}</Animated.View>
+      {/* Over the field's last 2 dp rather than a border under them: the stroke must not add height,
+          or the whole block below it would ride 2 dp up from where the design puts it. */}
+      <View style={[styles.answerStrokeLine, {backgroundColor: colors.accent}]} />
+    </View>
   );
 }
 
@@ -924,10 +981,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderLeftWidth: 0,
     borderRightWidth: 0,
-    borderBottomWidth: 2,
+    borderBottomWidth: 0,
     borderRadius: 0,
   },
   feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17, fontFamily: APP_FONT},
+  answerStroke: {width: "100%"},
+  answerStrokeLine: {position: "absolute", left: 0, right: 0, bottom: 0, height: 2},
+  answerShake: {width: "100%"},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
   stateMark: {marginBottom: 21},
   stateTitle: {fontSize: 23, fontWeight: "700", letterSpacing: -0.7, textAlign: "center", fontFamily: APP_FONT},

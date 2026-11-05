@@ -9,6 +9,12 @@ package com.gaten.app.ui
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
+import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
 import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -22,12 +28,28 @@ import com.gaten.app.R
 /** How firm a touch's feedback is: a step, a dictionary hit, or an action that landed. */
 enum class FeedbackHaptic { Tick, Lookup, Confirm }
 
+/**
+ * The two answers' own touch: the one cue in the app a reader feels rather than reads. A waveform
+ * rather than a [HapticFeedbackConstants] tick, so a right answer and a wrong one are told apart by
+ * rhythm and strength and not by one pulse's length alone. Every entry plays once (`repeat = -1`).
+ */
+enum class FeedbackPattern(
+    internal val timings: LongArray,
+    internal val amplitudes: IntArray
+) {
+    /** One short, light pulse: the answer landed. */
+    Right(longArrayOf(0, 35), intArrayOf(0, 90)),
+
+    /** Two heavier pulses with a gap between them: the answer did not. */
+    Wrong(longArrayOf(0, 45, 70, 45), intArrayOf(0, 200, 0, 200)),
+}
+
 /** The two moments in the app that carry a cue of their own. */
 enum class FeedbackSound { Added, Done }
 
 /**
- * What an action gives back: a haptic tick on the phone's own terms, and — only when the reader has
- * turned sounds on — one of two short cues.
+ * What an action gives back: a haptic tick on the phone's own terms, the answers' own vibration
+ * patterns ([pattern]), and — only when the reader has turned sounds on — one of two short cues.
  *
  * One instance belongs to one composition and owns the single [SoundPool] behind it, built on the
  * first sound actually asked for: a reader who leaves sounds off never allocates one. Cues load
@@ -61,6 +83,59 @@ class Feedback internal constructor(
             }
         )
     }
+
+    /**
+     * Plays one of the answers' own patterns. This is the one path that does not go through
+     * [View.performHapticFeedback], and that call's property still has to hold: a reader who turned
+     * haptics off feels nothing. [Vibrator] honours no such flag, so the switch that call respected
+     * is read here instead — the same [Settings.System.HAPTIC_FEEDBACK_ENABLED] the system uses —
+     * and a device with no vibrator is left alone. The waveform itself is API 26+, so every level
+     * this app supports can draw it.
+     *
+     * What this plays leaves no trace on the screen, so each request is logged at debug level with
+     * the decision it ended in: a capture can then say whether the cue was asked for and whether the
+     * platform was given it, which is as much as any device other than the reader's hand can tell.
+     */
+    fun pattern(kind: FeedbackPattern) {
+        if (released) return
+        if (Settings.System.getInt(context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 0) {
+            Log.d(TAG, "Feedback pattern $kind skipped: haptics are off")
+            return
+        }
+        val vibrator = vibrator()
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            Log.d(TAG, "Feedback pattern $kind skipped: no vibrator")
+            return
+        }
+        val wave = VibrationEffect.createWaveform(kind.timings, kind.amplitudes, NO_REPEAT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(wave, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
+        } else {
+            // Below 33 there is no VibrationAttributes to describe the cue with; the deprecated
+            // overload attributes it to this app's own sonification instead.
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(
+                wave,
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+        }
+        Log.d(TAG, "Feedback pattern $kind played")
+    }
+
+    /**
+     * The device's own vibrator: the manager's default one from API 31, where a device may have
+     * several, and the service itself on 29–30, where there is no [VibratorManager] to ask. Null when
+     * the device has none at all.
+     */
+    private fun vibrator(): Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            context.getSystemService(Vibrator::class.java)
+        }
 
     /** Plays [kind]'s cue if the reader has sounds on. */
     fun sound(kind: FeedbackSound) {
@@ -148,6 +223,8 @@ class Feedback internal constructor(
         /** A cue, not an alert: it sits under the reader's own audio instead of over it. */
         const val VOLUME = 0.8f
         const val PRIORITY = 1
+        /** The waveform plays through once; the platform spells "no repeat" as -1. */
+        const val NO_REPEAT = -1
     }
 }
 
