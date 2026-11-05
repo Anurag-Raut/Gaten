@@ -5,54 +5,51 @@ Source: `adb -s emulator-5554 shell dumpsys vibrator_manager`, dumped after each
 cue on 2025-11-05. The service keeps a rolling history, so every row below lives
 in one dump.
 
-Build: the APK behind these rows was built from commit 738eef2, installed as
-app-x86_64-debug.apk, sha256
-84ae9d9eced2d8371c2d0af5530412b899c8c754ac53f69c7d06e74e70353e12, re-hashed on
-device to the same value. The Right row at the end of this file is older and is
-labelled as older.
+Build: commit d2ae5ee (code tree bf1427e9d6acc8359c85fe2ba0fc3ee68eb58554),
+installed as app-x86_64-debug.apk, sha256
+fb4436a7d1d03b0f14c54d5e52f2726c2f2a5b2743e0b2cf197d45ee310ffb06, re-hashed on
+device to the same value. The Right row at the end is older and is labelled so.
 
 This file proves the app ASKED the platform to play a specific waveform, and that
 the platform played it to completion. It cannot prove how the pattern feels in a
 hand. See README 'What this evidence does not establish'.
 
 Every Wrong cue below fires on the same waveform from Feedback.kt: zero-length
-lead-in, 45 ms at 0.78431374 (= 200/255), 70 ms gap, 45 ms again, repeat -1.
-The review page (20:22 and 20:29) and the lesson quiz (20:25 and 20:31) each
-produced it twice, which is what "the cue is wired on both screens" means at the
-platform level rather than something inferred from the shared component.
+lead-in, 45 ms at 0.78431374 (= 200/255), 70 ms gap, 45 ms again, repeat -1. The
+review page and the lesson quiz each produced it, which is what "the cue is wired
+on both screens" means at the platform level rather than something inferred from
+the shared component.
 
 ------------------------------------------------------------------------------
 The two runs the recordings come from
 ------------------------------------------------------------------------------
-REVIEW page — review-wrong-field.mp4, the wrong answer at ~20:22:21
-createTime: 11-05 20:22:21.318, startTime: 11-05 20:22:21.319, endTime: 11-05 20:22:21.383, durationMs: 64, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
-createTime: 11-05 20:22:21.382, startTime: 11-05 20:22:21.383, endTime: 11-05 20:22:21.544, durationMs: 162, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+REVIEW page — review-wrong-field.mp4, the wrong answer at 20:54:00
+createTime: 11-05 20:54:00.218, startTime: 11-05 20:54:00.218, endTime: 11-05 20:54:00.280, durationMs: 62, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
+createTime: 11-05 20:54:00.280, startTime: 11-05 20:54:00.280, endTime: 11-05 20:54:00.440, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
 
-LESSON quiz — lesson-quiz-wrong.mp4, the wrong answer at ~20:25:39
-createTime: 11-05 20:25:39.418, startTime: 11-05 20:25:39.418, endTime: 11-05 20:25:39.441, durationMs: 23, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
-createTime: 11-05 20:25:39.441, startTime: 11-05 20:25:39.441, endTime: 11-05 20:25:39.601, durationMs: 160, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+LESSON quiz — lesson-quiz-wrong.mp4, the wrong answer at 20:56:30
+createTime: 11-05 20:56:30.068, startTime: 11-05 20:56:30.069, endTime: 11-05 20:56:30.095, durationMs: 27, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
+createTime: 11-05 20:56:30.095, startTime: 11-05 20:56:30.096, endTime: 11-05 20:56:30.256, durationMs: 160, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
 
 In both, the row above the cue is the Check-answer button's own platform tick,
-which the cue superseded part-way through — `cancelled_superseded`, at 20:22:21.382
-and 20:25:39.441. The cue does not wait for the tap's tick; it replaces it, which
-is why the Wrong waveform is the row that reaches `finished`. Both rows carry
-opPkg=com.gaten and Usage=TOUCH.
+which the cue superseded part-way through — `cancelled_superseded`, 62 ms into
+102 ms on the review and 27 ms into 102 ms on the lesson. The cue does not wait
+for the tap's tick; it replaces it, which is why the Wrong waveform is the row
+that reaches `finished`. Every row carries opPkg=com.gaten and Usage=TOUCH.
 
 ------------------------------------------------------------------------------
-The same two cues re-fired, with the logcat buffer preserved for each
+The two app-side lines, preserved, each paired with its row above
 ------------------------------------------------------------------------------
-These are the runs whose app-side lines are quoted in `feedback-logcat.txt`. They
-were fired from the same two screens on the same build, minutes after the
-recordings, so that each cue's `Feedback` line and its platform row are both
-preserved rather than only one of the two.
+A second Wrong cue was fired on each screen after this build's captures, with the
+logcat buffer left alone, so that both `Feedback` lines could be dumped together
+rather than one at a time. See `feedback-logcat.txt`:
 
-REVIEW page — 20:29:53
-createTime: 11-05 20:29:53.653, startTime: 11-05 20:29:53.655, endTime: 11-05 20:29:53.693, durationMs: 40, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
-createTime: 11-05 20:29:53.693, startTime: 11-05 20:29:53.693, endTime: 11-05 20:29:53.854, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+  review page   Feedback line 21:00:29.632  ←→ platform row 21:00:29.632, 162 ms, finished
+  lesson quiz   Feedback line 20:56:30.095  ←→ platform row 20:56:30.095, 160 ms, finished
 
-LESSON quiz — 20:31:23
-createTime: 11-05 20:31:23.068, startTime: 11-05 20:31:23.069, endTime: 11-05 20:31:23.092, durationMs: 24, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}
-createTime: 11-05 20:31:23.092, startTime: 11-05 20:31:23.092, endTime: 11-05 20:31:23.252, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+The lesson pair is the recorded run's own line; the review pair is a third Wrong
+cue on the same screen, because the recorded run's line (20:54:00.280) was read
+live but had rolled out of the buffer by the time the two lines were dumped.
 
 ------------------------------------------------------------------------------
 RIGHT — expected timings [0,35], amplitudes [0,90], repeat -1
@@ -62,13 +59,11 @@ createTime: 11-05 19:21:27.229, startTime: 11-05 19:21:27.230, endTime: 11-05 19
 Reading of the segments: zero-length lead-in, 35 ms at amplitude 0.3529412
 (= 90/255). Total 36 ms, repeat -1. That is the Right waveform.
 
-Provenance: this row is from the earlier run (19:21), on the pre-retarget commit,
-not from the runs above. The right-answer path was not touched by the retarget —
-that change moved a transform from the answer line to the answer field, and the
-cue vocabulary is unchanged — but the row is older, so it is labelled as older
-rather than presented as this build's. No right-answer cue was fired in this
-session: every right answer on the lesson quiz would have completed a part, and
-completing the meaning of a one-part subject starts and reports that subject.
+Provenance: this row is from an earlier run (19:21) on an earlier build, not from
+the runs above. No right answer was produced in this capture — on the lesson quiz
+a correct meaning advances or completes a part, and completing it is what starts
+and reports the subject — so the Right path was not exercised here. It is labelled
+as older rather than presented as this build's.
 
 ------------------------------------------------------------------------------
 Context rows in the same history
