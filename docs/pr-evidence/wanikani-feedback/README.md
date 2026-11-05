@@ -56,6 +56,7 @@ The personal access token is never shown, written into this repo, or included in
 | `review-b2-typed.png` | A wrong answer typed before checking |
 | `review-b3-wrong.png` | **The wrong answer**, re-taken on the retargeted build: the typed text held in the field in the error colour, the stroke under it, and **Incorrect** below — the verdict is the row that now stays still |
 | `review-wrong-field.mp4` | **The wrong answer and its shake**, recorded from the check press (1080×2340, 6.18 s, ~60 fps) |
+| `review-wrong-field-shake.gif` | The **same window** as a looping 620×126 crop, 37 frames at 50 ms, so the shake can be watched in place — GitHub plays a GIF inline and will not play a repository MP4 |
 | `review-wrong-field-shake-frames.png` | Frame strip cut from that clip around the check, frames 268–284, cropped to the typed answer row and the `Incorrect` line |
 | `review-b7-right.png` | **The right answer.** Checking the known answer gives **Correct** and **Continue** — the frame the right cue fires on |
 | `review-leave.mp4` | **The leave interaction, end to end.** Back → dialog → `Stay` → Back → `Leave` → Home, as one clip |
@@ -70,6 +71,7 @@ The personal access token is never shown, written into this repo, or included in
 | `lesson-leave.mp4` | **The lesson leave interaction, end to end** (1080×2340, 38.5 s) |
 | `lesson-quiz-wrong.png` | **The lesson quiz wrong answer.** `Kanji` badge, Level 28, 妙, **Meaning** prompt, **Incorrect** under the field. The field is empty: a wrong lesson answer clears the typed text (`review-store.ts`), so the stroke is what moves |
 | `lesson-quiz-wrong.mp4` | **The lesson cue and its shake**, recorded from the check press (1080×2340, 14.42 s, ~60 fps) |
+| `lesson-quiz-wrong-shake.gif` | The **same window** as a looping 620×132 crop, 33 frames at 50 ms, for the same reason: a GIF plays in place, an MP4 in a repository does not |
 | `lesson-quiz-wrong-shake-frames.png` | Frame strip cut from that clip around the check, frames 263–280, cropped to the field's stroke and the `Incorrect` line |
 | `hub-after-cues.png` | The hub after both cue runs: `Today · Items reviewed 1 · Lessons learned 2`, `Learned today · 2 of 15`, `5 reviews left in session`, `5 lessons left in batch · Progress · 5 of 15 parts · 5 kanji` |
 
