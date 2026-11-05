@@ -770,8 +770,11 @@ export function AnswerShake({
   const shake = useAnimatedStyle(() => ({transform: [{translateX: offset.value}]}));
 
   return (
-    <View style={[styles.answerStroke, {borderBottomColor: colors.accent}]}>
+    <View style={styles.answerStroke}>
       <Animated.View style={[styles.answerShake, shake]}>{children}</Animated.View>
+      {/* Over the field's last 2 dp rather than a border under them: the stroke must not add height,
+          or the whole block below it would ride 2 dp up from where the design puts it. */}
+      <View style={[styles.answerStrokeLine, {backgroundColor: colors.accent}]} />
     </View>
   );
 }
@@ -971,8 +974,7 @@ const styles = StyleSheet.create({
     fontFamily: APP_FONT,
     textAlign: "left",
     width: "100%",
-    // 60 + the 2 dp stroke [AnswerShake] draws under it: the field measures 62 either way.
-    minHeight: 60,
+    minHeight: 62,
     paddingTop: 9,
     paddingBottom: 7,
     paddingHorizontal: 1,
@@ -983,7 +985,8 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17, fontFamily: APP_FONT},
-  answerStroke: {width: "100%", borderBottomWidth: 2},
+  answerStroke: {width: "100%"},
+  answerStrokeLine: {position: "absolute", left: 0, right: 0, bottom: 0, height: 2},
   answerShake: {width: "100%"},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
   stateMark: {marginBottom: 21},
