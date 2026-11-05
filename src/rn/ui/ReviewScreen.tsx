@@ -57,7 +57,13 @@ import {DialogShell} from "./DialogShell";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
 import {RtkKanjiPanel} from "./rtk/RtkKanjiPanel";
 import {kanjiReferenceLabel, useKanjiReferenceSource} from "./kanjiReference";
-import {stepDepth, type ReviewFailure, type ReviewStep} from "./review/review-store";
+import {
+  shouldConfirmLeaving,
+  stepDepth,
+  type ConfirmableStep,
+  type ReviewFailure,
+  type ReviewStep,
+} from "./review/review-store";
 import {reviewActions, useReview} from "./review/useReview";
 import {StepTransition} from "./review/StepTransition";
 import {AnkiDeckPicker} from "./review/AnkiDeckPicker";
@@ -137,6 +143,38 @@ function stateBody(bottomInset: number, contentInset: number): StyleProp<ViewSty
   ];
 }
 
+/**
+ * The one question leaving work in progress asks, in the reader's own words: what leaving does not
+ * send or grade, and where the reader ends up. Only the steps `shouldConfirmLeaving` names have an
+ * answer here; the reader's place is kept in every case, because both services' sessions stay in the
+ * store and their hubs offer them back.
+ */
+function leaveQuestion(step: ConfirmableStep): {title: string; body: string} {
+  switch (step.kind) {
+    case "session":
+      return {
+        title: "Leave the review session?",
+        body:
+          "Nothing is graded by leaving. The card you are on stays unanswered, and you go back to " +
+          "the deck list.",
+      };
+    case "wkReview":
+      return {
+        title: "Leave the review session?",
+        body:
+          "Nothing is sent to WaniKani by leaving. The subject you are on stays unanswered and " +
+          "your place in the queue is kept, so you can pick the review up again.",
+      };
+    case "wkLesson":
+      return {
+        title: "Leave the lesson?",
+        body:
+          "Nothing is sent to WaniKani by leaving. The subjects you have not finished stay in " +
+          "your lessons, and the ones already started stay started.",
+      };
+  }
+}
+
 /** The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it. */
 export function ReviewScreen({onExit}: {onExit: () => void}) {
   const theme = useTheme();
@@ -147,20 +185,23 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
   const step = review.step;
 
   /**
-   * Back from this screen. With a card on screen it asks first, and confirming goes back to the
-   * picker, as does a card that failed: leaving a session is not leaving the deck. Every other step
-   * is the page's own pop — the deck list, WaniKani's connection screen and its queue were all opened
-   * from Home, and Back returns there. Nothing unsent is lost by any of it: Anki grades only what was
-   * rated, and a WaniKani review is sent when a subject is finished.
+   * Back from this screen. Work in progress asks first — the Anki card, the WaniKani review and the
+   * lesson batch alike — and confirming is one step back: an Anki session goes to the deck list, as
+   * does a card that failed, because leaving a session is not leaving the deck; a WaniKani review or
+   * lesson is the page's own pop, which is where Back already went. Every other step is the page's own
+   * pop — the deck list, WaniKani's connection screen and its queue were all opened from Home, and Back
+   * returns there. Nothing unsent is lost by any of it: Anki grades only what was rated, a WaniKani
+   * review is sent when a subject is finished, and either service's session is kept with its place.
    */
   const leave = useCallback(() => {
     if (review.busy) return;
+    if (shouldConfirmLeaving(review.step)) {
+      setConfirmLeave(true);
+      return;
+    }
     switch (review.step.kind) {
       case "done":
         reviewActions.changeDeck();
-        return;
-      case "session":
-        setConfirmLeave(true);
         return;
       case "failed":
         if (review.deck != null) {
@@ -174,21 +215,40 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
     }
   }, [review.busy, review.step.kind, review.deck, onExit]);
 
-  // Back is guarded only where leaving is a decision: a card on screen, or a failure that belongs to
-  // a deck the reader is still in. Every other step is the page's own pop, which the stack already
-  // performs — a handler there would only take the platform's Back away and hand it straight back.
+  // Back is guarded only where leaving is a decision: work in progress that asks first, or a failure
+  // that belongs to a deck the reader is still in. Every other step is the page's own pop, which the
+  // stack already performs — a handler there would only take the platform's Back away and hand it
+  // straight back.
   useEffect(() => {
     if (!isFocused) return;
-    const insideADeck =
-      review.step.kind === "session" || review.step.kind === "done" ||
+    const takesItsOwnBack =
+      shouldConfirmLeaving(review.step) ||
+      review.step.kind === "done" ||
       (review.step.kind === "failed" && review.deck != null);
-    if (!insideADeck) return;
+    if (!takesItsOwnBack) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       leave();
       return true;
     });
     return () => subscription.remove();
   }, [isFocused, review.step.kind, review.deck, leave]);
+
+  // The question belongs to the step that raised it: a session that is sent, or a batch that finishes,
+  // while the question is up takes it down with it rather than leaving a modal over the screen that
+  // replaced it — and never lets it reappear over the next one the reader starts.
+  useEffect(() => {
+    setConfirmLeave(false);
+  }, [step.kind]);
+
+  const question = shouldConfirmLeaving(step) ? leaveQuestion(step) : null;
+  /** Confirmed: one step back from the work the question was about. */
+  const leaveConfirmed = useCallback(() => {
+    setConfirmLeave(false);
+    // Back to the deck list, not out of the review flow: the reader still has decks to review, and
+    // the card they walked away from is not theirs to grade.
+    if (review.step.kind === "session") reviewActions.changeDeck();
+    else onExit();
+  }, [review.step.kind, onExit]);
 
   const requestAnkiPermission = useCallback(() => {
     void Anki.requestPermission()
@@ -304,10 +364,11 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
         )}
       </StepEnter>
 
-      {/* A card is on screen, so leaving is worth one question — never a grade, never a discard. */}
-      {confirmLeave && (
+      {/* Work in progress is on screen, so leaving is worth one question — never a grade, never a
+          discard, and never a question about a step that has already finished. */}
+      {confirmLeave && question != null && (
         <DialogShell
-          title="Leave the review session?"
+          title={question.title}
           onDismiss={() => setConfirmLeave(false)}
           actions={
             <>
@@ -316,23 +377,11 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
                 label="Stay"
                 onPress={() => setConfirmLeave(false)}
               />
-              <TextAction
-                theme={theme}
-                label="Leave"
-                onPress={() => {
-                  setConfirmLeave(false);
-                  // Back to the deck list, not out of the review flow: the reader still has
-                  // decks to review, and the card they walked away from is not theirs to grade.
-                  reviewActions.changeDeck();
-                }}
-              />
+              <TextAction theme={theme} label="Leave" onPress={leaveConfirmed} />
             </>
           }
         >
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
-            Nothing is graded by leaving. The card you are on stays unanswered, and you go back to
-            the deck list.
-          </Text>
+          <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{question.body}</Text>
         </DialogShell>
       )}
     </View>
