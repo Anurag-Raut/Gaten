@@ -333,6 +333,9 @@ export function WaniKaniReview({
   );
 }
 
+/** Lettering of the card's big hero character; the primary reading echoes it so they can't drift. */
+const HERO_LETTERING = {fontWeight: "500", fontFamily: APP_FONT} as const;
+
 const styles = StyleSheet.create({
   screen: {flex: 1},
   question: {
@@ -343,8 +346,8 @@ const styles = StyleSheet.create({
   reviewContent: CONTENT_COLUMN,
   hero: {alignItems: "center", marginTop: spacing.m, marginBottom: spacing.m},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
-  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500", fontFamily: APP_FONT},
-  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500", fontFamily: APP_FONT},
+  promptSingle: {fontSize: 64, lineHeight: 80, ...HERO_LETTERING},
+  promptWord: {fontSize: 40, lineHeight: 56, ...HERO_LETTERING},
   taskPillWrap: {marginTop: spacing.m},
   answerField: {position: "relative", width: "100%", marginTop: spacing.s},
   revealRow: {
@@ -363,7 +366,7 @@ const styles = StyleSheet.create({
   detailLabel: {fontSize: 12, lineHeight: 16, fontWeight: "700", fontFamily: APP_FONT},
   detailLabelSpaced: {marginTop: spacing.l},
   detailText: {fontSize: 14, lineHeight: 23, marginTop: spacing.xs, fontFamily: APP_FONT},
-  detailJapanese: {fontSize: 27, lineHeight: 34, marginTop: spacing.xs, fontFamily: APP_FONT},
+  detailJapanese: {fontSize: 27, lineHeight: 34, marginTop: spacing.xs, ...HERO_LETTERING},
   contextSpaced: {marginTop: spacing.l},
   contextEnglish: {fontSize: 12, lineHeight: 17, marginTop: spacing.xs, fontFamily: APP_FONT},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m, fontFamily: APP_FONT},
