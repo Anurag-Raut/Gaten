@@ -1,16 +1,27 @@
-# WaniKani answer feedback and the leave question — device evidence
+# WaniKani answer cues and the leave question — device evidence
 
 Captured on a live connected WaniKani account, from this tree's own debug build on the shared
-emulator. Two changes are shown: a judged answer now carries its own touch cue (a right answer and a
-wrong one are different wave forms, and a wrong one also shakes the feedback line), and backing out
-of the WaniKani **lesson** page now asks first — through the header's Back, through the system Back,
-with **Stay** keeping the page and **Leave** exiting it.
+emulator, **after merging `origin/dev` into the branch** (so this is the merged code, not the tree the
+branch was cut from).
 
-The **review** page could not be captured: this account's review queue is empty (`0 reviews due · All
-caught up`, `01-hub-before.png`), so there is no way to reach it. The lesson page is the reachable
-half and exercises the same code paths — the same `Feedback` line, the same `useJudgedAnswer` cue and
-the same `shouldConfirmLeaving` question in `ReviewScreen`. Which screen was and was not driven is
-spelled out under *What this evidence does not establish*.
+Two changes are shown:
+
+1. **A judged answer carries its own touch cue.** A right answer and a wrong answer are different
+   wave forms, and a wrong answer also shakes the feedback line once.
+2. **Backing out of the WaniKani review page and the lesson page now asks first** — through the
+   header's Back and through the system Back, with **Stay** keeping the page and **Leave** exiting it.
+
+The leave question was driven on **both** screens on this build. The answer cue was measured on the
+review screen, because that is the screen where a wrong answer and then the right answer could both be
+produced without submitting anything; the lesson screen renders the same `Feedback` component and its
+leave question is captured here, but its own cue was not re-recorded on this build — stated under
+*What this evidence does not establish* rather than glossed over. The review queue had **3 reviews
+due**, so the review page — the half that was blocked in the earlier capture — now carries its own
+recordings.
+
+Nothing was submitted. The review count read **3 reviews due** before entering and **3 reviews due**
+after leaving, and the hub's `Today` counters (`Items reviewed` 1, `Lessons learned` 2) were identical
+before and after. See *Account state* below for the exact reads and what the "1" is.
 
 The personal access token is never shown, written into this repo, or included in any capture.
 
@@ -18,160 +29,182 @@ The personal access token is never shown, written into this repo, or included in
 
 | Field | Value |
 | --- | --- |
-| Code under test | branch `feat/wanikani-wrong-answer-feedback`; item 1 `efb535f`, item 2 `149a0c1`; `HEAD^{tree}` `2953669a060857d00fb990c7a658a9bf161edb85` — the tree this APK and these captures were made from (every commit after it touches `docs/pr-evidence/` only) |
-| Base | `b38ff19` (`origin/dev`) |
+| Code under test | branch `feat/wanikani-wrong-answer-feedback`; item 1 `efb535f`, item 2 `149a0c1`, evidence `b2dd6b0`, merge `5de971c`, harness fix `f056c31`; `HEAD^{tree}` `129ec864dff6d0b039f41791b572b7bfe8544054` — the tree this APK and these captures were made from (every commit after it touches `docs/pr-evidence/` only) |
+| Base merged in | `c329631` (`origin/dev`, carrying #71, #69 and #70) |
 | Device | serial `emulator-5554`, AVD `Gaten_Lookup_Review` — Android 14 (API 34), `x86_64`, 1080×2340 @ 440 dpi, `font_scale` 0.94, headless; the one shared emulator, not a second AVD |
 | Theme | system dark mode throughout |
 | Haptics | `haptic_feedback_enabled 1`; a vibrator service with `AMPLITUDE_CONTROL` and a `Previous vibrations for usage TOUCH` history — see `vibrator-trace.txt` |
-| Build | `./gradlew :app:assembleDebug :app:testDebugUnitTest` → `BUILD SUCCESSFUL` (the same command CI runs) |
-| APK under test | `app/build/outputs/apk/debug/app-x86_64-debug.apk` — 205,499,847 bytes, sha256 `18fe75105d447960dfde553e39ee3de351d140e5ecbab6c37743be1fed3d0b26`; installed with `agent-device install` (`-r`, no uninstall, so the connected account survived); the installed `/data/app/…/base.apk` was re-hashed **on the device** (`run-as com.gaten sha256sum base.apk`) to the same value |
-| JS actually running | Metro from this worktree on port 8081 with `adb reverse tcp:8081 tcp:8081`; the served `index.bundle?platform=android&dev=true&minify=false` is HTTP 200, 10,440,609 bytes, sha256 `d20235b6de552e1e2d50ace0a1fc8aa241fbbcc4d6bf3af67b56a9cc1eae0bab`, and it contains `shouldConfirmLeaving` (6 occurrences) and `Leave the lesson?` (1) — so the running JS is this revision. (`Feedback pattern` appears 0 times in it because the cue is Kotlin, in the APK.) |
-| Account | WaniKani **connected**; 0 reviews due; 47 lessons available at the start (`01-hub-before.png`) |
-| Driver | agent-device (`install`, `open`, `press`, `type`, `keyboard`/`back`, `screenshot`, `record`, `logs`, `close`), taps placed by coordinate after reading a screenshot — `uiautomator` sees no text nodes of this app's RN content on this image |
+| Build | `./gradlew :app:assembleDebug :app:testDebugUnitTest` → `BUILD SUCCESSFUL` on the merged tree |
+| APK under test | `app/build/outputs/apk/debug/app-x86_64-debug.apk` — 208,910,467 bytes, sha256 `bb19d17734b4ad9282f3e6b46cbf080e80a73dcc3ca6ac21c97107c4b75e20a7`; installed with `agent-device install` (`-r`, no uninstall, so the connected account survived); the installed `/data/app/…/base.apk` was re-hashed **on the device** (`run-as com.gaten sha256sum`) to the same value |
+| JS actually running | Metro from this worktree on port 8081 with `adb reverse tcp:8081 tcp:8081`; the served `index.bundle?platform=android&dev=true&minify=false` is HTTP 200, 10,445,720 bytes, sha256 `0dbc0cba7b04a4257ac5bf220eef98ece3d09b7458ac25611e53a8e293dab317`, and it contains `shouldConfirmLeaving` (6), `Leave the review session?` (2), `Leave the lesson?` (1), `meaningMatches` (4) and `defaultDetailTab` (3) — so the running JS is this merged revision. (`Feedback pattern` appears 0 times in it because the cue is Kotlin, in the APK.) |
+| Account | WaniKani **connected**; 3 reviews due at the start and at the end; `Today · Items reviewed 1 · Lessons learned 2`; `Learned today · 2 of 15`; 47 lessons available |
+| Driver | agent-device (`install`, `open`, `press`, `back`, `screenshot`, `close`), taps placed by coordinate after reading a screenshot — `uiautomator` sees no text nodes of this app's RN content on this image |
 
 ## What the captures show
 
+### Review page — the half that was blocked before
+
 | File | Shows |
 | --- | --- |
-| `01-hub-before.png` | The WaniKani hub before anything was driven: **0 Reviews · All caught up · No reviews due**, **47 Lessons available · Next batch · 5 cards**, `Learned today · 2 of 15` |
-| `02-lesson-teaching-card.png` | The lesson page: teaching card `1 of 5`, kanji 妙 (Level 28), its Meaning (Peculiar, Unusual, Odd, Strange), its Reading (みょう) and mnemonics, pinned **Next** |
-| `03-lesson-leave-dialog.png` | **The question (new).** Header Back on the lesson page raises `Leave the lesson?` — *"Nothing is sent to WaniKani by leaving. The subjects you have not finished stay in your lessons, and the ones already started stay started."* — with `Stay` and `Leave` |
-| `04-lesson-stayed.png` | After `Stay`: the dialog is gone and the lesson is where it was, same card, same progress — nothing was left |
-| `05-lesson-left-to-home.png` | After `Leave`: the page is gone and Gaten's Home is showing, which is where Back already went |
-| `06-lesson-system-back-dialog.png` | **The question (new), system Back.** The platform's Back gesture raises the same dialog on the lesson page, so the guard is not only the header's own control |
-| `07-lesson-quiz-prompt.png` | The lesson quiz reached (five teaching cards passed): `1 of 5`, kanji 妙, the **Meaning** prompt, "Type the meaning", the disabled **Check answer** |
-| `08-lesson-wrong-answer.png` | **The wrong answer (new).** After typing `zzz` and checking: the field is cleared, the answer line reads **Incorrect** in the error colour, and **Check answer** re-arms. This is the frame the shake starts from |
-| `09-lesson-wrong-shake-frames.png` | Frame strip of `13-lesson-wrong-answer.mp4`: the answer line's own band at each encoded frame, with the frame's presentation time and the measured left edge — the move is visible and measured, not asserted |
-| `10-lesson-right-to-reading.png` | **The right answer.** After typing `peculiar` and checking, the quiz moved from the subject's Meaning to its Reading (`こたえ`) — so the right cue fired without a subject being started (see *Account state*) |
-| `11-hub-after.png` | The hub after the capture: **0 Items reviewed**, `Lessons learned 2`, `Learned today · 2 of 15` — unchanged from `01-hub-before.png` — and the paused batch holding the reader's place locally (`5 lessons left in batch · Progress · 6 of 15 parts`) |
-| `12-lesson-back-dialog.mp4` | 21.0 s recording of the whole question: header Back → dialog → `Stay` (page kept) → header Back → dialog → `Leave` (page gone, Home). Android's `screenrecord` encodes a frame only when the screen changes, so the clip is short |
-| `13-lesson-wrong-answer.mp4` | 5.6 s recording of the wrong answer and its shake: typing `zzz`, checking, `Incorrect` appearing and the line shuffling left and right once |
-| `vibrator-trace.txt` | The two answer cues as the app logged them, and as the platform's own vibration history recorded them |
+| `review-b0-hub.png` | The WaniKani hub before entering: **3 reviews left in session**, `Progress · 0 of 6 parts left`, 47 lessons available, `Learned today · 2 of 15` |
+| `review-a1-prompt.png` | The review page: **1 of 6**, `Vocabulary`, Level 27, the **Meaning** prompt, "Type the meaning", empty field, **Check answer** |
+| `review-a2-dialog-back.png` | **The question.** Header Back on the review page raises `Leave the review session?` — *"Nothing is sent to WaniKani by leaving. The subject you are on stays unanswered and your place in the queue is kept, so you can pick the review up again."* — with `Stay` and `Leave` |
+| `review-a3-stay.png` | After `Stay`: the dialog is gone and the same prompt is showing — nothing was left |
+| `review-a4-dialog-back2.png` | The question raised a second time, so the guard is re-armed rather than one-shot |
+| `review-a5-after-leave.png` | After `Leave`: the page is gone and Gaten's Home is showing, which is where Back already went |
+| `review-leave.mp4` | **The interaction, end to end.** Back → dialog → `Stay` → Back → `Leave` → Home, as one clip |
+| `review-b1-prompt.png` | Re-entered for the cue capture: the review page again, `1 of 6`, the Meaning prompt |
+| `review-b2-typed.png` | A wrong answer typed (`banana`) before checking |
+| `review-b3-wrong.png` | **The wrong answer.** After checking: **Incorrect** in the error colour, **Show answer**, and the card re-armed |
+| `review-wrong.mp4` | **The wrong answer and its shake**, recorded from the check press |
+| `review-wrong-shake-frames.png` | Frame strip cut from that clip at the feedback line, frames 15–30 |
+| `review-b4-answer.png` | The answer revealed: `tip`, **Correct** |
+| `review-b5-hide.png` | The answer hidden again |
+| `review-b6-next.png` | The card re-armed with an empty field |
+| `review-b7-right.png` | **The right answer.** Typing the known answer and checking gives **Correct** and **Continue** — this is the frame the right cue fires on |
+| `review-b8-reading.png` | After **Continue**: the session moved on to **2 of 6** with a Meaning prompt. `Continue` on a meaning does not submit; it advances the batch |
+| `review-c1-dialog.png` | The leave question raised again after the answered card, in the post-answer state |
+| `review-c2-hub-after.png` | After leaving: Gaten's Home, WaniKani card reading **3 reviews due** — unchanged |
+| `review-d1-hub-final.png` | The hub reopened for the account check: `Reviews 3 · 3 reviews left in session`, `Progress · 1 of 6 parts left`, and `Today · Items reviewed 1 · Lessons learned 2` |
 
-## Measurements — the shake
+### Lesson page
 
-From the 39 encoded frames of `13-lesson-wrong-answer.mp4` (`ffprobe` presentation times), the
-answer line's red ink (`#EF9A9A`, the dark-theme error colour, sampled as (237, 152, 151)) was
-located in its own band of each frame (`y 1040..1220`). Resting, its left edge is **62 px**; the
-table is the move away from that:
+| File | Shows |
+| --- | --- |
+| `lesson-a2-dialog-back.png` | **The question.** Header Back on the lesson page raises `Leave the lesson?` with `Stay` and `Leave` |
+| `lesson-a3-stay.png` | After `Stay`: the dialog is gone and the lesson is where it was |
+| `lesson-a4-dialog-back2.png` | The question raised a second time |
+| `lesson-a5-after-leave.png` | After `Leave`: the page is gone and Gaten's Home is showing |
+| `lesson-b0-entered.png` | Re-entered for the recorded clip: the lesson's first teaching card (Kanji, Level 28, meaning `Peculiar, Unusual, Odd, Strange`) — no teaching card advanced, so nothing was started |
+| `lesson-b1-dialog.png` | **The question** on the merged build: `Leave the lesson?` — *"Nothing is sent to WaniKani by leaving. The subjects you have not finished stay in your lessons, and the ones already started stay started."* — with `Stay` and `Leave` |
+| `lesson-b2-stay.png` | After `Stay`: dialog gone, the same teaching card showing |
+| `lesson-b3-dialog2.png` | The question raised a second time, so the guard is re-armed rather than one-shot |
+| `lesson-b4-hub-after.png` | After `Leave`: Gaten's Home |
+| `lesson-b5-hub-final.png` | Home with the WaniKani card reading **5 reviews due** |
+| `lesson-b6-hub.png` | The hub after the lesson exit: `3 reviews left in session`, `Progress · 1 of 6 parts left`, `5 lessons left in batch`, `Progress · 0 of 15 parts · 5 kanji`, `Today · Items reviewed 1 · Lessons learned 2` |
+| `lesson-leave.mp4` | **The lesson interaction, end to end.** Back → dialog → `Stay` → Back → dialog → `Leave` → Home, as one clip (1080×2340, 38.5 s) |
 
-| Frame (s) | Left edge (px) | Δ (px) | Δ (dp) |
+### Traces
+
+| File | Shows |
+| --- | --- |
+| `vibrator-trace.txt` | The two answer cues as the platform's own vibration history recorded them, plus the TICK rows around them, and an honest note about the logcat lines |
+
+## Measurements
+
+### The shake — measured, not asserted
+
+The feedback line (`Incorrect`) is what shakes. Its left edge per frame, taken from
+`review-wrong.mp4` (1080×2340, 31 frames over 7.17 s, variable frame rate), band `y 1040–1095`:
+
+| Frame | Time (s) | Left edge (px) | Displacement |
 | --- | --- | --- | --- |
-| 3.061 | 62 | 0 | 0.0 |
-| 3.079 | 38 | −24 | −8.7 |
-| 3.095 | 36 | −26 | −9.5 |
-| 3.112 | 36 | −26 | −9.5 |
-| 3.129 | 58 | −4 | −1.5 |
-| 3.146 | 76 | +14 | +5.1 |
-| 3.162 | 84 | +22 | +8.0 |
-| 3.178 | 88 | +26 | +9.5 |
-| 3.195 | 90 | +28 | +10.2 |
-| 3.211 | 90 | +28 | +10.2 |
-| 3.229 | 90 | +28 | +10.2 |
-| 3.245 | 70 | +8 | +2.9 |
-| 3.262 | 64 | +2 | +0.7 |
-| 3.279 | 62 | 0 | 0.0 |
-| 3.295 | 62 | 0 | 0.0 |
-| 3.579 | 62 | 0 | 0.0 |
+| 15 | 4.416 | 64 | rest |
+| 16 | 4.432 | 66 | +2 |
+| 17 | 4.449 | 42 | −22 |
+| 18 | 4.466 | 36 | −28 |
+| 19 | 4.482 | 34 | **−30** (left extreme) |
+| 20 | 4.499 | 62 | −2 |
+| 21 | 4.515 | 78 | +14 |
+| 22 | 4.533 | 86 | +22 |
+| 23 | 4.550 | 88 | +24 |
+| 24 | 4.565 | 90 | +26 |
+| 25 | 4.583 | 95 | **+31** (right extreme) |
+| 26 | 4.599 | 95 | +31 |
+| 27 | 4.616 | 70 | +6 |
+| 28 | 4.633 | 64 | rest |
+| 29–30 | 4.649–4.666 | 64 | rest |
 
-At 440 dpi, 1 dp is 2.75 px, so the extremes (−26 px, +28 px) are the shake constant's own travel:
-`SHAKE_TRAVEL` is 10 dp ≈ 27.5 px. The move lasts 3.061 → 3.279 s (218 ms) against a `withSequence`
-of 50 + 100 + 50 ms. Every frame from 3.279 s to the end of the clip (5.58 s) holds at 62 px: the
-shake happens **once** and is not repeated by the renders that follow.
+- Rest 64 px, left extreme 34 px (**−30 px**), right extreme 95 px (**+31 px**).
+- At 440 dpi, 1 dp = 2.75 px, so the extremes are ≈ **−10.9 dp** and **+11.3 dp** about rest — the
+  animation's own travel.
+- The motion runs from **4.416 s to 4.666 s = 250 ms**, once, and the line is flat at 64 px for the
+  remaining 2.3 s of the clip. It goes left first, then right: one shake, not a loop.
+- The typed answer row (`y 875–940`, the text `banana`) stays at left 75 px throughout — the shake is
+  on the feedback line only, which is what the component is built to do.
 
-## Measurements — the two wave forms
+### The two wave forms — as the platform played them
 
-`vibrator-trace.txt` carries both rows verbatim. What they say:
+From `vibrator-trace.txt` (`dumpsys vibrator_manager`, `Previous vibrations for usage TOUCH`,
+`opPkg=com.gaten`, `status: finished`):
 
-| Cue | Platform's record of the effect | Duration | Status |
-| --- | --- | --- | --- |
-| Wrong | `Step{amplitude=0.0, duration=0}, Step{amplitude=0.78431374, duration=45}, Step{amplitude=0.0, duration=70}, Step{amplitude=0.78431374, duration=45}`, `repeat=-1` | 161 ms | `finished` |
-| Right | `Step{amplitude=0.0, duration=0}, Step{amplitude=0.3529412, duration=35}`, `repeat=-1` | 37 ms | `finished` |
+| Cue | Timestamp | durationMs | Segments | Shape |
+| --- | --- | --- | --- | --- |
+| Wrong | `11-05 19:11:05.330` | 161 | `0.0@0, 0.78431374@45, 0.0@70, 0.78431374@45` | 45 ms buzz, 70 ms gap, 45 ms buzz |
+| Right | `11-05 19:21:27.229` | 36 | `0.0@0, 0.3529412@35` | 35 ms light pulse |
 
-0.78431374 is 200/255 and 0.3529412 is 90/255 — exactly `FeedbackPattern.Wrong`'s and
-`FeedbackPattern.Right`'s amplitudes, at their own timings, each attributed to `uid=10201`
-(`com.gaten`) with `Usage=TOUCH`, and each reported by the platform as **finished** rather than
-cancelled. Both are also in the app's own log, from the native path
-(`Feedback pattern Wrong played`, `Feedback pattern Right played`).
-
-Immediately before each of them the platform's history holds a
-`status: cancelled_superseded` `Prebaked{effect=TICK}` row: that is the **Check answer** press's own
-tick, replaced by the answer's cue within 37 ms. One answer, one thing felt.
+`0.78431374` is 200/255 and `0.3529412` is 90/255 — the amplitudes the app sets. `repeat = -1` on
+both, so each plays once. The 25 `Prebaked{effect=TICK, strength=MEDIUM}` rows in the same history are
+the Check-answer button's own platform tick on each press, not the cues; the nearest ones before each
+cue are `19:10:18.801` (before Wrong) and `19:20:43.168` (before Right).
 
 ## Method
 
-```sh
-# 1. Metro from this worktree, and the device pointed at it (the APK carries the Kotlin; Metro the JS)
-npx react-native start --port 8081 &        # detached; watchman is absent on this host
-adb reverse tcp:8081 tcp:8081
+1. Merged `origin/dev` (`c329631`) into the branch, resolved the hunks in `WaniKaniReview.tsx` and
+   `review-store.ts` by hand, rebuilt and re-hashed the APK.
+2. Installed that APK with `agent-device install -r`, then re-hashed the installed `base.apk` on the
+   device and compared with the host hash.
+3. Served the JS from this worktree's Metro on 8081 with `adb reverse`, then asserted the served
+   bundle's size, sha256 and symbol counts before driving anything.
+4. Drove the app with agent-device. Coordinates were read from screenshots (`uiautomator` cannot see
+   this app's RN text on this image), and the badge and task pill were read off each screenshot before
+   any answer was typed: only a **Vocabulary** subject on a **Meaning** prompt was answered.
+5. Recorded the leave sequence and the wrong answer with `screenrecord` at 1080p, then measured the
+   shake from the decoded frames rather than describing it.
+6. Read the two cues from the platform's own vibration history, and the leave dialog's copy from the
+   screenshot.
+7. Verified the account after leaving: review count and hub counters.
 
-# 2. the build this evidence is of, then the install and the on-device hash check
-./gradlew :app:assembleDebug :app:testDebugUnitTest
-agent-device install app/build/outputs/apk/debug/app-x86_64-debug.apk --platform android --serial emulator-5554
-adb shell run-as com.gaten sha256sum /data/app/…/com.gaten-…/base.apk
+## Account state — what the capture touched and what it did not
 
-# 3. open, and the LogBox banner out of the way of the pinned action
-agent-device open com.gaten --platform android --foreground --relaunch --metro-port 8081 --serial emulator-5554
-agent-device react-native dismiss-overlay --platform android --serial emulator-5554
-
-# 4. the captures (every tap by coordinate, verified by re-reading the screen)
-agent-device logs clear --restart --platform android --serial emulator-5554   # the app log the cue lands in
-agent-device record start docs/pr-evidence/wanikani-feedback/12-lesson-back-dialog.mp4 --scope device
-agent-device press 72 222        # the header's Back on the lesson page
-…
-agent-device record stop
-
-# 5. the shake's frames and their measurement (ffmpeg + PIL, not shipped as a script)
-ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of csv=p=0 13-lesson-wrong-answer.mp4
-ffmpeg -v error -i 13-lesson-wrong-answer.mp4 -fps_mode passthrough /tmp/shake/f%03d.png
-#   then, per frame, the bounding box of the error-red ink in y 1040..1220
-
-# 6. the platform's own record of the cues, and the session closed
-adb shell dumpsys vibrator_manager | grep "Step{amplitude"
-agent-device close --platform android --serial emulator-5554
-```
-
-Fixtures: the WaniKani account connected with 47 lessons available and 0 reviews due; the lesson
-batch of the five kanji that WaniKani offered next; no AnkiDroid access (the Anki card was in
-`Permission needed`, untouched).
-
-## Account state
-
-Nothing was graded, nothing was submitted, and **no lesson was started by this capture**.
-
-- **No review was submitted**, and none could be: the queue was empty (`0 reviews due · All caught
-  up` before and after, `01-hub-before.png` / `11-hub-after.png`), and the review page was never
-  reached.
-- **No lesson was started by this capture.** `Learned today · 2 of 15` and `Lessons learned 2` read
-  identically in `01-hub-before.png` — taken *before* the lesson page was opened for the first time
-  — and in `11-hub-after.png`, after every capture in this directory. Those two pre-date this run.
-- **The one wrong answer was never sent.** A lesson answer is sent only when a subject's quiz is
-  fully correct; this capture answered the meaning of 妙 wrongly, then correctly, which moves the
-  quiz to *its reading* (`10-lesson-right-to-reading.png`) and leaves the subject unstarted. The
-  wrong answer lives in the app's local session (the hub reads `Progress · 6 of 15 parts` —
-  the five teaching cards plus that one part) and is never reported, so
-  `incorrect_meaning_answers` was not touched for 妙 and the account's SRS is unchanged.
-- Leaving the page kept that local session, exactly as the dialog says: the hub offers it back as
-  `5 lessons left in batch`.
+- **Nothing was submitted.** The review count read **3 reviews due** before entering and **3 reviews
+  due** after leaving. The leave dialog states the same thing in its own words: *"Nothing is sent to
+  WaniKani by leaving. The subject you are on stays unanswered and your place in the queue is kept."*
+- **The hub's `Today` counters did not move:** `Items reviewed 1` and `Lessons learned 2` before and
+  after. The `1` is a review the previous agent on this device submitted (the radical), not this
+  capture; it is a daily total, so it is expected to be non-zero and is not evidence of a submission
+  here. `Learned today · 2 of 15` likewise pre-dates this capture — those 2 lessons were already
+  started before the first screenshot.
+- **One wrong answer and one correct answer were produced locally**, on the same Vocabulary subject's
+  Meaning prompt (`banana`, then `tip`). Both are held only in the app's paused session: the session
+  advanced to `2 of 6` and `Progress · 1 of 6 parts left` when `Continue` was pressed, but nothing was
+  sent. If the owner resumes and submits that subject, the wrong attempt may count toward
+  `incorrect_meaning_answers` on WaniKani's next review — that is the one SRS consequence of this
+  capture, and it was not triggered by the submission path.
+- **No lessons were started by this capture.** The lesson page was entered from the paused batch and
+  left through the question without advancing a teaching card; the batch is still `5 lessons left in
+  batch`, `0 of 15 parts left`. The dialog's own copy confirms the lesson was already started before
+  this capture — *"the ones already started stay started"* — so entering and leaving it issued no new
+  `PUT /assignments/<id>/start`.
+- **Home's due count did move, 3 → 5, while the capture ran.** It read `3 reviews due` when the review
+  half was driven and `5 reviews due` after the lesson half, roughly 30 minutes later. The hub's own
+  session count stayed at `3 reviews left in session` and the `Today` counters stayed at
+  `Items reviewed 1` / `Lessons learned 2`, so nothing was graded or submitted; the extra two are
+  WaniKani's schedule bringing items due during the window, not an effect of this capture. It is
+  stated here rather than smoothed over because a reviewer comparing the two Home screenshots will see
+  the difference.
 
 ## What this evidence does not establish
 
-- **The WaniKani review page.** It is unreachable on this account (0 due), so the review half of both
-  changes — the right/wrong cue there and the `Leave the review session?` question — was **not**
-  driven. It shares the code path: the same `Feedback` line, the same `useJudgedAnswer` cue read from
-  `reviewJudgement`, and the same `shouldConfirmLeaving`/`leaveQuestion` in `ReviewScreen` that the
-  lesson half exercises. The unit tests pin the review rules (`tests/wanikani-answer-feedback.test.cjs`,
-  `tests/wanikani-leave-confirm.test.cjs`).
-- **The feel of the cue.** No emulator can say whether a 35 ms pulse or a 45/70/45 ms double buzz
-  reads as "right" or "wrong" in the hand. What is established here is that the call was made (the
-  app's log), that the platform accepted the exact wave form asked for and ran it to completion (its
-  own history), and that it is a different rhythm and strength for each answer. Whether those numbers
-  feel right is a hardware judgement and needs a phone.
-- **The shake on the typed answer.** The measurement is of the feedback line under the field, which
-  is the element the change animates; the answer field itself does not move.
-- **One device, one theme, one subject.** A single x86_64 emulator in dark mode, one kanji (妙), one
-  wrong and one right answer, no reduced-motion pass, no other font scale, and no landscape.
-- **No "before" capture.** The old build's silent wrong answer was not recorded; the change is shown
-  as it is, not as a before/after pair.
-- No accessibility-tree evidence: the RN views expose no text nodes on this image, so every tap was
-  placed by coordinate from a screenshot.
+- **How either cue feels.** A vibration is invisible. `vibrator-trace.txt` and the dumpsys rows prove
+  the app asked the platform for a specific wave form and that the platform played it to completion;
+  they cannot prove the pattern feels right or distinct in a hand. That judgement needs real hardware.
+- **The shake's character as perceived.** The travel is measured (±11 dp about rest, 250 ms); whether
+  it reads as a shake rather than a jitter is a design judgement, not something these frames settle.
+- **The cue on the lesson screen.** The shake and both wave forms were measured on the review screen.
+  The lesson screen renders the same `Feedback` component and its leave question is captured here, but
+  reaching a lesson quiz means passing teaching cards, which issues `PUT /assignments/<id>/start` on a
+  live account — so the lesson cue was not re-recorded on this build. The review-screen measurement is
+  the evidence for the component, not for the lesson screen's wiring.
+- **Reduced motion.** The code short-circuits the shake when the OS asks for reduced motion; that path
+  was not exercised here (the emulator runs with animations on).
+- **Light theme.** All captures are in system dark mode; the error colour and the contrast of the cue
+  line in light theme were not driven.
+- **A second device or form factor.** One emulator, one resolution, one font scale.
+- **Landscape.** Portrait only.
+- **The logcat `Feedback` lines as an artifact.** The app logs one line per cue
+  (`Feedback pattern Wrong played` / `… Right played`), and both were observed live during the run
+  (Wrong at 19:11:05, Right at 19:21:27), but the ring buffer was cleared immediately before the leave
+  capture, so the lines are not preserved as a file. The dumpsys history rows in `vibrator-trace.txt`
+  are the preserved trace, and they are the stronger evidence because they record what the platform
+  actually played rather than what the app requested.
