@@ -23,6 +23,7 @@
  * full-screen with no bottom bar by the shell's own rule, so the flow does not have to ask for it.
  */
 import {romajiToHiragana} from "./wanikani-romaji";
+import {meaningMatches} from "./meaning-match";
 import * as Anki from "../../native/GatenAnki";
 import * as WaniKani from "../../native/GatenWaniKani";
 import {getAnkiDecks, loadAnkiDecks} from "../anki/useAnkiDecks";
@@ -348,11 +349,6 @@ function waniKaniFailureOf(error: unknown): WaniKaniFailure {
  */
 function isTerminalWaniKaniStatus(status: string): boolean {
   return status === "ready" || status === "failed" || status === "needsToken" || status === "authRejected";
-}
-
-/** How a meaning is compared: WaniKani answers are case-insensitive and their spacing does not count. */
-function normalizeMeaning(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 /** The parts one subject asks for: its meaning, and its reading when WaniKani quizzes one. */
@@ -1270,6 +1266,10 @@ class ReviewStore {
     if (step.kind !== "wkReview") return;
     const session = step.session;
     if (session.phase !== "answering" || session.entry.trim() === "") return;
+    // The field stays editable while the answer is judged, so Enter can arrive again before a
+    // reading's native conversion answers. One answer is checked once, or a wrong one is counted
+    // twice.
+    if (this.state.busy) return;
     const item = session.items[session.index];
     if (item == null) return;
 
@@ -1284,10 +1284,7 @@ class ReviewStore {
           const kana = await WaniKani.readingAnswer(romajiToHiragana(typed, true));
           correct = item.readings.includes(kana);
         } else {
-          const answer = normalizeMeaning(typed);
-          correct = item.meanings.some(
-            (meaning) => normalizeMeaning(meaning) === answer
-          );
+          correct = meaningMatches(typed, item.meanings);
         }
         // The step may have been left while the answer was being read.
         const current = this.state.step;
@@ -1525,8 +1522,7 @@ class ReviewStore {
           const kana = await WaniKani.readingAnswer(romajiToHiragana(typed, true));
           correct = item.readings.includes(kana);
         } else {
-          const answer = normalizeMeaning(typed);
-          correct = item.meanings.some((meaning) => normalizeMeaning(meaning) === answer);
+          correct = meaningMatches(typed, item.meanings);
         }
         const current = this.state.step;
         if (current.kind !== "wkLesson") return;
