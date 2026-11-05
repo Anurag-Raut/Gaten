@@ -1,0 +1,20 @@
+# The two answer cues of this capture, as the app's own native path logged them
+# (logcat tag Feedback, from the agent-device session log).
+11-05 17:21:23.037 D/Feedback(24245): Feedback pattern Wrong played
+11-05 17:21:38.934 D/Feedback(24245): Feedback pattern Right played
+
+# The same two, as the platform recorded them, from
+# 'adb shell dumpsys vibrator_manager' -> 'Previous vibrations for usage TOUCH'.
+# Only waveform rows are shown: every other row in that section for com.gaten is a
+# Prebaked{effect=TICK} from a button press (31 rows, the app's
+# existing press feedback, not the answer patterns). Amplitudes are the byte value over 255:
+# 0.78431374 = 200/255 and 0.3529412 = 90/255, i.e. exactly FeedbackPattern.Wrong's and
+# FeedbackPattern.Right's amplitudes, at their own timings (45/70/45 ms and 35 ms).
+createTime: 11-05 17:21:23.037, startTime: 11-05 17:21:23.037, endTime: 11-05 17:21:23.198, durationMs: 161, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}, Step{amplitude=0.0, frequencyHz=0.0, duration=70}, Step{amplitude=0.78431374, frequencyHz=0.0, duration=45}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+createTime: 11-05 17:21:38.934, startTime: 11-05 17:21:38.936, endTime: 11-05 17:21:38.971, durationMs: 37, status: finished, effect: Mono{mEffect=Composed{segments=[Step{amplitude=0.0, frequencyHz=0.0, duration=0}, Step{amplitude=0.3529412, frequencyHz=0.0, duration=35}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=-1, opPkg=com.gaten, reason=null}
+
+# The rows immediately before each waveform are the Check-answer press's own tick, superseded
+# by the answer cue: 'cancelled_superseded' means the pattern replaced it, so only one thing
+# is felt per answer.
+createTime: 11-05 17:21:23.000, startTime: 11-05 17:21:23.001, endTime: 11-05 17:21:23.037, durationMs: 37, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=0, opPkg=com.gaten, reason=null}
+createTime: 11-05 17:21:38.903, startTime: 11-05 17:21:38.904, endTime: 11-05 17:21:38.936, durationMs: 33, status: cancelled_superseded, effect: Mono{mEffect=Composed{segments=[Prebaked{effect=TICK, strength=MEDIUM, fallback=true}], repeat=-1}}, originalEffect: null, scale: 0.00, callerInfo: CallerInfo{ attrs=VibrationAttributes: Usage=TOUCH Audio Usage= USAGE_UNKNOWN Flags=0, uid=10201, displayId=0, opPkg=com.gaten, reason=null}
