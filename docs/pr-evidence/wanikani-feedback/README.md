@@ -29,7 +29,7 @@ The personal access token is never shown, written into this repo, or included in
 
 | Field | Value |
 | --- | --- |
-| Code under test | branch `feat/wanikani-wrong-answer-feedback`; item 1 `efb535f`, item 2 `149a0c1`, evidence `b2dd6b0`, merge `5de971c`, harness fix `f056c31`; `HEAD^{tree}` `129ec864dff6d0b039f41791b572b7bfe8544054` — the tree this APK and these captures were made from (every commit after it touches `docs/pr-evidence/` only) |
+| Code under test | branch `feat/wanikani-wrong-answer-feedback`; item 1 `efb535f`, item 2 `149a0c1`, evidence `b2dd6b0`, merge `5de971c`, harness fix `f056c31`; **code tree** `129ec864dff6d0b039f41791b572b7bfe8544054` — the tree this APK and these captures were made from. Commits after it (`e1bd848` and this README's own commit) touch `docs/pr-evidence/` only, so the built artifact still corresponds to that tree |
 | Base merged in | `c329631` (`origin/dev`, carrying #71, #69 and #70) |
 | Device | serial `emulator-5554`, AVD `Gaten_Lookup_Review` — Android 14 (API 34), `x86_64`, 1080×2340 @ 440 dpi, `font_scale` 0.94, headless; the one shared emulator, not a second AVD |
 | Theme | system dark mode throughout |
