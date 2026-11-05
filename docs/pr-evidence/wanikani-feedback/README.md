@@ -43,6 +43,7 @@ The personal access token is never shown, written into this repo, or included in
 | APK under test | `app/build/outputs/apk/debug/app-x86_64-debug.apk` — 208,910,799 bytes, sha256 `84ae9d9eced2d8371c2d0af5530412b899c8c754ac53f69c7d06e74e70353e12`; installed with `agent-device install` (no uninstall, so the connected account survived); the installed `/data/app/…/base.apk` was re-hashed **on the device** with `sha256sum` to the same value |
 | JS in the APK | the packaged `assets/index.android.bundle` — 3,410,892 bytes, sha256 `1540770c49b212067113775e3e66ef691f4dd2a5c0b6a86a3a9b00b8fb0ea4dc`, and it contains `answerShake`, `AnswerShake`, `shouldConfirmLeaving`, `Leave the review session?` and `Leave the lesson?` |
 | JS served by Metro | this worktree's Metro on port 8081 with `adb reverse tcp:8081 tcp:8081`: the served `index.bundle?platform=android&dev=true&minify=false` is HTTP 200, 10,447,432 bytes, sha256 `28b228693a28162b2bf3b331c026e0ac4d7076b22406a0e2a849a877f66dd42a`, and it contains `answerShake` (6), `AnswerShake` (5), `shouldConfirmLeaving` (7), `Leave the review session?` (2) and `Leave the lesson?` (1). Both JS paths are this revision, so the run is this revision whichever one the app took |
+| Which build each capture came from | The **cue** captures — `review-wrong-field.*`, `lesson-quiz-wrong.*`, `review-b3-wrong.png`, `hub-after-cues.png` — were taken on the retargeted build (`738eef2`, APK `84ae9d9e…`). The **leave** captures — `review-leave.mp4`, `lesson-leave.mp4`, their stills and their GIFs — were taken on the earlier merged build (`e1bd848`, APK `bb19d177…`). The retarget changed the shake's target only (`review-ui.tsx`, the two screens' JSX, `wanikani-cue.ts`, a doc comment), so it did not touch the leave path those clips exercise; they are labelled by build rather than presented as one run |
 | Account | WaniKani **connected**; 5 reviews due before and after; `Today · Items reviewed 1 · Lessons learned 2`; `Learned today · 2 of 15`; 47 lessons available at the start |
 | Driver | agent-device (`install`, `open`, `press`, `type`, `screenshot`, `close`), taps placed by coordinate after reading a screenshot — `uiautomator` sees no text nodes of this app's RN content on this image |
 
@@ -60,6 +61,7 @@ The personal access token is never shown, written into this repo, or included in
 | `review-wrong-field-shake-frames.png` | Frame strip cut from that clip around the check, frames 268–284, cropped to the typed answer row and the `Incorrect` line |
 | `review-b7-right.png` | **The right answer.** Checking the known answer gives **Correct** and **Continue** — the frame the right cue fires on |
 | `review-leave.mp4` | **The leave interaction, end to end.** Back → dialog → `Stay` → Back → `Leave` → Home, as one clip |
+| `review-leave-question.gif` | The same 60.3 s clip as a 5 fps, 380 px-wide looping GIF (204 KB) — the whole interaction playable in place, since a repository MP4 carries no player |
 | `review-a2-dialog-back.png`, `review-a3-stay.png`, `review-a4-dialog-back2.png`, `review-a5-after-leave.png` | The question, `Stay` keeping the prompt, the question re-armed, and `Leave` returning to Home |
 | `review-c2-hub-after.png`, `review-d1-hub-final.png` | After leaving: Home, then the hub reopened for the account check |
 
@@ -69,6 +71,7 @@ The personal access token is never shown, written into this repo, or included in
 | --- | --- |
 | `lesson-a2-dialog-back.png`, `lesson-a3-stay.png`, `lesson-a4-dialog-back2.png`, `lesson-a5-after-leave.png` | **The question** on the lesson page, `Stay` keeping the card, the question re-armed, and `Leave` returning to Home |
 | `lesson-leave.mp4` | **The lesson leave interaction, end to end** (1080×2340, 38.5 s) |
+| `lesson-leave-question.gif` | The same clip as a 5 fps, 380 px-wide looping GIF (433 KB) |
 | `lesson-quiz-wrong.png` | **The lesson quiz wrong answer.** `Kanji` badge, Level 28, 妙, **Meaning** prompt, **Incorrect** under the field. The field is empty: a wrong lesson answer clears the typed text (`review-store.ts`), so the stroke is what moves |
 | `lesson-quiz-wrong.mp4` | **The lesson cue and its shake**, recorded from the check press (1080×2340, 14.42 s, ~60 fps) |
 | `lesson-quiz-wrong-shake.gif` | The **same window** as a looping 620×132 crop, 33 frames at 50 ms, for the same reason: a GIF plays in place, an MP4 in a repository does not |
