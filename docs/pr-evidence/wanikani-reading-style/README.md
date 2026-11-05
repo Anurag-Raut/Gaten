@@ -46,6 +46,15 @@ stale bundle until restarted.
 `Show answer` appear. No answer was graded, no review advanced — the queue read `3 reviews due`
 before and after the capture, and `Items reviewed` is unchanged.
 
+## Capture head vs merged head
+
+The shots were taken with code `a2f05b3` (evidence commit `9b6fbcc`) on base `b38ff19`. The branch
+then merged `origin/dev` at `c329631` (merge `a35f32c`), which changed other lines of
+`WaniKaniReview.tsx` (#71's `editable` expression, #69's default-tab logic) but not the style block:
+`git diff origin/dev..HEAD -- src/rn/ui/review/WaniKaniReview.tsx` contains only the
+`HERO_LETTERING` declaration and the three spreads. The style code is byte-identical between the
+photographed head and the merged head, so the captures stand for the merged head too.
+
 ## Revision and environment
 
 | Item | Value |
