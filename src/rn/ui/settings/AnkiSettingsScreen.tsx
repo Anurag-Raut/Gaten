@@ -351,12 +351,12 @@ export function AnkiSettingsScreen({
           ...CONTENT_COLUMN,
           paddingLeft: insets.left + horizontalInset,
           paddingRight: insets.right + horizontalInset,
-          paddingTop: spacing.xl,
-          paddingBottom: spacing.l + insets.bottom,
+          paddingTop: spacing.s,
+          paddingBottom: spacing.xl + insets.bottom,
         }}
       >
         <SettingsGroup title="AnkiDroid" style={{marginTop: spacing.s}}>
-          <View style={{paddingVertical: spacing.s}}>
+          <View style={{paddingVertical: spacing.m}}>
             {status === "notInstalled" && (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
                 Install AnkiDroid to add cards.
@@ -367,9 +367,12 @@ export function AnkiSettingsScreen({
                 <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
                   Allow access to choose decks and note types and add cards directly.
                 </Text>
-                <View style={{alignSelf: "flex-start"}}>
-                  <Button label="Allow AnkiDroid access" onPress={() => void requestPermission()} />
-                </View>
+                <Button
+                  fullWidth
+                  label="Allow AnkiDroid access"
+                  style={{marginTop: spacing.m}}
+                  onPress={() => void requestPermission()}
+                />
               </>
             )}
             {status === "ready" && (
@@ -386,12 +389,12 @@ export function AnkiSettingsScreen({
               </View>
             )}
             {(loading || loadingFields) && (
-              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
                 Reading AnkiDroid…
               </Text>
             )}
             {readFailed && (
-              <Text style={[typeScale.bodyMedium, {color: colors.error}]}>
+              <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.s}]}>
                 Could not read AnkiDroid. Open AnkiDroid, then try Refresh.
               </Text>
             )}
@@ -399,7 +402,7 @@ export function AnkiSettingsScreen({
         </SettingsGroup>
 
         <SettingsGroup title="Study decks" style={{marginTop: spacing.l}}>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             {status !== "ready" ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
                 Allow AnkiDroid access to choose study decks.
@@ -428,7 +431,7 @@ export function AnkiSettingsScreen({
                     />
                   </SettingsTile>
                 ))}
-                <View style={{alignSelf: "flex-start"}}>
+                <View style={{alignSelf: "flex-start", marginTop: spacing.s}}>
                   <Button
                     variant="text"
                     label="Include all decks"
@@ -447,7 +450,7 @@ export function AnkiSettingsScreen({
         </SettingsGroup>
 
         <SettingsGroup title="Export" style={{marginTop: spacing.l}}>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             <FieldLabel label="Deck" />
             <TextField
               value={draft.deckName}
@@ -464,7 +467,7 @@ export function AnkiSettingsScreen({
               </View>
             )}
           </View>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             <FieldLabel label="Tags" />
             <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginBottom: spacing.xs}]}>Separate with spaces.</Text>
             <TextField
@@ -475,7 +478,7 @@ export function AnkiSettingsScreen({
         </SettingsGroup>
 
         <SettingsGroup title="Card layout" style={{marginTop: spacing.l}}>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             <PressableScale
               accessibilityRole="button"
               accessibilityState={{expanded: showAdvanced}}
