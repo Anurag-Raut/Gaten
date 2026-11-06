@@ -50,7 +50,7 @@ import {SubjectBadge, TaskLabel} from "./wanikani-card-ui";
 import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
 import {romajiToHiragana} from "./wanikani-romaji";
-import {reviewJudgement} from "./wanikani-cue";
+import {reviewCue} from "./wanikani-cue";
 import {useJudgedAnswer} from "./useJudgedAnswer";
 import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
 import type {WaniKaniSession} from "./review-store";
@@ -167,8 +167,9 @@ export function WaniKaniReview({
     if (session.phase === "answering" && session.retrying) inputRef.current?.focus();
   }, [session.phase, session.retrying]);
   // The answer's own cue, fired on the judgement and not on the renders that follow it; the key it
-  // returns is what the answer field's shake is pinned to.
-  const shakeKey = useJudgedAnswer(reviewJudgement, session);
+  // returns is what the answer field's shake is pinned to. A refused reading is not a judgement, but
+  // it earns the same shake and the same buzz: the tap did not go through.
+  const shakeKey = useJudgedAnswer(reviewCue, session);
 
   const tabs = useMemo<DetailTab[]>(() => {
     const list: DetailTab[] = ["meaning"];
@@ -262,8 +263,8 @@ export function WaniKaniReview({
               </AnswerShake>
             </View>
             {session.entryRefused && (
-              <Text accessibilityLiveRegion="polite" style={[styles.refused, {color: colors.error}]}>
-                Invalid input — kana only.
+              <Text accessibilityLiveRegion="polite" style={[styles.refused, {color: colors.onSurfaceVariant}]}>
+                Remove invalid characters
               </Text>
             )}
             {session.feedback != null && (

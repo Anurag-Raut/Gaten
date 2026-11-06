@@ -441,3 +441,44 @@ test('a reading whose trailing n is not finished yet is judged, not refused', as
   assert.deepEqual(asked, ['ほん']);
   assert.equal(session(store).entryRefused, false);
 });
+
+const {reviewCue, reviewRefusal} = loadTypeScript('src/rn/ui/review/wanikani-cue.ts', (name) => {
+  throw new Error(`Unexpected import: ${String(name)}`);
+});
+
+/** One reading prompt mid-answer, as a refusal moves between its states. */
+function answeringReading(patch = {}) {
+  return {
+    phase: 'answering',
+    index: 0,
+    part: 'reading',
+    entry: 'sひゅう',
+    entryRefused: false,
+    incorrectMeaning: 0,
+    incorrectReading: 0,
+    ...patch,
+  };
+}
+
+test("a refused reading earns a wrong answer's cue, once, and only it", () => {
+  const open = answeringReading();
+  const refused = answeringReading({entryRefused: true});
+  const judged = answeringReading({phase: 'reviewed', incorrectReading: 1});
+
+  // The tap did not go through: the tone a wrong answer plays, under a key of its own.
+  assert.equal(reviewRefusal(open, refused)?.tone, 'wrong');
+  assert.notEqual(reviewRefusal(open, refused).key, '0:reading:wrong:0');
+
+  // Once — not on the renders, the keystroke that clears it, or the Continue that follow.
+  assert.equal(reviewCue(refused, refused), null);
+  assert.equal(reviewCue(refused, answeringReading()), null);
+  assert.equal(reviewCue(refused, answeringReading({entry: 'しゅう'})), null);
+
+  // A judgement still wins when the same move carries one.
+  const cue = reviewCue(refused, judged);
+  assert.equal(cue.tone, 'wrong');
+  assert.match(cue.key, /:wrong:1$/);
+
+  // Typed again and refused again: cued again.
+  assert.equal(reviewCue(answeringReading(), refused)?.tone, 'wrong');
+});

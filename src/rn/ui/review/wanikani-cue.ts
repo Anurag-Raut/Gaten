@@ -56,6 +56,27 @@ export function reviewJudgement(
 }
 
 /**
+ * The cue a refused reading earns. Nothing was judged — the entry is not an answer to send, so it is
+ * counted against nothing and the prompt stays where it is — but the tap did not go through, so the
+ * reader gets the same shake and the same double buzz a wrong answer gets. Read from the refusal
+ * arriving, so a keystroke (which clears it) and the renders after it stay silent.
+ */
+export function reviewRefusal(
+  previous: WaniKaniSession,
+  next: WaniKaniSession
+): AnswerJudgement | null {
+  if (previous.phase !== "answering" || next.phase !== "answering") return null;
+  if (previous.index !== next.index || previous.part !== next.part) return null;
+  if (previous.entryRefused || !next.entryRefused) return null;
+  return {tone: "wrong", key: `${next.index}:${next.part}:refused:${next.entry}`};
+}
+
+/** What a review prompt owes the reader: its judgement, or the refusal that stood in for one. */
+export function reviewCue(previous: WaniKaniSession, next: WaniKaniSession): AnswerJudgement | null {
+  return reviewJudgement(previous, next) ?? reviewRefusal(previous, next);
+}
+
+/**
  * The judgement a lesson quiz prompt just reached. A lesson has no `reviewed` phase — a wrong answer
  * leaves the reader on the same prompt to retype it — so the wrong one is read from its own counter
  * rising, which is the only thing a wrong answer does to the prompt. A right one takes two shapes: a
