@@ -584,29 +584,31 @@ function RecentLookupRow({
         !last && {borderBottomWidth: 1, borderBottomColor: colors.outlineVariant},
       ]}
     >
-      <View style={styles.lookupWord}>
-        <Text numberOfLines={1} style={[typeScale.titleSmall, {color: colors.onSurface}]}>
-          {hit.primary}
-        </Text>
-        {reading ? (
-          <Text numberOfLines={1} style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>
-            {reading}
+      <View style={[styles.lookupContent, stacked && styles.lookupContentStacked]}>
+        <View style={styles.lookupWord}>
+          <Text numberOfLines={1} style={[typeScale.titleSmall, {color: colors.onSurface}]}>
+            {hit.primary}
+          </Text>
+          {reading ? (
+            <Text numberOfLines={1} style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>
+              {reading}
+            </Text>
+          ) : null}
+        </View>
+        {gloss ? (
+          <Text
+            numberOfLines={2}
+            style={[
+              typeScale.bodySmall,
+              styles.lookupGloss,
+              stacked && styles.lookupGlossStacked,
+              {color: colors.onSurfaceVariant},
+            ]}
+          >
+            {gloss}
           </Text>
         ) : null}
       </View>
-      {gloss ? (
-        <Text
-          numberOfLines={2}
-          style={[
-            typeScale.bodySmall,
-            styles.lookupGloss,
-            stacked && styles.lookupGlossStacked,
-            {color: colors.onSurfaceVariant},
-          ]}
-        >
-          {gloss}
-        </Text>
-      ) : null}
     </PressableScale>
   );
 }
@@ -734,6 +736,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   lookupRowStacked: {flexDirection: "column", alignItems: "stretch", gap: spacing.xs},
+  // The row's own vertical slack (its 58 dp minimum) must not be the line the gloss aligns to: this
+  // inner row hugs its contents, so both columns share a bottom and the gloss's last line sits on the
+  // reading's line, with a wrapped line growing upward from there.
+  lookupContent: {flex: 1, flexDirection: "row", alignItems: "flex-end", gap: spacing.m},
+  lookupContentStacked: {flexDirection: "column", alignItems: "stretch", gap: spacing.xs},
   lookupWord: {flex: 1, minWidth: 0},
   lookupGloss: {width: "34%", textAlign: "right"},
   lookupGlossStacked: {width: "100%", textAlign: "left"},
