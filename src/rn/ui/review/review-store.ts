@@ -98,6 +98,12 @@ export interface WaniKaniSession {
    * the next keystroke, so the note goes the moment the reader fixes the answer.
    */
   entryRefused: boolean;
+  /**
+   * The wrong answer the reader was stopped on, kept so an edited retry can be told from the
+   * unchanged one: the field stays editable at that stop, and Enter judges an entry the reader has
+   * changed instead of clearing it. Empty whenever no wrong answer is held.
+   */
+  reviewedEntry: string;
   /** The wrong answers recorded for the subject on screen, which is what its review reports. */
   incorrectMeaning: number;
   incorrectReading: number;
@@ -557,6 +563,7 @@ function startWaniKaniSession(items: WaniKaniReviewItem[]): WaniKaniSession {
     part: first.part,
     entry: "",
     entryRefused: false,
+    reviewedEntry: "",
     incorrectMeaning: 0,
     incorrectReading: 0,
     wrong: items.map(() => ({meaning: 0, reading: 0})),
@@ -601,6 +608,7 @@ function atPrompt(session: WaniKaniSession, cursor: number, doneParts: number): 
     doneParts,
     entry: "",
     entryRefused: false,
+    reviewedEntry: "",
     incorrectMeaning: wrong.meaning,
     incorrectReading: wrong.reading,
     feedback: null,
@@ -1353,10 +1361,15 @@ class ReviewStore {
                 ...live,
                 ...countWrong(live, session.part),
                 // The wrong attempt stays on screen, in red, behind its own `reviewed` stop. The card
-                // does not change and nothing is submitted: `wkContinue` only clears the field for the
-                // retry this rule requires. The feedback names no correct answer - that stays behind
-                // the reader's own Show answer disclosure.
+                // does not change and nothing is submitted: `wkContinue` clears the field for the
+                // retry this rule requires, or judges an entry the reader has since edited. The
+                // feedback names no correct answer - that stays behind the reader's own Show answer
+                // disclosure.
                 entry: live.entry,
+                // The snapshot that was actually judged, not the live field: the field stays
+                // editable while a reading's conversion answers, so `live.entry` may already hold a
+                // correction the reader typed during the await.
+                reviewedEntry: session.entry,
                 retrying: true,
                 phase: "reviewed",
                 feedback: { tone: "wrong", text: "Incorrect" },
@@ -1372,6 +1385,7 @@ class ReviewStore {
             kind: "wkReview",
             session: {
               ...live,
+              reviewedEntry: "",
               retrying: false,
               phase: "correct",
               feedback: { tone: "right", text: "✓ Correct" },
@@ -1385,20 +1399,41 @@ class ReviewStore {
   }
 
   /**
-   * Continues from either stop. After a wrong answer it keeps the same card and prompt and only
-   * clears the field for the retry WaniKani requires, leaving the recorded wrong count and the answer
-   * hint in place. After a right answer it moves to the next prompt — sending the subject's review
-   * first when this was the subject's last part, so a subject is reported once, when it is finished.
+   * Continues from either stop. After a wrong answer the field is editable, so the reader may have
+   * changed the rejected answer instead of accepting the retry: a changed entry is judged where it
+   * stands — the same card, part and recorded wrong count — while an unchanged (or emptied) field is
+   * only cleared for the retry WaniKani requires, leaving the wrong count and the answer hint in
+   * place. After a right answer it moves to the next prompt — sending the subject's review first when
+   * this was the subject's last part, so a subject is reported once, when it is finished.
    */
   wkContinue() {
     const step = this.state.step;
     if (step.kind !== "wkReview") return;
     const session = step.session;
     if (session.phase === "reviewed" && session.retrying) {
+      const edited =
+        session.entry.trim() !== "" && session.entry.trim() !== session.reviewedEntry.trim();
+      if (edited) {
+        // Reopen the prompt so the check judges the edited text. `retrying` is left as it stands: the
+        // part is still the wrong answer's retry until a check finishes it right, and a correction the
+        // check refuses stays one. `wkCheck`'s own busy guard keeps a rapid second Enter from judging
+        // or counting it twice.
+        this.set({
+          step: { kind: "wkReview", session: { ...session, phase: "answering" } },
+        });
+        this.wkCheck();
+        return;
+      }
       this.set({
         step: {
           kind: "wkReview",
-          session: { ...session, phase: "answering", entry: "", entryRefused: false },
+          session: {
+            ...session,
+            phase: "answering",
+            entry: "",
+            entryRefused: false,
+            reviewedEntry: "",
+          },
         },
       });
       return;
