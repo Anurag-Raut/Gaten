@@ -1,5 +1,5 @@
 diff --git a/artifacts/visual-review/hubs-procedural/fixtures.tsx b/artifacts/visual-review/hubs-procedural/fixtures.tsx
-index ef7157b..b876b3d 100644
+index ef7157b..b0bdcee 100644
 --- a/artifacts/visual-review/hubs-procedural/fixtures.tsx
 +++ b/artifacts/visual-review/hubs-procedural/fixtures.tsx
 @@ -1,5 +1,6 @@
@@ -9,7 +9,7 @@ index ef7157b..b876b3d 100644
  import {GestureHandlerRootView} from "react-native-gesture-handler";
  import {SafeAreaProvider, useSafeAreaInsets} from "react-native-safe-area-context";
  import {ThemeProvider, useTheme} from "../../../src/rn/ui/theme";
-@@ -18,14 +19,41 @@ const summary = (patch: Partial<WaniKaniSummary> = {}): WaniKaniSummary => ({
+@@ -18,14 +19,48 @@ const summary = (patch: Partial<WaniKaniSummary> = {}): WaniKaniSummary => ({
    dueNow: 23, lessonsNow: 15, nextReviewAt: now + 15 * 60_000,
    nextHourCount: 6, fetchedAt: now, sync: "fresh", retryAfterSeconds: null, ...patch,
  });
@@ -43,15 +43,22 @@ index ef7157b..b876b3d 100644
 +  summary: summary({dueNow: 28, lessonsNow: 47, nextHourCount: 12}),
 +  learningPreferences: {dailyLimit: 15, learnedToday: 0, reviewedToday: 27, activityDate: dayKey(-1), activityFailure: null},
 +};
++/** Mixed activity, so both segments of the day's bar are visible: 27 reviewed and 3 learned today. */
++const wkMixed: WaniKaniHubState = {
++  ...wkBase,
++  summary: summary({dueNow: 28, lessonsNow: 47, nextHourCount: 12}),
++  learningPreferences: {dailyLimit: 15, learnedToday: 3, reviewedToday: 27, activityDate: dayKey(0), activityFailure: null},
++};
  const wkStates: Record<string, WaniKaniHubState> = {
    ready: wkBase,
 +  today: wkToday,
 +  zero: wkZero,
 +  unknown: wkUnknown,
++  mixed: wkMixed,
    partial: {...wkBase, lessonFailure: {failure: "OFFLINE", retryAfterSeconds: null}},
    allClear: {...wkBase, summary: summary({dueNow: 0, lessonsNow: 0})},
    loading: {...wkBase, summary: null},
-@@ -125,7 +153,7 @@ function FixtureContent() {
+@@ -125,7 +160,7 @@ function FixtureContent() {
  
  function VisualReviewFixture() {
    return <GestureHandlerRootView style={styles.root}>

@@ -12,10 +12,11 @@
  * page carries; there is no summary line and no count the hub did not confirm.
  *
  * Today's two confirmed figures stand above the rows under Today's progress: each count, with its
- * own reason when it cannot be read, and one pair of labelled bars showing the day's completed mix.
- * The daily lesson goal is named once, in words; the counts themselves are never repeated inside a
- * row or a chart. The available rows keep their confirmed counts and carry the next review, batch
- * or session state as their support line.
+ * own reason when it cannot be read, over one segmented bar that breaks the day's completed work
+ * into reviews and lessons — the two tones keyed by the swatches on the captions themselves, never
+ * by a second row of numbers. A zero day draws the bar's neutral track; an unread count draws no
+ * bar at all. The available rows keep their confirmed counts and carry the next review, batch or
+ * session state as their support line.
  *
  * While the row the reader acted on is still working, that row says what is happening — Opening
  * reviews…, Opening lessons…, Refreshing — with a spinner, every row goes quiet, and the row's
@@ -31,7 +32,12 @@ import {PressableScale} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
-import {InlineBar, MetricPair, useAnalyticsEntrance} from "../analytics/ink";
+import {
+  MetricPair,
+  StackedBar,
+  useAnalyticsEntrance,
+  type DistributionPart,
+} from "../analytics/ink";
 import type {WaniKaniHubState} from "./review-store";
 import type {WaniKaniLearningPreferences} from "../../native/GatenWaniKani";
 import {deriveWaniKaniHub, type HubModuleModel} from "./wanikani-hub-model";
@@ -120,6 +126,9 @@ function HubRowSkeleton({title, minHeight}: {title: string; minHeight: number}) 
   );
 }
 
+/** The accent strengths the day's one bar is drawn from — one hue, two weights. */
+const TODAY_INTENSITY = [1, 0.42] as const;
+
 export function WaniKaniHome({
   hub,
   busy,
@@ -143,8 +152,6 @@ export function WaniKaniHome({
   const inset = contentInsetFor(width);
   // Narrow screens and large type get a taller floor for the row: its lines wrap instead of clipping.
   const stacked = width < 340 || fontScale >= 1.5;
-  // The chart's label column grows with the reader's text size, exactly as the shared BarRow does.
-  const barLabelWidth = Math.ceil(56 * fontScale);
   const [reviews, lessons] = deriveWaniKaniHub(hub);
   const allClear = reviews.complete && lessons.complete;
   const [todayHelpOpen, setTodayHelpOpen] = useState(false);
@@ -176,20 +183,31 @@ export function WaniKaniHome({
     if (!datedToday) return "Not available for today.";
     return known ? null : "Not tracked yet on this device.";
   };
-  // Both today counts at once, so the chart below has one honest denominator: the day's completed
-  // activity. Either figure unknown means no chart — the metric pair already says why.
+  // Both today counts at once, so the bar below has one honest denominator: the day's completed
+  // activity. Either figure unknown means no bar — the metric pair already says why.
   const today =
     reviewed != null && learned != null
       ? {reviewed, learned, total: reviewed + learned}
       : null;
-  const reviewedShare = today != null && today.total > 0 ? today.reviewed / today.total : 0;
-  const learnedShare = today != null && today.total > 0 ? today.learned / today.total : 0;
-  // The chart's accessibility label speaks the mix as percentages: one rounding, then its
-  // complement, so the two shares never add up to 101.
+  // The day's one bar, straight under the figures: the same two counts they state, sized by their
+  // own share of the completed total. No count is written again on the bar or under it.
+  const todayParts: DistributionPart[] =
+    today == null
+      ? []
+      : [
+          {key: "reviews", label: "Reviews", count: today.reviewed},
+          {key: "lessons", label: "Lessons", count: today.learned},
+        ].map((part, index) => ({
+          ...part,
+          value: String(part.count),
+          color: colors.accent,
+          opacity: TODAY_INTENSITY[index],
+        }));
+  // The bar's accessibility label speaks the mix as percentages: one rounding, then its complement,
+  // so the two shares never add up to 101.
   const reviewedPercent =
     today != null && today.total > 0 ? Math.round((today.reviewed / today.total) * 100) : 0;
   const learnedPercent = 100 - reviewedPercent;
-  const dailyLimit = prefs?.dailyLimit ?? null;
   // The analytics page's one-shot entrance: the figures sweep in once, when the first of them is
   // actually known, and never replay on a refresh.
   const entrance = useAnalyticsEntrance(reviewed != null || learned != null);
@@ -339,82 +357,32 @@ export function WaniKaniHome({
                 value: reviewed == null ? "—" : String(reviewed),
                 count: reviewed == null ? null : {value: reviewed},
                 caption: "Items reviewed",
+                swatch: {color: colors.accent, opacity: TODAY_INTENSITY[0]},
                 note: hintFor(reviewed != null),
               }}
               right={{
                 value: learned == null ? "—" : String(learned),
                 count: learned == null ? null : {value: learned},
                 caption: "Lessons learned",
+                swatch: {color: colors.accent, opacity: TODAY_INTENSITY[1]},
                 note: hintFor(learned != null),
               }}
               entrance={entrance}
             />
           </View>
-          {/* The two labelled bars are the day's mix, not a goal: their shares run against the day's
-              own completed total, and the metric pair above stays the only place the counts appear. */}
+          {/* The day's completed mix is one segmented bar straight under the figures; the caption
+              swatches are its key, so nothing below the bar repeats a count or explains itself. */}
           {today != null && (
-            <View
-              style={styles.todayChart}
-              accessible
+            <StackedBar
+              segments={todayParts}
+              selectedKey={null}
               accessibilityLabel={
                 today.total === 0
                   ? "Nothing completed yet today."
                   : `${reviewedPercent}% reviews and ${learnedPercent}% lessons of today’s completed activity.`
               }
-            >
-              {today.total === 0 ? (
-                <Text style={[styles.todayChartNote, {color: colors.onSurfaceVariant}]}>
-                  Nothing completed yet today.
-                </Text>
-              ) : (
-                <>
-                  <View style={styles.todayBarRow}>
-                    <Text
-                      style={[
-                        styles.todayBarLabel,
-                        {width: barLabelWidth, color: colors.onSurfaceVariant},
-                      ]}
-                    >
-                      Reviews
-                    </Text>
-                    <View style={styles.todayBarTrack}>
-                      <InlineBar
-                        share={reviewedShare}
-                        color={colors.accent}
-                        height={5}
-                        entrance={entrance}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.todayBarRow}>
-                    <Text
-                      style={[
-                        styles.todayBarLabel,
-                        {width: barLabelWidth, color: colors.onSurfaceVariant},
-                      ]}
-                    >
-                      Lessons
-                    </Text>
-                    <View style={styles.todayBarTrack}>
-                      <InlineBar
-                        share={learnedShare}
-                        color={colors.accent}
-                        height={5}
-                        entrance={entrance}
-                      />
-                    </View>
-                  </View>
-                  <Text style={[styles.todayChartNote, {color: colors.onSurfaceVariant}]}>
-                    Share of today’s completed activity
-                  </Text>
-                </>
-              )}
-            </View>
-          )}
-          {dailyLimit != null && dailyLimit > 0 && (
-            <Text style={[styles.todayGoal, {color: colors.onSurfaceVariant}]}>
-              {`Daily lesson goal · ${dailyLimit} ${dailyLimit === 1 ? "lesson" : "lessons"}`}
-            </Text>
+              entrance={entrance}
+            />
           )}
           <SectionCaption>Available study</SectionCaption>
           {sectionFor(reviews)}
@@ -477,15 +445,6 @@ const styles = StyleSheet.create({
   },
   todayCaption: {flex: 1, marginTop: 0, marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0},
   todayMetrics: {marginTop: 12},
-  // Today's completed mix: two labelled bars sharing one track width, then the line that names what
-  // the bars are a share of. The counts stay in the metric pair above; only labels ride the bars.
-  todayChart: {marginTop: 14, gap: 6},
-  todayBarRow: {flexDirection: "row", alignItems: "center", gap: spacing.m},
-  todayBarLabel: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15},
-  todayBarTrack: {flex: 1, minWidth: 0},
-  todayChartNote: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15},
-  // The daily lesson goal is named once, under the chart, so the lesson count above is not repeated.
-  todayGoal: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: 10},
   dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14, fontFamily: APP_FONT},
   dialogParagraph: {fontFamily: APP_FONT, fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
   notice: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: spacing.m, marginBottom: spacing.xs},

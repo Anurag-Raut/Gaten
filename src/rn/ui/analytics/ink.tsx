@@ -462,6 +462,12 @@ export interface MetricBlock {
   count?: {value: number | null; decimals?: number; suffix?: string} | null;
   /** What the figure counts, directly under it. */
   caption: string;
+  /**
+   * A small square drawn before [caption], in the tone of the bar segment this figure names. A bar
+   * that breaks one day into the figures above it needs the key to sit on those figures, not in a
+   * second row of numbers. Decorative: the caption and figure already carry the meaning.
+   */
+  swatch?: {color: string; opacity?: number} | null;
   /** A second line of context, a step below the caption. */
   note?: string | null;
   /** Draw the figure in the quiet ink: a number that is real but not the point of the section. */
@@ -483,6 +489,7 @@ export function Metric({
   value,
   count,
   caption,
+  swatch = null,
   note,
   muted = false,
   hero = true,
@@ -506,9 +513,27 @@ export function Metric({
         entrance={entrance}
         style={[hero ? styles.metricHero : typeScale.metric, {color: figureColor}]}
       />
-      <Text style={[typeScale.bodySmall, styles.metricCaption, {color: colors.onSurfaceVariant}]}>
-        {caption}
-      </Text>
+      {swatch == null ? (
+        // Exactly the original caption when there is no segment key: one Text, its own 5 dp step.
+        <Text style={[typeScale.bodySmall, styles.metricCaption, {color: colors.onSurfaceVariant}]}>
+          {caption}
+        </Text>
+      ) : (
+        <View style={styles.metricCaptionRow}>
+          <View
+            accessible={false}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[
+              styles.metricSwatch,
+              {backgroundColor: swatch.color, opacity: swatch.opacity ?? 1},
+            ]}
+          />
+          <Text style={[typeScale.bodySmall, styles.metricCaptionText, {color: colors.onSurfaceVariant}]}>
+            {caption}
+          </Text>
+        </View>
+      )}
       {note != null && note !== "" ? (
         <Text style={[typeScale.bodySmall, styles.metricNote, {color: colors.onSurfaceVariant}]}>
           {note}
@@ -1368,17 +1393,24 @@ function CountLegendButton({
  * The bar is also a way to choose: the wrapper is a real 48 dp touch row with the capsule centred
  * inside it, and the hit layer below still divides that row by each stage's own count — the
  * cumulative paint layers never replace the non-cumulative hit regions. A zero-count category has no
- * segment to press, so it is chosen from its legend like any other.
+ * segment to press, so it is chosen from its legend like any other. A caller with no legend — one
+ * static readout with its key already on the figures above it — omits `onSelect`, and the hit layer
+ * is not drawn at all; `accessibilityLabel` then states the bar's own reading instead of a summary
+ * built from counts.
  */
 export function StackedBar({
   segments,
   selectedKey,
   onSelect,
+  accessibilityLabel,
   entrance,
 }: {
   segments: DistributionPart[];
   selectedKey: string | null;
-  onSelect: (key: string) => void;
+  /** Absent when the bar is a static readout: no hit layer is drawn and nothing can be chosen. */
+  onSelect?: (key: string) => void;
+  /** Overrides the count-based summary for a caller that states its own shares. */
+  accessibilityLabel?: string;
   entrance: SharedValue<number>;
 }): React.JSX.Element {
   const {colors} = useTheme();
@@ -1397,9 +1429,11 @@ export function StackedBar({
   const revealStyle = useAnimatedStyle(() => ({
     width: barWidth.value * entrance.value,
   }));
-  const summary = segments
-    .map((segment) => `${segment.spoken ?? segment.label} ${segment.count}`)
-    .join(", ");
+  const summary =
+    accessibilityLabel ??
+    segments.map((segment) => `${segment.spoken ?? segment.label} ${segment.count}`).join(", ");
+  // A static bar has no selection: the hit layer and its handlers exist only when a caller asks.
+  const select = onSelect;
   return (
     <View style={styles.stackedBarWrap}>
       <View
@@ -1433,17 +1467,19 @@ export function StackedBar({
           proportional columns as the counts, independent of the cumulative paint layers above. It
           carries no ink and no accessibility of its own — the visible key is the spoken control, and
           this is only the sighted reader's quicker way to it. */}
-      <View style={styles.stackedHitLayer} pointerEvents="box-none">
-        {drawn.map((segment) => (
-          <PressableScale
-            key={segment.key}
-            accessible={false}
-            importantForAccessibility="no-hide-descendants"
-            onPress={() => onSelect(segment.key)}
-            style={{flexGrow: segment.count, height: "100%"}}
-          />
-        ))}
-      </View>
+      {select != null && (
+        <View style={styles.stackedHitLayer} pointerEvents="box-none">
+          {drawn.map((segment) => (
+            <PressableScale
+              key={segment.key}
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              onPress={() => select(segment.key)}
+              style={{flexGrow: segment.count, height: "100%"}}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -1663,7 +1699,12 @@ const styles = StyleSheet.create({
     fontFamily: APP_FONT,
   },
   metricHero: {fontSize: 34, lineHeight: 38, fontWeight: "700", letterSpacing: -1.5, fontFamily: APP_FONT},
+  // The caption keeps its original 5 dp step. Only a caption that leads with a segment swatch takes
+  // the row: the 8 dp swatch never shrinks, so the caption text wraps beside it.
   metricCaption: {marginTop: 5},
+  metricCaptionRow: {flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5},
+  metricCaptionText: {flexShrink: 1},
+  metricSwatch: {width: 8, height: 8, borderRadius: 2, flexShrink: 0},
   metricNote: {marginTop: 8},
   metricPair: {flexDirection: "row", alignItems: "flex-start"},
   metricPairSide: {flex: 1, minWidth: 0},
