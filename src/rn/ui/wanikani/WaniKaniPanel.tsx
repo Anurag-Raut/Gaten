@@ -196,6 +196,7 @@ export function WaniKaniPanel({
           cacheFailure={lookup.cacheFailure}
           compact={compact}
           onRadical={onRadical}
+          onRefresh={() => setRetry({key: targetKey, count: retryCount + 1})}
         />
       )}
       {lookup?.status === "noEntry" && (
@@ -231,56 +232,76 @@ export function WaniKaniPanel({
     </View>
   );
 
+  // A kanji's character is the page's anchor, so it sits in the heading row beside the page
+  // actions. A radical's anchor is its drawing and its name is the body's primary content: a
+  // heading here would say the name twice and leave a toolbar over the page. Only the overlay's
+  // back action stays in that row for a radical.
+  const isKanjiPage = target.kind === "kanji";
+
   return (
     <View style={styles.root}>
-      <View style={[
-        styles.headerRow,
-        !showBack && !embedded && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
-      ]}>
-        {showBack && onBack && (
-          <IconButton
-            name="arrow_back"
-            accessibilityLabel="Close these details"
-            onPress={onBack}
-            compact={compact}
-            size={compact ? 18 : 20}
-          />
-        )}
-        <Text
-          numberOfLines={1}
-          style={[
-            headingIsCharacter ? styles.heroGlyph : typeScale.titleLarge,
-            {
-              color: headingIsCharacter ? colors.onSurface : colors.onSurfaceVariant,
-              flexShrink: 1,
-            },
-          ]}
-        >
-          {heading}
-        </Text>
-        <View style={styles.headerActions}>
-          {subject !== null && (
-            <>
-              <IconButton
-                name="refresh"
-                accessibilityLabel="Refresh this page from WaniKani"
-                onPress={() => setRetry({key: targetKey, count: retryCount + 1})}
-                compact={compact}
-                size={compact ? 18 : 20}
-              />
-              {isWaniKaniPage(subject.documentUrl) && (
+      {isKanjiPage ? (
+        <View style={[
+          styles.headerRow,
+          !showBack && !embedded && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
+        ]}>
+          {showBack && onBack && (
+            <IconButton
+              name="arrow_back"
+              accessibilityLabel="Close these details"
+              onPress={onBack}
+              compact={compact}
+              size={compact ? 18 : 20}
+            />
+          )}
+          <Text
+            numberOfLines={1}
+            style={[
+              headingIsCharacter ? styles.heroGlyph : typeScale.titleLarge,
+              {
+                color: headingIsCharacter ? colors.onSurface : colors.onSurfaceVariant,
+                flexShrink: 1,
+              },
+            ]}
+          >
+            {heading}
+          </Text>
+          <View style={styles.headerActions}>
+            {subject !== null && (
+              <>
                 <IconButton
-                  name="open_in_new"
-                  accessibilityLabel="Open this page on WaniKani"
-                  onPress={() => openExternal(subject.documentUrl ?? "")}
+                  name="refresh"
+                  accessibilityLabel="Refresh this page from WaniKani"
+                  onPress={() => setRetry({key: targetKey, count: retryCount + 1})}
                   compact={compact}
                   size={compact ? 18 : 20}
                 />
-              )}
-            </>
-          )}
+                {isWaniKaniPage(subject.documentUrl) && (
+                  <IconButton
+                    name="open_in_new"
+                    accessibilityLabel="Open this page on WaniKani"
+                    onPress={() => openExternal(subject.documentUrl ?? "")}
+                    compact={compact}
+                    size={compact ? 18 : 20}
+                  />
+                )}
+              </>
+            )}
+          </View>
         </View>
-      </View>
+      ) : (
+        showBack && onBack && (
+          <View style={styles.headerRow}>
+            <IconButton
+              name="arrow_back"
+              accessibilityLabel="Close these details"
+              onPress={onBack}
+              compact={compact}
+              size={compact ? 18 : 20}
+            />
+          </View>
+        )
+      )}
       {scrollable ? (
         <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>{body}</ScrollView>
       ) : (
@@ -297,6 +318,7 @@ function AvailableContent({
   cacheFailure,
   compact,
   onRadical,
+  onRefresh,
 }: {
   kanji: KanjiSubject | null;
   radical: RadicalSubject | null;
@@ -304,6 +326,8 @@ function AvailableContent({
   cacheFailure: WaniKaniFailure | undefined;
   compact: boolean;
   onRadical?: (id: number) => void;
+  /** Asks WaniKani again; the radical page's foot action, where the kanji page's is in its row. */
+  onRefresh: () => void;
 }) {
   const {colors, dark} = useTheme();
   const meanings = radical ? radical.meanings : kanji?.meanings ?? [];
@@ -313,37 +337,53 @@ function AvailableContent({
 
   return (
     <View style={CONTENT_COLUMN}>
-      {/* A radical's own drawing is what the page is about, so it gets the page's one focal
-          surface; a kanji has its character in the heading and needs none. */}
+      {/* A radical's drawing is the page's anchor and its name is the page's one piece of primary
+          content, so they are drawn together straight on the page: no panel behind the drawing, and
+          the name said once here instead of once in a heading and again under a section label. */}
       {radical && (
-        <View style={[styles.hero, {backgroundColor: colors.surfaceVariant}]}>
+        <View style={[styles.heroRow, {borderBottomColor: colors.outlineVariant}]}>
+          {/* The drawing when WaniKani has one, its character when the radical has one, and
+              nothing when it has neither: the name below is then the page's only content, and it is
+              already said once — drawing it again as art would say it twice. */}
           {radical.svg ? (
             <RadicalImage
               svg={radical.svg}
               dark={dark}
-              background={colors.surfaceVariant}
+              background="transparent"
               size={compact ? 56 : 72}
             />
-          ) : (
-            <Text style={[styles.heroGlyph, {color: colors.onSurface}]}>
-              {radical.character ?? radical.primaryMeaning}
+          ) : radical.character != null ? (
+            <Text style={[styles.heroGlyph, {color: colors.onSurface}]}>{radical.character}</Text>
+          ) : null}
+          <View style={styles.heroText}>
+            <Text style={[styles.meaningGloss, {color: colors.onSurface}]}>
+              {primaryMeaning}
+            </Text>
+            {alternates.length > 0 && (
+              <Text style={[typeScale.bodySmall, styles.heroAlternates, {color: colors.onSurfaceVariant}]}>
+                {alternates.join(" · ")}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+      {/* A kanji's character is already the heading, so its meaning is the one thing the page has
+          to state; a radical states it in the hero above. */}
+      {kanji && (
+        <View style={[styles.sectionBlock, styles.sectionRule, {borderBottomColor: colors.outlineVariant}]}>
+          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
+            Meaning
+          </Text>
+          <Text style={[styles.meaningGloss, {color: colors.onSurface}]}>
+            {primaryMeaning}
+          </Text>
+          {alternates.length > 0 && (
+            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+              {alternates.join(" · ")}
             </Text>
           )}
         </View>
       )}
-      <View style={[styles.sectionBlock, styles.sectionRule, {borderBottomColor: colors.outlineVariant}]}>
-        <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-          Meaning
-        </Text>
-        <Text style={[styles.meaningGloss, {color: colors.onSurface}]}>
-          {primaryMeaning}
-        </Text>
-        {alternates.length > 0 && (
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-            {alternates.join(" · ")}
-          </Text>
-        )}
-      </View>
       {kanji && (kanji.onyomi.length > 0 || kanji.kunyomi.length > 0) && (
         <View
           style={[
@@ -417,7 +457,7 @@ function AvailableContent({
       <View
         style={[
           styles.sectionBlock,
-          styles.sectionGap,
+          radical ? styles.sectionRadical : styles.sectionGap,
           styles.sectionRule,
           {borderBottomColor: colors.outlineVariant},
         ]}
@@ -460,6 +500,28 @@ function AvailableContent({
           )}
         </View>
       )}
+      {/* A radical page's two page actions sit at the foot, out of the reading path: the kanji page
+          keeps the same pair in its heading row, beside the character it already draws. */}
+      {radical && (
+        <View style={styles.pageActions}>
+          <Button
+            variant="text"
+            label="Refresh"
+            accessibilityLabel="Refresh this page from WaniKani"
+            leading={<Icon name="refresh" size={18} color={colors.accent} />}
+            onPress={onRefresh}
+          />
+          {isWaniKaniPage(radical.documentUrl) && (
+            <Button
+              variant="text"
+              label="View on WaniKani"
+              accessibilityLabel="Open this page on WaniKani"
+              leading={<Icon name="open_in_new" size={18} color={colors.accent} />}
+              onPress={() => openExternal(radical.documentUrl ?? "")}
+            />
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -486,7 +548,7 @@ function RadicalImage({
       document={document}
       backgroundColor={background}
       mode="svg"
-      style={{width: size, height: size}}
+      style={{width: size, height: size, flexShrink: 0}}
     />
   );
 }
@@ -618,14 +680,18 @@ const styles = StyleSheet.create({
   meaningGloss: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
   readingValue: {fontSize: 18, fontFamily: APP_FONT},
   componentGlyph: {fontSize: 24, fontWeight: "600", fontFamily: APP_FONT},
-  hero: {
-    alignSelf: "center",
-    borderRadius: shape.medium,
-    padding: spacing.xl,
-    marginBottom: spacing.m,
+  // The radical's drawing and its name, drawn together straight on the page — the drawing unboxed
+  // and the name as the page's primary text — and closed by the section rule like every section.
+  heroRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: spacing.l,
+    paddingVertical: spacing.l,
+    borderBottomWidth: 1,
   },
+  // `minWidth: 0` lets the name wrap inside the row instead of pushing the drawing off the edge.
+  heroText: {flexShrink: 1, minWidth: 0, gap: spacing.xs},
+  heroAlternates: {marginTop: spacing.xs},
   // A flat section with a readable caption and enough room for a long mnemonic to wrap.
   sectionBlock: {
     paddingVertical: spacing.s,
@@ -633,6 +699,11 @@ const styles = StyleSheet.create({
   },
   sectionRule: {borderBottomWidth: 1},
   sectionGap: {marginTop: spacing.l},
+  // The radical page's last section sits directly under the hero's rule, so it spaces itself
+  // rather than carrying the gap a mid-page section uses.
+  sectionRadical: {paddingVertical: spacing.l},
+  // The radical page's page actions, at the foot and out of the reading path.
+  pageActions: {flexDirection: "row", flexWrap: "wrap", gap: spacing.m, paddingTop: spacing.m},
   readingRow: {marginTop: spacing.s},
   caption: {marginBottom: spacing.xs},
   componentRow: {gap: spacing.s},

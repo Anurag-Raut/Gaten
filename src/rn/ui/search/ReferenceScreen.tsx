@@ -6,8 +6,9 @@
 
 /**
  * The full-screen WaniKani pages the Search tab pushes: one behind a tapped kanji chip, one
- * behind a tapped radical component. Full pages use the shared app bar above the subject heading;
- * the lookup overlay keeps its compact panel heading and local back action.
+ * behind a tapped radical component. Full pages use the shared app bar; below it a kanji draws its
+ * character and a radical draws its name as the page's own content (`WaniKaniPanel`). The lookup
+ * overlay keeps its compact panel heading for a kanji and its local back action either way.
  *
  * A radical tap hands the id straight to the shell, which owns the Tick and the open-or-toggle
  * decision: only the shell knows whether the tap opens a new radical page or closes the open one
