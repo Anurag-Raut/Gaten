@@ -125,9 +125,22 @@ cards and rounded section tiles.
 | Content layout | `contentInsetFor(width)` supplies 16 dp below 360 dp and 22 dp otherwise. `CONTENT_COLUMN` caps and centers content at 560 dp; callers add their own padding. |
 
 All pushed review, settings and search detail pages use the shared app bar, including Anki settings
-while loading. Full-page kanji/radical details keep their subject heading beneath the app bar; the
-lookup overlay keeps its local heading and back action. Large header text can grow the bar past
-64 dp, and long titles ellipsize against trailing controls.
+while loading. A full-page kanji detail keeps its character beneath the app bar, because the
+character is the page's anchor; a radical's anchor is its drawing, so the radical detail draws the
+drawing unboxed with its name as the page's primary text and states the name only there, with the
+page's refresh and open-on-WaniKani actions at the foot. The lookup overlay keeps its local back
+action. Large header text can grow the bar past 64 dp, and long titles ellipsize against trailing
+controls.
+
+**Radical detail refinement (5 November 2026).** `WaniKaniPanel`'s radical page draws the SVG on the
+page surface with no panel or tint behind it, and the primary meaning as the one primary block beside
+it — the earlier tinted hero tile and the repeated `Meaning` section under a heading that already
+said the name are gone. The duplicate name row below the app bar is removed with them, and the page's
+refresh and open-on-WaniKani actions move to a flat foot row. The mnemonic keeps its quiet label and
+the page's section-rule rhythm, closing on the rule like every section, with the foot actions below
+it. A radical that has neither a drawing nor a character draws no art at all rather than repeating
+its name; kanji pages, the review flow's prompts and the lookup overlay's back action are unchanged;
+the nested radical detail inside a review expansion uses the same radical page.
 
 The AnkiDroid-not-installed state offers **Download AnkiDroid**, using the same store-opening action
 as Analytics. Returning after installation or first-time setup rechecks AnkiDroid's availability.
