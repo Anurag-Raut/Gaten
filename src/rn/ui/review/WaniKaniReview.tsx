@@ -203,6 +203,14 @@ export function WaniKaniReview({
         <View style={{paddingHorizontal: contentInset}}>
           <ProgressLine value={progress} height={3} />
         </View>
+        {/* The footer sits under the keyboard while the reader types, so a save in flight is stated
+            above the scrolling card instead: it stays on screen at any scroll position and the
+            keyboard cannot cover it. The next prompt replaces it. */}
+        {submitting && (
+          <View style={[styles.pending, {paddingHorizontal: contentInset}]}>
+            <BusyRow message="Saving to WaniKani…" />
+          </View>
+        )}
         <ScrollView
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
@@ -347,11 +355,6 @@ export function WaniKaniReview({
             onPress={onCheck}
           />
         )}
-        {submitting && (
-          <View style={styles.busy}>
-            <BusyRow message="Saving to WaniKani…" />
-          </View>
-        )}
       </ActionFooter>
     </View>
   );
@@ -395,5 +398,5 @@ const styles = StyleSheet.create({
   contextSpaced: {marginTop: spacing.l},
   contextEnglish: {fontSize: 12, lineHeight: 17, marginTop: spacing.xs, fontFamily: APP_FONT},
   failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m, fontFamily: APP_FONT},
-  busy: {marginTop: spacing.s},
+  pending: {marginTop: spacing.m},
 });

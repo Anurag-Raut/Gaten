@@ -1,0 +1,32 @@
+--- a/src/rn/native/GatenWaniKani.ts
++++ b/src/rn/native/GatenWaniKani.ts
+@@ -413,6 +413,15 @@
+   return GatenWaniKani.readingAnswer(text);
+ }
+ 
++/** The evidence build's synthetic bridge slot; absent from the committed source. */
++type FixtureSubmitGlobal = {
++  __GATEN_FIXTURE_SUBMIT__?: (
++    subjectId: number,
++    incorrectMeaningAnswers: number,
++    incorrectReadingAnswers: number
++  ) => Promise<WaniKaniReviewSubmissionResult>;
++};
++
+ /**
+  * Records one completed review for [subjectId], with how many times its meaning and its reading were
+  * answered wrongly. Sending it twice would advance the subject twice, so the caller is the one that
+@@ -423,6 +432,13 @@
+   incorrectMeaningAnswers: number,
+   incorrectReadingAnswers: number
+ ): Promise<WaniKaniReviewSubmissionResult> {
++  // EVIDENCE FIXTURE ONLY: the uncommitted capture build installs a synthetic bridge here so the
++  // production store's submit/advance/fail transitions can be photographed without a network call.
++  // This branch is absent from the committed source (see docs/pr-evidence/review-next-card-loading).
++  const fixture = (globalThis as FixtureSubmitGlobal).__GATEN_FIXTURE_SUBMIT__;
++  if (typeof fixture === "function") {
++    return fixture(subjectId, incorrectMeaningAnswers, incorrectReadingAnswers);
++  }
+   return GatenWaniKani.submitReview(
+     subjectId,
+     incorrectMeaningAnswers,
