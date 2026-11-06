@@ -20,6 +20,18 @@ const ROMAJI: Record<string, string> = {
 
 const TOKENS = Object.keys(ROMAJI).sort((a, b) => b.length - a.length);
 
+/**
+ * Kana only: the two syllabaries, their iteration marks and the prolonged sound mark. Anything else —
+ * a latin letter the converter could not finish, a digit, a kanji, punctuation — is not a reading,
+ * and a reading answer is refused rather than judged while it carries one.
+ */
+const KANA_ONLY = /^[\u3041-\u3096\u309d\u309e\u30a1-\u30fa\u30fc-\u30fe]+$/;
+
+/** Whether [text] is a reading WaniKani can judge at all: kana, and nothing but kana. */
+export function isKanaOnly(text: string): boolean {
+  return KANA_ONLY.test(text);
+}
+
 /** Convert complete syllables while typing; on submission, also finish an ambiguous trailing n. */
 export function romajiToHiragana(text: string, final = false): string {
   return text.replace(/[A-Za-z']+/g, (run) => {

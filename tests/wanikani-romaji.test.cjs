@@ -9,7 +9,7 @@ const javascript = ts.transpileModule(source, {
 }).outputText;
 const compiled = {exports: {}};
 new Function('module', 'exports', javascript)(compiled, compiled.exports);
-const {romajiToHiragana} = compiled.exports;
+const {romajiToHiragana, isKanaOnly} = compiled.exports;
 
 assert.equal(romajiToHiragana('tsu'), 'つ');
 assert.equal(romajiToHiragana('kanji'), 'かんじ');
@@ -30,3 +30,15 @@ console.log('wanikani-romaji tests passed');
 
 assert.equal(romajiToHiragana("ほn", true), "ほん");
 assert.equal(romajiToHiragana("hon", true), "ほん");
+
+// What a reading may be answered with: kana, and nothing else.
+assert.equal(isKanaOnly('しゅう'), true);
+assert.equal(isKanaOnly('シュウ'), true);
+assert.equal(isKanaOnly('しゅうー'), true);
+assert.equal(isKanaOnly(''), false);
+assert.equal(isKanaOnly('sひゅう'), false);
+assert.equal(isKanaOnly('shuu'), false);
+assert.equal(isKanaOnly('修'), false);
+assert.equal(isKanaOnly('5'), false);
+assert.equal(isKanaOnly('しゅう。'), false);
+assert.equal(isKanaOnly('しゅう う'), false);

@@ -26,7 +26,12 @@ function loadTypeScript(relativePath, mockedRequire) {
 }
 
 const stubs = {
-  './wanikani-romaji': {romajiToHiragana: (text) => text},
+  './wanikani-romaji': {
+    romajiToHiragana: (text) => text,
+    isKanaOnly: loadTypeScript('src/rn/ui/review/wanikani-romaji.ts', () => {
+      throw new Error('Unexpected import: wanikani-romaji');
+    }).isKanaOnly,
+  },
   '../../native/GatenAnki': {},
   '../../native/GatenWaniKani': new Proxy(
     {},
