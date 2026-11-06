@@ -32,7 +32,7 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, spacing} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
@@ -91,10 +91,24 @@ function ReviewDetails({item, tab}: {item: WaniKaniReviewItem; tab: DetailTab}) 
       </View>
     );
   }
+  // What WaniKani marks primary is the one big line of this tab, wearing the same hero lettering the
+  // primary reading does; every other accepted meaning follows in the quiet ink, so a word with a
+  // dozen of them still reads as one answer.
+  const alternates = item.meanings.filter((meaning) => meaning !== item.primaryMeaning);
   return (
     <View style={styles.detailBlock}>
-      <Text style={[styles.detailLabel, {color: colors.onSurfaceVariant}]}>Meaning</Text>
-      <Text style={[styles.detailText, {color: colors.onSurface}]}>{item.meanings.join(", ")}</Text>
+      <Text style={[styles.detailLabel, {color: colors.onSurfaceVariant}]}>Primary meaning</Text>
+      <Text style={[styles.detailJapanese, {color: colors.onSurface}]}>{item.primaryMeaning}</Text>
+      {alternates.length > 0 && (
+        <>
+          <Text style={[styles.detailLabel, styles.detailLabelSpaced, {color: colors.onSurfaceVariant}]}>
+            Other meanings
+          </Text>
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+            {alternates.join(" · ")}
+          </Text>
+        </>
+      )}
       {item.meaningMnemonic !== "" && (
         <>
           <Text style={[styles.detailLabel, styles.detailLabelSpaced, {color: colors.onSurfaceVariant}]}>
@@ -218,11 +232,11 @@ export function WaniKaniReview({
               </View>
             </View>
             <View style={styles.answerField}>
-              {/* A correct answer holds the card with the answer in the field: the input stays editable
-                  — and so keeps focus and the keyboard — while it is held and while it is sent, and
-                  Enter continues instead of checking again. It also stays editable while the answer
-                  is being checked: a reading is judged through a native call, and disabling the field
-                  for that round trip is what dropped the keyboard on every reading but no meaning. */}
+              {/* A judged answer holds the card with the answer in the field: the input stays editable
+                  while it is held, while the retry a wrong one asks for is typed, and while the answer
+                  is sent, and Enter continues from either stop instead of checking again. The submit
+                  handler consumes the key's action without blurring, so focus — and the keyboard the
+                  IME chooses to leave up — survive the judgement. */}
               <AnswerShake shakeKey={shakeKey}>
                 <AnswerInput
                   ref={inputRef}
@@ -231,7 +245,7 @@ export function WaniKaniReview({
                   onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
                   placeholder={reading ? "こたえ" : "Type the meaning"}
                   selectionColor={colors.accent}
-                  editable={correct || submitting || session.phase === "answering"}
+                  editable={session.phase !== "submitFailed"}
                   autoFocus
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -241,12 +255,17 @@ export function WaniKaniReview({
                   accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
                   style={{color: answerColor}}
                   onSubmitEditing={() => {
-                    if (correct) onContinue();
+                    if (correct || reviewed) onContinue();
                     else if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
                   }}
                 />
               </AnswerShake>
             </View>
+            {session.entryRefused && (
+              <Text accessibilityLiveRegion="polite" style={[styles.refused, {color: colors.error}]}>
+                A reading is answered in kana. Remove what did not convert.
+              </Text>
+            )}
             {session.feedback != null && (
               <Feedback tone={session.feedback.tone} text={session.feedback.text} />
             )}
@@ -362,6 +381,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   revealLabel: {fontSize: 13, lineHeight: 18, fontWeight: "700", fontFamily: APP_FONT},
+  refused: {fontSize: 12, lineHeight: 18, marginTop: spacing.s, fontFamily: APP_FONT},
   tabRow: {flexDirection: "row", alignItems: "stretch", minHeight: 50, borderBottomWidth: 1},
   tabCell: {flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center"},
   tabLabel: {fontSize: 12, lineHeight: 16, fontFamily: APP_FONT},

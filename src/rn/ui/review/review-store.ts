@@ -22,7 +22,7 @@
  * Nothing here is left in a component, and nothing here hides anything in the shell: a pushed page is
  * full-screen with no bottom bar by the shell's own rule, so the flow does not have to ask for it.
  */
-import {romajiToHiragana} from "./wanikani-romaji";
+import {isKanaOnly, romajiToHiragana} from "./wanikani-romaji";
 import {meaningMatches} from "./meaning-match";
 import * as Anki from "../../native/GatenAnki";
 import * as WaniKani from "../../native/GatenWaniKani";
@@ -92,6 +92,12 @@ export interface WaniKaniSession {
   part: "meaning" | "reading";
   /** What is in the field right now. */
   entry: string;
+  /**
+   * True when the last check refused the entry rather than judging it: a reading that is not kana is
+   * not an answer to send, so the prompt says so and stays where it is, counting nothing. Cleared by
+   * the next keystroke, so the note goes the moment the reader fixes the answer.
+   */
+  entryRefused: boolean;
   /** The wrong answers recorded for the subject on screen, which is what its review reports. */
   incorrectMeaning: number;
   incorrectReading: number;
@@ -374,7 +380,8 @@ export const REVIEW_PROMPT_MAX_GAP = 10;
 /**
  * The prompts one queue asks with every reading placed exactly [gap] prompts after its meaning.
  * Meanings are asked in subject order; a reading is asked when its own slot comes round, which makes
- * the queue a run of meanings, then a run of their readings, and so on.
+ * the queue a run of meanings, then a run of their readings, and so on. This is the order the spacing
+ * is chosen in; which part of a subject is actually asked first is drawn afterwards, per subject.
  */
 function orderWithGap(parts: number[], gap: number): WaniKaniPrompt[] {
   const total = parts.reduce((sum, count) => sum + count, 0);
@@ -474,10 +481,35 @@ function repairAdjacent(order: WaniKaniPrompt[]): WaniKaniPrompt[] {
 }
 
 /**
- * The prompts a queue asks, in the order they are asked. Every subject's meaning comes first and its
- * reading is asked at least `REVIEW_PROMPT_MIN_GAP` and at most `REVIEW_PROMPT_MAX_GAP` prompts later,
- * so the two parts of one subject are never asked next to each other the way WaniKani's own queue
- * asks them.
+ * The order with each two-part subject's pair turned round when the lead drawn for it is its reading.
+ * Swapping the two prompts of one subject moves neither of them any closer to the other, so the
+ * spacing the order was chosen for — the window, and the never-adjacent rule — survives the draw
+ * exactly. One draw per subject that has two parts; `random` is the caller's, so a suite can pin it.
+ */
+function leadFirst(order: WaniKaniPrompt[], parts: number[], random: () => number): WaniKaniPrompt[] {
+  const drawn = order.slice();
+  const positions = new Map<number, {meaning: number; reading: number}>();
+  drawn.forEach((prompt, position) => {
+    const at = positions.get(prompt.index) ?? {meaning: -1, reading: -1};
+    at[prompt.part] = position;
+    positions.set(prompt.index, at);
+  });
+  parts.forEach((count, index) => {
+    if (count < 2 || random() >= 0.5) return;
+    const at = positions.get(index);
+    if (at == null || at.meaning < 0 || at.reading < 0) return;
+    const held = drawn[at.meaning];
+    drawn[at.meaning] = drawn[at.reading];
+    drawn[at.reading] = held;
+  });
+  return drawn;
+}
+
+/**
+ * The prompts a queue asks, in the order they are asked. A subject's two parts are asked at least
+ * `REVIEW_PROMPT_MIN_GAP` and at most `REVIEW_PROMPT_MAX_GAP` prompts apart, so neither is asked next
+ * to the other the way WaniKani's own queue asks them. Which of the two is asked first is drawn per
+ * subject, so a reading leads as often as a meaning does — neither part is always the first one.
  *
  * The spacing is a run of meanings then a run of their readings, and the run length is taken from the
  * window: the length whose tail is either nothing or a whole run keeps every gap in the window, and
@@ -487,7 +519,10 @@ function repairAdjacent(order: WaniKaniPrompt[]): WaniKaniPrompt[] {
  *
  * `parts` is one entry per subject: 2 when it has a reading to ask, 1 when it does not.
  */
-export function buildWaniKaniPromptOrder(parts: number[]): WaniKaniPrompt[] {
+export function buildWaniKaniPromptOrder(
+  parts: number[],
+  random: () => number = Math.random
+): WaniKaniPrompt[] {
   let best = orderWithGap(parts, REVIEW_PROMPT_MIN_GAP);
   let bestRate = rateOrder(best);
   for (let gap = REVIEW_PROMPT_MIN_GAP + 1; gap <= REVIEW_PROMPT_MAX_GAP; gap += 1) {
@@ -498,7 +533,7 @@ export function buildWaniKaniPromptOrder(parts: number[]): WaniKaniPrompt[] {
       bestRate = rate;
     }
   }
-  return repairAdjacent(best);
+  return leadFirst(repairAdjacent(best), parts, random);
 }
 
 /**
@@ -521,6 +556,7 @@ function startWaniKaniSession(items: WaniKaniReviewItem[]): WaniKaniSession {
     index: first.index,
     part: first.part,
     entry: "",
+    entryRefused: false,
     incorrectMeaning: 0,
     incorrectReading: 0,
     wrong: items.map(() => ({meaning: 0, reading: 0})),
@@ -564,6 +600,7 @@ function atPrompt(session: WaniKaniSession, cursor: number, doneParts: number): 
     part: prompt.part,
     doneParts,
     entry: "",
+    entryRefused: false,
     incorrectMeaning: wrong.meaning,
     incorrectReading: wrong.reading,
     feedback: null,
@@ -1245,11 +1282,16 @@ class ReviewStore {
     }
   }
 
-  /** One keystroke in the review's answer field. */
+  /** One keystroke in the review's answer field; it clears a refusal the last check left. */
   wkEntry(text: string) {
     const step = this.state.step;
     if (step.kind !== "wkReview" || step.session.phase === "submitting") return;
-    this.set({ step: { kind: "wkReview", session: { ...step.session, entry: text } } });
+    this.set({
+      step: {
+        kind: "wkReview",
+        session: { ...step.session, entry: text, entryRefused: false },
+      },
+    });
   }
 
   /**
@@ -1257,6 +1299,9 @@ class ReviewStore {
    * asks for it to be typed before the subject moves on, which is WaniKani's own rule. A right one
    * stops with its result on screen — the reader continues with Enter or the footer, and that
    * continue is where the next prompt is asked and the review is sent.
+   *
+   * A reading that is not kana is not an answer to send at all: it is refused where it stands, counted
+   * as nothing and judged against nothing, and the prompt says so until the reader types again.
    *
    * Nothing is submitted here: the review is sent when the reader continues past the subject's last
    * part, and never because a part was merely typed.
@@ -1273,16 +1318,26 @@ class ReviewStore {
     const item = session.items[session.index];
     if (item == null) return;
 
+    const typed = session.entry.trim();
+    // A reading is judged in kana, so the field's text is finished the way the judgement finishes it
+    // before anything is asked of it. The field converts as the reader types, which leaves a trailing
+    // `n` unresolved — `hon` reads `ほn` on screen — and refusing that would refuse the reading it
+    // spells. The finished kana is what the guard checks and what the judgement compares.
+    const kana = session.part === "reading" ? romajiToHiragana(typed, true) : null;
+    if (kana != null && !isKanaOnly(kana)) {
+      this.set({
+        step: { kind: "wkReview", session: { ...session, entryRefused: true } },
+      });
+      return;
+    }
+
     this.setBusy(true);
     void (async () => {
       try {
-        const typed = session.entry.trim();
         let correct: boolean;
-        if (session.part === "reading") {
-          // A reading is compared in kana: what the reader typed is handed to the converter, so a
-          // romaji answer is judged as the reading it spells rather than as its letters.
-          const kana = await WaniKani.readingAnswer(romajiToHiragana(typed, true));
-          correct = item.readings.includes(kana);
+        if (kana != null) {
+          const judged = await WaniKani.readingAnswer(kana);
+          correct = item.readings.includes(judged);
         } else {
           correct = meaningMatches(typed, item.meanings);
         }
@@ -1341,14 +1396,18 @@ class ReviewStore {
     const session = step.session;
     if (session.phase === "reviewed" && session.retrying) {
       this.set({
-        step: { kind: "wkReview", session: { ...session, phase: "answering", entry: "" } },
+        step: {
+          kind: "wkReview",
+          session: { ...session, phase: "answering", entry: "", entryRefused: false },
+        },
       });
       return;
     }
     if (session.phase !== "correct") return;
-    const item = session.items[session.index];
-    // The subject's last part is its reading when it has one, and its meaning when it does not.
-    if (item != null && session.part === "meaning" && item.readings.length > 0) {
+    // The subject is finished when the queue asks nothing more of it. Which part is asked last
+    // depends on the lead drawn for it at the start, so the queue itself, not the part on screen, is
+    // what says whether another prompt of this subject is still owed.
+    if (session.order.slice(session.cursor + 1).some((prompt) => prompt.index === session.index)) {
       this.advanceWaniKani(session, session.doneParts + 1);
       return;
     }
