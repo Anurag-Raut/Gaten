@@ -16,7 +16,7 @@ UI changes require screenshots embedded below. Include a real-app recording for 
 - **Screenshots:** <!-- Paste the rendered screenshots inline in this body, not a link — the changed screen, before/after where a before exists. -->
 - **Interaction, navigation or motion:** <!-- Direct link to a short recording of the affected steps and their result, captured from the real app — never a preview or mockup. -->
 - **Source:** <!-- Head SHA, device/emulator, build command and APK hash; what the capture did not exercise. -->
-- **Assets:** <!-- What a reviewer opens from here, kept in docs/pr-evidence/<area>/ with a short README naming the device, the build and its SHA, and the limitations. -->
+- **Assets:** <!-- Upload evidence as PR attachments; keep local copies outside the repository. Include device, build SHA, and limitations here. Do not commit evidence or capture notes. -->
 - **Blocked capture:** <!-- No device, no test account, flaky emulator: state what is missing and why, and keep this pull request a draft / not ready for review. -->
 
 ## Verification
