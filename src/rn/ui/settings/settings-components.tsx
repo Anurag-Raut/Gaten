@@ -323,6 +323,7 @@ export function TextField(props: TextInputProps) {
         {...props}
         ref={input}
         placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
+        cursorColor={props.cursorColor ?? colors.accent}
         underlineColorAndroid="transparent"
         style={[typeScale.bodyMedium, {color: colors.onSurface, padding: 0}, props.style]}
       />
