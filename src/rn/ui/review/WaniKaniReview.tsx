@@ -254,7 +254,7 @@ export function WaniKaniReview({
                   returnKeyType="done"
                   submitBehavior="submit"
                   accessibilityLabel={reading ? "Reading answer" : "Meaning answer"}
-                  style={{color: answerColor}}
+                  style={[styles.answerText, {color: answerColor}]}
                   onSubmitEditing={() => {
                     if (correct || reviewed) onContinue();
                     else if (session.phase === "answering" && session.entry.trim() !== "") onCheck();
@@ -374,6 +374,9 @@ const styles = StyleSheet.create({
   promptWord: {fontSize: 40, lineHeight: 56, ...HERO_LETTERING},
   taskPillWrap: {marginTop: spacing.m},
   answerField: {position: "relative", width: "100%", marginTop: spacing.s},
+  // The answer is written under the prompt, which is centred: the placeholder and the typed text
+  // centre with it. The stroke under the field is drawn by AnswerShake and stays full width.
+  answerText: {textAlign: "center"},
   revealRow: {
     flexDirection: "row",
     alignItems: "center",
