@@ -263,7 +263,7 @@ export function WaniKaniReview({
             </View>
             {session.entryRefused && (
               <Text accessibilityLiveRegion="polite" style={[styles.refused, {color: colors.error}]}>
-                A reading is answered in kana. Remove what did not convert.
+                Kana only, please.
               </Text>
             )}
             {session.feedback != null && (
