@@ -28,20 +28,20 @@ element without a hit layer.
 
 Real app on the connected test account — the Lessons row now reads 15 ready for a 15/day limit:
 
-![Study page on the new design, real app](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/10-real-after-study-dark.png)
+![Study page on the new design, real app](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/10-real-after-study-dark.png)
 
 The study page arrives with a short transition; this clip shows navigation into it on the new design.
 
-https://github.com/Anurag-Raut/Gaten/blob/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/14-after-study-open.mp4
+https://github.com/Anurag-Raut/Gaten/blob/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/14-after-study-open.mp4
 
 <details>
 <summary>Before and after, the zero and unknown states, the light theme, and the Analytics regression pair</summary>
 
 ### Before — the old design, same page
 
-![Before, synthetic 27/0](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/01-before-fixture-today-dark.png)
+![Before, synthetic 27/0](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/01-before-fixture-today-dark.png)
 
-![Before, real app](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/04-real-before-study-dark.png)
+![Before, real app](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/04-real-before-study-dark.png)
 
 ### After — synthetic scenes that the real account cannot reach today
 
@@ -49,26 +49,26 @@ The real account has no in-app activity today, so the populated bar and the mid-
 be shown by the inert fixture harness. These render the production component tree with injected state;
 the numbers are chosen by the fixture rather than fetched.
 
-![After, 27 reviewed / 3 learned, Lessons 12 ready](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/05-after-fixture-mixed-dark.png)
+![After, 27 reviewed / 3 learned, Lessons 12 ready](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/05-after-fixture-mixed-dark.png)
 
-![After, 27 reviewed / 0 learned, Lessons 15 ready](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/07-after-fixture-today-dark.png)
+![After, 27 reviewed / 0 learned, Lessons 15 ready](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/07-after-fixture-today-dark.png)
 
-![After, zero day](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/08-after-fixture-zero-dark.png)
+![After, zero day](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/08-after-fixture-zero-dark.png)
 
-![After, unknown count](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/09-after-fixture-unknown-dark.png)
+![After, unknown count](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/09-after-fixture-unknown-dark.png)
 
-![After, light theme](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/06-after-fixture-mixed-light.png)
+![After, light theme](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/06-after-fixture-mixed-light.png)
 
 ### Analytics regression — the shared `Metric` change must not move
 
 Same screen, pre-change build versus this build: 220 of 2 397 600 pixels differ (0.009%), all inside
 the "Updated _m ago" relative-timestamp glyph. Every metric block is pixel-identical.
 
-![Analytics, previous build](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/11-analytics-before-swatch.png)
+![Analytics, previous build](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/11-analytics-before-swatch.png)
 
-![Analytics, this build](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/12-analytics-after-swatch.png)
+![Analytics, this build](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/12-analytics-after-swatch.png)
 
-![Amplified difference, timestamp only](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/13-analytics-diff-only-timestamp.png)
+![Amplified difference, timestamp only](https://raw.githubusercontent.com/Anurag-Raut/Gaten/01fe9ba247f24d346bffdeeb6598f0fea9a8cf6b/docs/pr-evidence/wanikani-study-progress/13-analytics-diff-only-timestamp.png)
 
 </details>
 

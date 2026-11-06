@@ -12,8 +12,8 @@ the daily lesson allowance instead of showing the whole unlocked queue.
 | --- | --- |
 | Base | `9350181` (`origin/dev`) |
 | Branch | `feat/wanikani-study-progress` |
-| Committed | `1e9aace` two-section page · `54741f3` one stacked bar · `fc221be` evidence links pinned |
-| Uncommitted | `src/rn/ui/review/wanikani-hub-model.ts`, `tests/wanikani-hub.test.cjs` (Lessons allowance) |
+| Committed | `1e9aace` two-section page · `54741f3` one stacked bar · `fc221be` evidence links pinned · `01fe9ba` lessons allowance, evidence `05`–`10` re-captured |
+| Committed in `01fe9ba` | `src/rn/ui/review/wanikani-hub-model.ts`, `tests/wanikani-hub.test.cjs` (Lessons allowance) |
 | Production diff | `git diff 9350181 -- src/rn tests \| sha256sum` = `08f60f95f4c8feffd6839871c0ea6d4f8d06eba8fe65f2ef4c7a4bdfcfc32ebe` (4 files, +191/−169) |
 | `WaniKaniHome.tsx` | `8655fe23acf7febdbd805bdc26adbce80e1afa6ba5339a3c45f294391dbe84d1` |
 | `ink.tsx` | `ed9ef05ff51f56ba20c17e2f4d9ebab293460a92641574e4b16170ffb5ba7fab` |
