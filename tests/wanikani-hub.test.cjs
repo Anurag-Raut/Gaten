@@ -86,24 +86,24 @@ test('ready snapshot uses real review detail and a preference-backed lesson batc
     summary: snapshot({nextHourCount: null}),
     learningPreferences: {dailyLimit: 15, learnedToday: 0},
   }));
-  assert.equal(reviews.subline, '3 reviews due');
+  assert.equal(reviews.subline, 'Next review · In 15 min');
   assert.deepEqual(reviews.trailing, {value: '3', label: 'due'});
-  assert.equal(reviews.extra, 'Next review · In 15 min');
+  assert.equal(reviews.extra, null);
   assert.equal(reviews.tap, 'reviews');
   assert.equal(reviews.complete, false);
-  assert.equal(lessons.subline, '4 lessons available');
+  assert.equal(lessons.subline, 'Next batch · 4 cards');
   assert.deepEqual(lessons.trailing, {value: '4', label: 'ready'});
-  assert.equal(lessons.extra, 'Next batch · 4 cards');
+  assert.equal(lessons.extra, null);
   assert.equal(lessons.tap, 'lessons');
   assert.equal(lessons.complete, false);
 
   const [dueNow] = models(hub({summary: snapshot({nextHourCount: null, nextReviewAt: now})}));
-  assert.equal(dueNow.extra, 'Next review · Due now');
+  assert.equal(dueNow.subline, 'Next review · Due now');
 });
 
 test('lesson batch detail stays unknown until learning preferences load', () => {
   const [, lessons] = models(hub({summary: snapshot()}));
-  assert.equal(lessons.subline, '4 lessons available');
+  assert.equal(lessons.subline, 'Ready to start');
   assert.deepEqual(lessons.trailing, {value: '4', label: 'ready'});
   assert.equal(lessons.extra, null);
   assert.equal(lessons.tap, 'lessons');
@@ -114,7 +114,7 @@ test('failed preference read keeps a known lesson count actionable without a bat
     summary: snapshot({lessonsNow: 3}),
     learningPreferencesFailed: true,
   }));
-  assert.equal(lessons.subline, '3 lessons available');
+  assert.equal(lessons.subline, 'Ready to start');
   assert.deepEqual(lessons.trailing, {value: '3', label: 'ready'});
   assert.equal(lessons.extra, null);
   assert.equal(lessons.tap, 'lessons');
@@ -160,7 +160,7 @@ test('zero reviews do not mark nonempty lessons complete', () => {
 test('zero lessons do not mark nonempty reviews complete', () => {
   const [reviews, lessons] = models(hub({summary: snapshot({dueNow: 1, lessonsNow: 0})}));
   assert.equal(reviews.complete, false);
-  assert.equal(reviews.subline, '1 review due');
+  assert.equal(reviews.subline, 'Next review · In 15 min');
   assert.deepEqual(reviews.trailing, {value: '1', label: 'due'});
   assert.equal(reviews.tap, 'reviews');
   assert.equal(lessons.subline, 'All caught up');
@@ -170,9 +170,9 @@ test('zero lessons do not mark nonempty reviews complete', () => {
 
 test('refresh keeps the confirmed counts visible and marks each queue refreshing', () => {
   const [reviews, lessons] = models(hub({summary: snapshot(), refreshing: true}));
-  assert.equal(reviews.subline, '3 reviews due');
+  assert.equal(reviews.subline, 'Next review · In 15 min');
   assert.deepEqual(reviews.trailing, {value: '3', label: 'due'});
-  assert.equal(lessons.subline, '4 lessons available');
+  assert.equal(lessons.subline, 'Ready to start');
   assert.deepEqual(lessons.trailing, {value: '4', label: 'ready'});
   assert.equal(reviews.refreshing, true);
   assert.equal(lessons.refreshing, true);
@@ -272,7 +272,7 @@ test('one queue failure leaves the other queue actionable', () => {
   assert.equal(reviews.notice, "You're offline. Try again when connected.");
   assert.equal(lessons.tap, 'lessons');
   assert.deepEqual(lessons.trailing, {value: '4', label: 'ready'});
-  assert.equal(lessons.subline, '4 lessons available');
+  assert.equal(lessons.subline, 'Ready to start');
 });
 
 test('paused review session takes priority and reports remaining queue and progress', () => {
@@ -292,7 +292,7 @@ test('paused review session takes priority and reports remaining queue and progr
   assert.equal(reviews.tap, 'reviews');
   assert.equal(reviews.complete, false);
   assert.equal(reviews.loading, false);
-  assert.match(moduleText(reviews), /reviews left in session/);
+  assert.match(moduleText(reviews), /Review session in progress/);
   assert.match(moduleText(reviews), /2 of 6 parts/);
 });
 
@@ -306,7 +306,7 @@ test('paused lesson session reports progress and actual mixed batch types', () =
   const [, lessons] = models(hub({summary: snapshot({lessonsNow: 0}), pausedLesson}));
   assert.equal(lessons.tap, 'lessons');
   assert.equal(lessons.complete, false);
-  assert.match(moduleText(lessons), /lessons left in batch/);
+  assert.match(moduleText(lessons), /Lesson session in progress/);
   assert.match(moduleText(lessons), /3 of 11 parts/);
   assert.match(moduleText(lessons), /2 radicals · 1 kanji · 1 vocab · 1 kana vocab/);
 });
@@ -316,11 +316,11 @@ test('singular queue labels and next-batch detail are grammatically singular', (
     summary: snapshot({dueNow: 1, lessonsNow: 1}),
     learningPreferences: {dailyLimit: 15, learnedToday: 0},
   }));
-  assert.equal(reviews.subline, '1 review due');
+  assert.equal(reviews.subline, 'Next review · In 15 min');
   assert.deepEqual(reviews.trailing, {value: '1', label: 'due'});
-  assert.equal(lessons.subline, '1 lesson available');
+  assert.equal(lessons.subline, 'Next batch · 1 card');
   assert.deepEqual(lessons.trailing, {value: '1', label: 'ready'});
-  assert.equal(lessons.extra, 'Next batch · 1 card');
+  assert.equal(lessons.extra, null);
 });
 
 test('reaching the daily lesson limit is distinct from an empty queue', () => {
@@ -344,7 +344,7 @@ test('next lesson batch respects the queue, five-card cap and remaining daily bu
       summary: snapshot({lessonsNow: queueCount}),
       learningPreferences: {dailyLimit: limit, learnedToday},
     }));
-    assert.equal(lessons.extra, expected);
+    assert.equal(lessons.subline, expected);
   }
 });
 
@@ -363,8 +363,8 @@ test('a nearly spent goal leaves only what the goal has left', () => {
     summary: snapshot({lessonsNow: 9}),
     learningPreferences: {dailyLimit: 15, learnedToday: 14},
   }));
-  assert.equal(lessons.subline, '9 lessons available');
-  assert.equal(lessons.extra, 'Next batch · 1 card');
+  assert.equal(lessons.subline, 'Next batch · 1 card');
+  assert.equal(lessons.extra, null);
 });
 
 function deferred() {

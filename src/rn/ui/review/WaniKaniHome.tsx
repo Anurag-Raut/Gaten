@@ -11,10 +11,12 @@
  * takes the reader to the connection screen. The header's own Refresh control is the one button the
  * page carries; there is no summary line and no count the hub did not confirm.
  *
- * The two confirmed figures are also drawn, the way Anki's hub draws its own: today's lesson budget
- * as one bar against the reader's daily goal, and the waiting queues as one distribution bar with
- * its key. Both come from the same snapshot the rows count from, and both stand down — with the
- * rows — when nothing is confirmed, work is paused mid-session, or the snapshot says all clear.
+ * Today's two confirmed figures stand above the rows under Today's progress: each count, with its
+ * own reason when it cannot be read, over one segmented bar that breaks the day's completed work
+ * into reviews and lessons — the two tones keyed by the swatches on the captions themselves, never
+ * by a second row of numbers. A zero day draws the bar's neutral track; an unread count draws no
+ * bar at all. The available rows keep their confirmed counts and carry the next review, batch or
+ * session state as their support line.
  *
  * While the row the reader acted on is still working, that row says what is happening — Opening
  * reviews…, Opening lessons…, Refreshing — with a spinner, every row goes quiet, and the row's
@@ -31,8 +33,6 @@ import {ScreenHeader} from "../ScreenHeader";
 import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {
-  CountLegend,
-  InlineBar,
   MetricPair,
   StackedBar,
   useAnalyticsEntrance,
@@ -57,14 +57,15 @@ function localDayKey(now: Date): string {
 }
 
 /**
- * The next time a row already states in its own extra line, said the way a sentence is read out:
- * `Next review · In 2 hours` is heard as "next review in 2 hours". Rows whose extra is not about a
- * time — a batch, a progress count, an updating queue — add no clause.
+ * The next time or batch a row states in its support line, said the way a sentence is read out:
+ * `Next review · In 2 hours` is heard as "next review in 2 hours", and `Next batch · 5 cards` as
+ * "next batch 5 cards". A support line that is only progress or an updating queue adds no clause.
  */
-function nextReviewClause(extra: string | null): string | null {
-  if (extra == null) return null;
-  const [label, value] = extra.split(" · ");
+function supportClause(line: string | null): string | null {
+  if (line == null) return null;
+  const [label, value] = line.split(" · ");
   if (value == null) return null;
+  if (label === "Next batch") return `next batch ${value}`;
   if (label !== "Next review" && label !== "No reviews due") return null;
   // The cleared row states the time as "Next in 2 hours"; only the value is spoken.
   const said = label === "No reviews due" ? value.replace(/^Next /, "") : value;
@@ -92,14 +93,14 @@ function destinationClause(model: HubModuleModel): string | null {
 function rowLabel(model: HubModuleModel): string {
   if (model.loading) return `${model.title}, loading`;
   if (model.trailing != null) {
-    const clause = nextReviewClause(model.extra);
+    const clause = supportClause(model.subline) ?? supportClause(model.extra);
     const destination = destinationClause(model);
     return `${model.title}, ${model.trailing.value} ${model.trailing.label}${
       clause == null ? "" : `, ${clause}`
     }${destination == null ? "" : `, ${destination}`}`;
   }
   if (model.complete) {
-    const clause = nextReviewClause(model.extra);
+    const clause = supportClause(model.extra) ?? supportClause(model.subline);
     return `${model.title}, all caught up${clause == null ? "" : `, ${clause}`}`;
   }
   const said = model.subline === "" ? "" : model.subline[0].toLowerCase() + model.subline.slice(1);
@@ -125,8 +126,8 @@ function HubRowSkeleton({title, minHeight}: {title: string; minHeight: number}) 
   );
 }
 
-/** The accent strengths the available-study bar is drawn from — one hue, two weights. */
-const QUEUE_INTENSITY = [0.2, 0.67] as const;
+/** The accent strengths the day's one bar is drawn from — one hue, two weights. */
+const TODAY_INTENSITY = [1, 0.42] as const;
 
 export function WaniKaniHome({
   hub,
@@ -182,37 +183,34 @@ export function WaniKaniHome({
     if (!datedToday) return "Not available for today.";
     return known ? null : "Not tracked yet on this device.";
   };
-  // The two waiting queues as one distribution, from the same snapshot the rows count from: the
-  // accent in two weights, Anki's ready-now bar with one fewer stage. Paused work, a missing
-  // snapshot and a first read still running are nothing to draw — the rows speak for those states —
-  // and a snapshot where nothing waits is the all-clear block, never an empty bar.
-  const queuePaused = hub.pausedReview != null || hub.pausedLesson != null;
-  const queueParts: DistributionPart[] =
-    !busy && !queuePaused && hub.summary != null && hub.connection === "connected"
-      ? [
-          {key: "reviews", label: "Reviews", count: hub.summary.dueNow},
-          {key: "lessons", label: "Lessons", count: hub.summary.lessonsNow},
+  // Both today counts at once, so the bar below has one honest denominator: the day's completed
+  // activity. Either figure unknown means no bar — the metric pair already says why.
+  const today =
+    reviewed != null && learned != null
+      ? {reviewed, learned, total: reviewed + learned}
+      : null;
+  // The day's one bar, straight under the figures: the same two counts they state, sized by their
+  // own share of the completed total. No count is written again on the bar or under it.
+  const todayParts: DistributionPart[] =
+    today == null
+      ? []
+      : [
+          {key: "reviews", label: "Reviews", count: today.reviewed},
+          {key: "lessons", label: "Lessons", count: today.learned},
         ].map((part, index) => ({
           ...part,
           value: String(part.count),
           color: colors.accent,
-          opacity: QUEUE_INTENSITY[index],
-        }))
-      : [];
-  const queueTotal = queueParts.reduce((sum, part) => sum + part.count, 0);
-  const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
-  // Today's lesson budget against the reader's own daily goal: the bar and its line exist only when
-  // the count and the goal it is measured against are both known for today.
-  const dailyLimit = prefs?.dailyLimit ?? null;
-  const budgetShare =
-    learned != null && dailyLimit != null && dailyLimit > 0 ? learned / dailyLimit : null;
-  const budgetNote = budgetShare == null ? null : `Learned today · ${learned} of ${dailyLimit}`;
-  const budgetLabel =
-    budgetShare == null ? null : `Lesson budget, ${learned} of ${dailyLimit} used today`;
+          opacity: TODAY_INTENSITY[index],
+        }));
+  // The bar's accessibility label speaks the mix as percentages: one rounding, then its complement,
+  // so the two shares never add up to 101.
+  const reviewedPercent =
+    today != null && today.total > 0 ? Math.round((today.reviewed / today.total) * 100) : 0;
+  const learnedPercent = 100 - reviewedPercent;
   // The analytics page's one-shot entrance: the figures sweep in once, when the first of them is
-  // actually known, and never replay on a refresh. The bars wait on the same sweep, so a page whose
-  // only known figures are the queues is not left uncounted.
-  const entrance = useAnalyticsEntrance(reviewed != null || learned != null || queueTotal > 0);
+  // actually known, and never replay on a refresh.
+  const entrance = useAnalyticsEntrance(reviewed != null || learned != null);
   const pressFor = (model: HubModuleModel) => {
     switch (model.tap) {
       case "reviews":
@@ -342,67 +340,51 @@ export function WaniKaniHome({
               </Text>
             </View>
           )}
-          {/* Nothing done today says nothing: the block stands only while one of its figures is a
-              real count, and an unread figure (a dash) keeps it up so its reason stays visible. */}
-          {!(reviewed === 0 && learned === 0) && (
-            <>
-              <View style={[styles.todayHeading, {borderBottomColor: colors.outlineVariant}]}>
-                <SectionCaption style={styles.todayCaption}>Today</SectionCaption>
-                <IconButton
-                  name="help"
-                  size={18}
-                  accessibilityLabel="About today’s activity"
-                  onPress={() => setTodayHelpOpen(true)}
-                />
-              </View>
-              <View style={styles.todayMetrics}>
-                <MetricPair
-                  left={{
-                    value: reviewed == null ? "—" : String(reviewed),
-                    count: reviewed == null ? null : {value: reviewed},
-                    caption: "Items reviewed",
-                    note: hintFor(reviewed != null),
-                  }}
-                  right={{
-                    value: learned == null ? "—" : String(learned),
-                    count: learned == null ? null : {value: learned},
-                    caption: "Lessons learned",
-                    note: hintFor(learned != null),
-                  }}
-                  entrance={entrance}
-                />
-              </View>
-              {budgetNote != null && (
-                <View
-                  style={styles.todayBudget}
-                  accessible
-                  accessibilityLabel={budgetLabel ?? undefined}
-                >
-                  <InlineBar share={budgetShare ?? 0} color={colors.accent} entrance={entrance} />
-                  <Text style={[styles.todayBudgetCaption, {color: colors.onSurfaceVariant}]}>
-                    {budgetNote}
-                  </Text>
-                </View>
-              )}
-            </>
+          {/* Today's progress always stands: a confirmed zero is a real zero, and an unread figure
+              keeps its dash and its reason. */}
+          <View style={[styles.todayHeading, {borderBottomColor: colors.outlineVariant}]}>
+            <SectionCaption style={styles.todayCaption}>Today’s progress</SectionCaption>
+            <IconButton
+              name="help"
+              size={18}
+              accessibilityLabel="About today’s activity"
+              onPress={() => setTodayHelpOpen(true)}
+            />
+          </View>
+          <View style={styles.todayMetrics}>
+            <MetricPair
+              left={{
+                value: reviewed == null ? "—" : String(reviewed),
+                count: reviewed == null ? null : {value: reviewed},
+                caption: "Items reviewed",
+                swatch: {color: colors.accent, opacity: TODAY_INTENSITY[0]},
+                note: hintFor(reviewed != null),
+              }}
+              right={{
+                value: learned == null ? "—" : String(learned),
+                count: learned == null ? null : {value: learned},
+                caption: "Lessons learned",
+                swatch: {color: colors.accent, opacity: TODAY_INTENSITY[1]},
+                note: hintFor(learned != null),
+              }}
+              entrance={entrance}
+            />
+          </View>
+          {/* The day's completed mix is one segmented bar straight under the figures; the caption
+              swatches are its key, so nothing below the bar repeats a count or explains itself. */}
+          {today != null && (
+            <StackedBar
+              segments={todayParts}
+              selectedKey={null}
+              accessibilityLabel={
+                today.total === 0
+                  ? "Nothing completed yet today."
+                  : `${reviewedPercent}% reviews and ${learnedPercent}% lessons of today’s completed activity.`
+              }
+              entrance={entrance}
+            />
           )}
           <SectionCaption>Available study</SectionCaption>
-          {queueParts.length > 0 && queueTotal > 0 && (
-            <View style={styles.studyChart}>
-              <StackedBar
-                segments={queueParts}
-                selectedKey={selectedQueue}
-                onSelect={setSelectedQueue}
-                entrance={entrance}
-              />
-              <CountLegend
-                items={queueParts}
-                selectedKey={selectedQueue}
-                onSelect={setSelectedQueue}
-                entrance={entrance}
-              />
-            </View>
-          )}
           {sectionFor(reviews)}
           {sectionFor(lessons)}
           {sharedCaveat != null && (
@@ -463,12 +445,6 @@ const styles = StyleSheet.create({
   },
   todayCaption: {flex: 1, marginTop: 0, marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0},
   todayMetrics: {marginTop: 12},
-  // The lesson budget rides under the Today pair: one bar, then the goal line in the quiet ink.
-  todayBudget: {marginTop: 14},
-  todayBudgetCaption: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: 8},
-  // The distribution rides the caption's own rule: a touch of air above, a step below before the
-  // first row.
-  studyChart: {marginTop: 2, marginBottom: 6},
   dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14, fontFamily: APP_FONT},
   dialogParagraph: {fontFamily: APP_FONT, fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
   notice: {fontFamily: APP_FONT, fontSize: 11, lineHeight: 15, marginTop: spacing.m, marginBottom: spacing.xs},

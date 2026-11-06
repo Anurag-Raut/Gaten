@@ -53,10 +53,6 @@ function staleNote(summary: WaniKaniSummary): string {
   return FAILED_NOTE;
 }
 
-function countLabel(count: number, singular: string, plural: string): string {
-  return count === 1 ? singular : plural;
-}
-
 function failureCopy(failure: WaniKaniHubState["failure"]): string {
   if (failure?.failure === "RATE_LIMITED" && failure.retryAfterSeconds != null) {
     return `Try again in ${failure.retryAfterSeconds} seconds.`;
@@ -155,9 +151,7 @@ function reviewsModel(hub: WaniKaniHubState, now: number): HubModuleModel {
       session.order.slice(session.cursor).map((prompt) => prompt.index)
     ).size;
     return {
-      ...reviewsRow(
-        `${remaining} ${countLabel(remaining, "review left in session", "reviews left in session")}`,
-      ),
+      ...reviewsRow("Review session in progress"),
       extra: `Progress · ${session.doneParts} of ${session.totalParts} parts`,
       trailing: {value: String(remaining), label: "left"},
       tap: "reviews",
@@ -183,8 +177,12 @@ function reviewsModel(hub: WaniKaniHubState, now: number): HubModuleModel {
     // finished session the counts predate the work just done, so neither row may open a queue the
     // session may have emptied: both offer the read instead.
     return {
-      ...reviewsRow(`${summary.dueNow} ${countLabel(summary.dueNow, "review due", "reviews due")}`),
-      extra: update ?? (next == null ? null : `Next review · Last known: ${next}`),
+      ...reviewsRow(
+        update ??
+          (summary.dueNow === 0
+            ? "Refresh for the latest"
+            : `Next review · ${next == null ? "Due now" : `Last known: ${next}`}`),
+      ),
       trailing: {value: String(summary.dueNow), label: "due"},
       tap: hub.sessionFinished === true ? "sync" : summary.dueNow > 0 ? "reviews" : "sync",
       stale: true,
@@ -206,8 +204,7 @@ function reviewsModel(hub: WaniKaniHubState, now: number): HubModuleModel {
     };
   }
   return {
-    ...reviewsRow(`${summary.dueNow} ${countLabel(summary.dueNow, "review due", "reviews due")}`),
-    extra: update ?? (next == null ? null : `Next review · ${next}`),
+    ...reviewsRow(update ?? `Next review · ${next ?? "Due now"}`),
     trailing: {value: String(summary.dueNow), label: "due"},
     tap: "reviews",
     refreshing: hub.refreshing,
@@ -255,9 +252,7 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
   if (session != null) {
     const remaining = Math.max(0, session.batch.length - session.quizIndex);
     return {
-      ...lessonsRow(
-        `${remaining} ${countLabel(remaining, "lesson left in batch", "lessons left in batch")}`,
-      ),
+      ...lessonsRow("Lesson session in progress"),
       extra: [`Progress · ${session.doneParts} of ${session.totalParts} parts`, summarizeBatch(session)]
         .filter((part) => part !== "")
         .join(" · "),
@@ -288,8 +283,9 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
     // session's counts predate the work, so this row too offers the read rather than a queue the
     // session may have changed.
     return {
-      ...lessonsRow(`${count} ${countLabel(count, "lesson available", "lessons available")}`),
-      extra: update ?? batch,
+      ...lessonsRow(
+        update ?? batch ?? (count === 0 ? "Refresh for the latest" : "Ready to start"),
+      ),
       trailing: {value: String(count), label: "ready"},
       tap: hub.sessionFinished === true ? "sync" : count > 0 ? "lessons" : "sync",
       stale: true,
@@ -305,8 +301,7 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
     };
   }
   return {
-    ...lessonsRow(`${count} ${countLabel(count, "lesson available", "lessons available")}`),
-    extra: update ?? batch,
+    ...lessonsRow(update ?? batch ?? "Ready to start"),
     trailing: {value: String(count), label: "ready"},
     tap: "lessons",
     refreshing: hub.refreshing,
