@@ -5,7 +5,14 @@
  */
 
 import React, {useState} from "react";
-import {ActivityIndicator, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type TextLayoutEvent,
+} from "react-native";
 import {useTheme} from "../theme";
 import {Icon} from "../components";
 import {Collapsible} from "../Collapsible";
@@ -573,6 +580,20 @@ function RecentLookupRow({
   const stacked = fontScale > 1.2;
   const reading = hit.kana[0] ?? "";
   const gloss = hit.glosses[0] ?? "";
+  // Android draws the tail ellipsis as U+2026, which this face sets a third of an em above the
+  // baseline. Once the platform has reported where it cut the second line, swap that character for
+  // three periods, which sit on the baseline and measure a hair narrower, so the cut text and its
+  // marker still fit on one line with no second ellipsis.
+  const [cutGloss, setCutGloss] = useState<string | null>(null);
+  const onGlossLayout = (event: TextLayoutEvent) => {
+    if (cutGloss !== null) return;
+    const first = event.nativeEvent.lines[0];
+    const second = event.nativeEvent.lines[1];
+    if (!second) return;
+    const cut = second.text.split("\u2026")[0];
+    if (cut === second.text) return; // the platform drew no ellipsis: nothing was cut
+    setCutGloss(`${first.text.trimEnd()}\n${cut}...`);
+  };
   return (
     <PressableScale
       accessibilityRole="button"
@@ -597,6 +618,7 @@ function RecentLookupRow({
       {gloss ? (
         <Text
           numberOfLines={2}
+          onTextLayout={onGlossLayout}
           style={[
             typeScale.bodySmall,
             styles.lookupGloss,
@@ -604,7 +626,7 @@ function RecentLookupRow({
             {color: colors.onSurfaceVariant},
           ]}
         >
-          {gloss}
+          {cutGloss ?? gloss}
         </Text>
       ) : null}
     </PressableScale>
