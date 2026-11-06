@@ -6,6 +6,7 @@
 
 package com.gaten.app.ui.lookup
 
+import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
@@ -81,6 +82,7 @@ import com.gaten.app.ocr.ScreenText
 import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ocr.prefetchOrder
 import com.gaten.app.ui.FeedbackHaptic
+import com.gaten.app.ui.FeedbackPattern
 import com.gaten.app.ui.rememberFeedback
 import com.gaten.app.ui.overlay.ViewMapping
 import com.gaten.app.ui.theme.Motion
@@ -126,6 +128,15 @@ private const val NOTICE_MS = 3000L
  * instruction cannot hold the rail for six seconds while the reader is already drawing.
  */
 private const val FOLLOW_UP_MS = 2000L
+
+/**
+ * The tap miss's own answer to the touch. The rail's "No text here" shakes in place with the same
+ * 10 dp travel and 50/100/50 ms steps as the wrong-answer field (`AnswerShake`), so a miss is felt
+ * as well as read. A tap miss is the only notice that moves; the frozen frame and the instruction
+ * that follows do not.
+ */
+private val SHAKE_TRAVEL = 10.dp
+private const val SHAKE_STEP_MS = 50
 
 /** Lifecycle of the offline dictionary handle. */
 private sealed interface RepoState {
@@ -265,6 +276,26 @@ fun LookupOverlay(
     // left running, whether that is a second miss or "Select again" after an answer.
     var notice by remember { mutableStateOf<RailNotice?>(null) }
     var noticeSerial by remember { mutableStateOf(0) }
+    // The notice's own shake, re-keyed on every tap miss and only on a miss: a recomposition, the
+    // notice's own fade or the instruction that replaces it all leave [shakeSerial] unchanged, so
+    // exactly one shake plays per miss. The offset is read inside the rail's own layer
+    // block — never hoisted into composition — so only the rail node moves; the frozen frame, the
+    // dim and the instruction stay still. Motion is a courtesy: when the system has animation off the
+    // notice still appears and the buzz still plays, it just does not move.
+    var shakeSerial by remember { mutableStateOf(0) }
+    val shakeOffset = remember { Animatable(0f) }
+    val shakeTravelPx = with(LocalDensity.current) { SHAKE_TRAVEL.toPx() }
+    LaunchedEffect(shakeSerial) {
+        if (shakeSerial == 0) return@LaunchedEffect
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            shakeOffset.snapTo(0f)
+            return@LaunchedEffect
+        }
+        shakeOffset.snapTo(0f)
+        shakeOffset.animateTo(-shakeTravelPx, tween(SHAKE_STEP_MS, easing = Motion.emphasized))
+        shakeOffset.animateTo(shakeTravelPx, tween(SHAKE_STEP_MS * 2, easing = Motion.emphasized))
+        shakeOffset.animateTo(0f, tween(SHAKE_STEP_MS, easing = Motion.emphasized))
+    }
     // Work outranks any notice: a status that names what is happening is never hidden by a message
     // about what already happened.
     val busyText = when {
@@ -540,6 +571,11 @@ fun LookupOverlay(
         val lineIndex = ScreenHits.hitTestLine(live, x, y, tolerance)
         if (lineIndex == null) {
             Log.d(TAG, "Tap missed: no text box within $tolerance px")
+            // The miss answers the touch on both channels: the rail says "No text here" and shakes,
+            // and the app's own "that did not go through" waveform plays — the same cue a refused
+            // WaniKani answer carries, so a miss and a refusal are told apart the same way.
+            feedback.pattern(FeedbackPattern.Wrong)
+            shakeSerial++
             // Absence, then the way to try again: a miss never dismisses the overlay, so the reader
             // is told what happened and how to recover, in that order.
             showNotice(RailNotice(R.string.lookup_tap_miss, then = instruction(scanState)))
@@ -676,7 +712,10 @@ fun LookupOverlay(
                     busy = busyText != null,
                     glyph = railGlyph,
                     tone = RailTone.Neutral,
-                    supporting = null
+                    supporting = null,
+                    // The tap miss's own shake rides this layer: zero everywhere else, so the rail
+                    // moves only for a miss and nothing else on the overlay does.
+                    modifier = Modifier.graphicsLayer { translationX = shakeOffset.value }
                 )
             }
 
