@@ -25,7 +25,7 @@ page is now two sections that each say one thing.
 - **Screenshots:** `Today's progress` with a mixed day — 27 reviews and 3 lessons completed, so both
   segments carry width — rendered by the app on the connected account:
 
-  ![After — Today's progress with the day's completed reviews and lessons in one bar](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/05-after-fixture-mixed-dark.png)
+  ![After — Today's progress with the day's completed reviews and lessons in one bar](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/05-after-fixture-mixed-dark.png)
 
   <details>
   <summary>Before, the other states, light theme, the real-app still, and the regression check</summary>
@@ -33,31 +33,31 @@ page is now two sections that each say one thing.
   **Before** — the reported page, where the `Today` block vanishes at zero and both counts appear
   twice (the `28 Reviews / 47 Lessons` bar and legend, then the cards):
 
-  ![Before — the reported page](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/01-before-fixture-today-dark.png)
+  ![Before — the reported page](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/01-before-fixture-today-dark.png)
 
   **Real app, production bundle, connected account** — before, with no `Today` section at all:
 
-  ![Real app before](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/04-real-before-study-dark.png)
+  ![Real app before](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/04-real-before-study-dark.png)
 
   and after:
 
-  ![Real app after](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/10-real-after-study-dark.png)
+  ![Real app after](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/10-real-after-study-dark.png)
 
   **A day with reviews but no lessons** — one full-width segment:
 
-  ![After — 27 reviews, 0 lessons](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/07-after-fixture-today-dark.png)
+  ![After — 27 reviews, 0 lessons](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/07-after-fixture-today-dark.png)
 
   **Zero** — the neutral track, with both figures reading 0:
 
-  ![After — nothing completed today](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/08-after-fixture-zero-dark.png)
+  ![After — nothing completed today](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/08-after-fixture-zero-dark.png)
 
   **Unknown** — counters stamped with yesterday: a dash and its reason, no bar:
 
-  ![After — today's figures unknown](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/09-after-fixture-unknown-dark.png)
+  ![After — today's figures unknown](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/09-after-fixture-unknown-dark.png)
 
   **Light theme:**
 
-  ![After — light theme](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/06-after-fixture-mixed-light.png)
+  ![After — light theme](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/06-after-fixture-mixed-light.png)
 
   **Regression check for the shared `Metric` change.** The Analytics screen renders the same
   primitives. Opening it on the pre-revision bundle and on this one, on the same device, theme and
@@ -65,11 +65,11 @@ page is now two sections that each say one thing.
   them the relative timestamp glyph ("Updated 1m ago" vs "Updated 2m ago") in an 18 × 26 px box. Every
   metric block, ring and chart is pixel-identical, so callers that pass no swatch are unchanged:
 
-  ![Analytics before](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/11-analytics-before-swatch.png)
+  ![Analytics before](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/11-analytics-before-swatch.png)
 
-  ![Analytics after](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/12-analytics-after-swatch.png)
+  ![Analytics after](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/12-analytics-after-swatch.png)
 
-  ![The amplified difference: only the timestamp glyph](https://raw.githubusercontent.com/Anurag-Raut/Gaten/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/13-analytics-diff-only-timestamp.png)
+  ![The amplified difference: only the timestamp glyph](https://raw.githubusercontent.com/Anurag-Raut/Gaten/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/13-analytics-diff-only-timestamp.png)
 
   **Provenance.** Build, per-APK and per-bundle hashes, device, bundle-content checks and the
   synthetic-scene harness are recorded in
@@ -78,7 +78,7 @@ page is now two sections that each say one thing.
   </details>
 
 - **Interaction, navigation or motion:** [Screen recording of the page opening from Home on the real
-  app](https://github.com/Anurag-Raut/Gaten/blob/<COMMITTED_SHA>/docs/pr-evidence/wanikani-study-progress/14-after-study-open.mp4).
+  app](https://github.com/Anurag-Raut/Gaten/blob/54741f3b4ec9369d5998fc705f8ed9d1063ff210/docs/pr-evidence/wanikani-study-progress/14-after-study-open.mp4).
   The bar is static by design, so this shows arrival and layout, not an animation.
 - **Source:** captured head is the working tree on top of `1e9aace`, based on `dev` `9350181`:
   `src/rn/ui/review/WaniKaniHome.tsx` `8655fe23acf7febdbd805bdc26adbce80e1afa6ba5339a3c45f294391dbe84d1`
