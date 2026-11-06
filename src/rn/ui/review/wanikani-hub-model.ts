@@ -277,6 +277,10 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
     batchSize == null || count === 0
       ? null
       : `Next batch · ${batchSize} ${batchSize === 1 ? "card" : "cards"}`;
+  // The trailing figure is today's allowance, not the whole queue: the daily limit caps what the
+  // reader may start, and it counts down as lessons are learned. An unknown limit leaves the queue
+  // count, exactly as before.
+  const allowance = remainingDailyBudget == null ? count : Math.min(count, remainingDailyBudget);
   if (stale) {
     // As in the reviews row: a cached nonempty queue opens, and the read that follows validates it;
     // a cached zero offers the read instead of claiming there is nothing to learn. A finished
@@ -286,7 +290,7 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
       ...lessonsRow(
         update ?? batch ?? (count === 0 ? "Refresh for the latest" : "Ready to start"),
       ),
-      trailing: {value: String(count), label: "ready"},
+      trailing: {value: String(allowance), label: "ready"},
       tap: hub.sessionFinished === true ? "sync" : count > 0 ? "lessons" : "sync",
       stale: true,
       notice: staleNote(summary),
@@ -302,7 +306,7 @@ function lessonsModel(hub: WaniKaniHubState): HubModuleModel {
   }
   return {
     ...lessonsRow(update ?? batch ?? "Ready to start"),
-    trailing: {value: String(count), label: "ready"},
+    trailing: {value: String(allowance), label: "ready"},
     tap: "lessons",
     refreshing: hub.refreshing,
     notice: limitNotice,
