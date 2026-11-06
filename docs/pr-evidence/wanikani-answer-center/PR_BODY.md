@@ -37,9 +37,9 @@ https://ticktick.com/webapp/#p/inbox125722853/tasks/6aedc0832b7a1f64be9d91fb.
 - **Interaction, navigation or motion:** Not applicable — a static alignment. The stills keep the real
   Gboard keyboard up, so the field's height and position are the ones a reader sees while typing.
 - **Source:** Base `d4977a6` (`origin/dev`) plus one file, `WaniKaniReview.tsx` (3 lines added,
-  1 changed), committed as `0580c69b442a0bfc13a03d7600badc531fc2441a`. The fixture builds and the stills were made
-  from exactly that production source before it was committed, and nothing later on the branch touches
-  production code. `emulator-5554`, AVD `Gaten_Lookup_Review` (Android 14, x86_64,
+  1 changed), committed as `0580c69b442a0bfc13a03d7600badc531fc2441a`. The fixture builds and the
+  stills were made from exactly that production source before it was committed, and nothing later on
+  the branch touches production code. `emulator-5554`, AVD `Gaten_Lookup_Review` (Android 14, x86_64,
   1080 × 2340 @ 440 dpi, `font_scale` 1.0, system dark); built with the repo's own
   `:app:assembleDebug -PreactNativeArchitectures=x86_64`. Both fixture APK sha256s, their bundle hashes
   and the device hashes are in the [evidence README](https://github.com/Anurag-Raut/Gaten/tree/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center). The fixed build's packaged bundle carries
@@ -63,7 +63,7 @@ https://ticktick.com/webapp/#p/inbox125722853/tasks/6aedc0832b7a1f64be9d91fb.
   review suites (`wanikani-answer-feedback`, `wanikani-review-prompt-order`, `wanikani-review-default-tab`,
   `wanikani-romaji`, `wanikani-leave-confirm`, `meaning-match`) — 35 pass, 0 fail. Three Gradle builds
   — `BUILD SUCCESSFUL`. No unit test covers this change, and none is added: one style property, no
-  logic.
+  logic. The remaining suites under `tests/` were not run for this change.
 
 ## Problems
 
