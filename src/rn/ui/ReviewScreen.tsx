@@ -820,7 +820,7 @@ function AnkiSession({
         )}
         {busy && (
           <View style={styles.gapS}>
-            <BusyRow message="Saving to AnkiDroid…" />
+            <BusyRow message="Saving to AnkiDroid" />
           </View>
         )}
       </ActionFooter>

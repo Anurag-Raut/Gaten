@@ -284,7 +284,7 @@ export function WaniKaniLesson({
         )}
         {starting && (
           <View style={styles.busy}>
-            <BusyRow message="Saving to WaniKani…" />
+            <BusyRow message="Saving to WaniKani" />
           </View>
         )}
       </ActionFooter>
