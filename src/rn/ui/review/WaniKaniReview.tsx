@@ -208,7 +208,7 @@ export function WaniKaniReview({
             keyboard cannot cover it. The next prompt replaces it. */}
         {submitting && (
           <View style={[styles.pending, {paddingHorizontal: contentInset}]}>
-            <BusyRow message="Saving to WaniKani…" />
+            <BusyRow message="Saving to WaniKani" />
           </View>
         )}
         <ScrollView

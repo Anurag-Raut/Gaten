@@ -37,10 +37,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing as ReanimatedEasing,
+  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withRepeat,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
@@ -829,12 +832,49 @@ export function StateChip({label}: {label: string}) {
   );
 }
 
+/**
+ * The busy row's spinner. The native `ActivityIndicator` is an Android `ProgressBar`; when the
+ * system animator duration scale is 0 it falls back to the platform's static refresh-arrow vector.
+ * This ring is drawn and rotated by Reanimated, so it keeps a circular loading shape independently
+ * of that platform fallback.
+ */
+function BusySpinner() {
+  const {colors} = useTheme();
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    spin.value = 0;
+    spin.value = withRepeat(
+      withTiming(1, {
+        duration: 900,
+        easing: ReanimatedEasing.linear,
+        reduceMotion: ReduceMotion.Never,
+      }),
+      -1,
+      false
+    );
+    return () => cancelAnimation(spin);
+  }, [spin]);
+  const rotation = useAnimatedStyle(() => ({
+    transform: [{rotate: `${spin.value * 360}deg`}],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.busySpinner,
+        {borderColor: colors.accent, borderTopColor: "transparent"},
+        rotation,
+      ]}
+    />
+  );
+}
+
 /** "Something is on its way": one small spinner beside its own line, at the layout's own rhythm. */
 export function BusyRow({message}: {message: string}) {
   const {colors} = useTheme();
   return (
     <View style={styles.busyRow} accessible accessibilityLabel={message}>
-      <ActivityIndicator size="small" color={colors.accent} />
+      <BusySpinner />
       <Text style={[typeScale.bodySmall, styles.busyText, {color: colors.onSurfaceVariant}]}>
         {message}
       </Text>
@@ -1004,6 +1044,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   busyRow: {flexDirection: "row", alignItems: "center", minHeight: 21},
+  busySpinner: {width: 16, height: 16, borderRadius: 8, borderWidth: 2},
   busyText: {marginStart: spacing.m, flexShrink: 1},
   enter: {flex: 1},
 });
