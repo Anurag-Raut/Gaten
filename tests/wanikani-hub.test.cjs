@@ -335,16 +335,21 @@ test('reaching the daily lesson limit is distinct from an empty queue', () => {
 });
 
 test('next lesson batch respects the queue, five-card cap and remaining daily budget', () => {
-  for (const [queueCount, limit, learnedToday, expected] of [
-    [12, 20, 18, 'Next batch · 2 cards'],
-    [3, 20, 18, 'Next batch · 2 cards'],
-    [12, 20, 0, 'Next batch · 5 cards'],
+  for (const [queueCount, limit, learnedToday, batch, ready] of [
+    [12, 20, 18, 'Next batch · 2 cards', '2'],
+    [3, 20, 18, 'Next batch · 2 cards', '2'],
+    [12, 20, 0, 'Next batch · 5 cards', '12'],
+    // The trailing count is the day's allowance, not the queue: it caps at the limit and counts down.
+    [47, 15, 0, 'Next batch · 5 cards', '15'],
+    [47, 15, 10, 'Next batch · 5 cards', '5'],
+    [3, 15, 0, 'Next batch · 3 cards', '3'],
   ]) {
     const [, lessons] = models(hub({
       summary: snapshot({lessonsNow: queueCount}),
       learningPreferences: {dailyLimit: limit, learnedToday},
     }));
-    assert.equal(lessons.subline, expected);
+    assert.equal(lessons.subline, batch);
+    assert.deepEqual(lessons.trailing, {value: ready, label: 'ready'});
   }
 });
 
@@ -365,6 +370,7 @@ test('a nearly spent goal leaves only what the goal has left', () => {
   }));
   assert.equal(lessons.subline, 'Next batch · 1 card');
   assert.equal(lessons.extra, null);
+  assert.deepEqual(lessons.trailing, {value: '1', label: 'ready'});
 });
 
 function deferred() {
