@@ -260,6 +260,7 @@ export function SearchField({
           accessibilityLabel="Search Japanese dictionary"
           placeholder="猫, ねこ, neko..."
           placeholderTextColor={colors.onSurfaceVariant}
+          cursorColor={colors.accent}
           returnKeyType="search"
           onSubmitEditing={onSearch}
           style={[styles.field, {color: colors.onSurface}]}

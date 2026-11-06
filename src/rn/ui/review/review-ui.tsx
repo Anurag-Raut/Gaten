@@ -701,6 +701,7 @@ export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function 
       ref={ref}
       {...props}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
+      cursorColor={props.cursorColor ?? colors.accent}
       underlineColorAndroid="transparent"
       style={[styles.input, {color: colors.onSurface}, props.style]}
     />
