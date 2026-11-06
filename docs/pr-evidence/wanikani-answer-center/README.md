@@ -90,7 +90,7 @@ with the fix reverted to `HEAD` and the right column the build with it.
 | --- | --- |
 | Branch | `fix/wanikani-answer-center-feedback` |
 | Base | `d4977a6` — `origin/dev` (`Merge pull request #77 … fix/wanikani-review-feedback`) |
-| Code tree | `d4977a6` plus one file: `src/rn/ui/review/WaniKaniReview.tsx` (4 lines = 3 added, 1 changed), committed on this branch. The fixture builds and every still were made from exactly this source |
+| Code tree | `d4977a6` plus one file: `src/rn/ui/review/WaniKaniReview.tsx` (4 lines = 3 added, 1 changed), committed as `0580c69b442a0bfc13a03d7600badc531fc2441a`. The fixture builds and every still were made from exactly this source |
 | Production diff | `src/rn/ui/review/WaniKaniReview.tsx` only. Nothing under `app/`, `index.js`, `App.js` or another screen. |
 | Checks | `npx tsc --noEmit -p tsconfig.json` — no errors (and the fixture's own `npx tsc --noEmit -p .evidence-fixture/tsconfig.json` — no errors). `node --test` on the six existing review suites (`wanikani-answer-feedback`, `wanikani-review-prompt-order`, `wanikani-review-default-tab`, `wanikani-romaji`, `wanikani-leave-confirm`, `meaning-match`) — 35 pass, 0 fail. Three Gradle builds — `BUILD SUCCESSFUL`. No test is added or re-pinned: the change is one style property with no logic. |
 | Build | `flock /tmp/gaten-build.lock ./gradlew --no-daemon :app:assembleDebug -PreactNativeArchitectures=x86_64` (fixture builds add `ENTRY_FILE=.evidence-fixture/index.js`) |

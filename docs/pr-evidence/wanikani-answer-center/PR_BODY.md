@@ -25,28 +25,28 @@ https://ticktick.com/webapp/#p/inbox125722853/tasks/6aedc0832b7a1f64be9d91fb.
 
   | Scene | Before | After |
   | --- | --- | --- |
-  | Meaning, empty | ![before: Type the meaning starts at the field's left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/before-01-meaning-empty.png) | ![after: Type the meaning sits centred under the prompt](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/after-01-meaning-empty.png) |
-  | Meaning, `waiting place` | ![before: the typed answer starts at the left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/before-02-meaning-typed.png) | ![after: the typed answer sits centred](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/after-02-meaning-typed.png) |
-  | Reading, empty | ![before: こたえ starts at the left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/before-03-reading-empty.png) | ![after: こたえ sits centred, insertion point inside it](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/after-03-reading-empty.png) |
-  | Reading, `machiai` → `まちあい` | ![before: まちあい starts at the left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/before-04-reading-typed.png) | ![after: まちあい sits centred](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/after-04-reading-typed.png) |
+  | Meaning, empty | ![before: Type the meaning starts at the field's left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/before-01-meaning-empty.png) | ![after: Type the meaning sits centred under the prompt](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/after-01-meaning-empty.png) |
+  | Meaning, `waiting place` | ![before: the typed answer starts at the left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/before-02-meaning-typed.png) | ![after: the typed answer sits centred](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/after-02-meaning-typed.png) |
+  | Reading, empty | ![before: こたえ starts at the left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/before-03-reading-empty.png) | ![after: こたえ sits centred, insertion point inside it](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/after-03-reading-empty.png) |
+  | Reading, `machiai` → `まちあい` | ![before: まちあい starts at the left edge](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/before-04-reading-typed.png) | ![after: まちあい sits centred](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/after-04-reading-typed.png) |
 
   The report's own capture of the shipped app — `Type the meaning` at the field's left edge, on a real
-  account — is [`00-report-screenshot.jpg`](https://raw.githubusercontent.com/Anurag-Raut/Gaten/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center/00-report-screenshot.jpg);
+  account — is [`00-report-screenshot.jpg`](https://raw.githubusercontent.com/Anurag-Raut/Gaten/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center/00-report-screenshot.jpg);
   `fixture-harness-bar-probe.png` is the harness chrome only, not part of the comparison. The stills
-  live in `docs/pr-evidence/wanikani-answer-center/` and are linked by raw URL from this branch.
+  live in `docs/pr-evidence/wanikani-answer-center/` and are linked by commit-pinned raw URLs.
 - **Interaction, navigation or motion:** Not applicable — a static alignment. The stills keep the real
   Gboard keyboard up, so the field's height and position are the ones a reader sees while typing.
 - **Source:** Base `d4977a6` (`origin/dev`) plus one file, `WaniKaniReview.tsx` (3 lines added,
-  1 changed), committed on this branch as its fix commit. The fixture builds and the stills were made
+  1 changed), committed as `0580c69b442a0bfc13a03d7600badc531fc2441a`. The fixture builds and the stills were made
   from exactly that production source before it was committed, and nothing later on the branch touches
   production code. `emulator-5554`, AVD `Gaten_Lookup_Review` (Android 14, x86_64,
   1080 × 2340 @ 440 dpi, `font_scale` 1.0, system dark); built with the repo's own
   `:app:assembleDebug -PreactNativeArchitectures=x86_64`. Both fixture APK sha256s, their bundle hashes
-  and the device hashes are in the [evidence README](https://github.com/Anurag-Raut/Gaten/tree/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center). The fixed build's packaged bundle carries
+  and the device hashes are in the [evidence README](https://github.com/Anurag-Raut/Gaten/tree/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center). The fixed build's packaged bundle carries
   `answerText` where the base build's does not — a string-presence check that the change is in the
   build under test, not a byte-level diff of the two binaries. Not exercised: the queue read, the
   lesson quiz, judging/retry, submission, a real account.
-- **Assets:** [the evidence directory](https://github.com/Anurag-Raut/Gaten/tree/fix/wanikani-answer-center-feedback/docs/pr-evidence/wanikani-answer-center) — README with the full provenance table, method and
+- **Assets:** [the evidence directory](https://github.com/Anurag-Raut/Gaten/tree/0580c69b442a0bfc13a03d7600badc531fc2441a/docs/pr-evidence/wanikani-answer-center) — README with the full provenance table, method and
   hashes, the stills, `fixture/` and `build-fixture-apk.sh`. That fixture is how the stills exist at
   all: it mounts the production `WaniKaniReview` over one synthetic session, because the device holds
   no WaniKani token and a capture run must not be pointed at a real account.
