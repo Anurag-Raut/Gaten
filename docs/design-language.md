@@ -7,6 +7,33 @@ current Home, Analytics and Settings rules; this companion records other screen 
 historical checks.
 The original supplied v1 document remains inside the frozen unified-hubs reference package.
 
+## Anki cards settings rhythm (6 November 2026)
+
+- The Anki cards page carried its own spacing: a 24 dp scroll top inset, group bodies at 8 dp and
+  4 dp, and a filled **Allow AnkiDroid access** action at its content width, left-aligned and flush
+  against the paragraph above it. It was the only settings page off the shared rhythm and the only
+  filled, non-full-width button in the app.
+- It now matches `WaniKaniSettingsScreen` — the other hand-rolled keyboard page — and the shared
+  scaffold pages: the scroller starts at `spacing.s` with `spacing.xl` bottom padding, every group
+  body is `spacing.m` (12 dp, the settings row rhythm), and the permission action is the shared
+  filled `Button` at `fullWidth` with a `spacing.m` gap above it. That is the same treatment the
+  identical label already carries on the review flow's blocked state.
+- Stacked text inside a group — the reading/failure lines and the **Include all decks** action —
+  gains a small top gap so nothing sits flush. `ChoiceRow` stays the outlined secondary select and
+  the text fields stay filled; the shared `TextField` primitive is untouched.
+- No behaviour, persistence, permission, navigation or accessibility change: the same nodes, labels
+  and handlers, with different style values only. Light and dark are unchanged in geometry because
+  no colour token was touched.
+- Measured on the light `needsPermission` pair at 392 dp: the first section label moves 149.1 dp →
+  133.1 dp below the bar, matching WaniKani settings; the action's width 216.0 dp → 348.0 dp, i.e.
+  the full content column with its right inset 154.2 dp → 22.2 dp; the paragraph-to-action gap
+  2.9 dp → 14.9 dp. The action's 52 dp height is unchanged.
+- Checked on `emulator-5556` (AVD `Gaten_Lookup_Review`, 1080×2340 @ 440 dpi → 392 dp, font scale
+  1.0) in light and dark, in the `needsPermission` and `ready` states, before and after, with the
+  installed APK hashed on device. Not checked: the `notInstalled` state, 130 %/160 % text, narrower
+  widths, landscape, other accents, TalkBack.
+- Build/test and device evidence for this change are recorded with the PR.
+
 ## Study hub refinement (25 October 2026)
 
 - Anki and WaniKani keep the unified Ink rows and add a flat **Today** section above their study
