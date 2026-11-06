@@ -25,7 +25,7 @@ keyboard disappeared here.*
 | --- | --- |
 | `after-01-reading-first.png` | Head, the pair ordered by `buildWaniKaniPromptOrder([2], () => 0.1)`: prompt 1 is 仮語 **Reading**. |
 | `before-01-meaning-first.png` | Baseline, the same call: prompt 1 is 仮語 **Meaning** (the baseline's builder takes no draw, so a meaning always leads). |
-| `after-02-mixed-refused.png` | Head, reading prompt holding `sひゅう`: the short refusal note under the field, no verdict, nothing counted. The still carries the note's first wording ("A reading is answered in kana. Remove what did not convert."); the shipped string is now **"Kana only, please."** |
+| `after-02-mixed-refused.png` | Head, reading prompt holding `sひゅう`: the short refusal note under the field, no verdict, nothing counted. The still carries the note's first wording ("A reading is answered in kana. Remove what did not convert."); the shipped string is now **"Invalid input — kana only."** |
 | `before-02-mixed-judged.png` | Baseline, the same input: the entry judged `Incorrect`. |
 | `after-03-wrong-stop.png` | Head, `zzz` judged wrong: red field with a caret, `Incorrect`, **keyboard up**, visible Done key present. |
 | `after-04-retry-armed.png` | Head, after the visible Done key: field cleared, `Incorrect` still guiding the retry, keyboard still up. |

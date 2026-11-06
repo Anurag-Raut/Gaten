@@ -12,7 +12,7 @@ Four review-flow fixes from TickTick checklist "wanikani hub feedbacka" (`6aed5b
 - **A reading answer that is not kana is refused, not judged.** `isKanaOnly` (two syllabaries, iteration marks,
   the prolonged sound mark) gates the store's reading judgement: an entry carrying anything else — a latin letter
   the converter could not finish, a digit, a kanji, punctuation — is not sent anywhere and counts nothing; the
-  prompt keeps the field and shows a short "Kana only, please." under it until the next keystroke clears it.
+  prompt keeps the field and shows a short "Invalid input — kana only." under it until the next keystroke clears it.
 - **A wrong answer keeps the keyboard.** The field is now editable whenever the session is not mid-submit-failure
   rather than only while answering or correct, so the wrong stop, the retry and the send all hold focus and the
   keyboard. The visible Done key runs the same Continue the footer does, so it arms the retry at a wrong stop and
