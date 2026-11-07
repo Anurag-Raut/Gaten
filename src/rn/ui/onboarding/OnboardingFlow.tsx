@@ -32,6 +32,12 @@ import {
   useWindowDimensions,
 } from "react-native";
 import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
@@ -42,7 +48,15 @@ import {WaniKaniConnect} from "../review/WaniKaniConnect";
 import type {WaniKaniConnectOutcome} from "../review/review-store";
 import {useLookupModeRequest} from "../settings/settings-components";
 import {useTheme} from "../theme";
-import {CONTENT_COLUMN, MAX_CONTENT_WIDTH, contentInsetFor, spacing, typeScale} from "../tokens";
+import {
+  CONTENT_COLUMN,
+  MAX_CONTENT_WIDTH,
+  PAGE_EASING_REANIMATED,
+  PAGE_SLIDE_DURATION_MS,
+  contentInsetFor,
+  spacing,
+  typeScale,
+} from "../tokens";
 import {AnkiArtwork, LookupArtwork, WaniKaniArtwork} from "./OnboardingArtwork";
 
 /** The short name of each page, for the progress row's announcement. */
@@ -167,6 +181,9 @@ export function OnboardingFlow({
 const ARTWORK_WIDTH = 340;
 const ARTWORK_CAPPED_WIDTH = 248;
 
+/** How far below its settled place the artwork starts its entrance, in dp. */
+const ARTWORK_ENTRY_RISE = 10;
+
 /** How the page's hero is drawn for the current window: full size, capped, or left out entirely. */
 type ArtworkMode = "hidden" | "capped" | "normal";
 
@@ -192,6 +209,11 @@ function artworkModeFor(fontScale: number, usableHeight: number): ArtworkMode {
  * The actions live at the end of the page's own scroller rather than in a second pinned one, so at a
  * short height or a large text size the primary and the Skip are reached by scrolling the same page —
  * never a footer that a second scroller has hidden.
+ *
+ * The artwork arrives with its page: it fades up from [ARTWORK_ENTRY_RISE] below its place on the
+ * page slide's own 260 ms and arriving curve, keyed to [step] so every page animates rather than the
+ * first mount alone. Opacity and transform only, so it settles exactly where it was drawn and nothing
+ * under it shifts; with reduced motion it is simply there.
  */
 function PageChrome({
   step,
@@ -240,6 +262,30 @@ function PageChrome({
     innerColumnWidth,
     mode === "capped" ? ARTWORK_CAPPED_WIDTH : ARTWORK_WIDTH,
   );
+
+  // The artwork's entrance, 0 (start) to 1 (settled). It starts settled under reduced motion, so
+  // the first frame is already the drawing's place rather than an invisible one.
+  const reducedMotion = useReducedMotion();
+  const artworkEntrance = useSharedValue(reducedMotion ? 1 : 0);
+
+  // A new page re-runs the entrance — keyed to [step], not the mount. Reduced motion skips straight
+  // to the settled value: no fade, no travel, no wait.
+  useEffect(() => {
+    if (reducedMotion) {
+      artworkEntrance.value = 1;
+      return;
+    }
+    artworkEntrance.value = 0;
+    artworkEntrance.value = withTiming(1, {
+      duration: PAGE_SLIDE_DURATION_MS,
+      easing: PAGE_EASING_REANIMATED,
+    });
+  }, [step, reducedMotion, artworkEntrance]);
+
+  const artworkStyle = useAnimatedStyle(() => ({
+    opacity: artworkEntrance.value,
+    transform: [{translateY: (1 - artworkEntrance.value) * ARTWORK_ENTRY_RISE}],
+  }));
 
   return (
     <SafeAreaView
@@ -315,15 +361,18 @@ function PageChrome({
       >
         <View>
           {mode !== "hidden" && (
-            <View
+            <Animated.View
               pointerEvents="none"
               accessible={false}
               accessibilityElementsHidden
               importantForAccessibility="no-hide-descendants"
-              style={{alignItems: "center", marginTop: spacing.s, marginBottom: spacing.l}}
+              style={[
+                {alignItems: "center", marginTop: spacing.s, marginBottom: spacing.l},
+                artworkStyle,
+              ]}
             >
               <Artwork width={artworkWidth} />
-            </View>
+            </Animated.View>
           )}
           <Text
             ref={headingRef}
