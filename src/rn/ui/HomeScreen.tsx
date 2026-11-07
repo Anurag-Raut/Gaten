@@ -33,7 +33,7 @@ import {useTheme} from "./theme";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
 import {GatenWordmark, wordmarkLineHeight} from "./home/GatenWordmark";
-import {LookupModeReminder, LookupStatusButton, useLookupStatus} from "./home/LookupStatus";
+import {LookupStatusButton, useLookupStatus} from "./home/LookupStatus";
 import {
   SEARCH_LIST_CONTENT,
   SearchIdlePrompt,
@@ -87,18 +87,6 @@ export function HomeScreen({
   );
   const searching = store.normalizeQuery(searchState.query).length > 0;
   const searchMode = searchState.searchActive || searching;
-
-  /**
-   * The reminder is for a reader who has never turned lookup mode on: a resolved "off", no history
-   * of the grant, and no dismissal. While the status is still being read, or could not be read, it
-   * stays away — an unknown state is not an off one.
-   */
-  const showLookupReminder =
-    focused &&
-    !searchMode &&
-    lookup.state === "off" &&
-    !lookup.everEnabled &&
-    !lookup.reminderDismissed;
 
   /** The Screen lookup page, on Home's own stack, the way a card or a reference chip opens one. */
   const openLookupSettings = useCallback(() => {
@@ -301,12 +289,6 @@ export function HomeScreen({
                   onRetry={lookup.retry}
                 />
               </Animated.View>
-            )}
-            {showLookupReminder && (
-              <LookupModeReminder
-                onTurnOn={requestLookupMode}
-                onDismiss={lookup.dismissReminder}
-              />
             )}
             <Animated.View style={styles.searchRow} layout={layoutTransition}>
               <Animated.View style={styles.searchField} layout={layoutTransition}>

@@ -11,12 +11,10 @@ import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
-import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.gaten.app.GatenAccessibilityService
-import com.gaten.app.trigger.LookupModePreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -25,8 +23,7 @@ import java.io.IOException
 
 /**
  * The small facts about the app the RN screens put on their settings pages: the version, the
- * dictionary's schema version, and whether lookup mode is on — with its history, which Home's
- * header and reminder read.
+ * dictionary's schema version, and whether lookup mode is on.
  *
  * Everything is a read of something that already exists: the platform's own
  * enabled-accessibility-services list, which is what lookup mode's "On" and "Off"
@@ -86,39 +83,6 @@ class GatenAppInfoModule(
     @ReactMethod
     fun isLookupModeActive(promise: Promise) {
         promise.resolve(isAccessibilityServiceEnabled(reactApplicationContext))
-    }
-
-    /**
-     * Lookup mode's whole state for Home's header: whether the accessibility grant is on right
-     * now, whether it has ever been on for this install, and whether Home's reminder for it has
-     * been dismissed.
-     *
-     * The two history flags are [LookupModePreferences]'s, so they are the facts the service itself
-     * writes. A read that finds the grant enabled also records it: a grant given before this
-     * preference existed, or one whose service instance never connected, is still proof the reader
-     * has used lookup mode.
-     */
-    @ReactMethod
-    fun getLookupStatus(promise: Promise) {
-        val context = reactApplicationContext
-        val enabled = isAccessibilityServiceEnabled(context)
-        if (enabled) {
-            LookupModePreferences.recordEverEnabled(context)
-        }
-        promise.resolve(
-            Arguments.createMap().apply {
-                putBoolean("enabled", enabled)
-                putBoolean("everEnabled", LookupModePreferences.everEnabled(context))
-                putBoolean("reminderDismissed", LookupModePreferences.reminderDismissed(context))
-            }
-        )
-    }
-
-    /** Dismisses Home's lookup-mode reminder for good; the flag is the preference Home reads. */
-    @ReactMethod
-    fun dismissLookupReminder(promise: Promise) {
-        LookupModePreferences.setReminderDismissed(reactApplicationContext)
-        promise.resolve(null)
     }
 
     override fun invalidate() {
