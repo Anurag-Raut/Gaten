@@ -181,20 +181,13 @@ function leaveQuestion(step: ConfirmableStep): {title: string; body: string} {
 }
 
 /**
- * The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it, and
- * `onOpenStudyDecks` is the study-deck settings page the AnkiDroid setup help hands the reader to.
+ * The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it.
  *
  * The setup help's dialog is held here rather than inside the screen it stands over: the reader
  * leaves Gaten to install or set up AnkiDroid, and the screen behind the help is re-read and
  * replaced on the way back. Held here, the dialog and the block the reader was reading stay put.
  */
-export function ReviewScreen({
-  onExit,
-  onOpenStudyDecks,
-}: {
-  onExit: () => void;
-  onOpenStudyDecks: () => void;
-}) {
+export function ReviewScreen({onExit}: {onExit: () => void}) {
   const theme = useTheme();
   const {colors} = theme;
   const review = useReview();
@@ -394,7 +387,6 @@ export function ReviewScreen({
         provider="anki"
         open={ankiHelpOpen}
         onDismiss={() => setAnkiHelpOpen(false)}
-        onOpenStudyDecks={onOpenStudyDecks}
       />
 
       {/* Work in progress is on screen, so leaving is worth one question — never a grade, never a

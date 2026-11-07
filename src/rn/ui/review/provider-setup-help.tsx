@@ -6,14 +6,13 @@
 
 /**
  * Getting AnkiDroid and WaniKani working, behind the hubs' quiet question mark: the provider's own
- * mark beside the title, exactly three numbered steps, and — in the block whose task it performs —
- * the control that does it.
+ * mark beside the title, a short numbered sequence, and — in the block whose task it performs — the
+ * control that does it. Anki takes two steps, WaniKani three.
  *
- * The help hands the reader off instead of describing the hand-off: the token page opens in the
- * browser, the token form opens where the screen that raised the help keeps it, the store listing
- * and AnkiDroid itself open as AnkiDroid's own screens, and the study decks open on the settings
- * page that chooses them. Nothing here documents a connected reader's routine; what they do next
- * belongs to the screens themselves.
+ * The help hands the reader off instead of describing the hand-off: the token page and the store
+ * listing open as links, the token form opens where the screen that raised the help keeps it, and
+ * AnkiDroid itself opens as AnkiDroid's own screen. Nothing here documents a connected reader's
+ * routine; what they do next belongs to the screens themselves.
  *
  * Opening the help requests nothing. AnkiDroid's installation, permission and collection come from
  * the shared deck read the review flow already owns (`useAnkiDecks`), reported as it stands — a read
@@ -34,7 +33,7 @@ import {PressableScale} from "../PressableScale";
 import {getAnkiDecks, loadAnkiDecks, useAnkiDecksState} from "../anki/useAnkiDecks";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {downloadAnkiDroid} from "../anki/anki-actions";
+import {ANKI_STORE_URL} from "../anki/anki-actions";
 import {shape, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {BrandTile} from "./review-ui";
@@ -95,13 +94,13 @@ function ReachedState({label}: {label: string}) {
 }
 
 /**
- * The token page as a link rather than as a sentence. It wears the outlined control's metrics — a
- * 52 dp target, the button radius, accent ink and a leading `open_in_new` — but it is a link and says
- * so, because the shared `Button` can only announce itself as a button. A page that does not open
- * says so underneath and offers its address instead, so a tap that did nothing is never the end of
- * the step.
+ * An outside page as a link rather than as a sentence — the WaniKani token page, or AnkiDroid's
+ * store listing. It wears the outlined control's metrics — a 52 dp target, the button radius, accent
+ * ink and a leading `open_in_new` — but it is a link and says so, because the shared `Button` can
+ * only announce itself as a button. A page that does not open says so underneath and offers its
+ * address instead, so a tap that did nothing is never the end of the step.
  */
-function TokenPageLink({
+function ExternalLink({
   label,
   accessibilityLabel,
   url,
@@ -175,7 +174,7 @@ function WaniKaniSetup({onOpenTokenForm}: {onOpenTokenForm: () => void}) {
     <>
       <SetupBlock number={1} title="Open WaniKani">
         <View style={styles.action}>
-          <TokenPageLink
+          <ExternalLink
             label="Open token settings"
             accessibilityLabel="Open WaniKani token settings, opens browser"
             url={WANIKANI_TOKEN_URL}
@@ -206,16 +205,18 @@ function WaniKaniSetup({onOpenTokenForm}: {onOpenTokenForm: () => void}) {
 }
 
 /**
- * AnkiDroid's three steps, each with the control the state it reads calls for. All three stay
- * visible whatever is known, because the reader is reading the whole path — only the controls and
- * the copy that answers the known state change.
+ * AnkiDroid's two steps: install the app, then let Gaten read it. Both stay visible whatever is
+ * known, because the reader is reading the whole path — only the controls and the copy that answers
+ * the known state change. What the reader does *inside* Anki is Anki's own business: step 1 carries
+ * the store link and, when the collection is not set up yet, the way into the app; choosing a deck
+ * to study is the settings page's, and the review flow's own deck list picks what to review now.
  *
  * `status()` alone cannot say whether the collection is set up, so the steps read the shared deck
  * state with it: NOT_INSTALLED and PERMISSION are the provider's own refusals, a list on screen (or a
  * provider that answered NOT_SET_UP) means the reader is past installing and allowing, and anything
  * else failed to read — which is said as a failed read, never as an absent AnkiDroid.
  */
-function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
+function AnkiSetup() {
   const {colors} = useTheme();
   const anki = useAnkiDecksState();
   const [openFailed, setOpenFailed] = useState(false);
@@ -239,9 +240,12 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
             ? "ready"
             : "checking";
 
-  // The collection itself: read now, and holding at least one deck to study.
-  const readable = anki.failure == null && anki.decks != null;
-  const noDecks = anki.failure == null && anki.decks?.length === 0;
+  // Installed means the provider answered at all: a refusal to hand over the collection still means
+  // the app is on the device, which is what step 1 claims.
+  const installed = read === "needsPermission" || read === "ready";
+  // Past installing, but nothing to read yet: Anki has not been opened once to create its collection,
+  // and only Anki itself can do that — so this is the one state that still needs the way in.
+  const needsSetupInAnki = anki.failure === "NOT_SET_UP";
 
   const openTheApp = () => {
     setOpenFailed(false);
@@ -267,31 +271,20 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
       .catch(() => setPermissionMessage("Couldn't request access."));
   };
 
-  const prepareBody = noDecks
-    ? "Create or import a deck."
-    : read === "needsPermission" || read === "ready"
-      ? "Finish setup in Anki, then create or import a deck."
-      : "Install Anki, then create or import a deck.";
-
   return (
     <>
-      <SetupBlock number={1} title="Set up Anki">
-        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>{prepareBody}</Text>
+      <SetupBlock number={1} title="Install Anki">
         {read === "notInstalled" && (
           <View style={styles.action}>
-            <Button
-              variant="outlined"
-              fullWidth
+            <ExternalLink
               label="Download Anki"
-              onPress={() => {
-                // The store page reports its own failure with a toast; a resolved promise is not
-                // proof that anything opened, so nothing here is claimed on the way back.
-                void downloadAnkiDroid();
-              }}
+              accessibilityLabel="Download Anki, opens the store listing"
+              url={ANKI_STORE_URL}
             />
           </View>
         )}
-        {(read === "needsPermission" || read === "ready") && (
+        {installed && <ReachedState label="Anki is installed." />}
+        {needsSetupInAnki && (
           <View style={styles.action}>
             <Button variant="outlined" fullWidth label="Open Anki" onPress={openTheApp} />
           </View>
@@ -341,34 +334,6 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
           </Text>
         )}
       </SetupBlock>
-
-      <StepDivider />
-
-      <SetupBlock number={3} title="Study decks">
-        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Select decks, then tap ‘Save’.
-        </Text>
-        {readable && !noDecks && (
-          <View style={styles.action}>
-            <Button
-              variant="tonal"
-              fullWidth
-              label="Choose study decks"
-              onPress={onOpenStudyDecks}
-            />
-          </View>
-        )}
-        {noDecks && (
-          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-            Add a deck in Anki first.
-          </Text>
-        )}
-        {!readable && (
-          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-            Complete steps 1–2 first.
-          </Text>
-        )}
-      </SetupBlock>
     </>
   );
 }
@@ -392,24 +357,21 @@ export function ProviderSetupHelpTrigger({
 
 /**
  * The help itself, for a host that holds its visibility: the provider's mark beside the title, the
- * three steps with their own controls, and the pinned Close. Dismissal and the hand-off both live
- * here, because a hand-off belongs to this dialog to finish: it runs only once the help has closed,
- * so the reader never comes back to it over the screen it asked for.
+ * steps with their own controls, and the pinned Close. Dismissal and the hand-off both live here,
+ * because a hand-off belongs to this dialog to finish: it runs only once the help has closed, so the
+ * reader never comes back to it over the screen it asked for.
  */
 export function ProviderSetupDialog({
   provider,
   open,
   onDismiss,
   onOpenTokenForm,
-  onOpenStudyDecks,
 }: {
   provider: Provider;
   open: boolean;
   onDismiss: () => void;
   /** WaniKani: what "Open token form" means on the screen that raised the help. */
   onOpenTokenForm?: () => void;
-  /** AnkiDroid: the study-deck settings page behind "Choose study decks". */
-  onOpenStudyDecks?: () => void;
 }) {
   if (!open) return null;
   const anki = provider === "anki";
@@ -424,12 +386,7 @@ export function ProviderSetupDialog({
       actions={<Button variant="text" label="Close" onPress={onDismiss} />}
     >
       {anki ? (
-        <AnkiSetup
-          onOpenStudyDecks={() => {
-            onDismiss();
-            onOpenStudyDecks?.();
-          }}
-        />
+        <AnkiSetup />
       ) : (
         <WaniKaniSetup
           onOpenTokenForm={() => {
@@ -449,11 +406,9 @@ export function ProviderSetupDialog({
 export function ProviderSetupHelp({
   provider,
   onOpenTokenForm,
-  onOpenStudyDecks,
 }: {
   provider: Provider;
   onOpenTokenForm?: () => void;
-  onOpenStudyDecks?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -464,7 +419,6 @@ export function ProviderSetupHelp({
         open={open}
         onDismiss={() => setOpen(false)}
         onOpenTokenForm={onOpenTokenForm}
-        onOpenStudyDecks={onOpenStudyDecks}
       />
     </>
   );

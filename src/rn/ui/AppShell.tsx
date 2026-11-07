@@ -198,14 +198,7 @@ function HomeRoute({navigation}: HomeRouteProps<"HomeTab">) {
  * before this page was pushed; Back pops the page, which is the whole of leaving a step.
  */
 function ReviewRoute({navigation}: NativeStackScreenProps<HomeStackParamList, "Review">) {
-  return (
-    <ReviewScreen
-      onExit={() => navigation.goBack()}
-      // The setup help's last step opens the study-deck page on this stack, so Back returns the
-      // reader to the deck list rather than to another tab's hub.
-      onOpenStudyDecks={() => openSettingsPage(navigation, "anki")}
-    />
-  );
+  return <ReviewScreen onExit={() => navigation.goBack()} />;
 }
 
 function HomeWordRoute({
