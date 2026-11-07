@@ -43,6 +43,7 @@ import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.OcrModels
 import com.gaten.app.rn.GatenBridgeEmitter
 import com.gaten.app.trigger.FloatingTriggerButton
+import com.gaten.app.trigger.LookupModePreferences
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.overlay.OverlayWindowController
 import java.util.concurrent.Executor
@@ -209,6 +210,11 @@ class GatenAccessibilityService : AccessibilityService() {
             displayManager.registerDisplayListener(displayListener, mainHandler)
             displayListenerRegistered = true
         }
+        // The honest signal that lookup mode has been on: the system connects this service only
+        // once the reader has enabled it in Android's accessibility settings. Home's reminder for
+        // the mode reads this, so opening those settings or accepting the disclosure is not enough
+        // to silence it.
+        LookupModePreferences.recordEverEnabled(this)
         syncFloatingButton()
     }
 
