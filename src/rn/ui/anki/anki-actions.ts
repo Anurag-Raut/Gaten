@@ -14,5 +14,5 @@ export async function downloadAnkiDroid(): Promise<void> {
   } catch {
     // Rejected intents and an unavailable URL handler get the same visible failure below.
   }
-  void toast("Could not open the AnkiDroid download page.");
+  void toast("Could not open the Anki download page.");
 }

@@ -138,22 +138,22 @@ const ANKI_FAILURES: Record<
 > = {
   NOT_INSTALLED: {
     tone: "neutral",
-    title: "AnkiDroid is not installed.",
-    detail: "Open the AnkiDroid installation flow.",
+    title: "Anki is not installed.",
+    detail: "Open the Anki installation flow.",
     downstream: "empty",
     fix: "install",
   },
   PERMISSION: {
     tone: "neutral",
-    title: "AnkiDroid access needed.",
+    title: "Anki access needed.",
     detail: "Allow Gaten to read collection statistics.",
     downstream: "permission",
     fix: "grant",
   },
   NOT_SET_UP: {
     tone: "neutral",
-    title: "AnkiDroid has no collection yet.",
-    detail: "Open AnkiDroid once to create it.",
+    title: "Anki has no collection yet.",
+    detail: "Open Anki once to create it.",
     downstream: "empty",
     fix: "open",
   },
@@ -204,10 +204,10 @@ function grantAnkiAccess(refresh: () => void) {
         refresh();
         return;
       }
-      void GatenPlatform.toast("AnkiDroid access was not granted");
+      void GatenPlatform.toast("Anki access was not granted");
     })
     .catch(() => {
-      void GatenPlatform.toast("Could not ask for AnkiDroid access");
+      void GatenPlatform.toast("Could not ask for Anki access");
     });
 }
 
@@ -227,8 +227,8 @@ function ankiAction(
       return {label: "Grant access", onPress: () => grantAnkiAccess(anki.refresh)};
     case "open":
       return {
-        label: "Open AnkiDroid",
-        onPress: () => openOrSay(Anki.openAnkiDroid(), "Could not open AnkiDroid"),
+        label: "Open Anki",
+        onPress: () => openOrSay(Anki.openAnkiDroid(), "Could not open Anki"),
       };
     case "settings":
       return {label: "Anki settings", onPress: () => onOpenSettings("anki")};
@@ -541,7 +541,7 @@ export function AnalyticsScreen({
   // the foot of the page — a cached figure never pretends to be fresh.
   const stale: string[] = [];
   if (anki.data != null && anki.failure != null) {
-    stale.push("The last AnkiDroid read did not finish.");
+    stale.push("The last Anki read did not finish.");
   }
   if (wanikani.snapshot != null && wanikani.stale) {
     stale.push(
@@ -678,7 +678,7 @@ export function AnalyticsScreen({
             <SourceState
               read={ankiState}
               art={AnkiConnectionArt}
-              loadingTitle="Checking AnkiDroid…"
+              loadingTitle="Checking Anki…"
               loadingDetail="Checking collection access."
             />
           ) : (
@@ -721,7 +721,7 @@ export function AnalyticsScreen({
                     />
                   </>
                 ) : (
-                  <InlineUnavailable>AnkiDroid would not answer the card-state searches.</InlineUnavailable>
+                  <InlineUnavailable>Anki would not answer the card-state searches.</InlineUnavailable>
                 )}
               </View>
             </View>

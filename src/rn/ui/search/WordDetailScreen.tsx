@@ -504,7 +504,7 @@ export function AddToAnkiBar({
     try {
       const refused = await GatenAnki.savePreferences({...anki.ankiSettings, deckName});
       if (refused) {
-        setDeckError("AnkiDroid did not accept that deck.");
+        setDeckError("Anki didn't accept that deck.");
         return;
       }
       await anki.refreshAnkiStatus();
@@ -581,25 +581,25 @@ export function AddToAnkiBar({
               {deckLoadFailed ? (
                 <PressableScale
                   accessibilityRole="button"
-                  accessibilityLabel="Try reading AnkiDroid's decks again"
+                  accessibilityLabel="Retry loading Anki decks"
                   onPress={loadDecks}
                   style={styles.deckOption}
                 >
                   <Text style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.error}]}>
-                    Could not read AnkiDroid's decks. Try again.
+                    Could not read Anki decks. Try again.
                   </Text>
                 </PressableScale>
               ) : decks === null ? (
                 <Text
                   style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
                 >
-                  Reading AnkiDroid decks…
+                  Reading Anki decks…
                 </Text>
               ) : decks.length === 0 ? (
                 <Text
                   style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
                 >
-                  AnkiDroid has no decks to choose from.
+                  Anki has no decks to choose from.
                 </Text>
               ) : (
                 decks.map((deck) => (

@@ -47,13 +47,13 @@ function countsLine(deck: AnkiDeckResult): string {
 function todayFailureCopy(failure: AnkiDecksFailure): string {
   switch (failure) {
     case "NOT_INSTALLED":
-      return "AnkiDroid isn't installed.";
+      return "Anki isn't installed.";
     case "PERMISSION":
-      return "AnkiDroid access is needed.";
+      return "Anki access is needed.";
     case "NOT_SET_UP":
-      return "Open AnkiDroid once to set it up.";
+      return "Open Anki once to set it up.";
     default:
-      return "Couldn't read AnkiDroid.";
+      return "Couldn't read Anki.";
   }
 }
 
@@ -230,7 +230,7 @@ export function AnkiDeckPicker({
           <Text style={[typeScale.bodyMedium, styles.empty, {color: colors.onSurfaceVariant}]}>
             {filteredEmpty
               ? "No study decks selected. Choose decks in Settings → Anki cards."
-              : "No decks found. Create a deck in AnkiDroid to get started."}
+              : "No decks found. Create a deck in Anki to get started."}
           </Text>
         ) : (
           decks.map((deck) => (
@@ -246,7 +246,7 @@ export function AnkiDeckPicker({
         )}
         {busy && decks.length > 0 && (
           <View style={styles.busy}>
-            <BusyRow message="Reading AnkiDroid…" />
+            <BusyRow message="Reading Anki…" />
           </View>
         )}
       </ScrollView>
@@ -265,12 +265,12 @@ export function AnkiDeckPicker({
           }
         >
           <Text style={[styles.dialogParagraph, {color: colors.onSurfaceVariant}]}>
-            Cards studied counts the distinct cards you answered in AnkiDroid today, across every
+            Cards studied counts the distinct cards you answered in Anki today, across every
             deck. Answering the same card again the same day counts once.
           </Text>
           <Text style={[styles.dialogParagraph, {color: colors.onSurfaceVariant}]}>
             Ready now adds up the cards due right now in the study decks you selected. “Today” is
-            AnkiDroid’s own study day, which rolls over when your Anki day does — not at midnight.
+            Anki’s own study day, which rolls over when your Anki day does — not at midnight.
           </Text>
         </DialogShell>
       )}

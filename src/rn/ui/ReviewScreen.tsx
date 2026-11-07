@@ -100,21 +100,21 @@ const FLASH_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 /** The line for an AnkiDroid failure, without any of the provider's internals. */
 function failureMessage(failure: ReviewFailure, detail?: string): string {
   if (failure === "PROVIDER" && detail != null) {
-    return `AnkiDroid could not do that: ${detail}`;
+    return `Anki could not do that: ${detail}`;
   }
   switch (failure) {
     case "NOT_INSTALLED":
-      return "Download AnkiDroid and open it once to set up your collection, then return here to review.";
+      return "Install Anki and finish setup, then return to review.";
     case "PERMISSION":
-      return "Gaten needs AnkiDroid's database access to read and answer cards.";
+      return "Allow Gaten to read and answer Anki cards.";
     case "NOT_SET_UP":
-      return "AnkiDroid has not set up its collection yet. Open AnkiDroid once and come back.";
+      return "Finish setup in Anki, then return to review.";
     case "NOT_FOUND":
-      return "That card is no longer in AnkiDroid.";
+      return "That card is no longer in Anki.";
     case "MALFORMED":
-      return "AnkiDroid sent something Gaten could not read.";
+      return "Gaten couldn't read Anki's response.";
     default:
-      return "AnkiDroid could not complete that request.";
+      return "Anki couldn't complete the request.";
   }
 }
 
@@ -468,7 +468,7 @@ function OpeningView({
         ]}
       >
         <BusyRow
-          message={source === "anki" ? "Opening AnkiDroid…" : "Reading WaniKani…"}
+          message={source === "anki" ? "Opening Anki…" : "Reading WaniKani…"}
         />
       </View>
     </View>
@@ -498,11 +498,11 @@ function BlockedView({
   const contentInset = contentInsetFor(width);
   const title =
     failure === "NOT_INSTALLED"
-      ? "AnkiDroid is not installed"
+      ? "Anki is not installed"
       : failure === "NOT_SET_UP"
-        ? "AnkiDroid is not set up"
+        ? "Anki setup needed"
         : failure === "PERMISSION"
-          ? "AnkiDroid access is needed"
+          ? "Anki access needed"
           : "Review unavailable";
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
@@ -521,13 +521,13 @@ function BlockedView({
           body={failureMessage(failure)}
         >
           {failure === "NOT_INSTALLED" && (
-            <FilledAction label="Download AnkiDroid" onPress={downloadAnkiDroid} />
+            <FilledAction label="Download Anki" onPress={downloadAnkiDroid} />
           )}
           {failure === "PERMISSION" && (
-            <FilledAction label="Allow AnkiDroid access" disabled={busy} onPress={onGrant} />
+            <FilledAction label="Allow access" disabled={busy} onPress={onGrant} />
           )}
           {failure === "NOT_SET_UP" && (
-            <OutlinedButton label="Open AnkiDroid" onPress={openAnkiDroid} />
+            <OutlinedButton label="Open Anki" onPress={openAnkiDroid} />
           )}
         </StateBlock>
       </ScrollView>
@@ -820,7 +820,7 @@ function AnkiSession({
         {session.revealed && card.typedAnswer && (
           <>
             <Text style={[typeScale.bodySmall, styles.note, {color: colors.onSurfaceVariant}]}>
-              This card expects typed input. Gaten shows the answer as AnkiDroid renders it, but the
+              This card expects typed input. Gaten shows the answer as Anki renders it, but the
               interactive comparison is not supported here, so rate it yourself.
             </Text>
             <View style={styles.gapS} />
@@ -831,12 +831,12 @@ function AnkiSession({
         {session.mediaFiles.length > 0 && (
           <PressableScale
             accessibilityRole="button"
-            accessibilityLabel="Open in AnkiDroid"
+            accessibilityLabel="Open in Anki"
             onPress={openAnkiDroid}
             style={styles.mediaAction}
           >
             <Text style={[typeScale.labelMedium, {color: colors.accent}]}>
-              This card has media. Open in AnkiDroid
+              This card has media. Open in Anki
             </Text>
           </PressableScale>
         )}
@@ -858,7 +858,7 @@ function AnkiSession({
         )}
         {busy && (
           <View style={styles.gapS}>
-            <BusyRow message="Saving to AnkiDroid" />
+            <BusyRow message="Saving to Anki" />
           </View>
         )}
       </ActionFooter>
@@ -1253,7 +1253,7 @@ function FailedView({
           body={failureMessage(step.failure, step.detail)}
           note={
             step.afterGrade
-              ? "AnkiDroid may or may not have saved that answer, so Gaten will not send it again."
+              ? "Anki may or may not have saved that answer, so Gaten will not send it again."
               : undefined
           }
         >
@@ -1263,7 +1263,7 @@ function FailedView({
             onPress={onRetry}
           />
           {step.failure === "PROVIDER" && (
-            <OutlinedButton label="Open AnkiDroid" onPress={openAnkiDroid} />
+            <OutlinedButton label="Open Anki" onPress={openAnkiDroid} />
           )}
           <OutlinedButton label="Change deck" disabled={busy} onPress={onChangeDeck} />
         </StateBlock>

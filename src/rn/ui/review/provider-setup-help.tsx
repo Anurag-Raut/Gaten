@@ -42,14 +42,6 @@ import {BrandTile} from "./review-ui";
 /** Where a token is created; the same page the connect screen's own link opens. */
 const WANIKANI_TOKEN_URL = "https://www.wanikani.com/settings/personal_access_tokens";
 
-/**
- * The permission instruction: every scope the page offers, not a narrowed list. Gaten reads study
- * data and Analytics figures from the same token it starts lessons and submits reviews with.
- */
-const WANIKANI_SCOPE =
-  "Leave all available token permissions selected; do not narrow the selection. Gaten needs read " +
-  "access for study data and Analytics, and permission to start lessons and submit reviews.";
-
 type Provider = "anki" | "wanikani";
 
 /** How AnkiDroid stands, as the three steps read it. */
@@ -156,7 +148,7 @@ function TokenPageLink({
           accessibilityLiveRegion="polite"
           style={[styles.failure, {color: colors.error}]}
         >
-          Couldn't open the page. Copy the link and open it in a browser.
+          Couldn't open the page. Copy the link into your browser.
         </Text>
       )}
       {openFailed && <Button variant="text" label="Copy link" onPress={copy} />}
@@ -173,19 +165,15 @@ function TokenPageLink({
 }
 
 /**
- * WaniKani's three steps: create a token on the site, keep every permission the page offers, and
- * paste it in here. The permission step has no control of its own — no Gaten action can tick a box
- * on wanikani.com — so it draws what the reader is choosing there instead of promising a state the
- * app cannot observe.
+ * WaniKani's three steps: open the site's token page, create a token with every permission selected,
+ * and paste it in here. The permission step has no control of its own — no Gaten action can tick a
+ * box on wanikani.com — so it states the instruction and nothing more.
  */
 function WaniKaniSetup({onOpenTokenForm}: {onOpenTokenForm: () => void}) {
   const {colors} = useTheme();
   return (
     <>
-      <SetupBlock number={1} title="Create a token">
-        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Sign in to WaniKani and open personal access tokens.
-        </Text>
+      <SetupBlock number={1} title="Open WaniKani">
         <View style={styles.action}>
           <TokenPageLink
             label="Open token settings"
@@ -197,27 +185,17 @@ function WaniKaniSetup({onOpenTokenForm}: {onOpenTokenForm: () => void}) {
 
       <StepDivider />
 
-      <SetupBlock number={2} title="Keep every permission">
-        <Text style={[styles.caption, {color: colors.onSurfaceVariant}]}>
-          Choose this on WaniKani
-        </Text>
-        <View style={styles.permission}>
-          <Icon name="check" size={20} color={colors.accent} />
-          <Text style={[typeScale.labelLarge, {color: colors.onSurface, flexShrink: 1}]}>
-            All permissions selected
-          </Text>
-        </View>
-        <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>{WANIKANI_SCOPE}</Text>
+      <SetupBlock number={2} title="Select all permissions">
         <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-          Create the token, then copy it in full.
+          Create the token and copy it in full.
         </Text>
       </SetupBlock>
 
       <StepDivider />
 
-      <SetupBlock number={3} title="Paste it in Gaten">
+      <SetupBlock number={3} title="Connect Gaten">
         <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Paste the complete token into ‘Personal access token’, then choose ‘Connect WaniKani’.
+          Paste into ‘Personal access token’, then tap ‘Connect WaniKani’.
         </Text>
         <View style={styles.action}>
           <Button variant="tonal" fullWidth label="Open token form" onPress={onOpenTokenForm} />
@@ -283,28 +261,28 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
           // keep a state of our own. Nothing is exported and no card is saved by granting.
           void loadAnkiDecks();
         } else {
-          setPermissionMessage("Access wasn't allowed. You can try again when you're ready.");
+          setPermissionMessage("Access wasn't allowed.");
         }
       })
-      .catch(() => setPermissionMessage("Couldn't request AnkiDroid access. Try again."));
+      .catch(() => setPermissionMessage("Couldn't request access."));
   };
 
   const prepareBody = noDecks
-    ? "Create or import a deck in AnkiDroid."
+    ? "Create or import a deck."
     : read === "needsPermission" || read === "ready"
-      ? "Open AnkiDroid and finish setup. Create or import a deck there."
-      : "Install AnkiDroid, then open it and create or import a deck.";
+      ? "Finish setup in Anki, then create or import a deck."
+      : "Install Anki, then create or import a deck.";
 
   return (
     <>
-      <SetupBlock number={1} title="Prepare AnkiDroid">
+      <SetupBlock number={1} title="Set up Anki">
         <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>{prepareBody}</Text>
         {read === "notInstalled" && (
           <View style={styles.action}>
             <Button
               variant="outlined"
               fullWidth
-              label="Download AnkiDroid"
+              label="Download Anki"
               onPress={() => {
                 // The store page reports its own failure with a toast; a resolved promise is not
                 // proof that anything opened, so nothing here is claimed on the way back.
@@ -315,13 +293,13 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
         )}
         {(read === "needsPermission" || read === "ready") && (
           <View style={styles.action}>
-            <Button variant="outlined" fullWidth label="Open AnkiDroid" onPress={openTheApp} />
+            <Button variant="outlined" fullWidth label="Open Anki" onPress={openTheApp} />
           </View>
         )}
         {read === "failed" && (
           <>
             <Text accessibilityLiveRegion="polite" style={[styles.failure, {color: colors.error}]}>
-              Couldn't check AnkiDroid.
+              Couldn't check Anki.
             </Text>
             <Button
               variant="text"
@@ -335,36 +313,26 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
         )}
         {openFailed && (
           <Text accessibilityLiveRegion="polite" style={[styles.failure, {color: colors.error}]}>
-            Couldn't open AnkiDroid. Try again.
+            Couldn't open Anki.
           </Text>
         )}
       </SetupBlock>
 
       <StepDivider />
 
-      <SetupBlock number={2} title="Allow Gaten access">
+      <SetupBlock number={2} title="Connect Gaten">
         <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Allow Gaten to read your collection and save cards to AnkiDroid.
+          Let Gaten read your collection and save cards.
         </Text>
         {read === "needsPermission" && (
           <View style={styles.action}>
-            <Button
-              variant="tonal"
-              fullWidth
-              label="Allow AnkiDroid access"
-              onPress={allowAccess}
-            />
+            <Button variant="tonal" fullWidth label="Allow access" onPress={allowAccess} />
           </View>
-        )}
-        {read === "notInstalled" && (
-          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-            Install AnkiDroid first.
-          </Text>
         )}
         {read === "ready" && <ReachedState label="Access allowed" />}
         {(read === "failed" || read === "checking") && (
           <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-            Finish the steps above first.
+            Complete step 1 first.
           </Text>
         )}
         {permissionMessage != null && (
@@ -376,9 +344,9 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
 
       <StepDivider />
 
-      <SetupBlock number={3} title="Choose study decks">
+      <SetupBlock number={3} title="Study decks">
         <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Choose which decks appear for study, then press ‘Save’.
+          Select decks, then tap ‘Save’.
         </Text>
         {readable && !noDecks && (
           <View style={styles.action}>
@@ -392,12 +360,12 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
         )}
         {noDecks && (
           <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-            Add a deck in AnkiDroid first.
+            Add a deck in Anki first.
           </Text>
         )}
         {!readable && (
           <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
-            Finish the steps above first.
+            Complete steps 1–2 first.
           </Text>
         )}
       </SetupBlock>
@@ -416,7 +384,7 @@ export function ProviderSetupHelpTrigger({
   return (
     <IconButton
       name="help"
-      accessibilityLabel={provider === "anki" ? "AnkiDroid setup help" : "WaniKani setup help"}
+      accessibilityLabel={provider === "anki" ? "Anki setup help" : "WaniKani setup help"}
       onPress={onPress}
     />
   );
@@ -447,7 +415,7 @@ export function ProviderSetupDialog({
   const anki = provider === "anki";
   return (
     <DialogShell
-      title={anki ? "Set up AnkiDroid" : "Set up WaniKani"}
+      title={anki ? "Set up Anki" : "Set up WaniKani"}
       titleLeading={<BrandTile brand={provider} size={40} radius={shape.brandTile} />}
       onDismiss={onDismiss}
       scrollBody
@@ -519,9 +487,7 @@ const styles = StyleSheet.create({
   divider: {height: 1, marginVertical: spacing.l},
   body: {...typeScale.bodyMedium},
   paragraph: {...typeScale.bodyMedium, marginTop: spacing.s},
-  caption: {...typeScale.bodySmall},
   action: {marginTop: spacing.s, gap: spacing.xs},
-  permission: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.s},
   status: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.s},
   failure: {...typeScale.bodySmall, marginTop: spacing.s},
   // The outlined control's own metrics, worn by a link: 52 dp, the button radius, accent ink.
