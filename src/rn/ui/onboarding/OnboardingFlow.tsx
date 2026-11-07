@@ -33,6 +33,7 @@ import {
 } from "react-native";
 import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
 import Animated, {
+  type SharedValue,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -85,6 +86,12 @@ interface PageProps {
   onRetry: () => void;
   /** The heading the flow focuses when the page arrives. */
   headingRef: React.RefObject<Text | null>;
+  /**
+   * The artwork's entrance, 0 (start) to 1 (settled), driven by the flow: only a real page arrival
+   * resets and times it, so a PageChrome that is replaced by, or returns from, the WaniKani connect
+   * form picks it up where it already is instead of replaying it.
+   */
+  artworkEntrance: SharedValue<number>;
 }
 
 /**
@@ -152,8 +159,44 @@ export function OnboardingFlow({
     return () => subscription.remove();
   }, [step, formOpen, write]);
 
+  // The artwork's entrance is driven here, above the pages, rather than in PageChrome: the flow owns
+  // the step and the WaniKani form's open state, so it outlives PageChrome being swapped for the
+  // connect form and back. That swap is not an arrival and must not bring the artwork in again.
+  const reducedMotion = useReducedMotion();
+  const artworkEntrance = useSharedValue(reducedMotion ? 1 : 0);
+
+  // A real arrival — the flow's own, then each step change — starts the entrance over. The reset is
+  // here, during render, rather than in the effect: a view computes its first style from the shared
+  // value as it mounts, so resetting later would paint one frame of the artwork already in its place
+  // (the same reason the review screen's StepTransition resets its own driver during render). Under
+  // reduced motion there is no reset, so the artwork is never a frame invisible.
+  const [entranceStep, setEntranceStep] = useState(step);
+  if (entranceStep !== step) {
+    setEntranceStep(step);
+    if (!reducedMotion) {
+      artworkEntrance.value = 0;
+    }
+  }
+
+  // Then timed to its settled end. Nothing else is an arrival: a status landing, a foreground return,
+  // a plain re-render, a resize, a text-size change, and the WaniKani form opening or closing all
+  // re-render this without changing [step]. A page whose artwork its own mode hides has still spent
+  // its run here, so the artwork comes back settled rather than queued. Reduced motion pins the
+  // settled end state and times nothing, on the first frame included.
+  useEffect(() => {
+    if (reducedMotion) {
+      artworkEntrance.value = 1;
+      return;
+    }
+    artworkEntrance.value = withTiming(1, {
+      duration: PAGE_SLIDE_DURATION_MS,
+      easing: PAGE_EASING_REANIMATED,
+    });
+  }, [step, reducedMotion, artworkEntrance]);
+
   const shared: PageProps = {
     step,
+    artworkEntrance,
     onAdvance: write,
     onBack: step > 0 ? () => write(step - 1) : null,
     saveError,
@@ -211,13 +254,15 @@ function artworkModeFor(fontScale: number, usableHeight: number): ArtworkMode {
  * never a footer that a second scroller has hidden.
  *
  * The artwork arrives with its page: it fades up from [ARTWORK_ENTRY_RISE] below its place on the
- * page slide's own 260 ms and arriving curve, keyed to [step] so every page animates rather than the
- * first mount alone. Opacity and transform only, so it settles exactly where it was drawn and nothing
- * under it shifts; with reduced motion it is simply there.
+ * page slide's own 260 ms and arriving curve. Opacity and transform only, so it settles exactly
+ * where it was drawn and nothing under it shifts. The entrance value itself is the flow's
+ * ([PageProps.artworkEntrance]) — the chrome only applies it, so a real page change is the only
+ * thing that ever brings the artwork in; being replaced by the WaniKani form is not one.
  */
 function PageChrome({
   step,
   artwork: Artwork,
+  artworkEntrance,
   heading,
   explanation,
   status,
@@ -234,6 +279,8 @@ function PageChrome({
 }: {
   step: number;
   artwork: React.ComponentType<{width: number}>;
+  /** The flow's entrance driver; the chrome applies it and never restarts it. */
+  artworkEntrance: SharedValue<number>;
   heading: string;
   explanation: string;
   status: React.ReactNode;
@@ -263,25 +310,8 @@ function PageChrome({
     mode === "capped" ? ARTWORK_CAPPED_WIDTH : ARTWORK_WIDTH,
   );
 
-  // The artwork's entrance, 0 (start) to 1 (settled). It starts settled under reduced motion, so
-  // the first frame is already the drawing's place rather than an invisible one.
-  const reducedMotion = useReducedMotion();
-  const artworkEntrance = useSharedValue(reducedMotion ? 1 : 0);
-
-  // A new page re-runs the entrance — keyed to [step], not the mount. Reduced motion skips straight
-  // to the settled value: no fade, no travel, no wait.
-  useEffect(() => {
-    if (reducedMotion) {
-      artworkEntrance.value = 1;
-      return;
-    }
-    artworkEntrance.value = 0;
-    artworkEntrance.value = withTiming(1, {
-      duration: PAGE_SLIDE_DURATION_MS,
-      easing: PAGE_EASING_REANIMATED,
-    });
-  }, [step, reducedMotion, artworkEntrance]);
-
+  // The flow drives the entrance; the chrome only maps it onto the wrapper. A mount here (the
+  // WaniKani form closing) reads the value as it already stands — settled — so nothing replays.
   const artworkStyle = useAnimatedStyle(() => ({
     opacity: artworkEntrance.value,
     transform: [{translateY: (1 - artworkEntrance.value) * ARTWORK_ENTRY_RISE}],
@@ -436,7 +466,7 @@ function PageChrome({
 type LookupState = "checking" | "on" | "off" | "failed";
 
 /** Page 1: the accessibility grant that lookup mode is, read afresh on every arrival. */
-function LookupPage({step, onAdvance, onBack, saveError, onRetry, headingRef}: PageProps) {
+function LookupPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry, headingRef}: PageProps) {
   const {colors} = useTheme();
   const {request, dialog} = useLookupModeRequest();
   const [state, setState] = useState<LookupState>("checking");
@@ -488,6 +518,7 @@ function LookupPage({step, onAdvance, onBack, saveError, onRetry, headingRef}: P
       <PageChrome
         step={step}
         artwork={LookupArtwork}
+        artworkEntrance={artworkEntrance}
         heading="Look up Japanese on your screen"
         explanation="Look up Japanese text while you read in other apps. Gaten needs Android's accessibility permission to start screen lookups."
         status={
@@ -567,7 +598,7 @@ function openAnkiDroid() {
 }
 
 /** Page 2: AnkiDroid installed, allowed and with a collection to read — done in place. */
-function AnkiPage({step, onAdvance, onBack, saveError, onRetry, headingRef}: PageProps) {
+function AnkiPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry, headingRef}: PageProps) {
   const {colors} = useTheme();
   const [state, setState] = useState<AnkiPageState>({kind: "checking"});
   const readSeq = useRef(0);
@@ -695,6 +726,7 @@ function AnkiPage({step, onAdvance, onBack, saveError, onRetry, headingRef}: Pag
     <PageChrome
       step={step}
       artwork={AnkiArtwork}
+      artworkEntrance={artworkEntrance}
       heading="Study with AnkiDroid"
       explanation="Review your AnkiDroid decks in Gaten and save words as cards. AnkiDroid needs to be installed and allow Gaten access."
       status={status}
@@ -737,6 +769,7 @@ function waniKaniFailureOf(error: unknown): WaniKaniFailure {
  */
 function WaniKaniPage({
   step,
+  artworkEntrance,
   onAdvance,
   onBack,
   saveError,
@@ -810,6 +843,7 @@ function WaniKaniPage({
     <PageChrome
       step={step}
       artwork={WaniKaniArtwork}
+      artworkEntrance={artworkEntrance}
       heading="Connect WaniKani"
       explanation="Bring your WaniKani lessons and reviews into Gaten. Connect with a personal access token from your WaniKani account."
       status={
