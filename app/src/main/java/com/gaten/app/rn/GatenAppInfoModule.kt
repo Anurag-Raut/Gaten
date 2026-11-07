@@ -11,10 +11,12 @@ import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.gaten.app.GatenAccessibilityService
+import com.gaten.app.support.SupportPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -23,11 +25,11 @@ import java.io.IOException
 
 /**
  * The small facts about the app the RN screens put on their settings pages: the version, the
- * dictionary's schema version, and whether lookup mode is on.
+ * dictionary's schema version, whether lookup mode is on, and the support popup's own state.
  *
  * Everything is a read of something that already exists: the platform's own
  * enabled-accessibility-services list, which is what lookup mode's "On" and "Off"
- * report on. The dictionary's schema
+ * report on, and the support popup's counters in the app's settings file. The dictionary's schema
  * version is read from the SQLite header the way `app/build.gradle.kts` verifies the packaged
  * asset — `PRAGMA user_version` at bytes 60-63 — read from the extracted copy when there is one
  * and from the asset otherwise, so the number the build checked is the number JS sees.
@@ -83,6 +85,38 @@ class GatenAppInfoModule(
     @ReactMethod
     fun isLookupModeActive(promise: Promise) {
         promise.resolve(isAccessibilityServiceEnabled(reactApplicationContext))
+    }
+
+    /**
+     * The support popup's stored state: how many times the app has been opened, whether the reader
+     * silenced the popup for good, and the earliest moment it may be offered again.
+     */
+    @ReactMethod
+    fun getSupportPromptState(promise: Promise) {
+        val context = reactApplicationContext
+        promise.resolve(
+            Arguments.createMap().apply {
+                putInt("openCount", SupportPreferences.openCount(context))
+                putBoolean("never", SupportPreferences.promptNever(context))
+                putDouble("nextEligibleAt", SupportPreferences.promptNextEligibleAt(context).toDouble())
+            }
+        )
+    }
+
+    /** Counts one app open and resolves the running total, so JS can gate the first offer on it. */
+    @ReactMethod
+    fun recordSupportAppOpen(promise: Promise) {
+        promise.resolve(SupportPreferences.recordAppOpen(reactApplicationContext))
+    }
+
+    /**
+     * Records a dismissal: `permanent` is "Don't show again" and silences the popup for good,
+     * otherwise it is "Not now" and postpones the next offer.
+     */
+    @ReactMethod
+    fun dismissSupportPrompt(permanent: Boolean, promise: Promise) {
+        SupportPreferences.dismissPrompt(reactApplicationContext, permanent)
+        promise.resolve(null)
     }
 
     override fun invalidate() {
