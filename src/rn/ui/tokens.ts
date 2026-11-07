@@ -109,6 +109,15 @@ export const EXIT_EASING_REANIMATED = ReanimatedEasing.bezier(0.4, 0, 1, 1);
  */
 export const APP_FONT = "IBM Plex Sans JP";
 
+/**
+ * Lettering for a kanji the app draws as a page's own anchor — the WaniKani review's hero
+ * character, the reference page's hero character and its component chips. One weight for all of
+ * them, so a character never changes weight as the reader moves between the surfaces that show it;
+ * the size stays each surface's own. The kanji chips and the Anki answer's headword already wear
+ * the same weight through `typeScale.displaySmall`/`displayMedium`.
+ */
+export const KANJI_LETTERING = {fontWeight: "500", fontFamily: APP_FONT} as const;
+
 /** Shared text roles from docs/Gaten_Ink_Design_Language_v1.md. Display roles retain Japanese reading sizes. */
 export const typeScale = {
   displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500", fontFamily: APP_FONT},
