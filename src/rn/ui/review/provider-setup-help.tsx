@@ -378,7 +378,7 @@ export function ProviderSetupDialog({
   return (
     <DialogShell
       title={anki ? "Anki help" : "WaniKani help"}
-      titleLeading={<BrandTile brand={provider} size={40} radius={shape.brandTile} />}
+      titleLeading={<BrandTile flat brand={provider} size={40} />}
       onDismiss={onDismiss}
       scrollBody
       fitToViewport

@@ -187,7 +187,17 @@ function leaveQuestion(step: ConfirmableStep): {title: string; body: string} {
  * leaves Gaten to install or set up AnkiDroid, and the screen behind the help is re-read and
  * replaced on the way back. Held here, the dialog and the block the reader was reading stay put.
  */
-export function ReviewScreen({onExit}: {onExit: () => void}) {
+export function ReviewScreen({
+  onExit,
+  onOpenSettingsPage,
+}: {
+  onExit: () => void;
+  /**
+   * The shell's own way to a settings page on this stack: an open reference page hands the reader
+   * to WaniKani's settings to connect a token, and Back returns to the card they were on.
+   */
+  onOpenSettingsPage?: (page: "wanikani") => void;
+}) {
   const theme = useTheme();
   const {colors} = theme;
   const review = useReview();
@@ -198,6 +208,22 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
   const ankiHelp = (
     <ProviderSetupHelpTrigger provider="anki" onPress={() => setAnkiHelpOpen(true)} />
   );
+
+  /**
+   * The reader can connect WaniKani from the settings page this screen opens over itself. Coming
+   * back re-reads any open reference page once, so the token it now has shows; the review store is
+   * never touched, so the card being answered stays exactly as it was left — unanswered and
+   * ungraded. A changed key is the panel's own cue to look again; the overlay caller, which has no
+   * navigator, never sets one.
+   */
+  const [referenceReload, setReferenceReload] = useState(0);
+  const wasFocused = useRef(isFocused);
+  useEffect(() => {
+    if (isFocused && !wasFocused.current) {
+      setReferenceReload((count) => count + 1);
+    }
+    wasFocused.current = isFocused;
+  }, [isFocused]);
 
   /**
    * Back from this screen. Work in progress asks first — the Anki card, the WaniKani review and the
@@ -321,6 +347,8 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onKanji={(character) => reviewActions.toggleKanji(character)}
             onRadical={(id) => reviewActions.toggleRadical(id)}
             onCloseDetails={() => reviewActions.closeDetails()}
+            onOpenSettingsPage={onOpenSettingsPage}
+            referenceReload={referenceReload}
           />
         ) : step.kind === "wkConnect" ? (
           <WaniKaniConnect
@@ -542,6 +570,8 @@ function AnkiSession({
   onKanji,
   onRadical,
   onCloseDetails,
+  onOpenSettingsPage,
+  referenceReload,
 }: {
   theme: Theme;
   session: Extract<ReviewStep, {kind: "session"}>;
@@ -554,6 +584,10 @@ function AnkiSession({
   onKanji: (character: string) => void;
   onRadical: (id: number) => void;
   onCloseDetails: () => void;
+  /** The page's own route to WaniKani's settings, for the panels' connect action. */
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  /** Bumped when the reader returns to this page, so an open reference page looks again. */
+  referenceReload: number;
 }) {
   const {colors} = theme;
   const insets = useSafeAreaInsets();
@@ -564,6 +598,9 @@ function AnkiSession({
   // The same choice the reference pages read: a kanji tapped during review opens whichever
   // reference the reader selected, with no account needed for Remembering the Kanji.
   const kanjiReference = useKanjiReferenceSource();
+  // The panels' connect action, offered only when this page really can open WaniKani's settings.
+  const onWaniKaniSettings =
+    onOpenSettingsPage == null ? undefined : () => onOpenSettingsPage("wanikani");
   // The note's own sentence is the example source: it is already on the device, so the answer never
   // waits on a network and stays readable with no connection at all.
   // The corpus is the example source; the note's own sentence is the fallback for a word the
@@ -772,6 +809,8 @@ function AnkiSession({
                           compact={false}
                           embedded
                           onRadical={onRadical}
+                          onSettings={onWaniKaniSettings}
+                          reloadKey={referenceReload}
                         />
                         {/* One level deeper: the radical is a page opened inside the kanji's
                             page, so the kanji panel above stands still while it slides in. */}
@@ -790,6 +829,8 @@ function AnkiSession({
                                   compact={false}
                                   embedded
                                   onRadical={onRadical}
+                                  onSettings={onWaniKaniSettings}
+                                  reloadKey={referenceReload}
                                 />
                               </View>
                             )}

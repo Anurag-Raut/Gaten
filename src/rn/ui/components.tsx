@@ -214,16 +214,13 @@ export function SectionLabel({
   );
 }
 
-/** The "common" marker beside a headword. */
+/**
+ * The "common" marker beside a headword: the bare word, because the result card behind it is the
+ * only box — a marker in its own fill would be a box inside that box.
+ */
 export function CommonChip({label = "common"}: {label?: string}) {
   const {colors} = useTheme();
-  return (
-    <ChipBase
-      label={label}
-      background={colors.primaryContainer}
-      color={colors.onPrimaryContainer}
-    />
-  );
+  return <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{label}</Text>;
 }
 
 /** A count or short figure the screens float beside a heading. */

@@ -16,7 +16,7 @@ import {Button, Icon} from "../components";
 import type {IconName} from "../icons";
 import {BusySpinner} from "../review/review-ui";
 import {useTheme} from "../theme";
-import {shape, spacing, typeScale} from "../tokens";
+import {spacing, typeScale} from "../tokens";
 
 /**
  * What every search's loading notice says. Three ASCII periods, not U+2026: IBM Plex Sans JP sets
@@ -28,9 +28,9 @@ export const SEARCHING_NOTICE_TITLE = "Searching the dictionary...";
 
 /**
  * A state with no results to show: what happened, and — when something can be done — the action.
- * It is one flat row on the list's own fill and rounding, so it occupies exactly the box a result
- * card does: a glyph column, then the title and body, then the action under them. It draws no inset
- * and does not scroll — the list around it owns both — so it can never box a card inside a card.
+ * It is one flat row: a glyph column, then the title and body, then the outlined action under them.
+ * It draws no card, no inset and no scroll — the list or the sheet around it owns those — so it can
+ * never box a card inside a card.
  */
 export function SearchNotice({
   title,
@@ -48,7 +48,7 @@ export function SearchNotice({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={[styles.notice, {backgroundColor: colors.surfaceVariant}]}>
+    <View style={styles.notice}>
       <View style={styles.noticeRow}>
         <View style={styles.noticeGlyph}>
           {spin ? (
@@ -73,6 +73,7 @@ export function SearchNotice({
       {action != null && (
         <Button
           fullWidth
+          variant="outlined"
           label={action.label}
           onPress={action.onPress}
           style={styles.noticeAction}
@@ -83,8 +84,9 @@ export function SearchNotice({
 }
 
 const styles = StyleSheet.create({
+  // One flat row of prose and its action, never a card: a box around the action would be a box
+  // inside whatever the notice stands on.
   notice: {
-    borderRadius: shape.small,
     paddingVertical: spacing.m,
     paddingHorizontal: spacing.l,
     width: "100%",

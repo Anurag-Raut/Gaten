@@ -34,7 +34,15 @@ import type {
 import {Button, Icon, IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {
+  APP_FONT,
+  CONTENT_COLUMN,
+  contentInsetFor,
+  KANJI_LETTERING,
+  shape,
+  spacing,
+  typeScale,
+} from "../tokens";
 
 /** What was tapped: a kanji by its character, or a radical by its WaniKani subject id. */
 export type WaniKaniTarget =
@@ -52,10 +60,23 @@ export interface WaniKaniPanelProps {
   compact?: boolean;
   /** The caller already applies the content grid: keep the body flush with the panel's heading. */
   embedded?: boolean;
+  /**
+   * The hosted tree already paints the surface — the lookup sheet's panel. The page then drops the
+   * fills and rounding of its component chips and its loading blocks; a page on its own background
+   * keeps them.
+   */
+  flat?: boolean;
   /** A component chip was tapped; the caller owns the Tick and the open-or-toggle decision. */
   onRadical?: (id: number) => void;
   /** The NeedsToken/AuthRejected notices' button: the shell opens the WaniKani settings page. */
   onSettings?: () => void;
+  /**
+   * A value that changes when the caller wants the target read again — the review page bumps it
+   * when the reader comes back from connecting a token in Settings. The lookup is re-requested from
+   * the device (token, then cache), never with `refresh`, so a page that was `needsToken` becomes
+   * the page itself once the token is there. Callers with no navigation of their own leave it alone.
+   */
+  reloadKey?: number;
 }
 
 /** The failure strings the Compose panel showed, one per WaniKaniFailure. */
@@ -110,8 +131,10 @@ export function WaniKaniPanel({
   scrollable = true,
   compact = false,
   embedded = false,
+  flat = false,
   onRadical,
   onSettings,
+  reloadKey = 0,
 }: WaniKaniPanelProps) {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
@@ -153,9 +176,10 @@ export function WaniKaniPanel({
     return () => {
       cancelled = true;
     };
-    // `target` is rebuilt by the caller on every render; the key is the stable identity.
+    // `target` is rebuilt by the caller on every render; the key is the stable identity. A changed
+    // `reloadKey` re-requests the page from the device — after a token was connected behind it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetKey, retryCount]);
+  }, [targetKey, retryCount, reloadKey]);
 
   const subject: WaniKaniSubject | null =
     lookup?.status === "available" ? lookup.subject : null;
@@ -178,7 +202,7 @@ export function WaniKaniPanel({
         {paddingHorizontal: embedded ? 0 : contentInsetFor(width)},
       ]}
     >
-      {lookup === null && unreachable === null && <Skeleton compact={compact} />}
+      {lookup === null && unreachable === null && <Skeleton compact={compact} flat={flat} />}
       {unreachable !== null && (
         <PanelNotice
           message={`Could not load this page from WaniKani: ${unreachable}.`}
@@ -197,6 +221,7 @@ export function WaniKaniPanel({
           compact={compact}
           onRadical={onRadical}
           onRefresh={() => setRetry({key: targetKey, count: retryCount + 1})}
+          flat={flat}
         />
       )}
       {lookup?.status === "noEntry" && (
@@ -219,14 +244,14 @@ export function WaniKaniPanel({
       )}
       {lookup?.status === "needsToken" && (
         <PanelNotice
-          message="Connect a WaniKani personal access token in the Gaten app to see kanji and radical pages here."
-          action={onSettings ? {label: "Open Gaten", onPress: onSettings} : undefined}
+          message="Connect WaniKani to see kanji and radical pages here."
+          action={onSettings ? {label: "Connect WaniKani", onPress: onSettings} : undefined}
         />
       )}
       {lookup?.status === "authRejected" && (
         <PanelNotice
-          message="WaniKani rejected the saved token. Open Gaten to connect again."
-          action={onSettings ? {label: "Open Gaten", onPress: onSettings} : undefined}
+          message="WaniKani rejected the saved token. Connect WaniKani again to keep seeing kanji and radical pages here."
+          action={onSettings ? {label: "Connect WaniKani", onPress: onSettings} : undefined}
         />
       )}
     </View>
@@ -319,6 +344,7 @@ function AvailableContent({
   compact,
   onRadical,
   onRefresh,
+  flat = false,
 }: {
   kanji: KanjiSubject | null;
   radical: RadicalSubject | null;
@@ -328,6 +354,8 @@ function AvailableContent({
   onRadical?: (id: number) => void;
   /** Asks WaniKani again; the radical page's foot action, where the kanji page's is in its row. */
   onRefresh: () => void;
+  /** @see WaniKaniPanelProps.flat */
+  flat?: boolean;
 }) {
   const {colors, dark} = useTheme();
   const meanings = radical ? radical.meanings : kanji?.meanings ?? [];
@@ -445,7 +473,10 @@ function AvailableContent({
                   accessibilityRole="button"
                   accessibilityLabel={`WaniKani details for the radical ${label}`}
                   onPress={() => onRadical(component.id)}
-                  style={[styles.componentChip, {backgroundColor: colors.surfaceVariant}]}
+                  style={[
+                    styles.componentChip,
+                    flat ? styles.componentChipFlat : {backgroundColor: colors.surfaceVariant},
+                  ]}
                 >
                   <Text style={[styles.componentGlyph, {color: colors.onSurface}]}>{label}</Text>
                 </PressableScale>
@@ -555,8 +586,9 @@ function RadicalImage({
 
 /**
  * A state with no page to show: what happened, and — when something can be done about it — the one
- * action that can. A card rather than a line of prose, because none of it is content from WaniKani,
- * so it should not read like a page.
+ * action that can. A plain line of prose with the action under it, the way the rest of the app
+ * states a state that needs something from the reader: no card and no badge, because none of it is
+ * content from WaniKani and it must not read as a panel inside the page.
  */
 function PanelNotice({
   message,
@@ -567,18 +599,11 @@ function PanelNotice({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={[styles.notice, {backgroundColor: colors.surface}]}>
-      <View style={styles.noticeRow}>
-        <View style={[styles.noticeBadge, {backgroundColor: colors.surfaceVariant}]}>
-          <Icon name="info" size={22} color={colors.onSurfaceVariant} />
-        </View>
-        <Text style={[typeScale.bodyMedium, styles.noticeMessage, {color: colors.onSurface}]}>
-          {message}
-        </Text>
-      </View>
+    <View style={styles.notice}>
+      <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>{message}</Text>
       {action != null && (
         <View style={styles.noticeAction}>
-          <Button fullWidth label={action.label} onPress={action.onPress} />
+          <Button variant="outlined" label={action.label} onPress={action.onPress} />
         </View>
       )}
     </View>
@@ -586,13 +611,14 @@ function PanelNotice({
 }
 
 /** A label-sized block, in the same rhythm a real caption keeps: more gap above it than below. */
-function SkeletonLabel({compact}: {compact: boolean}) {
+function SkeletonLabel({compact, flat}: {compact: boolean; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View style={{marginTop: compact ? spacing.s : spacing.m}}>
       <View
         style={[
           styles.skeletonBlock,
+          flat && styles.skeletonBlockFlat,
           styles.skeletonLabel,
           {backgroundColor: colors.surfaceVariant},
         ]}
@@ -603,7 +629,7 @@ function SkeletonLabel({compact}: {compact: boolean}) {
 }
 
 /** A paragraph's worth of lines, the last one short like a real paragraph's end. */
-function SkeletonParagraph({lines}: {lines: number}) {
+function SkeletonParagraph({lines, flat}: {lines: number; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View>
@@ -612,6 +638,7 @@ function SkeletonParagraph({lines}: {lines: number}) {
           key={index}
           style={[
             styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
             index === lines - 1 ? styles.skeletonTail : styles.skeletonLine,
             {backgroundColor: colors.surfaceVariant},
             index > 0 ? styles.skeletonLineGap : null,
@@ -627,7 +654,7 @@ function SkeletonParagraph({lines}: {lines: number}) {
  * holds the layout still instead of blanking out and filling in a beat later. Plain blocks in the
  * surface's own colour — no shimmer, no animation — and the state is still announced.
  */
-function Skeleton({compact}: {compact: boolean}) {
+function Skeleton({compact, flat}: {compact: boolean; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View
@@ -635,29 +662,48 @@ function Skeleton({compact}: {compact: boolean}) {
       style={CONTENT_COLUMN}
     >
       <View style={styles.sectionBlock}>
-        <SkeletonLabel compact={compact} />
-        <View style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]} />
-        <SkeletonLabel compact={compact} />
-        <View style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]} />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <View
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLine,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
+        />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <View
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLine,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
+        />
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
-        <SkeletonLabel compact={compact} />
+        <SkeletonLabel compact={compact} flat={flat} />
         <View style={styles.skeletonChips}>
           {[0, 1, 2, 3].map((chip) => (
             <View
               key={chip}
-              style={[styles.skeletonBlock, styles.skeletonChip, {backgroundColor: colors.surfaceVariant}]}
+              style={[
+                styles.skeletonBlock,
+                flat && styles.skeletonBlockFlat,
+                styles.skeletonChip,
+                {backgroundColor: colors.surfaceVariant},
+              ]}
             />
           ))}
         </View>
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
-        <SkeletonLabel compact={compact} />
-        <SkeletonParagraph lines={3} />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <SkeletonParagraph lines={3} flat={flat} />
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
-        <SkeletonLabel compact={compact} />
-        <SkeletonParagraph lines={2} />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <SkeletonParagraph lines={2} flat={flat} />
       </View>
     </View>
   );
@@ -675,11 +721,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: CONTENT_COLUMN,
   // Match the landing lookup modal's hierarchy: the hero glyph and the gloss use the same roles
-  // the shared entry sections do, so a WaniKani page reads as the same sheet.
-  heroGlyph: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  // the shared entry sections do, so a WaniKani page reads as the same sheet. The character itself
+  // wears the one kanji lettering weight (`KANJI_LETTERING`) — the same the review's hero and the
+  // chips under an answer wear — while the gloss, a meaning rather than a character, keeps its own.
+  heroGlyph: {fontSize: 36, ...KANJI_LETTERING},
   meaningGloss: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
   readingValue: {fontSize: 18, fontFamily: APP_FONT},
-  componentGlyph: {fontSize: 24, fontWeight: "600", fontFamily: APP_FONT},
+  componentGlyph: {fontSize: 24, ...KANJI_LETTERING},
   // The radical's drawing and its name, drawn together straight on the page — the drawing unboxed
   // and the name as the page's primary text — and closed by the section rule like every section.
   heroRow: {
@@ -714,25 +762,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.s,
   },
+  // Flat, a chip is the glyph and its target: the fill and the rounding go, the padding that keeps
+  // the 48 dp target stays.
+  componentChipFlat: {borderRadius: 0},
   notes: {gap: spacing.s, marginTop: spacing.s},
-  notice: {
-    ...CONTENT_COLUMN,
-    borderRadius: shape.medium,
-    padding: spacing.l,
-    marginTop: spacing.s,
-    marginBottom: spacing.l,
-  },
-  noticeRow: {flexDirection: "row", alignItems: "flex-start", gap: spacing.m},
-  noticeBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: shape.small,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  noticeMessage: {flex: 1, paddingTop: spacing.xs},
-  noticeAction: {marginTop: spacing.l, width: "100%"},
+  // A state with no page: one flat line of prose and, when there is one, the action under it.
+  notice: {...CONTENT_COLUMN, marginTop: spacing.s, marginBottom: spacing.l},
+  noticeAction: {marginTop: spacing.m, alignSelf: "flex-start"},
+  // Flat, a loading block is a square bar: on a page that paints its own surface, rounding is what
+  // would read as a card inside it.
   skeletonBlock: {borderRadius: shape.small},
+  skeletonBlockFlat: {borderRadius: 0},
   skeletonLabel: {width: 72, height: 14},
   skeletonLine: {height: 14},
   skeletonLineGap: {marginTop: spacing.xs},

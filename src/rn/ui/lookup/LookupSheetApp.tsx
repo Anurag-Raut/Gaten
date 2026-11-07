@@ -82,6 +82,13 @@ type ReferenceTarget =
   | {kind: "kanji"; character: string}
   | {kind: "radical"; id: number};
 
+/**
+ * The results list's row gap, flattened for the sheet. It is a module-scope component rather than
+ * an inline arrow because `ItemSeparatorComponent` compares component types: a new one each render
+ * would remount every separator.
+ */
+const FlatRowSeparator = () => <SearchRowSeparator flat />;
+
 function LookupSheetRoot({sessionId}: {sessionId?: string}) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
@@ -412,6 +419,7 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
             </View>
             <View style={styles.fieldWrap}>
               <SearchField
+                flat
                 inputRef={input}
                 query={searchState.query}
                 queryLimited={searchState.queryLimited}
@@ -427,13 +435,15 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
             <FlatList<SearchRow>
               data={searchRowsData}
               keyExtractor={(row) => row.key}
-              renderItem={({item}) => <SearchRowItem row={item} onOpen={pickSearched} />}
-              ItemSeparatorComponent={SearchRowSeparator}
+              renderItem={({item}) => <SearchRowItem flat row={item} onOpen={pickSearched} />}
+              ItemSeparatorComponent={FlatRowSeparator}
               contentContainerStyle={[
                 SEARCH_LIST_CONTENT,
                 {paddingBottom: spacing.xxl + insets.bottom},
               ]}
-              ListHeaderComponent={searchState.query.length === 0 ? <SearchIdlePrompt /> : null}
+              ListHeaderComponent={
+                searchState.query.length === 0 ? <SearchIdlePrompt flat /> : null
+              }
               ListEmptyComponent={
                 searchState.query.length > 0 && searchNotice != null ? searchNotice : null
               }
@@ -561,15 +571,12 @@ function EntryDetail({
               accessibilityRole="button"
               accessibilityState={{selected: index === selected}}
               onPress={() => onSelectWord(index)}
-              style={[
-                styles.tab,
-                {backgroundColor: index === selected ? colors.primaryContainer : colors.surfaceVariant},
-              ]}
+              style={[styles.tab, index === selected && {borderBottomColor: colors.primary}]}
             >
               <Text
                 style={[
                   typeScale.titleMedium,
-                  {color: index === selected ? colors.onPrimaryContainer : colors.onSurface},
+                  {color: index === selected ? colors.primary : colors.onSurfaceVariant},
                 ]}
               >
                 {word.entries[0]?.primary ?? word.surface}
@@ -598,6 +605,7 @@ function EntryDetail({
         <OtherSpellingsRow primary={entry.primary} spellings={entry.kanji} />
         {showKanjiStrip(kanjiReference, wanikaniConfigured) && (
           <WordKanjiSection
+            flat
             label={kanjiReferenceLabel(kanjiReference)}
             characters={distinctIdeographs(entry.primary)}
             onOpenKanji={onOpenKanji}
@@ -670,10 +678,18 @@ const styles = StyleSheet.create({
   // collapsed with it.
   tabsScroll: {flexGrow: 0, flexShrink: 0},
   tabs: {paddingHorizontal: spacing.l, paddingVertical: spacing.m, gap: spacing.s},
-  // The pill is the Pressable and the label is a plain Text inside it, the same shape as the
-  // shared WaniKani kanji chip: the background and its rounding belong to the container, and the
-  // CJK label is never clipped by a Text box shorter than the glyph's own metrics.
-  tab: {paddingHorizontal: spacing.l, paddingVertical: spacing.s, borderRadius: shape.small},
+  // A bare label, not a pill: the panel already paints the surface, so the selection is the design
+  // language's word tab — `primary` ink over a 2 dp `primary` bottom rule. The rule is drawn on
+  // every tab, transparent when unselected, so the rail keeps one height; the 48 dp floor keeps the
+  // target whole without a box around it.
+  tab: {
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: spacing.l,
+    paddingVertical: spacing.s,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
   entryContent: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.xl, paddingBottom: spacing.xxl},
   searchedFrom: {paddingHorizontal: spacing.contentInset, paddingTop: spacing.m},
   emptyBody: {flex: 1, paddingBottom: spacing.xxl},

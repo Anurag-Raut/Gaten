@@ -143,15 +143,20 @@ export function SectionCaption({
  * The brand mark in its own holder: the app's real Anki or WaniKani logo on the service's own tint,
  * which is the one place a brand colour belongs. The tint is read from the canvas rather than from a
  * theme role because it is a brand surface, not an app one.
+ *
+ * A flat mark drops the holder: a host that already paints the surface — a dialog card — shows the
+ * bare logo, at the size and in the colours it draws in either way.
  */
 export function BrandTile({
   brand,
   size = 43,
   radius = 12,
+  flat = false,
 }: {
   brand: "anki" | "wanikani";
   size?: number;
   radius?: number;
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
@@ -169,7 +174,11 @@ export function BrandTile({
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.tile, {width: size, height: size, borderRadius: radius, backgroundColor: background}]}
+      style={[
+        styles.tile,
+        {width: size, height: size},
+        flat ? null : {borderRadius: radius, backgroundColor: background},
+      ]}
     >
       {brand === "anki" ? (
         <AnkiServiceMark size={glyph} />
