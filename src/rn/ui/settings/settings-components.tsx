@@ -297,7 +297,16 @@ export function FieldLabel({
  * while the placeholder used the box's 16 dp. An input sized inside the wrapper's padding follows
  * both, and the platform's own padding is cleared so it cannot add a second inset.
  */
-export function TextField(props: TextInputProps) {
+export function TextField({
+  inputRef,
+  ...props
+}: TextInputProps & {
+  /**
+   * The input itself, for a screen that has to put the caret in it — the setup help's "Open token
+   * form", which hands the reader back to a field they have already started typing into.
+   */
+  inputRef?: React.Ref<TextInput>;
+}) {
   const {colors} = useTheme();
   const input = useRef<TextInput>(null);
   return (
@@ -321,7 +330,7 @@ export function TextField(props: TextInputProps) {
     >
       <TextInput
         {...props}
-        ref={input}
+        ref={inputRef ?? input}
         placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
         cursorColor={props.cursorColor ?? colors.accent}
         underlineColorAndroid="transparent"
@@ -432,11 +441,7 @@ export function HelpAction({paragraphs}: {paragraphs: string[]}) {
   const [open, setOpen] = useState(false);
   return (
     <View>
-      <IconButton
-        name="help"
-        accessibilityLabel="Open help"
-        onPress={() => setOpen(true)}
-      />
+      <IconButton name="help" accessibilityLabel="Open help" onPress={() => setOpen(true)} />
       {open && <HelpDialog paragraphs={paragraphs} onDismiss={() => setOpen(false)} />}
     </View>
   );

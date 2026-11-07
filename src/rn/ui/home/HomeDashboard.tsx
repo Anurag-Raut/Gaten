@@ -187,7 +187,7 @@ function AnkiCard({
       status = anki.refreshing ? "Refreshing…" : "Connected";
       statusTone = anki.refreshing ? "neutral" : "connected";
       action = onOpen;
-      hint = "Opens AnkiDroid's decks";
+      hint = "Opens Anki's decks";
       if (due != null) {
         count = due;
         countLabel = completed != null && completed > 0 ? "remaining" : "reviews due";
@@ -207,7 +207,7 @@ function AnkiCard({
       statusTone = "error";
       action = onOpen;
       actionLabel = "Grant access";
-      hint = "Opens the Anki screen to grant AnkiDroid access";
+      hint = "Opens the Anki screen to grant Anki access";
       break;
     case "notSetUp":
       status = "Not set up";

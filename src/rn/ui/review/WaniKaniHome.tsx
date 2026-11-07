@@ -42,6 +42,7 @@ import type {WaniKaniHubState} from "./review-store";
 import type {WaniKaniLearningPreferences} from "../../native/GatenWaniKani";
 import {deriveWaniKaniHub, type HubModuleModel} from "./wanikani-hub-model";
 import {SectionCaption, StudyRow, SuccessCheck} from "./review-ui";
+import {ProviderSetupHelp} from "./provider-setup-help";
 
 /**
  * Today's activity fields are optional in the bridge type: an older native side (or a test bridge)
@@ -277,20 +278,29 @@ export function WaniKaniHome({
         title="WaniKani"
         onBack={onBack}
         trailing={
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Refresh"
-            accessibilityState={{disabled: locked}}
-            disabled={locked}
-            onPress={onRetrySync}
-            style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
-          >
-            <Icon
-              name="refresh"
-              size={22}
-              color={locked ? colors.onSurfaceVariant : colors.accent}
-            />
-          </PressableScale>
+          // Refresh keeps its own 44 dp chip inside a 48 dp target, and the help stands beside it
+          // rather than replacing it: a refresh in flight quiets the chip alone, never the help.
+          <View style={styles.headerActions}>
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Refresh"
+              accessibilityState={{disabled: locked}}
+              disabled={locked}
+              onPress={onRetrySync}
+              style={styles.refreshTarget}
+            >
+              <View style={[styles.refreshChip, {backgroundColor: colors.surfaceVariant}]}>
+                <Icon
+                  name="refresh"
+                  size={22}
+                  color={locked ? colors.onSurfaceVariant : colors.accent}
+                />
+              </View>
+            </PressableScale>
+            {/* The help's own "Open token form" is this hub's own way in: the same step the card
+                opens, so the reader lands on the token field rather than being told to find it. */}
+            <ProviderSetupHelp provider="wanikani" onOpenTokenForm={onConnect} />
+          </View>
         }
       />
       <ScrollView
@@ -424,9 +434,13 @@ const styles = StyleSheet.create({
   screen: {flex: 1},
   body: {flexGrow: 1},
   content: CONTENT_COLUMN,
-  // The bar's one trailing button, drawn as the analytics page draws its own: a quiet circular chip,
-  // not a bare icon.
-  refresh: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
+  // The bar's trailing group: Refresh then Help, each on its own target, one small step apart so the
+  // two never overlap.
+  headerActions: {flexDirection: "row", alignItems: "center", gap: spacing.xs},
+  // Refresh keeps the analytics page's quiet circular chip at 44 dp, with the 48 dp ring around it
+  // every bar control answers to.
+  refreshTarget: {width: 48, height: 48, alignItems: "center", justifyContent: "center"},
+  refreshChip: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
   subtitle: {fontFamily: APP_FONT, fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   updating: {marginTop: 4},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.

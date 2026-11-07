@@ -18,7 +18,15 @@
  * authenticates, so the reader's own token is what the flow asks for.
  */
 import React, {useEffect, useRef, useState} from "react";
-import {Keyboard, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import {
+  Keyboard,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenPlatform from "../../native/GatenPlatform";
@@ -26,14 +34,15 @@ import {FieldLabel, TextField} from "../settings/settings-components";
 import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
 import {contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
+import {ScreenHeader} from "../ScreenHeader";
 import {
   ActionFooter,
   BrandTile,
   FilledAction,
   StateBlock,
   StateChip,
-  SubHeader,
 } from "./review-ui";
+import {ProviderSetupHelp} from "./provider-setup-help";
 import type {WaniKaniConnectOutcome as Outcome} from "./review-store";
 
 /** Where a token is created, opened in the browser from this screen. */
@@ -86,6 +95,7 @@ export function WaniKaniConnect({
 
   const pending = busy || connecting;
   const scrollRef = useRef<ScrollView>(null);
+  const tokenField = useRef<TextInput>(null);
 
   // Once the keyboard settles, scroll the token field and its link into view.
   useEffect(() => {
@@ -100,7 +110,23 @@ export function WaniKaniConnect({
       {/* The KeyboardAvoidingView (the project's keyboard library, as the review and lesson screens
           use) wraps only the header and the form, so the token field lifts clear of the keyboard. */}
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
-        <SubHeader title="WaniKani" onBack={onBack} />
+        {/* The reader who has not connected yet is the one who needs the steps, so the setup help
+            stands here as well as on the hub. Its "Open token form" is this screen's own field:
+            the help closes, the field comes into view and the caret goes into it, and whatever the
+            reader had already typed stays where it is. */}
+        <ScreenHeader
+          title="WaniKani"
+          onBack={onBack}
+          trailing={
+            <ProviderSetupHelp
+              provider="wanikani"
+              onOpenTokenForm={() => {
+                scrollRef.current?.scrollToEnd({animated: true});
+                tokenField.current?.focus();
+              }}
+            />
+          }
+        />
         <ScrollView
           ref={scrollRef}
           showsVerticalScrollIndicator={false}
@@ -128,6 +154,7 @@ export function WaniKaniConnect({
           <View style={styles.field}>
             <FieldLabel label="Personal access token" />
             <TextField
+              inputRef={tokenField}
               value={token}
               onChangeText={setToken}
               placeholder="Paste your token"

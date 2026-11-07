@@ -21,7 +21,7 @@
     <string name="anki_deck_empty">AnkiDroid has no decks to choose</string>
     <string name="anki_deck_retry">Try again</string>
     <string name="anki_not_installed">Install AnkiDroid to add cards</string>
-    <string name="anki_error_permission">AnkiDroid denied access</string>
+    <string name="anki_error_permission">Anki denied access</string>
     <string name="anki_error_deck">Could not create the deck</string>
     <string name="anki_error_model">Could not create the note type</string>
     <string name="anki_error_failed">Could not add the word</string>

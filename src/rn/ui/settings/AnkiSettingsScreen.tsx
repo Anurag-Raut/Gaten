@@ -62,11 +62,11 @@ import {
 } from "./anki-validation";
 
 const HELP_PARAGRAPHS = [
-  "Without AnkiDroid access, Add to Anki is unavailable. Grant access here to add cards.",
+  "Without Anki access, Add to Anki is unavailable. Grant access here to add cards.",
   "Choose a deck or enter a new name. New decks are created on export.",
   "Separate tags with spaces. Leave blank for none.",
   "Map Expression to at least one field. Duplicates check the first mapped field across all decks for this note type. Select a note type again to reload its fields.",
-  "AnkiDroid note types keep their own templates and styling. Cloze note types are not supported.",
+  "Anki note types keep their own templates and styling. Cloze note types are not supported.",
   "Use {{Expression}}, {{Reading}}, and {{Meaning}} in HTML. {{FrontSide}} repeats the front on the back; conditional sections such as {{#Reading}}…{{/Reading}} are supported. {{Meaning}} includes glosses and part of speech. Layout edits affect future exports only; existing cards keep their note type.",
 ];
 
@@ -269,7 +269,7 @@ export function AnkiSettingsScreen({
     setStatus(nextStatus);
     setRefresh((n) => n + 1);
     if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-      void GatenPlatform.toast("AnkiDroid did not allow writing to its database");
+      void GatenPlatform.toast("Anki did not allow writing to its database");
     }
   };
 
@@ -309,7 +309,7 @@ export function AnkiSettingsScreen({
         setLoadingFields(false);
       },
       () => {
-        void GatenPlatform.toast("Could not read AnkiDroid. Open AnkiDroid, then try Refresh.");
+        void GatenPlatform.toast("Could not read Anki. Open Anki, then try Refresh.");
         setLoadingFields(false);
       }
     );
@@ -355,11 +355,11 @@ export function AnkiSettingsScreen({
           paddingBottom: spacing.xl + insets.bottom,
         }}
       >
-        <SettingsGroup title="AnkiDroid" style={{marginTop: spacing.s}}>
+        <SettingsGroup title="Anki" style={{marginTop: spacing.s}}>
           <View style={{paddingVertical: spacing.m}}>
             {status === "notInstalled" && (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Install AnkiDroid to add cards.
+                Install Anki to add cards.
               </Text>
             )}
             {status === "needsPermission" && (
@@ -369,7 +369,7 @@ export function AnkiSettingsScreen({
                 </Text>
                 <Button
                   fullWidth
-                  label="Allow AnkiDroid access"
+                  label="Allow access"
                   style={{marginTop: spacing.m}}
                   onPress={() => void requestPermission()}
                 />
@@ -379,7 +379,7 @@ export function AnkiSettingsScreen({
               <View style={{alignSelf: "flex-start"}}>
                 <Button
                   variant="text"
-                  label="Refresh from AnkiDroid"
+                  label="Refresh from Anki"
                   disabled={loading || loadingFields || saving || dirty || preferencesLoading}
                   onPress={() => {
                     setRefresh((n) => n + 1);
@@ -390,12 +390,12 @@ export function AnkiSettingsScreen({
             )}
             {(loading || loadingFields) && (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
-                Reading AnkiDroid…
+                Reading Anki…
               </Text>
             )}
             {readFailed && (
               <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.s}]}>
-                Could not read AnkiDroid. Open AnkiDroid, then try Refresh.
+                Could not read Anki. Open Anki, then try Refresh.
               </Text>
             )}
           </View>
@@ -405,11 +405,11 @@ export function AnkiSettingsScreen({
           <View style={{paddingVertical: spacing.m}}>
             {status !== "ready" ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Allow AnkiDroid access to choose study decks.
+                Allow Anki access to choose study decks.
               </Text>
             ) : loading ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Reading AnkiDroid decks…
+                Reading Anki decks…
               </Text>
             ) : studyDecks.length === 0 ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>

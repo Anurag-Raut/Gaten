@@ -132,7 +132,7 @@ class GatenAnkiModule(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_PROVIDER, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_PROVIDER, e.message ?: "Anki failed", e)
             }
         }
     }
@@ -178,7 +178,7 @@ class GatenAnkiModule(
             } catch (e: IllegalArgumentException) {
                 promise.reject(CODE_STATS, e.message ?: "bad searches", e)
             } catch (e: Exception) {
-                promise.reject(CODE_PROVIDER, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_PROVIDER, e.message ?: "Anki failed", e)
             }
         }
     }
@@ -215,7 +215,7 @@ class GatenAnkiModule(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_PROVIDER, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_PROVIDER, e.message ?: "Anki failed", e)
             }
         }
     }
@@ -235,7 +235,7 @@ class GatenAnkiModule(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_PROVIDER, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_PROVIDER, e.message ?: "Anki failed", e)
             }
         }
     }
@@ -268,7 +268,7 @@ class GatenAnkiModule(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_PROVIDER, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_PROVIDER, e.message ?: "Anki failed", e)
             }
         }
     }
@@ -294,12 +294,12 @@ class GatenAnkiModule(
                             }
                         )
                     },
-                    onFailure = { promise.reject(CODE_EXPORT, it.message ?: "AnkiDroid failed", it) }
+                    onFailure = { promise.reject(CODE_EXPORT, it.message ?: "Anki failed", it) }
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_EXPORT, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_EXPORT, e.message ?: "Anki failed", e)
             }
         }
     }
@@ -311,12 +311,12 @@ class GatenAnkiModule(
             try {
                 AnkiExporter.modelFields(reactApplicationContext, modelId.toLong()).fold(
                     onSuccess = { promise.resolve(it.toJsArray()) },
-                    onFailure = { promise.reject(CODE_EXPORT, it.message ?: "AnkiDroid failed", it) }
+                    onFailure = { promise.reject(CODE_EXPORT, it.message ?: "Anki failed", it) }
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_EXPORT, e.message ?: "AnkiDroid failed", e)
+                promise.reject(CODE_EXPORT, e.message ?: "Anki failed", e)
             }
         }
     }
