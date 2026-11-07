@@ -60,6 +60,12 @@ export interface WaniKaniPanelProps {
   compact?: boolean;
   /** The caller already applies the content grid: keep the body flush with the panel's heading. */
   embedded?: boolean;
+  /**
+   * The hosted tree already paints the surface — the lookup sheet's panel. The page then drops the
+   * fills and rounding of its component chips and its loading blocks; a page on its own background
+   * keeps them.
+   */
+  flat?: boolean;
   /** A component chip was tapped; the caller owns the Tick and the open-or-toggle decision. */
   onRadical?: (id: number) => void;
   /** The NeedsToken/AuthRejected notices' button: the shell opens the WaniKani settings page. */
@@ -125,6 +131,7 @@ export function WaniKaniPanel({
   scrollable = true,
   compact = false,
   embedded = false,
+  flat = false,
   onRadical,
   onSettings,
   reloadKey = 0,
@@ -195,7 +202,7 @@ export function WaniKaniPanel({
         {paddingHorizontal: embedded ? 0 : contentInsetFor(width)},
       ]}
     >
-      {lookup === null && unreachable === null && <Skeleton compact={compact} />}
+      {lookup === null && unreachable === null && <Skeleton compact={compact} flat={flat} />}
       {unreachable !== null && (
         <PanelNotice
           message={`Could not load this page from WaniKani: ${unreachable}.`}
@@ -214,6 +221,7 @@ export function WaniKaniPanel({
           compact={compact}
           onRadical={onRadical}
           onRefresh={() => setRetry({key: targetKey, count: retryCount + 1})}
+          flat={flat}
         />
       )}
       {lookup?.status === "noEntry" && (
@@ -336,6 +344,7 @@ function AvailableContent({
   compact,
   onRadical,
   onRefresh,
+  flat = false,
 }: {
   kanji: KanjiSubject | null;
   radical: RadicalSubject | null;
@@ -345,6 +354,8 @@ function AvailableContent({
   onRadical?: (id: number) => void;
   /** Asks WaniKani again; the radical page's foot action, where the kanji page's is in its row. */
   onRefresh: () => void;
+  /** @see WaniKaniPanelProps.flat */
+  flat?: boolean;
 }) {
   const {colors, dark} = useTheme();
   const meanings = radical ? radical.meanings : kanji?.meanings ?? [];
@@ -462,7 +473,10 @@ function AvailableContent({
                   accessibilityRole="button"
                   accessibilityLabel={`WaniKani details for the radical ${label}`}
                   onPress={() => onRadical(component.id)}
-                  style={[styles.componentChip, {backgroundColor: colors.surfaceVariant}]}
+                  style={[
+                    styles.componentChip,
+                    flat ? styles.componentChipFlat : {backgroundColor: colors.surfaceVariant},
+                  ]}
                 >
                   <Text style={[styles.componentGlyph, {color: colors.onSurface}]}>{label}</Text>
                 </PressableScale>
@@ -597,13 +611,14 @@ function PanelNotice({
 }
 
 /** A label-sized block, in the same rhythm a real caption keeps: more gap above it than below. */
-function SkeletonLabel({compact}: {compact: boolean}) {
+function SkeletonLabel({compact, flat}: {compact: boolean; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View style={{marginTop: compact ? spacing.s : spacing.m}}>
       <View
         style={[
           styles.skeletonBlock,
+          flat && styles.skeletonBlockFlat,
           styles.skeletonLabel,
           {backgroundColor: colors.surfaceVariant},
         ]}
@@ -614,7 +629,7 @@ function SkeletonLabel({compact}: {compact: boolean}) {
 }
 
 /** A paragraph's worth of lines, the last one short like a real paragraph's end. */
-function SkeletonParagraph({lines}: {lines: number}) {
+function SkeletonParagraph({lines, flat}: {lines: number; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View>
@@ -623,6 +638,7 @@ function SkeletonParagraph({lines}: {lines: number}) {
           key={index}
           style={[
             styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
             index === lines - 1 ? styles.skeletonTail : styles.skeletonLine,
             {backgroundColor: colors.surfaceVariant},
             index > 0 ? styles.skeletonLineGap : null,
@@ -638,7 +654,7 @@ function SkeletonParagraph({lines}: {lines: number}) {
  * holds the layout still instead of blanking out and filling in a beat later. Plain blocks in the
  * surface's own colour — no shimmer, no animation — and the state is still announced.
  */
-function Skeleton({compact}: {compact: boolean}) {
+function Skeleton({compact, flat}: {compact: boolean; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View
@@ -646,29 +662,48 @@ function Skeleton({compact}: {compact: boolean}) {
       style={CONTENT_COLUMN}
     >
       <View style={styles.sectionBlock}>
-        <SkeletonLabel compact={compact} />
-        <View style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]} />
-        <SkeletonLabel compact={compact} />
-        <View style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]} />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <View
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLine,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
+        />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <View
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLine,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
+        />
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
-        <SkeletonLabel compact={compact} />
+        <SkeletonLabel compact={compact} flat={flat} />
         <View style={styles.skeletonChips}>
           {[0, 1, 2, 3].map((chip) => (
             <View
               key={chip}
-              style={[styles.skeletonBlock, styles.skeletonChip, {backgroundColor: colors.surfaceVariant}]}
+              style={[
+                styles.skeletonBlock,
+                flat && styles.skeletonBlockFlat,
+                styles.skeletonChip,
+                {backgroundColor: colors.surfaceVariant},
+              ]}
             />
           ))}
         </View>
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
-        <SkeletonLabel compact={compact} />
-        <SkeletonParagraph lines={3} />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <SkeletonParagraph lines={3} flat={flat} />
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
-        <SkeletonLabel compact={compact} />
-        <SkeletonParagraph lines={2} />
+        <SkeletonLabel compact={compact} flat={flat} />
+        <SkeletonParagraph lines={2} flat={flat} />
       </View>
     </View>
   );
@@ -727,11 +762,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.s,
   },
+  // Flat, a chip is the glyph and its target: the fill and the rounding go, the padding that keeps
+  // the 48 dp target stays.
+  componentChipFlat: {borderRadius: 0},
   notes: {gap: spacing.s, marginTop: spacing.s},
   // A state with no page: one flat line of prose and, when there is one, the action under it.
   notice: {...CONTENT_COLUMN, marginTop: spacing.s, marginBottom: spacing.l},
   noticeAction: {marginTop: spacing.m, alignSelf: "flex-start"},
+  // Flat, a loading block is a square bar: on a page that paints its own surface, rounding is what
+  // would read as a card inside it.
   skeletonBlock: {borderRadius: shape.small},
+  skeletonBlockFlat: {borderRadius: 0},
   skeletonLabel: {width: 72, height: 14},
   skeletonLine: {height: 14},
   skeletonLineGap: {marginTop: spacing.xs},

@@ -27,7 +27,7 @@ import {PressableScale, heldTone} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme, type ThemeColors} from "../theme";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
@@ -327,11 +327,14 @@ export function WordKanjiSection({
   characters,
   label = "WaniKani kanji",
   onOpenKanji,
+  flat = false,
 }: {
   characters: string[];
   /** The selected reference's name: WaniKani's kanji, or Remembering the Kanji. */
   label?: string;
   onOpenKanji: (character: string) => void;
+  /** The hosted tree already paints the surface: the tiles keep their size but drop their box. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   if (characters.length === 0) return null;
@@ -356,10 +359,12 @@ export function WordKanjiSection({
             onPress={() => onOpenKanji(character)}
             style={[
               styles.kanjiTile,
-              {
-                backgroundColor: colors.surfaceVariant,
-                borderColor: colors.outlineVariant,
-              },
+              flat
+                ? styles.kanjiTileFlat
+                : {
+                    backgroundColor: colors.surfaceVariant,
+                    borderColor: colors.outlineVariant,
+                  },
             ]}
           >
             <Text style={[styles.kanjiCharacter, {color: colors.onSurface}]}>{character}</Text>
@@ -675,7 +680,8 @@ const styles = StyleSheet.create({
   body: {flex: 1},
   scrollContent: {...CONTENT_COLUMN, paddingTop: spacing.xl, paddingBottom: spacing.xl},
   headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
-  wordTitle: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  // One lettering weight for the word's own characters — headword and kanji strip — as the kanji surfaces wear.
+  wordTitle: {fontSize: 36, fontWeight: "500", fontFamily: APP_FONT},
   reading: {...typeScale.bodyMedium, marginTop: spacing.s},
   metadata: {...typeScale.bodyMedium, marginTop: spacing.m},
   meaningSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
@@ -719,7 +725,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  kanjiCharacter: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  // Flat, the tile keeps its 58 dp target and the glyph on it; the fill, rounding and border go.
+  kanjiTileFlat: {borderRadius: 0, borderWidth: 0},
+  kanjiCharacter: {fontSize: 36, ...KANJI_LETTERING},
   examplesSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
   examplesState: {marginTop: spacing.m},
   examplesList: {marginTop: spacing.s},
