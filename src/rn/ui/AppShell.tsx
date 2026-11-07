@@ -16,10 +16,11 @@
  * Studying is one of those pushed pages, not a tab: Home's two service cards ask the review store for
  * a step and push the flow onto Home's own stack.
  */
-import React, {useEffect, useMemo} from "react";
+import React, {useCallback, useEffect, useMemo, useState} from "react";
 import {
   DeviceEventEmitter,
   StatusBar,
+  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -44,7 +45,8 @@ import type {
 } from "@react-navigation/native-stack";
 import {useReducedMotion} from "react-native-reanimated";
 import {useTheme} from "./theme";
-import {APP_FONT} from "./tokens";
+import {APP_FONT, spacing, typeScale} from "./tokens";
+import {Button} from "./components";
 import {BottomBar} from "./BottomBar";
 import {HomeScreen} from "./HomeScreen";
 import {AnalyticsScreen} from "./analytics/AnalyticsScreen";
@@ -67,6 +69,8 @@ import {
   type SettingsStackParamList,
 } from "./navigation";
 import * as ShellBridge from "../native/GatenShell";
+import * as GatenAppInfo from "../native/GatenAppInfo";
+import {OnboardingFlow} from "./onboarding/OnboardingFlow";
 import {reviewStore} from "./review/review-store";
 import * as searchStore from "./search/searchStore";
 
@@ -374,11 +378,56 @@ export function AppShell() {
   // height comes from its own constant and the scene takes the rest.
   const {width} = useWindowDimensions();
 
+  // The first-run setup step: read before the tabs mount, and written back as the reader moves
+  // through the flow. While it is below 3 the flow is shown in place of the navigator, and once it
+  // is 3 the tabs are the app. `null` means the read is still on its way, so nothing is shown on a
+  // guess — and a read that fails offers a retry rather than opening the tabs over a setup the
+  // reader may still owe.
+  const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
+  const [stepReadFailed, setStepReadFailed] = useState(false);
+
+  const readOnboardingStep = useCallback(() => {
+    setStepReadFailed(false);
+    void GatenAppInfo.getOnboardingStep()
+      // Clamped to the four legal values, so a corrupt or older value can never draw a page that
+      // does not exist: anything past the flow's last page opens the tabs.
+      .then((step) => setOnboardingStep(Math.max(0, Math.min(3, step))))
+      .catch(() => setStepReadFailed(true));
+  }, []);
+
+  useEffect(() => {
+    readOnboardingStep();
+  }, [readOnboardingStep]);
+
+  // Writes the next step before the page behind it changes; `false` keeps the reader where they are
+  // so the flow can offer its retry instead of silently moving on.
+  const advanceOnboarding = useCallback(
+    async (next: number): Promise<boolean> => {
+      try {
+        await GatenAppInfo.setOnboardingStep(next);
+        setOnboardingStep(next);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [],
+  );
+
+  const tabsMounted = onboardingStep !== null && onboardingStep >= 3;
+
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
   // state when it is already mounted, so a page the reader left open is stacked above rather than
   // swapped for the new one — and every request, matched or not, is consumed exactly once.
+  //
+  // It is read only once the tabs are mounted: while the setup flow owns the screen there is no
+  // navigator to push into, and a request must not be consumed into nothing. The pending request
+  // waits in the bridge until the tabs arrive.
   useEffect(() => {
+    if (!tabsMounted) {
+      return;
+    }
     let live = true;
     let handling = false;
     const handle = async (page: string | null) => {
@@ -435,7 +484,7 @@ export function AppShell() {
       live = false;
       subscription.remove();
     };
-  }, [navigationRef]);
+  }, [navigationRef, tabsMounted]);
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     return {
@@ -460,6 +509,47 @@ export function AppShell() {
   // A tap on a tab slides the pager to it (that is what `animationEnabled` means to the library);
   // with reduced motion on it lands on the spot, as every other animation in the app does.
   const reducedMotion = useReducedMotion();
+
+  // The setup flow owns the screen until the stored step reaches 3. The step is read first, so the
+  // first frame is never the tabs over a flow the reader still owes; a read that failed offers a
+  // retry rather than opening them.
+  if (onboardingStep === null) {
+    return (
+      <View style={{flex: 1, backgroundColor: colors.background}}>
+        <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
+        {stepReadFailed && (
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              gap: spacing.l,
+              paddingHorizontal: spacing.xl,
+            }}
+          >
+            <Text
+              style={[
+                typeScale.bodyMedium,
+                {color: colors.onSurfaceVariant, textAlign: "center"},
+              ]}
+            >
+              Couldn't save setup progress. Try again.
+            </Text>
+            <Button label="Try again" onPress={readOnboardingStep} />
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  if (onboardingStep < 3) {
+    return (
+      <View style={{flex: 1, backgroundColor: colors.background}}>
+        <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
+        <OnboardingFlow step={onboardingStep} onAdvance={advanceOnboarding} />
+      </View>
+    );
+  }
 
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
