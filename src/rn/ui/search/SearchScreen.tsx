@@ -5,29 +5,32 @@
  */
 
 /**
- * The state card the dictionary screens share: what happened, and — when something can be done — the
- * one action. The search field, the result rows and the example chips live in `searchParts`; this
- * file is only the notice, because Home, the word detail and the reference pages all raise the same
- * one and a second copy of it would drift.
+ * The state notice the dictionary screens share: what happened and — when something can be done —
+ * the one action. The search field, the result rows and the example chips live in `searchParts`;
+ * this file is only the notice, because Home, the word detail and the reference pages all raise the
+ * same one and a second copy of it would drift.
  */
 import React from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import {StyleSheet, Text, View} from "react-native";
 import {Button, Icon} from "../components";
 import type {IconName} from "../icons";
+import {BusySpinner} from "../review/review-ui";
 import {useTheme} from "../theme";
-import {contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {shape, spacing, typeScale} from "../tokens";
 
 /**
- * A state with no results to show: what happened, and — when something can be done — the one
- * action. One raised surface with a badge behind its glyph and a short hierarchy over it, the same
- * shape the review's states draw, shared between the search surfaces and the word detail.
+ * What every search's loading notice says. Three ASCII periods, not U+2026: IBM Plex Sans JP sets
+ * the single ellipsis glyph a third of an em above the baseline, so the dots float above the line
+ * the text sits on, while three periods sit on it. It lives here beside the notice the three screens
+ * raise, so Home, the word detail and the lookup sheet cannot drift apart on it.
+ */
+export const SEARCHING_NOTICE_TITLE = "Searching the dictionary...";
+
+/**
+ * A state with no results to show: what happened, and — when something can be done — the action.
+ * It is one flat row on the list's own fill and rounding, so it occupies exactly the box a result
+ * card does: a glyph column, then the title and body, then the action under them. It draws no inset
+ * and does not scroll — the list around it owns both — so it can never box a card inside a card.
  */
 export function SearchNotice({
   title,
@@ -40,77 +43,57 @@ export function SearchNotice({
   body?: string;
   action?: {label: string; onPress: () => void};
   icon?: IconName;
-  /** A working badge rather than a glyph one. */
+  /** A working spinner rather than a glyph. */
   spin?: boolean;
 }) {
   const {colors} = useTheme();
-  const {width} = useWindowDimensions();
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      showsHorizontalScrollIndicator={false}
-      style={styles.noticeScroll}
-      contentContainerStyle={[
-        styles.notice,
-        {padding: contentInsetFor(width)},
-      ]}
-    >
-      <View style={[styles.noticeCard, {backgroundColor: colors.surface}]}>
-        <View style={[styles.noticeBadge, {backgroundColor: colors.surfaceVariant}]}>
+    <View style={[styles.notice, {backgroundColor: colors.surfaceVariant}]}>
+      <View style={styles.noticeRow}>
+        <View style={styles.noticeGlyph}>
           {spin ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            // 20 dp inside the 24 dp column: the ring is the drawing kit's own, so it stays a ring
+            // when the system animator duration scale is 0, where `ActivityIndicator` does not.
+            <BusySpinner size={20} />
           ) : (
             <Icon name={icon} size={24} color={colors.onSurfaceVariant} />
           )}
         </View>
-        <Text style={[typeScale.titleLarge, styles.noticeText, {color: colors.onSurface}]}>
-          {title}
-        </Text>
-        {body != null && (
-          <Text
-            style={[
-              typeScale.bodyMedium,
-              styles.noticeText,
-              styles.noticeBody,
-              {color: colors.onSurfaceVariant},
-            ]}
-          >
-            {body}
-          </Text>
-        )}
-        {action != null && (
-          <View style={styles.noticeAction}>
-            <Button fullWidth label={action.label} onPress={action.onPress} />
-          </View>
-        )}
+        <View style={styles.noticeText}>
+          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
+          {body != null && (
+            <Text
+              style={[typeScale.bodyMedium, styles.noticeBody, {color: colors.onSurfaceVariant}]}
+            >
+              {body}
+            </Text>
+          )}
+        </View>
       </View>
-    </ScrollView>
+      {action != null && (
+        <Button
+          fullWidth
+          label={action.label}
+          onPress={action.onPress}
+          style={styles.noticeAction}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  noticeScroll: {flexGrow: 1},
   notice: {
-    flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.contentInset,
-  },
-  noticeCard: {
-    borderRadius: shape.medium,
-    padding: spacing.xl,
+    borderRadius: shape.small,
+    paddingVertical: spacing.m,
+    paddingHorizontal: spacing.l,
     width: "100%",
-    maxWidth: 420,
-    alignItems: "center",
   },
-  noticeBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: shape.medium,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  noticeText: {marginTop: spacing.l, textAlign: "center"},
+  noticeRow: {flexDirection: "row", alignItems: "flex-start", gap: spacing.m},
+  // The glyph column is the same 24 dp whether it holds a glyph or the spinner, so the text beside
+  // it does not shift when a search starts.
+  noticeGlyph: {width: 24, alignItems: "center"},
+  noticeText: {flex: 1, minWidth: 0},
   noticeBody: {marginTop: spacing.s},
-  noticeAction: {marginTop: spacing.xl, width: "100%"},
+  noticeAction: {marginTop: spacing.m},
 });

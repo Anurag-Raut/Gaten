@@ -34,7 +34,7 @@ import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {hitFor, useSearchState} from "./searchStore";
-import {SearchNotice} from "./SearchScreen";
+import {SEARCHING_NOTICE_TITLE, SearchNotice} from "./SearchScreen";
 import {useAnkiExport, type AnkiExport, type ExportState} from "./useAnkiExport";
 
 export interface SearchWordScreenProps {
@@ -96,16 +96,24 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
     return (
       <View style={[styles.root, {backgroundColor: colors.background}]}>
         <WordAppBar onBack={onBack} />
-        <View style={styles.body}>
+        {/* The notice draws no inset of its own and does not scroll, so this scroller carries the
+            screen inset — the same one the entry's own content uses — and keeps a long failure
+            message reachable. */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          style={styles.body}
+          contentContainerStyle={[styles.scrollContent, {paddingHorizontal: inset}]}
+        >
           {state.status === "searching" ? (
-            <SearchNotice spin title="Searching the dictionary…" />
+            <SearchNotice spin title={SEARCHING_NOTICE_TITLE} />
           ) : (
             <SearchNotice
               title="This entry is no longer in the results"
               body="The search was run again and no longer has it. Go back for the results you have."
             />
           )}
-        </View>
+        </ScrollView>
       </View>
     );
   }
