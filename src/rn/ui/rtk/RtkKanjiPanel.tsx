@@ -24,7 +24,15 @@ import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {IconButton} from "../components";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {
+  APP_FONT,
+  CONTENT_COLUMN,
+  contentInsetFor,
+  KANJI_LETTERING,
+  shape,
+  spacing,
+  typeScale,
+} from "../tokens";
 import {EmphasizedText} from "./richText";
 
 export interface RtkKanjiPanelProps {
@@ -38,6 +46,11 @@ export interface RtkKanjiPanelProps {
   compact?: boolean;
   /** The caller already applies the content grid: keep the body flush with the panel's heading. */
   embedded?: boolean;
+  /**
+   * The hosted tree already paints the surface — the lookup sheet's panel. The page then squares its
+   * loading blocks; a page on its own background keeps their rounding.
+   */
+  flat?: boolean;
 }
 
 /** Only a page on kanji.koohii.com is opened; the native side already dropped anything else. */
@@ -61,6 +74,7 @@ export function RtkKanjiPanel({
   scrollable = true,
   compact = false,
   embedded = false,
+  flat = false,
 }: RtkKanjiPanelProps) {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
@@ -91,7 +105,7 @@ export function RtkKanjiPanel({
     <View
       style={[styles.content, {paddingHorizontal: embedded ? 0 : contentInsetFor(width)}]}
     >
-      {current == null && <RtkSkeleton />}
+      {current == null && <RtkSkeleton flat={flat} />}
       {current?.failed === true && (
         <Notice message="Could not read the Remembering the Kanji data on this device." />
       )}
@@ -292,34 +306,50 @@ function MnemonicStory({mnemonic}: {mnemonic: RtkMnemonic}) {
 function Notice({message}: {message: string}) {
   const {colors} = useTheme();
   return (
-    <View style={[styles.notice, {backgroundColor: colors.surface}]}>
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{message}</Text>
+    <View style={styles.notice}>
+      <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>{message}</Text>
     </View>
   );
 }
 
 /** The page while its answer is read: the shape it will take, so it never blanks out. */
-function RtkSkeleton() {
+function RtkSkeleton({flat}: {flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View accessibilityLabel="Reading the Remembering the Kanji entry…">
       <View style={styles.sectionBlock}>
         <View
-          style={[styles.skeletonBlock, styles.skeletonLabel, {backgroundColor: colors.surfaceVariant}]}
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLabel,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
         />
         <View
-          style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]}
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLine,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
         />
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
         <View
-          style={[styles.skeletonBlock, styles.skeletonLabel, {backgroundColor: colors.surfaceVariant}]}
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLabel,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
         />
         {[0, 1, 2].map((line) => (
           <View
             key={line}
             style={[
               styles.skeletonBlock,
+              flat && styles.skeletonBlockFlat,
               line === 2 ? styles.skeletonTail : styles.skeletonLine,
               {backgroundColor: colors.surfaceVariant},
               line > 0 ? {marginTop: spacing.xs} : null,
@@ -329,10 +359,20 @@ function RtkSkeleton() {
       </View>
       <View style={[styles.sectionBlock, styles.sectionGap]}>
         <View
-          style={[styles.skeletonBlock, styles.skeletonLabel, {backgroundColor: colors.surfaceVariant}]}
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLabel,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
         />
         <View
-          style={[styles.skeletonBlock, styles.skeletonLine, {backgroundColor: colors.surfaceVariant}]}
+          style={[
+            styles.skeletonBlock,
+            flat && styles.skeletonBlockFlat,
+            styles.skeletonLine,
+            {backgroundColor: colors.surfaceVariant},
+          ]}
         />
       </View>
     </View>
@@ -349,7 +389,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   scrollContent: CONTENT_COLUMN,
-  heroGlyph: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  // The card in the same slot the WaniKani kanji card takes, so the character wears the same
+  // weight here; the keyword below it is a meaning, not a character, and keeps its own.
+  heroGlyph: {fontSize: 36, ...KANJI_LETTERING},
   keyword: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
   sourceLabel: {marginTop: spacing.xs},
   sectionBlock: {paddingVertical: spacing.s, gap: spacing.xs},
@@ -365,14 +407,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.s,
   },
   otherStories: {gap: spacing.l, paddingTop: spacing.s},
-  notice: {
-    ...CONTENT_COLUMN,
-    borderRadius: shape.medium,
-    padding: spacing.l,
-    marginTop: spacing.s,
-    marginBottom: spacing.l,
-  },
+  // A state with no page: one flat line of prose, the same the WaniKani panel's notice is, so a
+  // card never sits inside the page it is not part of.
+  notice: {...CONTENT_COLUMN, marginTop: spacing.s, marginBottom: spacing.l},
+  // Flat, a loading block is a square bar: rounding is what would read as a card on the sheet's own
+  // surface.
   skeletonBlock: {borderRadius: shape.small},
+  skeletonBlockFlat: {borderRadius: 0},
   skeletonLabel: {width: 72, height: 14},
   skeletonLine: {height: 14},
   skeletonTail: {width: 160, height: 14},

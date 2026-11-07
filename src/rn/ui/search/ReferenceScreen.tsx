@@ -92,12 +92,14 @@ function ReferencePage({
           onBack={onBack}
         />
       )}
+      {/* The overlay hosts either panel on the sheet's own surface, so both are flat there. */}
       {rememberKanji && target.kind === "kanji" ? (
         <RtkKanjiPanel
           character={target.character}
           showBack={overlay}
           onBack={onBack}
           scrollable
+          flat={overlay}
         />
       ) : (
         <WaniKaniPanel
@@ -107,6 +109,7 @@ function ReferencePage({
           scrollable
           onRadical={onOpenRadical}
           onSettings={onSettings}
+          flat={overlay}
         />
       )}
     </View>

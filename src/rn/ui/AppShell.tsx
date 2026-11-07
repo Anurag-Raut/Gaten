@@ -206,7 +206,14 @@ function HomeRoute({navigation}: HomeRouteProps<"HomeTab">) {
  * before this page was pushed; Back pops the page, which is the whole of leaving a step.
  */
 function ReviewRoute({navigation}: NativeStackScreenProps<HomeStackParamList, "Review">) {
-  return <ReviewScreen onExit={() => navigation.goBack()} />;
+  return (
+    <ReviewScreen
+      onExit={() => navigation.goBack()}
+      // The review flow's own way into WaniKani's settings, on Home's stack: connecting a token
+      // from an open reference page returns to the card, not to another tab's hub.
+      onOpenSettingsPage={(page) => openSettingsPage(navigation, page)}
+    />
+  );
 }
 
 function HomeWordRoute({
