@@ -415,7 +415,7 @@ export function ProviderSetupDialog({
   const anki = provider === "anki";
   return (
     <DialogShell
-      title={anki ? "Set up Anki" : "Set up WaniKani"}
+      title={anki ? "Anki help" : "WaniKani help"}
       titleLeading={<BrandTile brand={provider} size={40} radius={shape.brandTile} />}
       onDismiss={onDismiss}
       scrollBody
