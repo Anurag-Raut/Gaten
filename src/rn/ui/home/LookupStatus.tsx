@@ -13,8 +13,9 @@
  * never lands (the same sequence guard the Screen lookup page uses).
  *
  * Nothing here switches the mode off: "on" is the grant being present, and the only way out of it
- * is Android's own accessibility list. Tapping when it is off opens the app's disclosure and then
- * that list, exactly as the Screen lookup page's own switch does.
+ * is Android's own accessibility list. Whatever the mark reports, a tap opens the Screen lookup
+ * page, which owns the disclosure, the switch and the read — one destination, so the reader never
+ * has to guess which of two places a tap will take them.
  */
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import {ActivityIndicator, AppState, StyleSheet} from "react-native";
@@ -34,13 +35,13 @@ const SPINNER = 24;
 const LABEL: Record<LookupState, string> = {
   checking: "Checking lookup mode.",
   on: "Lookup mode on. Open screen lookup settings.",
-  off: "Lookup mode off. Turn on lookup mode.",
-  unavailable: "Lookup mode status unavailable. Try again.",
+  off: "Lookup mode off. Open screen lookup settings.",
+  unavailable: "Lookup mode status unavailable. Open screen lookup settings.",
 };
 
 /**
  * Lookup mode's state for Home, re-read when Home is focused and when the app returns to the
- * foreground. [retry] is the same read the effects run, for the button's unavailable state.
+ * foreground.
  */
 export function useLookupStatus(focused: boolean) {
   const [state, setState] = useState<LookupState>("checking");
@@ -86,25 +87,21 @@ export function useLookupStatus(focused: boolean) {
     };
   }, [read]);
 
-  return {state, retry: read};
+  return {state};
 }
 
 /**
  * The Home header's lookup-mode status: a 48 dp target at the row's trailing edge whose mark says
- * what the mode is doing. A tap does what the label says — the disclosure and Android's settings
- * when the mode is off, the Screen lookup page when it is on, and the read again when the status
- * could not be read. While the status is being read the target is disabled and shows a spinner.
+ * what the mode is doing. The mark reports; the Screen lookup page acts — a tap always opens it,
+ * whatever the mark shows. While the status is being read the target is disabled and shows a
+ * spinner.
  */
 export function LookupStatusButton({
   state,
   onOpenSettings,
-  onTurnOn,
-  onRetry,
 }: {
   state: LookupState;
   onOpenSettings: () => void;
-  onTurnOn: () => void;
-  onRetry: () => void;
 }) {
   const {colors} = useTheme();
   const pending = state === "checking";
@@ -114,7 +111,7 @@ export function LookupStatusButton({
       accessibilityLabel={LABEL[state]}
       accessibilityState={{busy: pending, disabled: pending}}
       disabled={pending}
-      onPress={state === "on" ? onOpenSettings : state === "off" ? onTurnOn : onRetry}
+      onPress={onOpenSettings}
       style={styles.target}
     >
       {pending ? (

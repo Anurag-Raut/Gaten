@@ -49,7 +49,6 @@ import {SEARCHING_NOTICE_TITLE, SearchNotice} from "./search/SearchScreen";
 import {openSettingsPage, type HomeStackParamList, type RootTabParamList} from "./navigation";
 import {useHomeDashboard} from "./home/useHomeDashboard";
 import {reviewStore} from "./review/review-store";
-import {useLookupModeRequest} from "./settings/settings-components";
 
 type HomeScreenProps = Partial<
   CompositeScreenProps<
@@ -78,7 +77,6 @@ export function HomeScreen({
   const focused = useIsFocused();
   const home = useHomeDashboard();
   const lookup = useLookupStatus(focused);
-  const {request: requestLookupMode, dialog: lookupDisclosure} = useLookupModeRequest();
 
   const searchState = store.useSearchState();
   const rows = useMemo(
@@ -285,8 +283,6 @@ export function HomeScreen({
                 <LookupStatusButton
                   state={lookup.state}
                   onOpenSettings={openLookupSettings}
-                  onTurnOn={requestLookupMode}
-                  onRetry={lookup.retry}
                 />
               </Animated.View>
             )}
@@ -377,7 +373,6 @@ export function HomeScreen({
           scrollEventThrottle={16}
         />
       </KeyboardAvoidingView>
-      {lookupDisclosure}
     </SafeAreaView>
   );
 }
