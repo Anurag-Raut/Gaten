@@ -392,52 +392,75 @@ export function SwitchRow({
 
 /**
  * A page's own long explanation in a dialog, scrolling when it is longer than the dialog is.
- * What it shows is the page's own text, moved whole rather than rewritten.
+ * What it shows is the page's own text, moved whole rather than rewritten. A caller whose help is
+ * more than plain paragraphs — a provider's numbered setup steps, say — passes `children` and its
+ * own `title` instead, and keeps the pinned Close action either way.
  */
 export function HelpDialog({
   paragraphs,
+  children,
+  title = "Help",
   onDismiss,
 }: {
-  paragraphs: string[];
+  paragraphs?: string[];
+  children?: React.ReactNode;
+  title?: string;
   onDismiss: () => void;
 }) {
   const {colors} = useTheme();
   return (
     <DialogShell
-      title="Help"
+      title={title}
       onDismiss={onDismiss}
       scrollBody
       actions={<Button variant="text" label="Close" onPress={onDismiss} />}
     >
-      {paragraphs.map((paragraph, index) => (
-        <Text
-          key={index}
-          style={[
-            typeScale.bodyMedium,
-            {color: colors.onSurfaceVariant, marginBottom: index < paragraphs.length - 1 ? spacing.m : 0},
-          ]}
-        >
-          {paragraph}
-        </Text>
-      ))}
+      {children ??
+        (paragraphs ?? []).map((paragraph, index, all) => (
+          <Text
+            key={index}
+            style={[
+              typeScale.bodyMedium,
+              {color: colors.onSurfaceVariant, marginBottom: index < all.length - 1 ? spacing.m : 0},
+            ]}
+          >
+            {paragraph}
+          </Text>
+        ))}
     </DialogShell>
   );
 }
 
 /**
  * The one toolbar action a page with long explanations carries: a question mark that opens them
- * in a dialog, so the page itself stays rows instead of paragraphs.
+ * in a dialog, so the page itself stays rows instead of paragraphs. `title`, `children` and the
+ * trigger's `accessibilityLabel` are there for the help that is richer than paragraphs; the
+ * paragraph callers are untouched.
  */
-export function HelpAction({paragraphs}: {paragraphs: string[]}) {
+export function HelpAction({
+  paragraphs,
+  children,
+  title,
+  accessibilityLabel = "Open help",
+}: {
+  paragraphs?: string[];
+  children?: React.ReactNode;
+  title?: string;
+  accessibilityLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <View>
       <IconButton
         name="help"
-        accessibilityLabel="Open help"
+        accessibilityLabel={accessibilityLabel}
         onPress={() => setOpen(true)}
       />
-      {open && <HelpDialog paragraphs={paragraphs} onDismiss={() => setOpen(false)} />}
+      {open && (
+        <HelpDialog title={title} paragraphs={paragraphs} onDismiss={() => setOpen(false)}>
+          {children}
+        </HelpDialog>
+      )}
     </View>
   );
 }

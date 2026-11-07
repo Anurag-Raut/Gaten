@@ -26,9 +26,11 @@ import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, t
 import {useTheme} from "../theme";
 import {IconButton} from "../components";
 import {DialogShell} from "../DialogShell";
+import {ScreenHeader} from "../ScreenHeader";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import {useAnkiDecks, type AnkiDecksFailure} from "../anki/useAnkiDecks";
-import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SubHeader, SuccessCheck} from "./review-ui";
+import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SuccessCheck} from "./review-ui";
+import {ProviderSetupHelp} from "./provider-setup-help";
 import {
   CountLegend,
   MetricPair,
@@ -131,7 +133,11 @@ export function AnkiDeckPicker({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <SubHeader title="Anki" onBack={onBack} />
+      <ScreenHeader
+        title="Anki"
+        onBack={onBack}
+        trailing={<ProviderSetupHelp provider="anki" />}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}

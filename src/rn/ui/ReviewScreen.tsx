@@ -54,6 +54,8 @@ import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "./t
 import {useTheme, type Theme} from "./theme";
 import {OutlinedButton} from "./settings/settings-components";
 import {DialogShell} from "./DialogShell";
+import {ScreenHeader} from "./ScreenHeader";
+import {ProviderSetupHelp} from "./review/provider-setup-help";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
 import {RtkKanjiPanel} from "./rtk/RtkKanjiPanel";
 import {kanjiReferenceLabel, useKanjiReferenceSource} from "./kanjiReference";
@@ -470,7 +472,13 @@ function BlockedView({
           : "Review unavailable";
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <SubHeader title="Anki" onBack={onBack} />
+      {/* The setup help stands on the blocked screen too: the reader who has not set AnkiDroid up is
+          the one who needs the steps, and it is reachable whatever the failure is. */}
+      <ScreenHeader
+        title="Anki"
+        onBack={onBack}
+        trailing={<ProviderSetupHelp provider="anki" />}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}

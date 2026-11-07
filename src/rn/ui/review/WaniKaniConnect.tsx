@@ -26,14 +26,15 @@ import {FieldLabel, TextField} from "../settings/settings-components";
 import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
 import {contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
+import {ScreenHeader} from "../ScreenHeader";
 import {
   ActionFooter,
   BrandTile,
   FilledAction,
   StateBlock,
   StateChip,
-  SubHeader,
 } from "./review-ui";
+import {ProviderSetupHelp} from "./provider-setup-help";
 import type {WaniKaniConnectOutcome as Outcome} from "./review-store";
 
 /** Where a token is created, opened in the browser from this screen. */
@@ -100,7 +101,13 @@ export function WaniKaniConnect({
       {/* The KeyboardAvoidingView (the project's keyboard library, as the review and lesson screens
           use) wraps only the header and the form, so the token field lifts clear of the keyboard. */}
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
-        <SubHeader title="WaniKani" onBack={onBack} />
+        {/* The reader who has not connected yet is the one who needs the steps, so the setup help
+            stands here as well as on the hub. */}
+        <ScreenHeader
+          title="WaniKani"
+          onBack={onBack}
+          trailing={<ProviderSetupHelp provider="wanikani" />}
+        />
         <ScrollView
           ref={scrollRef}
           showsVerticalScrollIndicator={false}
