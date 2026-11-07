@@ -663,20 +663,20 @@ function AnkiPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry,
 
   switch (state.kind) {
     case "checking":
-      primary = {label: "Checking AnkiDroid…", onPress: () => {}, disabled: true};
+      primary = {label: "Checking Anki…", onPress: () => {}, disabled: true};
       break;
     case "notInstalled":
-      primary = {label: "Download AnkiDroid", onPress: () => void downloadAnkiDroid()};
+      primary = {label: "Download Anki", onPress: () => void downloadAnkiDroid()};
       break;
     case "needsPermission":
-      primary = {label: "Allow AnkiDroid access", onPress: grant};
+      primary = {label: "Allow access", onPress: grant};
       break;
     case "notSetUp":
-      outlined = {label: "Open AnkiDroid", onPress: openAnkiDroid};
+      outlined = {label: "Open Anki", onPress: openAnkiDroid};
       status = (
         <View style={{gap: spacing.s}}>
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-            AnkiDroid has not set up its collection yet. Open AnkiDroid once and come back.
+            Finish setup in Anki, then come back.
           </Text>
         </View>
       );
@@ -686,18 +686,18 @@ function AnkiPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry,
       status = (
         <View style={{gap: spacing.s}}>
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-            AnkiDroid access wasn't allowed. You can try again or skip this step.
+            Access wasn't allowed. Try again or skip.
           </Text>
         </View>
       );
       break;
     case "failure":
       primary = {label: "Try again", onPress: () => read(true)};
-      outlined = {label: "Open AnkiDroid", onPress: openAnkiDroid};
+      outlined = {label: "Open Anki", onPress: openAnkiDroid};
       status = (
         <View style={{gap: spacing.s}}>
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-            Couldn't read AnkiDroid. Open AnkiDroid, then try again.
+            Couldn't read Anki. Open it, then try again.
           </Text>
         </View>
       );
@@ -707,11 +707,11 @@ function AnkiPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry,
       status = (
         <View style={{gap: spacing.s}}>
           <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-            AnkiDroid is connected.
+            Anki is connected.
           </Text>
           {state.empty && (
             <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-              Create or import a deck in AnkiDroid when you're ready.
+              Create or import a deck when you're ready.
             </Text>
           )}
         </View>
@@ -724,8 +724,8 @@ function AnkiPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry,
       step={step}
       artwork={AnkiArtwork}
       artworkEntrance={artworkEntrance}
-      heading="Study with AnkiDroid"
-      explanation="Review your AnkiDroid decks and save words as cards."
+      heading="Study with Anki"
+      explanation="Review your Anki decks and save words as cards."
       status={status}
       primary={primary}
       outlined={outlined}
