@@ -217,7 +217,7 @@ function WaniKaniSetup({onOpenTokenForm}: {onOpenTokenForm: () => void}) {
 
       <SetupBlock number={3} title="Paste it in Gaten">
         <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Paste the complete token into 'Personal access token', then choose 'Connect WaniKani'.
+          Paste the complete token into ‘Personal access token’, then choose ‘Connect WaniKani’.
         </Text>
         <View style={styles.action}>
           <Button variant="tonal" fullWidth label="Open token form" onPress={onOpenTokenForm} />
@@ -378,7 +378,7 @@ function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
 
       <SetupBlock number={3} title="Choose study decks">
         <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
-          Choose which decks appear for study, then press 'Save'.
+          Choose which decks appear for study, then press ‘Save’.
         </Text>
         {readable && !noDecks && (
           <View style={styles.action}>
@@ -451,6 +451,7 @@ export function ProviderSetupDialog({
       titleLeading={<BrandTile brand={provider} size={40} radius={shape.brandTile} />}
       onDismiss={onDismiss}
       scrollBody
+      fitToViewport
       bodyGap={spacing.l}
       actions={<Button variant="text" label="Close" onPress={onDismiss} />}
     >
