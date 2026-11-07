@@ -55,7 +55,10 @@ import {useTheme, type Theme} from "./theme";
 import {OutlinedButton} from "./settings/settings-components";
 import {DialogShell} from "./DialogShell";
 import {ScreenHeader} from "./ScreenHeader";
-import {ProviderSetupHelp} from "./review/provider-setup-help";
+import {
+  ProviderSetupDialog,
+  ProviderSetupHelpTrigger,
+} from "./review/provider-setup-help";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
 import {RtkKanjiPanel} from "./rtk/RtkKanjiPanel";
 import {kanjiReferenceLabel, useKanjiReferenceSource} from "./kanjiReference";
@@ -177,14 +180,31 @@ function leaveQuestion(step: ConfirmableStep): {title: string; body: string} {
   }
 }
 
-/** The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it. */
-export function ReviewScreen({onExit}: {onExit: () => void}) {
+/**
+ * The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it, and
+ * `onOpenStudyDecks` is the study-deck settings page the AnkiDroid setup help hands the reader to.
+ *
+ * The setup help's dialog is held here rather than inside the screen it stands over: the reader
+ * leaves Gaten to install or set up AnkiDroid, and the screen behind the help is re-read and
+ * replaced on the way back. Held here, the dialog and the block the reader was reading stay put.
+ */
+export function ReviewScreen({
+  onExit,
+  onOpenStudyDecks,
+}: {
+  onExit: () => void;
+  onOpenStudyDecks: () => void;
+}) {
   const theme = useTheme();
   const {colors} = theme;
   const review = useReview();
   const isFocused = useIsFocused();
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [ankiHelpOpen, setAnkiHelpOpen] = useState(false);
   const step = review.step;
+  const ankiHelp = (
+    <ProviderSetupHelpTrigger provider="anki" onPress={() => setAnkiHelpOpen(true)} />
+  );
 
   /**
    * Back from this screen. Work in progress asks first — the Anki card, the WaniKani review and the
@@ -275,18 +295,20 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
       <StepEnter pageKey={step.kind} forward={forward}>
         {step.kind === "opening" ? (
           step.source === "anki" ? (
-            <AnkiDeckPicker decks={[]} busy onBack={onExit} onStart={() => {}} />
+            <AnkiDeckPicker help={ankiHelp} decks={[]} busy onBack={onExit} onStart={() => {}} />
           ) : <OpeningView source={step.source} onBack={onExit} />
         ) : step.kind === "blocked" ? (
           <BlockedView
             theme={theme}
             failure={step.failure}
             busy={review.busy}
+            help={ankiHelp}
             onBack={leave}
             onGrant={requestAnkiPermission}
           />
         ) : step.kind === "decks" ? (
           <AnkiDeckPicker
+            help={ankiHelp}
             decks={step.decks}
             filteredEmpty={step.filteredEmpty}
             busy={review.busy}
@@ -365,6 +387,15 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
           />
         )}
       </StepEnter>
+
+      {/* Above the step the page is drawing: the reader goes to AnkiDroid's own screens from here,
+          and what comes back may be a different step of the flow. */}
+      <ProviderSetupDialog
+        provider="anki"
+        open={ankiHelpOpen}
+        onDismiss={() => setAnkiHelpOpen(false)}
+        onOpenStudyDecks={onOpenStudyDecks}
+      />
 
       {/* Work in progress is on screen, so leaving is worth one question — never a grade, never a
           discard, and never a question about a step that has already finished. */}
@@ -449,12 +480,15 @@ function BlockedView({
   theme,
   failure,
   busy,
+  help,
   onBack,
   onGrant,
 }: {
   theme: Theme;
   failure: ReviewFailure;
   busy: boolean;
+  /** The setup help's trigger, owned by the page so its dialog outlives this screen. */
+  help: React.ReactNode;
   onBack: () => void;
   onGrant: () => void;
 }) {
@@ -474,11 +508,7 @@ function BlockedView({
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
       {/* The setup help stands on the blocked screen too: the reader who has not set AnkiDroid up is
           the one who needs the steps, and it is reachable whatever the failure is. */}
-      <ScreenHeader
-        title="Anki"
-        onBack={onBack}
-        trailing={<ProviderSetupHelp provider="anki" />}
-      />
+      <ScreenHeader title="Anki" onBack={onBack} trailing={help} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}

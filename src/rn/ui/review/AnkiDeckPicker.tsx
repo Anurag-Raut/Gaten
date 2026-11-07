@@ -30,7 +30,6 @@ import {ScreenHeader} from "../ScreenHeader";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import {useAnkiDecks, type AnkiDecksFailure} from "../anki/useAnkiDecks";
 import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SuccessCheck} from "./review-ui";
-import {ProviderSetupHelp} from "./provider-setup-help";
 import {
   CountLegend,
   MetricPair,
@@ -69,12 +68,15 @@ const READY_INTENSITY = [0.2, 0.42, 0.67] as const;
 export function AnkiDeckPicker({
   decks,
   busy,
+  help,
   filteredEmpty = false,
   onBack,
   onStart,
 }: {
   decks: AnkiDeckResult[];
   busy: boolean;
+  /** The setup help's trigger, owned by the review page so its dialog outlives this screen. */
+  help: React.ReactNode;
   filteredEmpty?: boolean;
   onBack: () => void;
   onStart: (deck: AnkiDeckResult) => void;
@@ -133,11 +135,7 @@ export function AnkiDeckPicker({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <ScreenHeader
-        title="Anki"
-        onBack={onBack}
-        trailing={<ProviderSetupHelp provider="anki" />}
-      />
+      <ScreenHeader title="Anki" onBack={onBack} trailing={help} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}

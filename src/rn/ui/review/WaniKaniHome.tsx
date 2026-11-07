@@ -297,7 +297,9 @@ export function WaniKaniHome({
                 />
               </View>
             </PressableScale>
-            <ProviderSetupHelp provider="wanikani" />
+            {/* The help's own "Open token form" is this hub's own way in: the same step the card
+                opens, so the reader lands on the token field rather than being told to find it. */}
+            <ProviderSetupHelp provider="wanikani" onOpenTokenForm={onConnect} />
           </View>
         }
       />

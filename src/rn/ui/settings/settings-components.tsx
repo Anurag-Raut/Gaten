@@ -297,7 +297,16 @@ export function FieldLabel({
  * while the placeholder used the box's 16 dp. An input sized inside the wrapper's padding follows
  * both, and the platform's own padding is cleared so it cannot add a second inset.
  */
-export function TextField(props: TextInputProps) {
+export function TextField({
+  inputRef,
+  ...props
+}: TextInputProps & {
+  /**
+   * The input itself, for a screen that has to put the caret in it — the setup help's "Open token
+   * form", which hands the reader back to a field they have already started typing into.
+   */
+  inputRef?: React.Ref<TextInput>;
+}) {
   const {colors} = useTheme();
   const input = useRef<TextInput>(null);
   return (
@@ -321,7 +330,7 @@ export function TextField(props: TextInputProps) {
     >
       <TextInput
         {...props}
-        ref={input}
+        ref={inputRef ?? input}
         placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
         cursorColor={props.cursorColor ?? colors.accent}
         underlineColorAndroid="transparent"
@@ -392,75 +401,48 @@ export function SwitchRow({
 
 /**
  * A page's own long explanation in a dialog, scrolling when it is longer than the dialog is.
- * What it shows is the page's own text, moved whole rather than rewritten. A caller whose help is
- * more than plain paragraphs — a provider's numbered setup steps, say — passes `children` and its
- * own `title` instead, and keeps the pinned Close action either way.
+ * What it shows is the page's own text, moved whole rather than rewritten.
  */
 export function HelpDialog({
   paragraphs,
-  children,
-  title = "Help",
   onDismiss,
 }: {
-  paragraphs?: string[];
-  children?: React.ReactNode;
-  title?: string;
+  paragraphs: string[];
   onDismiss: () => void;
 }) {
   const {colors} = useTheme();
   return (
     <DialogShell
-      title={title}
+      title="Help"
       onDismiss={onDismiss}
       scrollBody
       actions={<Button variant="text" label="Close" onPress={onDismiss} />}
     >
-      {children ??
-        (paragraphs ?? []).map((paragraph, index, all) => (
-          <Text
-            key={index}
-            style={[
-              typeScale.bodyMedium,
-              {color: colors.onSurfaceVariant, marginBottom: index < all.length - 1 ? spacing.m : 0},
-            ]}
-          >
-            {paragraph}
-          </Text>
-        ))}
+      {paragraphs.map((paragraph, index) => (
+        <Text
+          key={index}
+          style={[
+            typeScale.bodyMedium,
+            {color: colors.onSurfaceVariant, marginBottom: index < paragraphs.length - 1 ? spacing.m : 0},
+          ]}
+        >
+          {paragraph}
+        </Text>
+      ))}
     </DialogShell>
   );
 }
 
 /**
  * The one toolbar action a page with long explanations carries: a question mark that opens them
- * in a dialog, so the page itself stays rows instead of paragraphs. `title`, `children` and the
- * trigger's `accessibilityLabel` are there for the help that is richer than paragraphs; the
- * paragraph callers are untouched.
+ * in a dialog, so the page itself stays rows instead of paragraphs.
  */
-export function HelpAction({
-  paragraphs,
-  children,
-  title,
-  accessibilityLabel = "Open help",
-}: {
-  paragraphs?: string[];
-  children?: React.ReactNode;
-  title?: string;
-  accessibilityLabel?: string;
-}) {
+export function HelpAction({paragraphs}: {paragraphs: string[]}) {
   const [open, setOpen] = useState(false);
   return (
     <View>
-      <IconButton
-        name="help"
-        accessibilityLabel={accessibilityLabel}
-        onPress={() => setOpen(true)}
-      />
-      {open && (
-        <HelpDialog title={title} paragraphs={paragraphs} onDismiss={() => setOpen(false)}>
-          {children}
-        </HelpDialog>
-      )}
+      <IconButton name="help" accessibilityLabel="Open help" onPress={() => setOpen(true)} />
+      {open && <HelpDialog paragraphs={paragraphs} onDismiss={() => setOpen(false)} />}
     </View>
   );
 }

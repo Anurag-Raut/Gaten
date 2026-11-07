@@ -5,285 +5,535 @@
  */
 
 /**
- * How each provider is set up and operated, behind the hubs' quiet question mark: the provider's own
- * mark, the ordered steps with the control each one names, and the one hand-off the reader may need —
- * AnkiDroid's download page, AnkiDroid itself, or WaniKani's token page.
+ * Getting AnkiDroid and WaniKani working, behind the hubs' quiet question mark: the provider's own
+ * mark beside the title, exactly three numbered steps, and — in the block whose task it performs —
+ * the control that does it.
  *
- * The same help stands on the hub, on the screen that opens when a provider is not connected, and on
- * the AnkiDroid blocked screen, because the reader who has not connected yet is the one who needs the
- * steps. The words are the app's own states and controls — "AnkiDroid is not installed" and "Download
- * AnkiDroid", "AnkiDroid access is needed" and "Allow AnkiDroid access", the deck picker's "Clear for
- * now" — so nothing here names a control the app does not draw. The two counting dialogs beside the
- * metrics stay where they are: they explain what a figure counts, this explains what to press.
+ * The help hands the reader off instead of describing the hand-off: the token page opens in the
+ * browser, the token form opens where the screen that raised the help keeps it, the store listing
+ * and AnkiDroid itself open as AnkiDroid's own screens, and the study decks open on the settings
+ * page that chooses them. Nothing here documents a connected reader's routine; what they do next
+ * belongs to the screens themselves.
  *
- * Opening the dialog reads nothing but AnkiDroid's own installation state (`status`, a passive read):
- * no permission is requested, no queue is refreshed and nothing is submitted.
+ * Opening the help requests nothing. AnkiDroid's installation, permission and collection come from
+ * the shared deck read the review flow already owns (`useAnkiDecks`), reported as it stands — a read
+ * that failed is said to have failed, never read as a provider that is not installed — and the
+ * shared state is read again only where the reader's own control asks for it.
+ *
+ * The trigger and the dialog are separate pieces because one host needs them apart. The review flow
+ * replaces the screen under the dialog while the reader is away — AnkiDroid's own installation and
+ * setup happen outside Gaten, and the screen comes back re-read — and a dialog mounted inside that
+ * screen would be unmounted with it. The review screen keeps the dialog above the step it draws, so
+ * the reader returns to the block they left.
  */
 import React, {useEffect, useState} from "react";
 import {StyleSheet, Text, View} from "react-native";
-import {Button} from "../components";
-import {HelpAction} from "../settings/settings-components";
-import {spacing, typeScale} from "../tokens";
-import {useTheme} from "../theme";
+import {Button, Icon, IconButton} from "../components";
+import {DialogShell} from "../DialogShell";
+import {PressableScale} from "../PressableScale";
+import {getAnkiDecks, loadAnkiDecks, useAnkiDecksState} from "../anki/useAnkiDecks";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import {downloadAnkiDroid} from "../anki/anki-actions";
+import {shape, spacing, typeScale} from "../tokens";
+import {useTheme} from "../theme";
 import {BrandTile} from "./review-ui";
 
 /** Where a token is created; the same page the connect screen's own link opens. */
 const WANIKANI_TOKEN_URL = "https://www.wanikani.com/settings/personal_access_tokens";
 
+/**
+ * The permission instruction: every scope the page offers, not a narrowed list. Gaten reads study
+ * data and Analytics figures from the same token it starts lessons and submits reviews with.
+ */
+const WANIKANI_SCOPE =
+  "Leave all available token permissions selected; do not narrow the selection. Gaten needs read " +
+  "access for study data and Analytics, and permission to start lessons and submit reviews.";
+
 type Provider = "anki" | "wanikani";
 
-interface SetupStep {
-  /** What the step does, in the reader's words. */
+/** How AnkiDroid stands, as the three steps read it. */
+type AnkiRead = "checking" | "failed" | "notInstalled" | "needsPermission" | "ready";
+
+/**
+ * One numbered step: the marker and its heading on one row, then the copy and this step's own
+ * control under them, at the dialog's left content edge — no indented text column, because at 320 dp
+ * every paragraph needs the width the marker would take.
+ */
+function SetupBlock({
+  number,
+  title,
+  children,
+}: {
+  number: number;
   title: string;
-  /** The controls to press and what to expect, named as the app names them. */
-  instruction: string;
-}
-
-const ANKI_STEPS: SetupStep[] = [
-  {
-    title: "Install AnkiDroid",
-    instruction:
-      "If Gaten shows ‘AnkiDroid is not installed’, choose ‘Download AnkiDroid’.",
-  },
-  {
-    title: "Set up your collection",
-    instruction:
-      "Open AnkiDroid and finish its setup. Create or import a deck there, then return to Gaten. " +
-      "If Gaten shows ‘AnkiDroid is not set up’, choose ‘Open AnkiDroid’.",
-  },
-  {
-    title: "Allow Gaten access",
-    instruction:
-      "When Gaten shows ‘AnkiDroid access is needed’, choose ‘Allow AnkiDroid access’ and approve " +
-      "the Android permission request.",
-  },
-  {
-    title: "Choose a deck",
-    instruction:
-      "On ‘Choose a deck’, open a deck with cards due. ‘Clear for now’ means that deck has no work " +
-      "available.",
-  },
-  {
-    title: "Choose which decks appear",
-    instruction:
-      "Open Settings → Anki cards → Study decks, choose your decks, then press ‘Save’. ‘Include all " +
-      "decks’ includes every deck. The Export → Deck setting controls where saved words go; it does " +
-      "not choose your study decks.",
-  },
-];
-
-const WANIKANI_STEPS: SetupStep[] = [
-  {
-    title: "Create a personal access token",
-    instruction:
-      "On ‘Connect WaniKani’, choose ‘Create a token on wanikani.com’. Sign in on WaniKani’s website " +
-      "and create a token.",
-  },
-  {
-    title: "Allow lessons and reviews",
-    instruction:
-      "Keep read access enabled. Allow ‘assignments:start’ for lessons and ‘reviews:create’ for " +
-      "reviews. Copy the complete token.",
-  },
-  {
-    title: "Connect in Gaten",
-    instruction:
-      "Return to Gaten, paste it into ‘Personal access token’, then choose ‘Connect WaniKani’.",
-  },
-  {
-    title: "Choose your study",
-    instruction:
-      "Open ‘Reviews’ for due reviews or ‘Lessons’ for new lessons. ‘Refresh’ checks availability " +
-      "again. Studying here updates your WaniKani account.",
-  },
-  {
-    title: "Change your connection or lesson limit",
-    instruction:
-      "Open Settings → WaniKani. Use ‘Get a token’ when connecting there, paste your token, and press " +
-      "‘Save’. Under Lessons, ‘New per day’ accepts 1–20. Use ‘Change token’ to replace a connection " +
-      "or ‘Disconnect’ to remove it.",
-  },
-];
-
-/** The one failure a reader is likely to meet, and where the app explains the rest. */
-const WANIKANI_RECOVERY =
-  "If you see ‘WaniKani rejected that token. Check it was copied in full.’, copy the complete token " +
-  "again. Connection failures explain whether you need internet or should wait before trying again.";
-
-/** The ordered steps, each numbered in the accent and read as title, then instruction. */
-function StepList({steps}: {steps: SetupStep[]}) {
+  children: React.ReactNode;
+}) {
   const {colors} = useTheme();
   return (
-    <View style={styles.steps}>
-      {steps.map((step, index) => (
-        <View key={step.title} style={styles.step}>
-          <Text style={[styles.stepNumber, {color: colors.accent}]}>{index + 1}</Text>
-          <View style={styles.stepBody}>
-            <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{step.title}</Text>
-            <Text style={[styles.stepText, {color: colors.onSurfaceVariant}]}>
-              {step.instruction}
-            </Text>
-          </View>
+    <View>
+      <View style={styles.headingRow}>
+        <View style={[styles.number, {borderColor: colors.outlineVariant}]}>
+          <Text style={[typeScale.labelMedium, {color: colors.accent}]}>{number}</Text>
         </View>
-      ))}
+        <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1, minWidth: 0}]}>
+          {title}
+        </Text>
+      </View>
+      <View style={styles.blockBody}>{children}</View>
+    </View>
+  );
+}
+
+/** The hairline between two steps, with the brief's 16 dp of air on either side. */
+function StepDivider() {
+  const {colors} = useTheme();
+  return <View style={[styles.divider, {backgroundColor: colors.outlineVariant}]} />;
+}
+
+/** A check and the words for a state the reader has reached, never a control they could press. */
+function ReachedState({label}: {label: string}) {
+  const {colors} = useTheme();
+  return (
+    <View style={styles.status}>
+      <Icon name="check" size={20} color={colors.accent} />
+      <Text style={[typeScale.labelLarge, {color: colors.onSurface, flexShrink: 1}]}>{label}</Text>
     </View>
   );
 }
 
 /**
- * One page the help hands the reader off to: accent ink with an underline and link semantics, at the
- * same 48 dp target every control keeps, never the URL as its visible label. A hand-off that does not
- * land says so under the link rather than closing over a tap that did nothing.
+ * The token page as a link rather than as a sentence. It wears the outlined control's metrics — a
+ * 52 dp target, the button radius, accent ink and a leading `open_in_new` — but it is a link and says
+ * so, because the shared `Button` can only announce itself as a button. A page that does not open
+ * says so underneath and offers its address instead, so a tap that did nothing is never the end of
+ * the step.
  */
-function HelpLink({label, url}: {label: string; url: string}) {
+function TokenPageLink({
+  label,
+  accessibilityLabel,
+  url,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  url: string;
+}) {
   const {colors} = useTheme();
-  const [failed, setFailed] = useState(false);
-  const open = () => {
-    setFailed(false);
-    void GatenPlatform.openUrl(url)
-      .then((opened) => {
-        if (!opened) setFailed(true);
-      })
-      .catch(() => setFailed(true));
-  };
-  return (
-    <View style={styles.linkBlock}>
-      <Text
-        accessibilityRole="link"
-        onPress={open}
-        style={[styles.link, {color: colors.accent}]}
-      >
-        {label}
-      </Text>
-      {failed && (
-        <Text
-          accessibilityLiveRegion="polite"
-          style={[styles.handoffError, {color: colors.error}]}
-        >
-          Couldn't open the page. Try again.
-        </Text>
-      )}
-    </View>
-  );
-}
-
-/** AnkiDroid's steps and its two hand-offs: the store page always, the app itself once it is here. */
-function AnkiSetup() {
-  const {colors} = useTheme();
-  const [installed, setInstalled] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
-  // AnkiDroid's installation state, read once per opening. A failed read hides the app hand-off
-  // rather than claiming AnkiDroid is here; the download stays, which is the step that fixes it.
-  useEffect(() => {
-    let cancelled = false;
-    void GatenAnki.status()
-      .then((status) => {
-        if (!cancelled) setInstalled(status !== "notInstalled");
+  const open = () => {
+    setOpenFailed(false);
+    setCopyFailed(false);
+    void GatenPlatform.openUrl(url)
+      .then((opened) => setOpenFailed(!opened))
+      .catch(() => setOpenFailed(true));
+  };
+
+  const copy = () => {
+    setCopyFailed(false);
+    void GatenPlatform.copyToClipboard(url)
+      .then((copied) => {
+        if (copied) void GatenPlatform.toast("Link copied");
+        else setCopyFailed(true);
       })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      .catch(() => setCopyFailed(true));
+  };
 
   return (
     <View>
-      <View style={styles.mark}>
-        <BrandTile brand="anki" />
-      </View>
-      <StepList steps={ANKI_STEPS} />
-      <View style={styles.actions}>
-        <Button
-          variant="tonal"
-          fullWidth
-          label="Download AnkiDroid"
-          onPress={() => {
-            void downloadAnkiDroid();
-          }}
-        />
-        {installed && (
-          <Button
-            variant="outlined"
-            fullWidth
-            label="Open AnkiDroid"
-            onPress={() => {
-              setOpenFailed(false);
-              void GatenAnki.openAnkiDroid()
-                .then((opened) => {
-                  if (!opened) setOpenFailed(true);
-                })
-                .catch(() => setOpenFailed(true));
-            }}
-          />
-        )}
-      </View>
+      <PressableScale
+        accessibilityRole="link"
+        accessibilityLabel={accessibilityLabel}
+        onPress={open}
+        style={[styles.link, {borderColor: colors.accent}]}
+      >
+        <Icon name="open_in_new" size={20} color={colors.accent} />
+        <Text style={[typeScale.labelLarge, {color: colors.accent, flexShrink: 1}]}>{label}</Text>
+      </PressableScale>
       {openFailed && (
         <Text
           accessibilityLiveRegion="polite"
-          style={[styles.handoffError, {color: colors.error}]}
+          style={[styles.failure, {color: colors.error}]}
         >
-          Couldn't open AnkiDroid. Try again.
+          Couldn't open the page. Copy the link and open it in a browser.
+        </Text>
+      )}
+      {openFailed && <Button variant="text" label="Copy link" onPress={copy} />}
+      {copyFailed && (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.failure, {color: colors.error}]}
+        >
+          Couldn't copy the link.
         </Text>
       )}
     </View>
   );
 }
 
-/** WaniKani's steps, the token page, and the one recovery the connection's own words promise. */
-function WaniKaniSetup() {
+/**
+ * WaniKani's three steps: create a token on the site, keep every permission the page offers, and
+ * paste it in here. The permission step has no control of its own — no Gaten action can tick a box
+ * on wanikani.com — so it draws what the reader is choosing there instead of promising a state the
+ * app cannot observe.
+ */
+function WaniKaniSetup({onOpenTokenForm}: {onOpenTokenForm: () => void}) {
   const {colors} = useTheme();
   return (
-    <View>
-      <View style={styles.mark}>
-        <BrandTile brand="wanikani" />
-      </View>
-      <StepList steps={WANIKANI_STEPS} />
-      <HelpLink label="Open WaniKani token settings" url={WANIKANI_TOKEN_URL} />
-      <Text style={[styles.recovery, {color: colors.onSurfaceVariant}]}>{WANIKANI_RECOVERY}</Text>
-    </View>
+    <>
+      <SetupBlock number={1} title="Create a token">
+        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
+          Sign in to WaniKani and open personal access tokens.
+        </Text>
+        <View style={styles.action}>
+          <TokenPageLink
+            label="Open token settings"
+            accessibilityLabel="Open WaniKani token settings, opens browser"
+            url={WANIKANI_TOKEN_URL}
+          />
+        </View>
+      </SetupBlock>
+
+      <StepDivider />
+
+      <SetupBlock number={2} title="Keep every permission">
+        <Text style={[styles.caption, {color: colors.onSurfaceVariant}]}>
+          Choose this on WaniKani
+        </Text>
+        <View style={styles.permission}>
+          <Icon name="check" size={20} color={colors.accent} />
+          <Text style={[typeScale.labelLarge, {color: colors.onSurface, flexShrink: 1}]}>
+            All permissions selected
+          </Text>
+        </View>
+        <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>{WANIKANI_SCOPE}</Text>
+        <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
+          Create the token, then copy it in full.
+        </Text>
+      </SetupBlock>
+
+      <StepDivider />
+
+      <SetupBlock number={3} title="Paste it in Gaten">
+        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
+          Paste the complete token into 'Personal access token', then choose 'Connect WaniKani'.
+        </Text>
+        <View style={styles.action}>
+          <Button variant="tonal" fullWidth label="Open token form" onPress={onOpenTokenForm} />
+        </View>
+      </SetupBlock>
+    </>
   );
 }
 
 /**
- * The hub headers' help: a question mark that opens the provider's setup steps. The trigger is the
- * same bare 48 dp help target the settings pages carry, and the dialog is the app's own `HelpDialog`
- * in its rolling form, so the reader scrolls the steps and closes with the pinned action.
+ * AnkiDroid's three steps, each with the control the state it reads calls for. All three stay
+ * visible whatever is known, because the reader is reading the whole path — only the controls and
+ * the copy that answers the known state change.
+ *
+ * `status()` alone cannot say whether the collection is set up, so the steps read the shared deck
+ * state with it: NOT_INSTALLED and PERMISSION are the provider's own refusals, a list on screen (or a
+ * provider that answered NOT_SET_UP) means the reader is past installing and allowing, and anything
+ * else failed to read — which is said as a failed read, never as an absent AnkiDroid.
  */
-export function ProviderSetupHelp({provider}: {provider: Provider}) {
+function AnkiSetup({onOpenStudyDecks}: {onOpenStudyDecks: () => void}) {
+  const {colors} = useTheme();
+  const anki = useAnkiDecksState();
+  const [openFailed, setOpenFailed] = useState(false);
+  const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
+
+  // A store nothing has read yet is read once here, so the dialog is not blank on a screen that
+  // never asked for decks. Every later read — including the resume the review flow does — is the
+  // host's own, and a read cannot be doubled: the store joins one already in flight.
+  useEffect(() => {
+    if (getAnkiDecks().status === "idle") void loadAnkiDecks();
+  }, []);
+
+  const read: AnkiRead =
+    anki.failure === "NOT_INSTALLED"
+      ? "notInstalled"
+      : anki.failure === "PERMISSION"
+        ? "needsPermission"
+        : anki.status === "unavailable" && anki.failure !== "NOT_SET_UP"
+          ? "failed"
+          : anki.decks != null || anki.failure === "NOT_SET_UP"
+            ? "ready"
+            : "checking";
+
+  // The collection itself: read now, and holding at least one deck to study.
+  const readable = anki.failure == null && anki.decks != null;
+  const noDecks = anki.failure == null && anki.decks?.length === 0;
+
+  const openTheApp = () => {
+    setOpenFailed(false);
+    void GatenAnki.openAnkiDroid()
+      .then((opened) => {
+        if (!opened) setOpenFailed(true);
+      })
+      .catch(() => setOpenFailed(true));
+  };
+
+  const allowAccess = () => {
+    setPermissionMessage(null);
+    void GatenAnki.requestPermission()
+      .then((granted) => {
+        if (granted) {
+          // The shared deck state is what knows about the collection now; read it again rather than
+          // keep a state of our own. Nothing is exported and no card is saved by granting.
+          void loadAnkiDecks();
+        } else {
+          setPermissionMessage("Access wasn't allowed. You can try again when you're ready.");
+        }
+      })
+      .catch(() => setPermissionMessage("Couldn't request AnkiDroid access. Try again."));
+  };
+
+  const prepareBody = noDecks
+    ? "Create or import a deck in AnkiDroid."
+    : read === "needsPermission" || read === "ready"
+      ? "Open AnkiDroid and finish setup. Create or import a deck there."
+      : "Install AnkiDroid, then open it and create or import a deck.";
+
+  return (
+    <>
+      <SetupBlock number={1} title="Prepare AnkiDroid">
+        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>{prepareBody}</Text>
+        {read === "notInstalled" && (
+          <View style={styles.action}>
+            <Button
+              variant="outlined"
+              fullWidth
+              label="Download AnkiDroid"
+              onPress={() => {
+                // The store page reports its own failure with a toast; a resolved promise is not
+                // proof that anything opened, so nothing here is claimed on the way back.
+                void downloadAnkiDroid();
+              }}
+            />
+          </View>
+        )}
+        {(read === "needsPermission" || read === "ready") && (
+          <View style={styles.action}>
+            <Button variant="outlined" fullWidth label="Open AnkiDroid" onPress={openTheApp} />
+          </View>
+        )}
+        {read === "failed" && (
+          <>
+            <Text accessibilityLiveRegion="polite" style={[styles.failure, {color: colors.error}]}>
+              Couldn't check AnkiDroid.
+            </Text>
+            <Button
+              variant="text"
+              label="Try again"
+              onPress={() => {
+                setOpenFailed(false);
+                void loadAnkiDecks();
+              }}
+            />
+          </>
+        )}
+        {openFailed && (
+          <Text accessibilityLiveRegion="polite" style={[styles.failure, {color: colors.error}]}>
+            Couldn't open AnkiDroid. Try again.
+          </Text>
+        )}
+      </SetupBlock>
+
+      <StepDivider />
+
+      <SetupBlock number={2} title="Allow Gaten access">
+        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
+          Allow Gaten to read your collection and save cards to AnkiDroid.
+        </Text>
+        {read === "needsPermission" && (
+          <View style={styles.action}>
+            <Button
+              variant="tonal"
+              fullWidth
+              label="Allow AnkiDroid access"
+              onPress={allowAccess}
+            />
+          </View>
+        )}
+        {read === "notInstalled" && (
+          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
+            Install AnkiDroid first.
+          </Text>
+        )}
+        {read === "ready" && <ReachedState label="Access allowed" />}
+        {(read === "failed" || read === "checking") && (
+          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
+            Finish the steps above first.
+          </Text>
+        )}
+        {permissionMessage != null && (
+          <Text accessibilityLiveRegion="polite" style={[styles.failure, {color: colors.error}]}>
+            {permissionMessage}
+          </Text>
+        )}
+      </SetupBlock>
+
+      <StepDivider />
+
+      <SetupBlock number={3} title="Choose study decks">
+        <Text style={[styles.body, {color: colors.onSurfaceVariant}]}>
+          Choose which decks appear for study, then press 'Save'.
+        </Text>
+        {readable && !noDecks && (
+          <View style={styles.action}>
+            <Button
+              variant="tonal"
+              fullWidth
+              label="Choose study decks"
+              onPress={onOpenStudyDecks}
+            />
+          </View>
+        )}
+        {noDecks && (
+          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
+            Add a deck in AnkiDroid first.
+          </Text>
+        )}
+        {!readable && (
+          <Text style={[styles.paragraph, {color: colors.onSurfaceVariant}]}>
+            Finish the steps above first.
+          </Text>
+        )}
+      </SetupBlock>
+    </>
+  );
+}
+
+/** The hub headers' question mark: the same bare 48 dp help target the settings pages carry. */
+export function ProviderSetupHelpTrigger({
+  provider,
+  onPress,
+}: {
+  provider: Provider;
+  onPress: () => void;
+}) {
+  return (
+    <IconButton
+      name="help"
+      accessibilityLabel={provider === "anki" ? "AnkiDroid setup help" : "WaniKani setup help"}
+      onPress={onPress}
+    />
+  );
+}
+
+/**
+ * The help itself, for a host that holds its visibility: the provider's mark beside the title, the
+ * three steps with their own controls, and the pinned Close. Dismissal and the hand-off both live
+ * here, because a hand-off belongs to this dialog to finish: it runs only once the help has closed,
+ * so the reader never comes back to it over the screen it asked for.
+ */
+export function ProviderSetupDialog({
+  provider,
+  open,
+  onDismiss,
+  onOpenTokenForm,
+  onOpenStudyDecks,
+}: {
+  provider: Provider;
+  open: boolean;
+  onDismiss: () => void;
+  /** WaniKani: what "Open token form" means on the screen that raised the help. */
+  onOpenTokenForm?: () => void;
+  /** AnkiDroid: the study-deck settings page behind "Choose study decks". */
+  onOpenStudyDecks?: () => void;
+}) {
+  if (!open) return null;
   const anki = provider === "anki";
   return (
-    <HelpAction
+    <DialogShell
       title={anki ? "Set up AnkiDroid" : "Set up WaniKani"}
-      accessibilityLabel={anki ? "AnkiDroid setup help" : "WaniKani setup help"}
+      titleLeading={<BrandTile brand={provider} size={40} radius={shape.brandTile} />}
+      onDismiss={onDismiss}
+      scrollBody
+      bodyGap={spacing.l}
+      actions={<Button variant="text" label="Close" onPress={onDismiss} />}
     >
-      {anki ? <AnkiSetup /> : <WaniKaniSetup />}
-    </HelpAction>
+      {anki ? (
+        <AnkiSetup
+          onOpenStudyDecks={() => {
+            onDismiss();
+            onOpenStudyDecks?.();
+          }}
+        />
+      ) : (
+        <WaniKaniSetup
+          onOpenTokenForm={() => {
+            onDismiss();
+            onOpenTokenForm?.();
+          }}
+        />
+      )}
+    </DialogShell>
+  );
+}
+
+/**
+ * The trigger and its dialog together, for the screens that raise the help and keep it themselves:
+ * the hub that has not connected, and the connect screen the help hands the reader to.
+ */
+export function ProviderSetupHelp({
+  provider,
+  onOpenTokenForm,
+  onOpenStudyDecks,
+}: {
+  provider: Provider;
+  onOpenTokenForm?: () => void;
+  onOpenStudyDecks?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <ProviderSetupHelpTrigger provider={provider} onPress={() => setOpen(true)} />
+      <ProviderSetupDialog
+        provider={provider}
+        open={open}
+        onDismiss={() => setOpen(false)}
+        onOpenTokenForm={onOpenTokenForm}
+        onOpenStudyDecks={onOpenStudyDecks}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  mark: {marginBottom: spacing.l, alignSelf: "flex-start"},
-  // The steps, one 12 dp step apart, each numbered in the accent beside its own column.
-  steps: {gap: spacing.m},
-  step: {flexDirection: "row", gap: spacing.m},
-  stepNumber: {...typeScale.titleMedium, width: 18},
-  stepBody: {flex: 1, minWidth: 0},
-  stepText: {...typeScale.bodyMedium, marginTop: spacing.xs},
-  actions: {marginTop: spacing.l, gap: spacing.s},
-  linkBlock: {marginTop: spacing.l},
-  // The link's own 48 dp target: a 20 dp line inside 14 dp of padding, underlined so the colour is
-  // never the only signal that it leads somewhere.
-  link: {
-    ...typeScale.bodyMedium,
-    paddingVertical: 14,
-    minHeight: 48,
-    alignSelf: "flex-start",
-    textDecorationLine: "underline",
+  // The heading row, its copy and this step's control, one 8 dp step apart.
+  headingRow: {flexDirection: "row", alignItems: "center", gap: spacing.s},
+  // A circle at 24 dp, which may grow to hold a scaled digit rather than clip it.
+  number: {
+    minWidth: 24,
+    minHeight: 24,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xs,
   },
-  handoffError: {...typeScale.bodySmall, marginTop: spacing.s},
-  recovery: {...typeScale.bodySmall, marginTop: spacing.l},
+  blockBody: {marginTop: spacing.s},
+  divider: {height: 1, marginVertical: spacing.l},
+  body: {...typeScale.bodyMedium},
+  paragraph: {...typeScale.bodyMedium, marginTop: spacing.s},
+  caption: {...typeScale.bodySmall},
+  action: {marginTop: spacing.s, gap: spacing.xs},
+  permission: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.s},
+  status: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.s},
+  failure: {...typeScale.bodySmall, marginTop: spacing.s},
+  // The outlined control's own metrics, worn by a link: 52 dp, the button radius, accent ink.
+  link: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.s,
+    minHeight: 52,
+    borderRadius: shape.button,
+    borderWidth: 1,
+    paddingVertical: spacing.m,
+    paddingHorizontal: spacing.xl,
+    alignSelf: "stretch",
+  },
 });
