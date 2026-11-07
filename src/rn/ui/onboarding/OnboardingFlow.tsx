@@ -266,7 +266,6 @@ function PageChrome({
   heading,
   explanation,
   status,
-  reassurance,
   primary,
   outlined,
   skipLabel,
@@ -282,9 +281,9 @@ function PageChrome({
   /** The flow's entrance driver; the chrome applies it and never restarts it. */
   artworkEntrance: SharedValue<number>;
   heading: string;
-  explanation: string;
+  /** The one-line explanation under the heading; omitted on a page that needs none. */
+  explanation?: string;
   status: React.ReactNode;
-  reassurance: string;
   primary: Action | null;
   outlined: Action | null;
   skipLabel: string;
@@ -411,13 +410,12 @@ function PageChrome({
           >
             {heading}
           </Text>
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
-            {explanation}
-          </Text>
+          {explanation != null && (
+            <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
+              {explanation}
+            </Text>
+          )}
           {status != null && <View style={{marginTop: spacing.l}}>{status}</View>}
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
-            {reassurance}
-          </Text>
         </View>
 
         <View style={{gap: spacing.s, marginTop: spacing.xxl}}>
@@ -520,7 +518,7 @@ function LookupPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetr
         artwork={LookupArtwork}
         artworkEntrance={artworkEntrance}
         heading="Look up Japanese on your screen"
-        explanation="Look up Japanese text while you read in other apps. Gaten needs Android's accessibility permission to start screen lookups."
+        explanation="Look up Japanese while you read in other apps."
         status={
           state === "checking" ? null : (
             <View style={{gap: spacing.s}}>
@@ -548,7 +546,6 @@ function LookupPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetr
             </View>
           )
         }
-        reassurance="You can change this later in Settings → Screen lookup."
         primary={primary}
         outlined={null}
         skipLabel="Skip lookup mode"
@@ -728,9 +725,8 @@ function AnkiPage({step, artworkEntrance, onAdvance, onBack, saveError, onRetry,
       artwork={AnkiArtwork}
       artworkEntrance={artworkEntrance}
       heading="Study with AnkiDroid"
-      explanation="Review your AnkiDroid decks in Gaten and save words as cards. AnkiDroid needs to be installed and allow Gaten access."
+      explanation="Review your AnkiDroid decks and save words as cards."
       status={status}
-      reassurance="You can choose study decks and an export deck later in Settings → Anki cards."
       primary={primary}
       outlined={outlined}
       skipLabel="Skip Anki"
@@ -845,7 +841,6 @@ function WaniKaniPage({
       artwork={WaniKaniArtwork}
       artworkEntrance={artworkEntrance}
       heading="Connect WaniKani"
-      explanation="Bring your WaniKani lessons and reviews into Gaten. Connect with a personal access token from your WaniKani account."
       status={
         connected ? (
           <View style={{gap: spacing.s}}>
@@ -855,7 +850,6 @@ function WaniKaniPage({
           </View>
         ) : null
       }
-      reassurance="You can connect or disconnect later in Settings → WaniKani."
       primary={primary}
       outlined={null}
       skipLabel="Skip WaniKani"
