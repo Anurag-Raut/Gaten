@@ -168,6 +168,10 @@ function whenFocused(navigation: HomeStackNavigation, run: () => void): void {
 function HomeRoute({navigation}: HomeRouteProps<"HomeTab">) {
   return (
     <HomeScreen
+      // HomeScreen is drawn by this route rather than registered as a screen, so React Navigation
+      // never hands it a navigation of its own: the lookup mark's page and the review flow's two
+      // screens are reached through Home's stack only because it is passed down here.
+      navigation={navigation}
       onOpenWord={(entryId) => {
         // A second tap on the same row must not stack a second copy of the page it just opened —
         // the same guard the reference chips use for their own toggle.
