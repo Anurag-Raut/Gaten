@@ -11,11 +11,20 @@
  * same one and a second copy of it would drift.
  */
 import React from "react";
-import {ActivityIndicator, StyleSheet, Text, View} from "react-native";
+import {StyleSheet, Text, View} from "react-native";
 import {Button, Icon} from "../components";
 import type {IconName} from "../icons";
+import {BusySpinner} from "../review/review-ui";
 import {useTheme} from "../theme";
 import {shape, spacing, typeScale} from "../tokens";
+
+/**
+ * What every search's loading notice says. Three ASCII periods, not U+2026: IBM Plex Sans JP sets
+ * the single ellipsis glyph a third of an em above the baseline, so the dots float above the line
+ * the text sits on, while three periods sit on it. It lives here beside the notice the three screens
+ * raise, so Home, the word detail and the lookup sheet cannot drift apart on it.
+ */
+export const SEARCHING_NOTICE_TITLE = "Searching the dictionary...";
 
 /**
  * A state with no results to show: what happened, and — when something can be done — the action.
@@ -43,7 +52,9 @@ export function SearchNotice({
       <View style={styles.noticeRow}>
         <View style={styles.noticeGlyph}>
           {spin ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            // 20 dp inside the 24 dp column: the ring is the drawing kit's own, so it stays a ring
+            // when the system animator duration scale is 0, where `ActivityIndicator` does not.
+            <BusySpinner size={20} />
           ) : (
             <Icon name={icon} size={24} color={colors.onSurfaceVariant} />
           )}

@@ -837,8 +837,11 @@ export function StateChip({label}: {label: string}) {
  * system animator duration scale is 0 it falls back to the platform's static refresh-arrow vector.
  * This ring is drawn and rotated by Reanimated, so it keeps a circular loading shape independently
  * of that platform fallback.
+ *
+ * Sized by the style's own 16 dp unless a caller asks for another one: the review flow's rows are
+ * the default, and the search notice's 24 dp glyph column asks for a ring that sits inside it.
  */
-function BusySpinner() {
+export function BusySpinner({size}: {size?: number} = {}) {
   const {colors} = useTheme();
   const spin = useSharedValue(0);
   useEffect(() => {
@@ -862,6 +865,7 @@ function BusySpinner() {
       pointerEvents="none"
       style={[
         styles.busySpinner,
+        size != null && {width: size, height: size, borderRadius: size / 2},
         {borderColor: colors.accent, borderTopColor: "transparent"},
         rotation,
       ]}

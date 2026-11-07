@@ -34,7 +34,7 @@ import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {hitFor, useSearchState} from "./searchStore";
-import {SearchNotice} from "./SearchScreen";
+import {SEARCHING_NOTICE_TITLE, SearchNotice} from "./SearchScreen";
 import {useAnkiExport, type AnkiExport, type ExportState} from "./useAnkiExport";
 
 export interface SearchWordScreenProps {
@@ -106,7 +106,7 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
           contentContainerStyle={[styles.scrollContent, {paddingHorizontal: inset}]}
         >
           {state.status === "searching" ? (
-            <SearchNotice spin title="Searching the dictionary…" />
+            <SearchNotice spin title={SEARCHING_NOTICE_TITLE} />
           ) : (
             <SearchNotice
               title="This entry is no longer in the results"

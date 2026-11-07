@@ -57,7 +57,7 @@ import {
   searchRows,
   type SearchRow,
 } from "../search/searchParts";
-import {SearchNotice} from "../search/SearchScreen";
+import {SEARCHING_NOTICE_TITLE, SearchNotice} from "../search/SearchScreen";
 import {
   AddToAnkiBar,
   ExampleSentencesSection,
@@ -246,7 +246,7 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
         action={{label: "Try again", onPress: lookupSearch.retrySearch}}
       />
     ) : searchState.status === "searching" ? (
-      <SearchNotice spin title="Searching the dictionary…" />
+      <SearchNotice spin title={SEARCHING_NOTICE_TITLE} />
     ) : searchState.status === "results" ? (
       <SearchNotice
         icon="search"
