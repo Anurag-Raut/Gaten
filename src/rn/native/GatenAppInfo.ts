@@ -1,6 +1,6 @@
 /**
  * The small facts about the app the settings pages put on screen: the version, the dictionary's
- * schema version, and whether lookup mode is on.
+ * schema version, whether lookup mode is on, and how far the first-run setup flow has got.
  */
 import { NativeModules } from "react-native";
 
@@ -8,6 +8,8 @@ interface GatenAppInfoNative {
   getAppVersion(): Promise<string>;
   getDictionarySchemaVersion(): Promise<number>;
   isLookupModeActive(): Promise<boolean>;
+  getOnboardingStep(): Promise<number>;
+  setOnboardingStep(step: number): Promise<void>;
 }
 
 const GatenAppInfo = NativeModules.GatenAppInfo as GatenAppInfoNative;
@@ -28,4 +30,21 @@ export function getDictionarySchemaVersion(): Promise<number> {
  */
 export function isLookupModeActive(): Promise<boolean> {
   return GatenAppInfo.isLookupModeActive();
+}
+
+/**
+ * How far the first-run setup flow has got: 0, 1 or 2 is the page being shown and 3 means it is
+ * finished. A device that has never stored it answers 0, so the flow runs on the first launch.
+ */
+export function getOnboardingStep(): Promise<number> {
+  return GatenAppInfo.getOnboardingStep();
+}
+
+/**
+ * Stores the onboarding step — the page being shown, or 3 once the flow is finished. The shell
+ * writes the next step before it shows the next page, so a page on screen is never ahead of what
+ * is stored.
+ */
+export function setOnboardingStep(step: number): Promise<void> {
+  return GatenAppInfo.setOnboardingStep(step);
 }
