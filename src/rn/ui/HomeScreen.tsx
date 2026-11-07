@@ -32,7 +32,8 @@ import {Icon} from "./components";
 import {useTheme} from "./theme";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
-import {GatenWordmark} from "./home/GatenWordmark";
+import {GatenWordmark, wordmarkLineHeight} from "./home/GatenWordmark";
+import {LookupStatusButton, useLookupStatus} from "./home/LookupStatus";
 import {
   SEARCH_LIST_CONTENT,
   SearchIdlePrompt,
@@ -45,7 +46,7 @@ import {
 import {PressableScale} from "./PressableScale";
 import * as store from "./search/searchStore";
 import {SEARCHING_NOTICE_TITLE, SearchNotice} from "./search/SearchScreen";
-import {type HomeStackParamList, type RootTabParamList} from "./navigation";
+import {openSettingsPage, type HomeStackParamList, type RootTabParamList} from "./navigation";
 import {useHomeDashboard} from "./home/useHomeDashboard";
 import {reviewStore} from "./review/review-store";
 
@@ -69,12 +70,13 @@ export function HomeScreen({
   onOpenWaniKani,
 }: HomeScreenProps) {
   const {colors} = useTheme();
-  const {width} = useWindowDimensions();
+  const {width, fontScale} = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const contentInset = contentInsetFor(width);
   const reducedMotion = useReducedMotion();
   const focused = useIsFocused();
   const home = useHomeDashboard();
+  const lookup = useLookupStatus(focused);
 
   const searchState = store.useSearchState();
   const rows = useMemo(
@@ -83,6 +85,15 @@ export function HomeScreen({
   );
   const searching = store.normalizeQuery(searchState.query).length > 0;
   const searchMode = searchState.searchActive || searching;
+
+  /** The Screen lookup page, on Home's own stack, the way a card or a reference chip opens one. */
+  const openLookupSettings = useCallback(() => {
+    if (navigation == null) {
+      return;
+    }
+    openSettingsPage(navigation, "lookup");
+  }, [navigation]);
+
   const searchInput = useRef<TextInput>(null);
   const list = useRef<FlatList<SearchRow>>(null);
   const restored = useRef(false);
@@ -255,17 +266,24 @@ export function HomeScreen({
         <View style={styles.topHeader}>
           <Animated.View style={[styles.headerColumn, {paddingHorizontal: contentInset}]} layout={layoutTransition}>
             {!searchMode && (
+              // The mark keeps its own line box, margins and scale: the row is sized by that box,
+              // so the status button's 48 dp target is centred on the mark's row and overhangs it
+              // rather than growing the header or moving the search field below.
               <Animated.View
-                accessible
-                accessibilityRole="header"
-                accessibilityLabel="Gaten"
+                style={[styles.brandRow, {height: wordmarkLineHeight(fontScale)}]}
                 entering={searchTransitioned.current
                   ? FadeInUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)
                   : undefined}
                 exiting={FadeOutUp.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
-                style={styles.brand}
               >
-                <GatenWordmark />
+                <View accessible accessibilityRole="header" accessibilityLabel="Gaten">
+                  <GatenWordmark />
+                </View>
+                <View style={styles.brandSpacer} />
+                <LookupStatusButton
+                  state={lookup.state}
+                  onOpenSettings={openLookupSettings}
+                />
               </Animated.View>
             )}
             <Animated.View style={styles.searchRow} layout={layoutTransition}>
@@ -378,10 +396,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  brand: {
+  /**
+   * The mark's own row: the wordmark, a flexible spacer, and the lookup-mode status button. The
+   * margins are the ones the mark carried on its own before it had a row, and the row's height is
+   * set from the mark's line box (see `wordmarkLineHeight`), so the mark renders exactly where and
+   * at what size it did — the 48 dp button is centred on that box and overhangs it.
+   */
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 11,
     marginBottom: 20,
   },
+  brandSpacer: {flex: 1},
   listContent: {
     paddingHorizontal: spacing.l,
     paddingTop: 0,

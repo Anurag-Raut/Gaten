@@ -38,6 +38,15 @@ const WORDMARK_WIDTH = 1833;
 /** The ink each supplied wordmark file draws its (identical) path in. */
 const WORDMARK_INK = {light: "#17171A", dark: "#F5F5F6"} as const;
 
+/**
+ * The height of the box the mark is drawn in at [fontScale] — the tab headings' own line box. It is
+ * what Home's header row is sized by, so the row can hold the mark and a control beside it without
+ * either moving the mark.
+ */
+export function wordmarkLineHeight(fontScale: number): number {
+  return TAB_HEADING_METRICS.lineHeightDp * fontScale;
+}
+
 /** Draws the mark at the shared brand-heading scale, in the tab headings' line box. */
 export function GatenWordmark() {
   const {dark} = useTheme();
@@ -46,7 +55,7 @@ export function GatenWordmark() {
   return (
     <Svg
       width={WORDMARK_WIDTH * scale}
-      height={TAB_HEADING_METRICS.lineHeightDp * fontScale}
+      height={wordmarkLineHeight(fontScale)}
       viewBox={WORDMARK_VIEWBOX}
     >
       <Path d={WORDMARK_PATH} fill={dark ? WORDMARK_INK.dark : WORDMARK_INK.light} fillRule="evenodd" />
