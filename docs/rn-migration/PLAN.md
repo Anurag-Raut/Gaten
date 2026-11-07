@@ -210,7 +210,8 @@ on a landing page. The Settings pages are untouched and still hold the configura
 Home's **Start studying** button went with the tab: once the Anki row opened the deck list itself, the
 button was a second way to the same screen, and it was the only filled primary action on Home. That
 is a deliberate deviation from the supplied Ink document ("one strong action per screen"), recorded
-in `docs/design-language.md`; `home.canReview` — which existed only to disable it — went too.
+in the [design language](../Gaten_Ink_Design_Language_v1.md); `home.canReview` — which existed only to
+disable it — went too.
 
 A step is still not a route, and now it is not a tab either: `HomeStackParamList` gained a single
 `Review: undefined` entry, and Back is that page's pop. `openAnki` / `openWaniKani` are the only ways

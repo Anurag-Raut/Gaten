@@ -1,30 +1,30 @@
 # Gaten / Ink — Design Language
 
-**Version 1.6 · 23 October 2026 · Current Home, Analytics, Settings and Screen lookup baseline**
+Rules for the shipped app: Home, the Anki and WaniKani study hubs, review and lessons, Analytics,
+Settings, the screen lookup workflow and the shared tokens. This is the single current design
+authority. The frozen packages and historical records under `docs/` are indexed in
+[`docs/README.md`](README.md); none of them overrides this file. The filename keeps `v1` for stable
+links.
 
 ## Summary
 
-| Area | Current rule |
+| Area | Rule |
 | --- | --- |
 | Visual language | Quiet, mostly monochrome pages; flat rows, whitespace and 1 dp separators establish hierarchy. |
 | Home | Gaten wordmark → search → Daily streak → Anki and WaniKani rows → Recently looked up. The service rows are the study actions; there is no separate Start studying button. |
+| Study hubs | Anki and WaniKani share one flat row grammar: a 48 dp art or icon holder, a title with sublines, one trailing count lane or an accent check, and a chevron only on an actionable row. Each hub carries a flat **Today** block above its destinations. |
+| Review and lessons | Anki review renders the note's template; WaniKani review and lessons share one field, feedback and pinned footer. Meaning is teal and Reading is violet in both, independent of the reader's accent. |
 | Analytics | One page, no source switcher: Anki → WaniKani → Study activity → Accuracy → Level progress, with no cards at all — hairline-separated sections, paired figures split by a single vertical rule, unboxed charts. |
-| Settings | Six destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
+| Settings | Seven destinations in three flat groups: Lookup, Study and App. No row cards or tinted section containers. |
 | Color | System/Light/Dark modes and seven selectable accents. The chosen accent colors actions, selection, Home due counts and streak marks — and, on Analytics, every chart and every ring, in accent-intensity ladders rather than extra hues. No success green, brand pink or brand blue appears in an analytical element. |
 | Navigation | Three bottom tabs: Home, Analytics and Settings. Review is a pushed flow, not a fourth tab. |
 | Screen lookup | Over foreign content: an animated screen-edge outline, a 40 % black freeze veil, a two-pass selection mark, a rounded neutral status rail with an accent gesture glyph, and a flat result sheet that expands into full-screen search. Its query control matches Home and searches as the reader types. |
 | Exceptions | Neutral input fills, brand-mark holders, dialogs and approved sparse empty-state artwork have specific treatments below. |
-| Source of truth | This document consolidates the current Home/Analytics/Settings implementation and shared tokens. Historical previews do not override it. |
-| Audit scope | Checked against source code on 22 October 2026, and against a debug build on an Android 14 emulator at 392 dp in all seven accents, light and dark, plus 320/340/430 dp and 130/160 % text. |
+| Source of truth | The React Native UI in `src/rn/ui/`, the lookup overlay in `app/src/main/java/com/gaten/app/ui/lookup/`, and the shared tokens are the implementation this document describes. Historical previews and implementation records do not override it. |
 
-The filename retains `v1` to preserve existing links. Version 1.1 replaces the conflicting v1.0
-Home, Settings, palette, navigation and motion guidance in this file. The supplied original
-[Ink document inside the V4 package](unified-ink-hubs-v4/docs/Gaten_Ink_Design_Language_v1.md)
-remains a historical reference; it is not a second current specification.
-
-**North star:** a quiet study instrument. Japanese lookup and study remain the focus.
-This is a reusable design guideline, with current screen behavior stated explicitly rather than
-sample counts or mockup-only controls.
+**North star:** a quiet study instrument. Japanese lookup and study remain the focus. This is a
+reusable design guideline, stated as present-tense rules rather than sample counts, mockup-only
+controls or a change log.
 
 ## 1. Principles and scope
 
@@ -43,10 +43,13 @@ sample counts or mockup-only controls.
 - **Native behavior.** Use real insets, keyboard behavior, scalable text and current routes.
   A prototype device frame, status bar, gesture indicator or sample data is never production UI.
 
-The current [unified Ink hubs V4](unified-ink-hubs-v4/README.md) remains the screen-specific
-reference for the Anki deck hub and WaniKani study hub. Its exceptions do not change Home or
-Settings geometry. The [analytics content proposal](analytics/CONTENT_PLAN.md) is a planning
-document, not an implemented Analytics redesign.
+The current rules for the Anki deck hub and the WaniKani study hub are in §8. The user-supplied
+*Gaten unified Ink hubs V4* package ([`unified-ink-hubs-v4/`](unified-ink-hubs-v4/README.md)) is the
+frozen visual reference for those rows, and
+the [Anki/WaniKani hub handoff](hubs-procedural-art/README.md) and
+[WaniKani Ink V3](wanikani-ink-v3/README.md) are earlier historical packages. Where any of them
+differs from §8, §8 wins. Frozen prototype screenshots use sample data and are not evidence of
+shipped behavior.
 
 ## 2. Color system
 
@@ -76,11 +79,9 @@ Container ladder: in light mode `surfaceContainer`, `surfaceContainerHigh` and
 `surfaceContainerHighest` are #F6F6F8. In dark mode they are #1B1C21, #1C1D21 and #303136.
 These roles do not imply that Settings groups should acquire background fills.
 
-The older #83838C body-text baseline, #909099 dark body-text baseline and the implementation
-record's former #B0B0BA dark secondary text are superseded for these screens. Use
-`onSurfaceVariant` for copy; keep `fine` and secondary-icon tones in their own roles.
-Contrast targets remain at least 4.5:1 for normal text and 3:1 for large text; this source audit
-does not claim a new contrast test run.
+Use `onSurfaceVariant` for copy; keep the `fine` role and the secondary-icon tones for decorative
+details and glyphs, never for body text. Contrast targets are at least 4.5:1 for normal text and
+3:1 for large text.
 
 ### 2.2 Selectable accents
 
@@ -104,8 +105,7 @@ choice remains `Black`; Appearance calls it **White** when showing dark mode.
 Action aliases share the accent: `accent / actionPrimary = primary`,
 `onActionPrimary = onPrimary`, `accentSubtle / actionSecondary = primaryContainer`,
 and `onActionSecondary = onPrimaryContainer`. Filled, tonal, outlined and text buttons use
-these roles. The selected navigation pill also uses `primary / onPrimary`. Neutral black
-action fills from v1.0 are no longer the default.
+these roles. The selected navigation pill also uses `primary / onPrimary`.
 
 ### 2.3 Brand and task exceptions
 
@@ -119,14 +119,15 @@ action fills from v1.0 are no longer the default.
 
 ## 3. Typography
 
-Inter is bundled and named explicitly by the shared Latin text roles. Japanese uses platform
-glyph fallback. A display role without an explicit font family retains native fallback.
-Do not infer current UI typography from a historical preview or an attribution-row title.
+**IBM Plex Sans JP** is bundled and is the face for Latin and Japanese alike, so a mixed string stays
+in one face; only a glyph the face does not carry falls back to the platform. Every shared text role
+names it explicitly (`APP_FONT` in `tokens.ts`). Do not infer current typography from a historical
+preview or an attribution-row title.
 
 | Shared role | Size / line height | Weight | Letter spacing |
 | --- | --- | --- | --- |
-| Brand wordmark | artwork, 38 dp line box | — | traced |
-| Page heading | 35 / 44 | 700 | -1.85 |
+| Home wordmark, `Analytics` and `Settings` headings | SVG artwork, shared scale below | — | traced |
+| Text heading (non-artwork fallback) | 35 / 44 | 700 | -1.85 |
 | Section heading / settings app-bar title | 17 / 22 | 700 | -0.57 |
 | Row title | 15 / 20 | 700 | -0.45 |
 | Button label | 15 / 20 | 600 | -0.20 |
@@ -143,6 +144,13 @@ Do not infer current UI typography from a historical preview or an attribution-r
 Home-specific overrides are intentional: the due count is 24 / 24, weight 700, tracking -0.9;
 the streak count is 20 / 22, weight 500; the empty-history caption is 13 / 18, weight 700.
 Weekday labels use the 12 / 18 field/value role, not the original 10 px mockup labels.
+
+The Home wordmark (`GatenWordmark.tsx`) and the `Analytics` and `Settings` headings
+(`TabHeading.tsx`) are the approved SVG letterforms, not text. All three share one scale —
+`brandHeadingScale(fontScale) = 24.5 × fontScale / 435`, drawn in a `44 dp × fontScale` line box; the
+wordmark keeps its own aspect ratio and box (`1833 × scale` wide, `44 × fontScale` tall). The
+headings therefore grow with the system font scale like text and wrap between glyphs rather than
+clipping. Keep the approved artwork and these shared metrics; never substitute plain text or a font.
 
 Numbers are React Native font sizes that scale with the system. Use readable line heights
 and flexible row height; do not port arbitrary variable-font weights such as 745 from HTML.
@@ -173,7 +181,7 @@ the current composition with uniform card padding.
 | Home service row | Minimum 69 dp, square outer shape, bottom rule |
 | Home service-mark holder | 37 × 37 dp, radius 10 dp; mark 28 dp |
 | Settings destination/switch row | Minimum 60 dp, 12 dp vertical padding, 12 dp content gaps |
-| Settings text field | Minimum 49 dp, radius 14 dp, 1 dp outline; 16 dp horizontal / 12 dp vertical padding |
+| Settings text field | Minimum 49 dp, radius 14 dp, filled `surfaceVariant`, no outline; 16 dp horizontal / 12 dp vertical padding; caret follows the accent |
 | Filled/tonal/outlined button | Minimum 52 dp, radius 13 dp |
 | Text/icon action | Minimum 48 dp effective target |
 | Dialog | Radius 20 dp, padding 24 dp, width capped at 360 dp |
@@ -181,8 +189,7 @@ the current composition with uniform card padding.
 | Selected bottom pill | Visual height 46 dp, radius 15 dp; touch region at least 48 dp |
 | Rule / focus | 1 dp separator; 2 dp accent focus outline |
 
-Existing `shape.settings = 17` and `shape.settingsIcon = 11` tokens do not authorize
-rounded Settings row cards or icon tiles; the current hub uses bare glyphs.
+The current Settings hub uses bare glyphs and flat rows: no rounded row cards or icon tiles.
 
 Content surfaces stay flat. The bottom capsule is the sole raised in-page surface:
 elevation 8, black shadow with opacity 0.18, radius 16 and offset (0, 0), as declared in code.
@@ -196,10 +203,10 @@ Resting order: **Gaten → search → Daily streak → Anki → WaniKani → Rec
 There is no separate filled study CTA and no optional split-card variant in the current baseline.
 
 The header has 12 dp top/bottom padding; the brand adds 11 dp above and 20 dp below.
-The brand is the approved Gaten wordmark artwork (`GatenWordmark`), drawn at the brand role's
-38 dp line box in the ink the supplied light or dark wordmark file uses — chosen from
-`useTheme().dark`, so it follows light/dark alone and never one of the accents — and the header
-keeps its height; it is not a text role and does not scale with the system font size.
+The brand is the approved Gaten wordmark artwork (`GatenWordmark`), drawn at the shared heading scale
+(§3) in the ink the supplied light or dark wordmark file uses — chosen from `useTheme().dark`, so it
+follows light/dark alone and never one of the accents. It scales with the system font size like the
+tab headings; it is not a fixed text size.
 Search uses a minimum 52 dp neutral shell, 14 dp radius, 15 dp horizontal padding,
 13 dp icon/input gap, and placeholder **猫, ねこ, neko...**. Its 2 dp border is transparent
 at rest and accent-colored on focus. Focus starts through the reader's action.
@@ -271,14 +278,16 @@ Start this section 34 dp after the services. Use the 17 / 22 heading and show th
 three recent entries. More entries expose **See all**, then **Show less**, with an accessible
 expanded state. Recent lookups are opened entries; search-mode recent terms are a separate list.
 
-Rows have a 58 dp minimum height, 12 dp horizontal padding, a headword/reading block and
-a trailing gloss, with 1 dp separators between entries. At normal scale the gloss occupies
-at most 34% of the row and up to two lines. Above 1.2 font scale it moves under the word,
-aligns left and wraps without a fixed line limit.
+Rows have a 58 dp minimum height, 12 dp horizontal and 4 dp vertical padding, a headword/reading
+block and a trailing gloss, with 1 dp separators between entries. At normal scale the gloss occupies
+at most 34 % of the row, right-aligned on the row's content bottom edge, and clamps to two lines
+(`numberOfLines={2}`). Above 1.2 font scale it moves below the word, left-aligned at full width, and
+still clamps to two lines. A clamped gloss draws its tail ellipsis as three baseline periods — swapped
+in from the platform's `…` once layout reports the cut — and keeps the full gloss as its
+accessibility label.
 
 The current empty state is a centered, theme-aware **history tray and clock** SVG,
-up to 340 × 148 dp, followed by **No recent searches found**. This replaces the older
-39 dp icon and two-line horizontal empty-state copy. Keep this approved exception sparse;
+up to 340 × 148 dp, followed by **No recent searches found**. Keep this approved exception sparse;
 do not substitute a mascot or colored feature panel.
 
 Loading and failure use compact icon/copy rows; failure provides Try again.
@@ -294,7 +303,7 @@ geometry, colour roles and states are recorded in
 
 ### 6.1 Composition
 
-- **Header** matches Home: `Analytics` at 35 sp/700, the freshness line 13 sp 10 dp beneath
+- **Header** matches Home: the `Analytics` SVG heading (§3), the freshness line 13 sp 10 dp beneath
   (`Updated now`, `Updated 4m ago`, `Updated on 21 Oct`), and one 43 dp refresh square (radius 14 dp,
   `surfaceVariant` fill, accent glyph, ≥48 dp target) — the only chip on the page.
 - **Five sections, in this order:** `Anki` (the collection's shape), `WaniKani` (the curriculum's
@@ -347,9 +356,9 @@ both modes are in [analytics/PLAN.md](analytics/PLAN.md#colour-by-element-and-mo
 
 ### 7.1 Hub
 
-Use the same page canvas and 560 dp column as Home, with native top inset and a
-**Settings** page heading. The heading begins 23 dp below the inset; each group starts
-22 dp after the preceding element.
+Use the same page canvas and 560 dp column as Home, with native top inset and the `Settings` SVG
+heading (§3). The heading begins 23 dp below the inset; each group starts 22 dp after the preceding
+element.
 
 | Group | Destination | Trailing live value |
 | --- | --- | --- |
@@ -357,6 +366,7 @@ Use the same page canvas and 560 dp column as Home, with native top inset and a
 | Lookup | Text recognition | Installed model label / None |
 | Study | Anki cards | Export deck, Choose deck, Not installed or Permission needed |
 | Study | WaniKani | Connected / Not connected |
+| Study | Kanji reference | Remembering the Kanji / WaniKani |
 | App | Appearance | System / Light / Dark |
 | App | About | Actual app version |
 
@@ -374,7 +384,7 @@ foreground return while the hub is focused.
 
 ### 7.2 Shared detail-page grammar
 
-All six pages keep the flat section language. Use a **64 dp app bar below the top safe inset**,
+All seven pages keep the flat section language. Use a **64 dp app bar below the top safe inset**,
 Back control, 17 / 22 page title and Help action where provided.
 The body scrolls in the shared column, with bottom safe-area padding. The bottom tab bar is
 hidden because these are pushed pages.
@@ -399,6 +409,7 @@ from pages with a draft.
 | Text recognition | Current model and available model, download/import/remove actions, progress and cancel, installation/error states, and Help. Download confirmation is a dialog; progress stays in the flat form. |
 | Anki cards | AnkiDroid access/refresh, Study decks, Export deck/tags, and Card layout with note type, field mappings and HTML/CSS controls. Toolbar Save commits the draft; leaving dirty state offers Discard / Keep editing. Study-deck selection is independent of export destination. |
 | WaniKani | Connection status, Lessons → New per day, and token controls. The daily goal is a whole number from 1 to 20, and 15 until the reader sets one — the field always shows the goal the device works to, so there is no unlimited setting, no placeholder and no helper line, and no line reports the learner's running count. One filled **Save** at the foot of the page commits both drafts: it writes the lesson limit, and checks and stores a token only when the field holds one, so a blank field saves the limit without touching a token that is already saved. Disconnect stays a separate, explicit text action. A saved limit is carried by the button's own Saving… → Save round-trip; only a failure takes ink under the field. |
+| Kanji reference | One radio group choosing the reference a kanji page shows: **WaniKani** (the account's online kanji pages and radicals, needs a connected account) or **Remembering the Kanji** (bundled keywords, Heisig stories and Koohii mnemonics, offline). The choice applies immediately and is independent of the WaniKani connection, reviews, lessons and Analytics. |
 | Appearance | Theme radio rows, visible Accent swatches, and Feedback. Theme/accent apply immediately. Feedback shows Haptics → System and a Sounds switch with the short Anki and review cues description. |
 | About | App/version, Privacy, Attributions and Licence. Use the same flat rows for links, with essential legal explanations allowed to wrap. |
 
@@ -431,16 +442,159 @@ Selection must be conveyed semantically as well as visually.
   Concise hub copy must not conceal permission consequences.
 - Anki selectors and editors remain their real controls, not decorative sample menus.
 
-## 8. Screen lookup
+## 8. Study hubs — Anki and WaniKani
+
+### 8.1 One row grammar
+
+Both provider hubs draw the same flat row: a leading **48 dp** holder (the provider glyph on the
+neutral surface, or Anki's deterministic procedural deck art), the title with its subline and at
+most one `Label · value` line, then the trailing lane — the count in the reader's accent with its
+caption, or a **22 dp accent check** — and a **22 dp chevron**. The whole row is one target of at
+least 48 dp with one accessibility label and no button nested inside it. A chevron appears only on a
+row that opens something.
+
+Rows carry a **1 dp `outlineVariant`** bottom rule on the page surface; there is no card, tinted
+panel or radius. Row floors: **90 dp** for an Anki deck row, **110 dp** for a WaniKani row, raised to
+**118 dp** below 340 dp width or at 150 % type so the lines wrap instead of clipping.
+
+`SuccessCheck` is a 22 dp disc filled with the reader's **accent** carrying an `onPrimary` tick. It is
+the one completion mark in either hub, and completion is always carried by words as well as colour —
+there is no green disc, no pale-green row wash and no green panel. An all-clear list keeps every row
+visible under one compact neutral `You're all caught up` notice.
+
+### 8.2 Honest state
+
+Unknown data is never rendered as zero. Loading draws row-shaped skeletons with no numbers; a cached
+snapshot stays marked stale; a failed read keeps its actionable retry/connect row instead of a count.
+A fetched zero is clear on its own and never opens an empty session. A deck with nothing due leads
+nowhere and reads **`Clear for now`** unless a session in it finished today, when it reads
+**`Completed today`**. The other queue stays independent.
+
+### 8.3 Anki deck picker
+
+`Choose a deck` with the real due total, an `Available decks` caption, then one row per deck: 48 × 48
+procedural art, the name, AnkiDroid's own counts, and the accent due total or the check. Opening Anki
+always shows this hub, even when a single deck matches; starting a queue requires choosing that deck.
+When AnkiDroid is not installed the state offers **Download AnkiDroid**, the same store-opening action
+Analytics uses, and installation or first-time setup is rechecked on return.
+
+Study-deck selection is stored by stable deck IDs: a null selection means all decks and an explicit
+empty selection means none; the selection filters this hub and Home's Anki due counts. Parent decks
+include their subdecks. It is separate from the export-deck destination.
+
+### 8.4 WaniKani hub
+
+A back bar, `Your study` with `Choose what to work on next.` (`Everything available is clear for now.`
+when both queues are clear), one `Available study` caption and exactly two whole-row-tappable rows,
+**Reviews** and **Lessons**, at a 110 dp floor. There are no black Start buttons, no tabs, no summary
+or sync line and no `Coming up` section. A clear queue shows the accent check and its clear detail.
+
+### 8.5 Today's activity
+
+Both hubs carry a flat **Today** block above their destinations — page canvas, whitespace and
+hairlines, no card or tint. Each block has its own help target (`About today's figures` on Anki,
+`About today's activity` on WaniKani) that explains the read's scope.
+
+- **Anki** states **`Cards studied`** — the distinct cards answered in AnkiDroid today, across every
+  deck, with repeated ratings counted once — beside **`Ready now`** — the cards due now in the study
+  decks the reader selected. The two figures have different scopes and never form a completion
+  percentage. A `New / Learn. / Review` ready distribution sits under them.
+- **WaniKani** states **`Items reviewed`** and **`Lessons learned`**, both device-local and bounded by
+  local midnight. The two captions carry accent swatches at intensity 1 and 0.42, and they key **one
+  segmented bar** that breaks the day's completed work into reviews and lessons. That bar states no
+  count and is not a completion percentage: a zero day draws its neutral track, and a figure that could
+  not be read draws no bar at all and says why.
+
+A figure the source did not answer is an em dash with a reason, never a zero.
+
+## 9. Review and lessons
+
+### 9.1 Anki review
+
+An Anki question renders the note's own template and deck context. Revealing changes the step title to
+**Answer** and presents the known Gaten fields in a scalable **40 / 48 dp** expression, then 17 / 24 dp
+reading and meaning; other and imported templates keep Anki's HTML renderer. Example sentences sit
+behind a **56 dp** accessible disclosure row and are read from the bundled Tanaka Corpus — no network.
+Up to three are shown shortest-first; a word the corpus lacks falls back to the note's own `Sentence`
+field, then to a quiet no-examples line. The rating footer stays pinned above the native system insets,
+and saving shows `Saving to AnkiDroid`.
+
+### 9.2 WaniKani review and lessons
+
+A subject badge carries the kind and level, a hero prompt (single kanji **64 / 80**, vocabulary
+**40 / 56**, shrinking to fit one line) is the visual focus, and a compact `Meaning` or `Reading` task
+label sits beside it. Meaning keeps the fixed semantic **teal** and Reading the **violet**, in both
+review and lessons, independent of the reader's selected accent; other text and surfaces use the theme
+roles.
+
+The answer field's text is **centred** in the WaniKani review and lesson (`AnswerInput` overrides
+`textAlign`); the shared `AnswerInput` default stays left-aligned for other callers. The placeholder is
+`Type the meaning` or `こたえ`. The keyboard stays up through the judgement — the submit action consumes
+the key without blurring — so the reader can keep typing. The typed answer wears the outcome: `error`
+red while a wrong answer is held for its retry, `success` green on a correct one while it is sent; the
+underline beneath it stays the accent.
+
+- **A wrong answer stops on its own card** behind **Continue**: it marks the answer incorrect in red
+  and never reveals the correct one for the reader. **Show answer** is a disclosure that opens on the
+  part being asked (Reading for a reading prompt); **Primary meaning** is the hero and **Other
+  meanings** sit quiet under it, with mnemonic and context tabs. The reader can edit the held answer:
+  **Done** / **Continue** rejudges changed, non-empty text in place, while unchanged or emptied text
+  clears to re-arm the retry. The incorrect count and the same prompt are kept and nothing is
+  submitted prematurely.
+- **A refused reading** (non-kana input) shows exactly **`Remove invalid characters`** in quiet
+  `onSurfaceVariant` with the wrong-answer shake and buzz, judges and counts nothing, and clears the
+  note on the next keystroke.
+- **Saving** is stated above the scrolling card, directly under the progress line, while
+  `phase === submitting`: a `BusyRow` reading **`Saving to WaniKani`** stays on screen at any scroll
+  position and above the keyboard — it is never in the footer. `BusyRow`'s ring is a custom 900 ms
+  circular animation (16 dp, 2 dp accent) that deliberately keeps spinning under `ReduceMotion.Never`,
+  even at animator scale 0; this is the workflow's one intentional motion exception, not a general
+  claim that motion ignores the reduced-motion setting. Settings' own `Save` keeps its `Saving…` label;
+  the review and lesson saving labels carry no ellipsis. A failed send keeps its real cause and offers
+  `Send again` (or `Reconnect` when the token was refused); sending again is safe because WaniKani
+  records a review once.
+
+### 9.3 Lessons
+
+A lesson flow teaches a batch of subjects one card at a time, then quizzes them. A teach card carries
+the kind and level, the character (or the radical drawing), the meanings and readings with their
+mnemonics, and up to two example sentences for vocabulary; Meaning and Reading keep their review
+colours. The quiz reuses the review's field, placeholder, feedback and pinned footer exactly.
+
+A finished lesson is sent with **`PUT /assignments/<id>/start`**, never as a review, which WaniKani's
+reference forbids. Each subject is started the moment its quiz passes, so leaving mid-batch keeps what
+was finished; starting is idempotent, so a retry is always safe. The Lessons row then reads
+`N lessons left in batch` with its progress and resumes the batch when tapped.
+
+Each offered batch is capped at the smaller of the queue, five subjects, and the remaining daily
+allowance. The Lessons row's trailing count is **today's allowance**, not the whole queue. Reaching the
+daily limit is not "all caught up": the row states the limit, for example `Learned today · N of M`.
+
+Lessons and reviews respect the account's entitlement ceiling (`max_level_granted`): content above it
+is not offered at all.
+
+Review and lesson writes are real: an Anki review save and a WaniKani review or lesson submit write to
+the provider (`POST /reviews`, `PUT /assignments/{id}/start`). The study integration is not read-only.
+
+### 9.4 Kanji and radical detail
+
+A kanji page keeps its character beneath the app bar, because the character is the page's anchor.
+A radical page draws its drawing unboxed on the page surface — no panel or tint behind it — with the
+primary meaning as the one primary block beside it and the name stated once; the page's refresh and
+open-on-WaniKani actions sit in a flat foot row. A radical with neither drawing nor character draws no
+art rather than repeating its name. The nested radical detail inside a review expansion uses the same
+page.
+
+## 10. Screen lookup
 
 The lookup workflow is the one part of Gaten drawn *over* somebody else's content: an accessibility
 overlay window, a frozen screenshot, a finger-drawn selection, and a reading surface. It carries the
 same paper, ink, accent and type scale as the app; what it adds is a small set of overlay-specific
-recipes (§8.10) that exist only because the pixels underneath are not ours. The exhaustive tables —
+recipes (§10.10) that exist only because the pixels underneath are not ours. The exhaustive tables —
 every value, state, string and mockup — are in
 [the lookup design specification](../artifacts/lookup-redesign/DESIGN.md).
 
-### 8.1 Surfaces and states
+### 10.1 Surfaces and states
 
 Four surfaces, one instrument: the **floating button** (the entry point on foreign screens), the
 **freeze scrim with the selection mark**, the **status rail** (what the tool is doing), and the
@@ -455,11 +609,13 @@ non-destructive tap miss.
 - The capture is never animated, tinted, moved or scaled. A missing region stays opaque black and
   never reveals the live app.
 
-### 8.2 Freeze and arming
+### 10.2 Freeze and arming
 
 - The first visible frame is the opaque frozen capture alone. Keep the controller's
   frame-commit → additional vsync → media-pause → UI ordering and its safety timeouts; no visual
-  animation may delay capture, media pause or OCR.
+  animation may delay capture, media pause or OCR. Capture takes one full-screen `ARGB_8888` software
+  copy, shared with the overlay, the selection crop and OCR; that copy is the single source the whole
+  lookup reads, so its lifetime is owned by the pipeline, not by any one consumer.
 - The dim is fixed black at **0.40** in both modes, fading 0 → 0.40 over `SHORT` on `emphasized`. It
   is context separation, not a contrast guarantee for whatever is underneath.
 - Restore the **screen-edge outline**: two strokes reveal from the bottom midpoint, travel up the
@@ -475,7 +631,7 @@ non-destructive tap miss.
   exactly when the reader starts typing. Leaving the frozen frame on top of whatever the reader
   switched to is the failure this prevents.
 
-### 8.3 The selection mark
+### 10.3 The selection mark
 
 - The lasso is two solid strokes on one smoothed path: **5 dp `onPrimary` outside, 3 dp `primary`
   inside**, both alpha 1.00, round cap and round join, with the width independent of how far the
@@ -491,7 +647,7 @@ non-destructive tap miss.
 - The 24 view-px minimum selection and the 24 dp tap tolerance are thresholds, not a gesture model:
   the lasso and the tap both stay available, and a miss never dismisses.
 
-### 8.4 The status rail
+### 10.4 The status rail
 
 One rounded, neutral status rail carries instructions, real progress and notices; empty lookup
 results have a different, centred body treatment. Floating over the frozen screen, the rail is opaque
@@ -530,7 +686,7 @@ illustrated empty state. No terminal message is duplicated in a floating rail. T
 centring rules and search behaviour are specified in
 [DESIGN-REV2.md](../artifacts/lookup-redesign/DESIGN-REV2.md) §§2–4.
 
-### 8.5 The result sheet
+### 10.5 The result sheet
 
 Keep the **20 dp** dock corner and the **60 %** bottom-dock fraction — this is a window that
 genuinely contains the reading task, not an in-page row card — on `surface` at alpha 1.00, elevation
@@ -542,7 +698,8 @@ keeps the same centred 560 dp column. A top inset the window reports is reserved
 frozen status bar stays visible where the platform reports one; where the window reports none — the
 accessibility-overlay window on the test emulator reports 0 — the panel starts at the display's top
 edge and its toolbar sits in the status-bar band, and no reservation is guaranteed. The landscape
-side dock, its **45 %** fraction and its exposed inner-edge rule are retired with the Compose sheet.
+side dock, its **45 %** fraction and its exposed inner-edge rule are not used: held sideways the sheet
+is the full-height panel described below.
 
 Inside, there is no intermediate filled card: **grip → header → one body scroller → footer**. The
 Anki action is that footer in both orientations — the content's own last item, reached by scrolling
@@ -560,7 +717,7 @@ the entry it belongs to, never a bar pinned to the panel's bottom.
   or a failure rail); only below 96 dp does Search also become a labelled body action, leaving Close
   alone. Targets are never shrunk to keep icon density, and a blank source keeps its disabled Copy
   slot only where the four slots fit.
-- **Word tabs** replace the old filled chips: transparent, 0 dp radius, selected = `primary` text +
+- **Word tabs** are transparent, 0 dp radius, selected = `primary` text +
   a **2 dp `primary` bottom rule** + a check in a reserved slot, unselected `onSurfaceVariant`. They
   live in the body scroller and are omitted when only one word can be selected.
 - **Entry**: headword `displaySmall` in **`onSurface`** (never accent — the word is content), reading
@@ -613,7 +770,7 @@ keyboard first, leaves search second, and then follows the existing sheet/refere
 Full interaction and accessibility rules are in
 [DESIGN-REV2.md](../artifacts/lookup-redesign/DESIGN-REV2.md) §4.
 
-### 8.6 The floating button
+### 10.6 The floating button
 
 48 dp, **opaque `primary` fill**, a 24 dp glyph in `onPrimary`, and a hard **2 dp `onPrimary`
 perimeter** drawn inside the circle; no shadow, gradient or secondary ring. It is an isolated accent
@@ -623,7 +780,7 @@ arbitrary pixels cannot be trusted to supply an icon's background. Press is opac
 It is **absent**, not dimmed, while a lookup is being admitted, captured or open, and it never appears
 on a locked screen.
 
-### 8.7 Settings, disclosure and the tile
+### 10.7 Settings, disclosure and the tile
 
 - The **Screen lookup** page uses the shared detail-page grammar (§7.2): flat rows, bare 22 dp icons,
   real values, no row cards. Lookup mode shows the service's own state; Pause media is an access
@@ -637,7 +794,7 @@ on a locked screen.
   size, tint and radius to the system. Its state describes lookup availability, not a latched capture
   toggle. A disabled tile routes to the same disclosure before any native permission prompt.
 
-### 8.8 Copy
+### 10.8 Copy
 
 Sentence case, one clause per line, in the app's voice; the workflow's full string list is in
 [the specification](../artifacts/lookup-redesign/DESIGN.md#9-copy-inventory). Data — the OCR source,
@@ -645,7 +802,7 @@ glosses, forms, parts of speech, deck names, mnemonics — is never rewritten to
 rule. Failure copy names the real cause and the one action that fixes it, and never claims a success
 the app did not observe.
 
-### 8.9 Motion
+### 10.9 Motion
 
 Overlay timings use the shared tokens only: dim and rail `SHORT` (150 ms), sheet entrance `MEDIUM`
 (300 ms), sheet exit and full dismissal `SHORT`, all on `emphasized`; finger-driven geometry is
@@ -654,10 +811,10 @@ a sub-threshold drag returns on the `overshoot` spring. Search animates the moda
 screen and back with the shared motion tokens, revealing the query controls smoothly. The keyboard
 appears after expansion and its geometry follows the native IME insets. The restored screen-edge
 outline retains its bottom-to-top reveal and result-time retraction. Functional spinners keep the platform's own timing. Reduced motion is
-the platform's animation scale — every one of these is a Compose animation and scales with it, and no
-custom timing loop bypasses that scale.
+the platform's animation scale, which the overlay's Compose animations follow; the one exception is
+the review/lesson `BusyRow` ring in §9.2, which is deliberately pinned to keep spinning.
 
-### 8.10 Amendments this workflow makes
+### 10.10 Amendments this workflow makes
 
 Approved for surfaces drawn over foreign content, and nowhere else:
 
@@ -677,7 +834,7 @@ field and focus grammar; they do not authorize translucent fields, tinted conten
 windows. The screen-edge outline restores the original 900 ms reveal, 420 ms retraction and
 2400 ms busy drift; these are the restored component’s existing timings.
 
-## 9. Floating bottom navigation
+## 11. Floating bottom navigation
 
 The app has **Home · Analytics · Settings**. Review is pushed from Home.
 Settings uses the app's gear glyph; do not copy a preview's person/Profile icon.
@@ -697,7 +854,7 @@ The existing short tap-settle and icon-arrival gestures, and the spring-based ba
 departure/return, are intentional. Preserve reduced-motion behavior and measured labels;
 do not truncate Settings to make a fixed capsule fit.
 
-## 10. Feedback, motion and microcopy
+## 12. Feedback, motion and microcopy
 
 | Concern | Current convention |
 | --- | --- |
@@ -722,7 +879,7 @@ Use the actual **days**, **No recent searches found**, **Screen lookup** and **A
 where specified above, rather than obsolete mockup copy. Legal, error and permission detail
 may be longer when the reader needs it.
 
-## 11. Accessibility and responsive requirements
+## 13. Accessibility and responsive requirements
 
 - Keep effective touch targets at least 48 × 48 dp; smaller painted icons are fine inside them.
 - Keep system-scalable fonts and flexible row height. Do not fix a Settings row at the
@@ -734,11 +891,10 @@ may be longer when the reader needs it.
 - Preserve Home's outcome stacking and large-text gloss layout, Settings value wrapping and
   measured bottom-nav labels.
 - Use native status/gesture insets and keyboard avoidance. Never draw mock system chrome.
-- When a visual pass is requested, check light/dark, each affected accent, narrow widths and
-  100%/130%/160% text scale, including keyboard and TalkBack behavior. These are future checks,
-  not claims that they were run in this documentation audit.
+- A visual pass checks light/dark, each affected accent, narrow widths and 100 %/130 %/160 % text
+  scale, including keyboard and TalkBack behavior.
 
-## 12. Source map and maintenance
+## 14. Source map
 
 | Concern | Current source |
 | --- | --- |
@@ -758,111 +914,19 @@ may be longer when the reader needs it.
 | Settings hub | [SettingsScreen.tsx](../src/rn/ui/settings/SettingsScreen.tsx) |
 | Settings groups, rows, fields and dialogs | [settings-components.tsx](../src/rn/ui/settings/settings-components.tsx) |
 | Settings detail pages | [settings/](../src/rn/ui/settings/) |
+| Shared pushed-screen app bar | [ScreenHeader.tsx](../src/rn/ui/ScreenHeader.tsx) |
+| Shared dialogs | [DialogShell.tsx](../src/rn/ui/DialogShell.tsx) |
+| Heading artwork and tab-lettering metrics | [TabHeading.tsx](../src/rn/ui/TabHeading.tsx), [tabHeadingGlyphs.ts](../src/rn/ui/tabHeadingGlyphs.ts), [GatenWordmark.tsx](../src/rn/ui/home/GatenWordmark.tsx) |
+| Study hubs, review and lessons | [review/](../src/rn/ui/review/), [ReviewScreen.tsx](../src/rn/ui/ReviewScreen.tsx) |
+| Portrait-only app orientation, accessibility overlay | [AndroidManifest.xml](../app/src/main/AndroidManifest.xml) |
 | Buttons and press/focus feedback | [components.tsx](../src/rn/ui/components.tsx), [PressableScale.tsx](../src/rn/ui/PressableScale.tsx) |
 | Bottom navigation and route behavior | [BottomBar.tsx](../src/rn/ui/BottomBar.tsx), [AppShell.tsx](../src/rn/ui/AppShell.tsx) |
 | Lookup overlay: session, scrim, status rail, gesture wiring | [LookupOverlay.kt](../app/src/main/java/com/gaten/app/ui/lookup/LookupOverlay.kt), [LookupStatusRail.kt](../app/src/main/java/com/gaten/app/ui/lookup/LookupStatusRail.kt) |
 | Lookup overlay: lasso, selection hole and edge | [LassoLayer.kt](../app/src/main/java/com/gaten/app/ui/lookup/LassoLayer.kt) |
-| Lookup result sheet, docks and inner reference pages | [ResultSheet.kt](../app/src/main/java/com/gaten/app/ui/lookup/ResultSheet.kt), [SheetPlacement.kt](../app/src/main/java/com/gaten/app/ui/lookup/SheetPlacement.kt), [WaniKaniDetail.kt](../app/src/main/java/com/gaten/app/ui/wanikani/WaniKaniDetail.kt) |
+| Lookup result sheet and inner reference pages (RN surface in the native window) | [LookupSheetApp.tsx](../src/rn/ui/lookup/LookupSheetApp.tsx), [LookupSheetHost.kt](../app/src/main/java/com/gaten/app/ui/lookup/LookupSheetHost.kt), [LookupSheetView.kt](../app/src/main/java/com/gaten/app/ui/lookup/LookupSheetView.kt), [SheetPlacement.kt](../app/src/main/java/com/gaten/app/ui/lookup/SheetPlacement.kt), [WaniKaniDetail.kt](../app/src/main/java/com/gaten/app/ui/wanikani/WaniKaniDetail.kt) |
 | Lookup trigger: floating button, tile, capture ordering | [FloatingTriggerButton.kt](../app/src/main/java/com/gaten/app/trigger/FloatingTriggerButton.kt), [LookupTileService.kt](../app/src/main/java/com/gaten/app/LookupTileService.kt), [GatenAccessibilityService.kt](../app/src/main/java/com/gaten/app/GatenAccessibilityService.kt), [OverlayWindowController.kt](../app/src/main/java/com/gaten/app/ui/overlay/OverlayWindowController.kt) |
 | Lookup strings, settings page and disclosure | [strings_lookup.xml](../app/src/main/res/values/strings_lookup.xml), [LookupSettingsScreen.tsx](../src/rn/ui/settings/LookupSettingsScreen.tsx) |
 | Lookup design specification and evidence | [lookup-redesign/DESIGN.md](../artifacts/lookup-redesign/DESIGN.md), [lookup-redesign/](../artifacts/lookup-redesign/) |
-| Other screen refinements and historical checks | [Implementation record](design-language.md) |
 
 For a future UI change, update the affected section here and the shared token source where
-applicable. Record the reason, light/dark impact, accessibility implications and what was
-actually checked. Keep supplied historical packages intact and distinguish proposals from
-shipped behavior.
-
-### Version 1.1 audit changes
-
-Consolidated the selected-accent system and actual typography; removed the separate Home
-CTA and optional split-card baseline; documented current search mode, bounded Anki streak,
-service states and history artwork; replaced obsolete Settings entries/card geometry;
-added all six Settings pages and their controls; corrected three-tab navigation, current
-motion and dark secondary text. This was a documentation-only source audit.
-
-### Version 1.2 changes
-
-Added §6 Analytics: the three-view borderless layout, the switcher and section grammar, the
-per-element colour roles with the three-step accent ladder and the one `success` segment, and the
-honesty rules for missing, unavailable and cached figures. Renumbered the following sections; added
-the analytics sources to §12. Checked on a debug build at 392 dp across all seven accents in light
-and dark, and at 160 % text scale.
-
-### Version 1.3 changes
-
-§6 Analytics rewritten for the final single-page design: the source switcher is gone, the sections are
-`Anki → WaniKani → Study activity → Recall → Ahead` (the two source summaries lead; the twelve-week
-heatmap follows them; the last two became `Accuracy` and `Level progress` on 23 October, and §6 above
-carries the current names), and the colour rule is now accent-only — the
-`success` segment on the collection bar is removed, so no analytical element carries a hue the reader
-did not choose. Added the heatmap's unknown-versus-zero treatment, the cumulative-accuracy rule, and
-the once-per-source action rule. Checked on a debug build at 392 dp across all seven accents in light
-and dark, at 320/340/430 dp, and at 130 % and 160 % text.
-
-### Version 1.4 changes
-
-Added §8 **Screen lookup**: the freeze veil with no screen-edge ring, the two-pass paired selection
-mark (a 5/3 dp trail, 4/2 dp while reading and 3/1 dp once the answer is up, a 4 dp hole), the square
-status rail with its 2 dp accent rule and its four lifetimes, the flat result sheet (grip → header →
-one body scroller → pinned footer, unfilled word tabs, neutral headword, bare-glyph kanji strip,
-honest Anki labels), the opaque floating button with its paired rim, the Screen lookup settings rows,
-the regrouped disclosure, the tile's own name and state, the workflow's copy, and the amendments this
-workflow is allowed to make (§8.10). Renumbered §8–§11 to §9–§12 and added the lookup sources and
-evidence to the source map. The specification, the brief, the eight design renders and the device
-stills are in [artifacts/lookup-redesign](../artifacts/lookup-redesign/README.md).
-
-Checked on a debug build on the `Pixel_Safe` emulator (1080 × 2340 @ 440 dpi, portrait): the sheet,
-lasso and rails in light (Indigo) and in dark with the Black accent, which resolves to white ink on a
-dark page; the right dock in landscape; the empty-crop and tap-miss rails; the floating button at
-rest over another app's content; and the sheet at 160 % text over a browser page, where the header
-source reflows into the body and the deck value stacks above the action. The eight renders cover all
-seven accents across light and dark, both side docks, the live gesture, the committed crop and the
-disclosure. Reduced motion was not exercised: the transitions are Compose animations and follow the
-platform's animation scale, which was left untouched.
-
-### Version 1.5 changes
-
-Revision 2 of the lookup workflow, from a review pass on the shipped redesign. The **status rail** is
-now a 13 dp rounded neutral surface with **no accent leading rule** (it was square and carried one),
-and a settled message stays three seconds before fading with the message that follows it staying two.
-**No text found** and **No dictionary matches** became **centred, illustrated empty states** — sparse
-neutral SVG artwork, the message, **Search dictionary** as the primary recovery and **Select again** as
-the secondary action — replacing the left-aligned inline rails; **Dictionary unavailable** stays an
-error rail. A confirmed zero-line screen index now opens that no-text sheet instead of spending a timed
-notice. The sheet's header grew to a four-control cluster (Copy → Search → Select again → Close) that
-yields controls into the body as physical width shrinks, and **Search dictionary** opens a
-**full-screen query cover inside the same overlay window**: the house field, the existing offline
-search helper verbatim (romaji included), flat rows carrying exact / matched-form / approximate-reading
-/ prefix provenance, and a chosen entry returning to the sheet labelled **Searched** with **Original
-lookup** to restore what the capture said.
-
-Checked on a debug build on the `Pixel_Safe` emulator (1080 × 2340 @ 440 dpi, portrait and landscape,
-100 % and 160 % text): the rounded rail and its dwell, both illustrated empty states (a blank crop and
-a zero-hit query), the bottom dock and a 45 % side dock, the full-screen cover with the system keyboard
-up, romaji input (`neko` → ねこ, 9 results, exact and prefix provenance), choosing a row, and
-**Original lookup** restoring the captured result. The keyboard taking focus no longer ends the lookup,
-which is what lets the reader type at all; the existing 200 ms focus bounce is otherwise unchanged. Not
-exercised: the WaniKani reference page inside a searched entry (needs a token) and the reduced-motion
-path (every transition is a Compose animation and follows the platform's animation scale).
-
-The same revision closed a hole found while testing it: with the overlay up, an accessibility overlay
-window keeps the window focus, so Home — or another app coming forward — never produced the focus loss
-the dismissal was built on, and the frozen frame stayed on top of whatever the reader switched to. The
-lookup now also ends on a **full-screen window from a package that is neither Gaten's nor the app the
-capture froze** (nor the active keyboard), leaving the media paused for whatever took the screen.
-Verified on the emulator: Home ends the lookup both when the service has seen the app come forward and
-when it has not, an idle overlay survives twelve seconds untouched, Back still closes it, the keyboard
-opening while searching does **not** close it, and Home while searching does.
-
-### Version 1.6 — Lookup review follow-up
-
-Restored the animated screen-edge outline and applied the selected accent to the instruction’s
-gesture glyph. Matched the overlay query field to Home’s compact search control, removed the
-visible Dictionary query heading, and restored automatic search while typing. Search now expands
-from the result modal’s measured bounds to full screen rather than switching surfaces with a fade.
-The native Compose field mirrors Home’s React Native control because the overlay uses a separate
-native window. The Anki action keeps 24 dp of bottom breathing room above the system inset. Tapping
-the deck name opens an in-overlay picker; choosing an existing deck updates the saved export deck
-for future cards while preserving tags, templates and field mapping. Picking a deck never writes a
-card, and the destination remains editable after a duplicate is found.
+applicable. Keep supplied historical packages intact and keep proposals out of this file.
