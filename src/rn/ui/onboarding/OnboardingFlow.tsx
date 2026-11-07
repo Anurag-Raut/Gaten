@@ -37,13 +37,13 @@ import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {downloadAnkiDroid} from "../anki/anki-actions";
-import {Button, Icon, IconButton} from "../components";
-import {BrandTile} from "../review/review-ui";
+import {Button, IconButton} from "../components";
 import {WaniKaniConnect} from "../review/WaniKaniConnect";
 import type {WaniKaniConnectOutcome} from "../review/review-store";
 import {useLookupModeRequest} from "../settings/settings-components";
 import {useTheme} from "../theme";
-import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, MAX_CONTENT_WIDTH, contentInsetFor, spacing, typeScale} from "../tokens";
+import {AnkiArtwork, LookupArtwork, WaniKaniArtwork} from "./OnboardingArtwork";
 
 /** The short name of each page, for the progress row's announcement. */
 const PAGES = [
@@ -163,8 +163,31 @@ export function OnboardingFlow({
   );
 }
 
+/** The artwork's full width, and the width the chrome caps it at in the middle mode. */
+const ARTWORK_WIDTH = 340;
+const ARTWORK_CAPPED_WIDTH = 248;
+
+/** How the page's hero is drawn for the current window: full size, capped, or left out entirely. */
+type ArtworkMode = "hidden" | "capped" | "normal";
+
 /**
- * One page's chrome: the way back, the progress row, the scrolling content column, and the actions.
+ * The artwork mode for a window, in the brief's order: a large text size or a short viewport drops
+ * the artwork entirely; the next step down caps its width. [usableHeight] is the scroller's visible
+ * height less the bottom safe-area allowance it pads with.
+ */
+function artworkModeFor(fontScale: number, usableHeight: number): ArtworkMode {
+  if (fontScale >= 1.6 || usableHeight < 360) return "hidden";
+  if (fontScale >= 1.3 || usableHeight < 560) return "capped";
+  return "normal";
+}
+
+/**
+ * One page's chrome: the way back, the progress row, the artwork, the scrolling content column, and
+ * the actions.
+ *
+ * The artwork sits above the heading at the brief's rhythm — 8 dp under the progress row and 16 dp
+ * above the heading — and scales from the column's own width, never from the system font scale. It
+ * is left out entirely on a short window or at 160% text, so it never crowds the setup content.
  *
  * The actions live at the end of the page's own scroller rather than in a second pinned one, so at a
  * short height or a large text size the primary and the Skip are reached by scrolling the same page —
@@ -172,7 +195,7 @@ export function OnboardingFlow({
  */
 function PageChrome({
   step,
-  mark,
+  artwork: Artwork,
   heading,
   explanation,
   status,
@@ -188,7 +211,7 @@ function PageChrome({
   headingRef,
 }: {
   step: number;
-  mark: React.ReactNode;
+  artwork: React.ComponentType<{width: number}>;
   heading: string;
   explanation: string;
   status: React.ReactNode;
@@ -205,8 +228,18 @@ function PageChrome({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
-  const {width} = useWindowDimensions();
+  const {width, height, fontScale} = useWindowDimensions();
   const inset = contentInsetFor(width);
+  // The scroller's own visible height, measured; the window stands in until the first layout, so a
+  // page decides its artwork mode from its first frame.
+  const [scrollerHeight, setScrollerHeight] = useState<number | null>(null);
+  const usableHeight = (scrollerHeight ?? height) - insets.bottom;
+  const mode = artworkModeFor(fontScale, usableHeight);
+  const innerColumnWidth = Math.min(width, MAX_CONTENT_WIDTH) - 2 * inset;
+  const artworkWidth = Math.min(
+    innerColumnWidth,
+    mode === "capped" ? ARTWORK_CAPPED_WIDTH : ARTWORK_WIDTH,
+  );
 
   return (
     <SafeAreaView
@@ -266,6 +299,10 @@ function PageChrome({
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
+        onLayout={(event) => {
+          const next = event.nativeEvent.layout.height;
+          setScrollerHeight((current) => (current === next ? current : next));
+        }}
         contentContainerStyle={[
           CONTENT_COLUMN,
           {
@@ -276,8 +313,18 @@ function PageChrome({
           },
         ]}
       >
-        <View style={{gap: spacing.xl}}>
-          <View>{mark}</View>
+        <View>
+          {mode !== "hidden" && (
+            <View
+              pointerEvents="none"
+              accessible={false}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={{alignItems: "center", marginTop: spacing.s, marginBottom: spacing.l}}
+            >
+              <Artwork width={artworkWidth} />
+            </View>
+          )}
           <Text
             ref={headingRef}
             accessibilityRole="header"
@@ -285,11 +332,11 @@ function PageChrome({
           >
             {heading}
           </Text>
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
             {explanation}
           </Text>
-          {status}
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+          {status != null && <View style={{marginTop: spacing.l}}>{status}</View>}
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.m}]}>
             {reassurance}
           </Text>
         </View>
@@ -391,7 +438,7 @@ function LookupPage({step, onAdvance, onBack, saveError, onRetry, headingRef}: P
     <>
       <PageChrome
         step={step}
-        mark={<Icon name="search" size={30} color={colors.onSurfaceVariant} />}
+        artwork={LookupArtwork}
         heading="Look up Japanese on your screen"
         explanation="Look up Japanese text while you read in other apps. Gaten needs Android's accessibility permission to start screen lookups."
         status={
@@ -598,7 +645,7 @@ function AnkiPage({step, onAdvance, onBack, saveError, onRetry, headingRef}: Pag
   return (
     <PageChrome
       step={step}
-      mark={<BrandTile brand="anki" size={56} radius={15} />}
+      artwork={AnkiArtwork}
       heading="Study with AnkiDroid"
       explanation="Review your AnkiDroid decks in Gaten and save words as cards. AnkiDroid needs to be installed and allow Gaten access."
       status={status}
@@ -713,7 +760,7 @@ function WaniKaniPage({
   return (
     <PageChrome
       step={step}
-      mark={<BrandTile brand="wanikani" size={56} radius={15} />}
+      artwork={WaniKaniArtwork}
       heading="Connect WaniKani"
       explanation="Bring your WaniKani lessons and reviews into Gaten. Connect with a personal access token from your WaniKani account."
       status={
