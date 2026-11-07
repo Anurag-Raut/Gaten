@@ -186,7 +186,7 @@ export function SearchIdlePrompt() {
       <View style={styles.art}>
         <SearchArtwork width={artWidth} />
         <Text style={[typeScale.bodyMedium, styles.artCaption, {color: colors.onSurfaceVariant}]}>
-          Find your next Japanese word
+          Search by kanji, kana, or a reading in romaji.
         </Text>
       </View>
     </View>

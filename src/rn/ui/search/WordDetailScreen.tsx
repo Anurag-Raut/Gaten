@@ -96,7 +96,15 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
     return (
       <View style={[styles.root, {backgroundColor: colors.background}]}>
         <WordAppBar onBack={onBack} />
-        <View style={styles.body}>
+        {/* The notice draws no inset of its own and does not scroll, so this scroller carries the
+            screen inset — the same one the entry's own content uses — and keeps a long failure
+            message reachable. */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          style={styles.body}
+          contentContainerStyle={[styles.scrollContent, {paddingHorizontal: inset}]}
+        >
           {state.status === "searching" ? (
             <SearchNotice spin title="Searching the dictionary…" />
           ) : (
@@ -105,7 +113,7 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
               body="The search was run again and no longer has it. Go back for the results you have."
             />
           )}
-        </View>
+        </ScrollView>
       </View>
     );
   }
