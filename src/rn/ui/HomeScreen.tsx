@@ -29,6 +29,7 @@ import Animated, {
   useReducedMotion,
 } from "react-native-reanimated";
 import {Icon} from "./components";
+import {SupportPrompt} from "./support/SupportPrompt";
 import {useTheme} from "./theme";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
@@ -390,6 +391,9 @@ export function HomeScreen({
           scrollEventThrottle={16}
         />
       </KeyboardAvoidingView>
+      {/* Only while Home is the screen on show: the same gate that keeps it off a pushed page's
+          dialogs keeps it off another tab, so it can never stack on a dialog the reader raised. */}
+      {focused && <SupportPrompt />}
     </View>
   );
 }
