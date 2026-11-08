@@ -59,6 +59,13 @@ internal object PpOcrPack {
     /** How long a requested install may stay unfinished before it is reported as failed. */
     private const val INSTALL_TIMEOUT_MS = 10 * 60 * 1000L
 
+    /**
+     * How long an on-demand state read may take before the last state Play reported is left to
+     * stand. Short: it bounds a settings read the reader is waiting on, and a Play service that has
+     * stopped answering must not be able to leave the screen unpopulated.
+     */
+    private const val STATE_READ_TIMEOUT_MS = 2_000L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** The last state Play reported, kept live by [manager]'s listener; UNKNOWN until it speaks. */
@@ -107,8 +114,12 @@ internal object PpOcrPack {
     suspend fun refreshNow(context: Context) {
         val manager = manager(context) ?: return
         try {
-            val state = manager.getPackStates(listOf(PACK_NAME)).await().packStates()[PACK_NAME]
-            if (state != null) _status.value = state.status()
+            // Bounded: the settings read waits on this answer, so a wedged Play service must not be
+            // able to leave the screen unpopulated. On a timeout the last reported state stands.
+            val states = withTimeoutOrNull(STATE_READ_TIMEOUT_MS) {
+                manager.getPackStates(listOf(PACK_NAME)).await()
+            }
+            states?.packStates()?.get(PACK_NAME)?.let { _status.value = it.status() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -156,7 +167,18 @@ internal object PpOcrPack {
         // [fetchError] carries a rejection Play reports through the Task rather than as a state.
         val fetchError = AtomicReference<String?>(null)
         _status.value = AssetPackStatus.PENDING
-        manager.fetch(listOf(PACK_NAME)).addOnFailureListener { error ->
+        val request = try {
+            manager.fetch(listOf(PACK_NAME))
+        } catch (e: Exception) {
+            // A throw here happens before any listener exists, so nothing would ever replace the
+            // armed sentinel: without this the row would read a download that is not running. The
+            // request is refused, not queued, so say so and end the wait.
+            _status.value = AssetPackStatus.FAILED
+            throw PpOcrModel.DownloadException(
+                "Google Play refused the ${PACK_NAME} download: ${e.message ?: e}"
+            )
+        }
+        request.addOnFailureListener { error ->
             // Play can reject the request outright, with no listener state to follow it, so the
             // rejection itself is what ends the wait — promptly, carrying Play's own reason, rather
             // than leaving the caller on the timeout.

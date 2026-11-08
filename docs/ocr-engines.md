@@ -48,7 +48,8 @@ itself, so `ocr/PpOcrPack.kt` reads the files straight out of
   Play rejects outright ends the wait immediately with Play's own reason (the fetch `Task`'s failure
   listener, since no state update follows a rejected request), and each request arms the watch with a
   non-terminal state first, so a conflated terminal state left by an earlier attempt cannot answer a
-  new one.
+  new one. The settings read that answers the JS is itself bounded at 2 s, so a Play service that
+  stops answering leaves the last reported state standing rather than an unpopulated screen.
 - Both files are always resolved from **one** directory: the pack's copy when both pinned sizes are
   present, the in-app copy otherwise. A `getPackLocation` result on its own is not "installed", so a
   half-extracted pack is never handed to ONNX Runtime.
