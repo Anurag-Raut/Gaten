@@ -13,7 +13,7 @@ import org.junit.Test
 
 class TapLookupResultTest {
     @Test
-    fun onlyMangaReadingSuppliesWordsAndContext() {
+    fun onlyTheEngineReadingSuppliesWordsAndContext() {
         val result = tapLookupResult(screenLine("猫と呪分と犬", top = 100),
             "注文", 100, 130, dictionaryOf("猫", "注文", "犬"))
         assertEquals("注文", result.ocrText)
@@ -27,7 +27,7 @@ class TapLookupResultTest {
         val lookup = dictionaryOf("猫", "犬")
         for (reading in listOf(null, "", "   ", "[UNK]", "□", "letters")) {
             for (result in listOf(tapLookupResult(line, reading, 20, 130, lookup),
-                mangaLookupResult(reading, lookup))) {
+                readingLookupResult(reading, lookup))) {
                 assertEquals("", result.ocrText)
                 assertTrue(result.words.isEmpty())
                 assertTrue(result.error != null)

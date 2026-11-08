@@ -102,6 +102,7 @@ import {
 import {
   cancelDownload,
   classifyDownloadError,
+  canCancelDownload,
   downloadMedium,
   getRecognitionSettings,
   setRecognitionMode,
@@ -1742,7 +1743,7 @@ function OnboardingShell({
 
 type LookupState = "checking" | "on" | "off" | "failed";
 
-/** The PP-OCRv6 Medium install, as the reader rows show it. */
+/** The Enhanced install, as the reader rows show it. */
 type OcrState = "checking" | "absent" | "downloading" | "installed";
 
 /** Where a token is created, opened in the browser from the WaniKani page. */
@@ -1860,15 +1861,15 @@ function DownloadBar({percent}: {percent: number}) {
 function downloadFailureText(failure: DownloadFailure): string {
   switch (failure) {
     case "offline":
-      return "Couldn't download PP-OCRv6 Medium: no connection.";
+      return "Couldn't download Enhanced: no connection.";
     case "storage":
-      return "Couldn't download PP-OCRv6 Medium: not enough storage on this device";
+      return "Couldn't download Enhanced: not enough storage on this device";
     case "verify":
-      return "Couldn't download PP-OCRv6 Medium: the file did not pass its check";
+      return "Couldn't download Enhanced: the file did not pass its check";
     case "cancelled":
       return "Cancelled.";
     default:
-      return "Couldn't download PP-OCRv6 Medium.";
+      return "Couldn't download Enhanced.";
   }
 }
 
@@ -1877,8 +1878,8 @@ function downloadFailureText(failure: DownloadFailure): string {
  * the lookups will be read with.
  *
  * The grant is the step that advances the page; the better reader is the second row's own
- * verification, and the bundled ML Kit default never verifies it, so the reader either installs and
- * selects PP-OCRv6 Medium or resolves the page with its own "Done". Nothing here is inferred from a
+ * verification, and the bundled Standard default never verifies it, so the reader either installs and
+ * selects Enhanced or resolves the page with its own "Done". Nothing here is inferred from a
  * return to the app: the grant is re-read, and an "off" stays off, however the reader came back.
  */
 function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
@@ -1949,7 +1950,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
               : "absent",
         );
         // An install is only used when it is the selected mode, so one that finishes here — or was
-        // already on the device when the reader arrived — selects itself. Skipped, ML Kit stays.
+        // already on the device when the reader arrived — selects itself. Skipped, Standard stays.
         // The advance waits for this selection write to settle, whatever it answers.
         if (engine?.installed && settings.mode !== "medium" && !mediumApplied.current) {
           mediumApplied.current = true;
@@ -2026,9 +2027,9 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
   const confirmDownload = useCallback(() => {
     if (medium === "downloading") return;
     Alert.alert(
-      "Download PP-OCRv6 Medium?",
+      "Download Enhanced?",
       mediumBytes > 0
-        ? `PP-OCRv6 Medium is ${formatMegabytes(mediumBytes)}. Wi-Fi is recommended. Downloading on mobile data may incur charges.`
+        ? `Enhanced is ${formatMegabytes(mediumBytes)}. Wi-Fi is recommended. Downloading on mobile data may incur charges.`
         : "Wi-Fi is recommended. Downloading on mobile data may incur charges.",
       [
         {text: "Cancel", style: "cancel"},
@@ -2131,11 +2132,11 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
           status={steps.step2}
           previousStatus={steps.step1}
           title="Choose text recognition"
-          summary="ML Kit or PP-OCRv6 Medium"
+          summary="Standard or Enhanced"
         >
           <View>
             <ReaderRow
-              title="ML Kit"
+              title="Standard"
               summary="Included \u00b7 offline"
               hint="Japanese text, included with Gaten"
               selected={!mediumSelected}
@@ -2143,13 +2144,13 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
               onPress={selectMlKit}
             />
             <ReaderRow
-              title="PP-OCRv6 Medium"
+              title="Enhanced"
               badge="Recommended"
               summary={mediumSummary}
               hint={
                 medium === "installed"
                   ? "Installed. Use it for screen and novel text"
-                  : "Downloads PP-OCRv6 Medium for screen and novel text"
+                  : "Downloads Enhanced for screen and novel text"
               }
               selected={mediumSelected}
               disabled={medium === "downloading"}
@@ -2164,6 +2165,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
                   {downloadProgressText(progressShown)}
                 </Text>
                 <DownloadBar percent={downloadPercent(progressShown)} />
+                {canCancelDownload() && (
                 <Button
                   variant="text"
                   label="Cancel"
@@ -2172,6 +2174,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
                   }}
                   fullWidth
                 />
+                )}
               </View>
             )}
             {failure != null && medium !== "downloading" && (

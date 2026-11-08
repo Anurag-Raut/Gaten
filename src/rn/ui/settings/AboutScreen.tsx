@@ -86,7 +86,7 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         <SettingsRow
           icon="public"
           title="PP-OCRv6"
-          summary="Recommended on-demand recognition model by PaddlePaddle · Apache-2.0 · ONNX Runtime"
+          summary="Recommended on-demand detection and recognition models by PaddlePaddle · Apache-2.0 · ONNX Runtime"
           onPress={() => open(PADDLE_OCR_URL)}
         />
         <SettingsRow

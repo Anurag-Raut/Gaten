@@ -38,7 +38,7 @@ test('resuming with lookup already on verifies only when the better reader is in
   assert.equal(resumed.verified, true);
 });
 
-test('the bundled ML Kit default alone never auto-advances the lookup page', () => {
+test('the bundled Standard default alone never auto-advances the lookup page', () => {
   const onMlKit = steps.lookupSteps(LOOKUP_FACTS.onWithMlKit);
   assert.equal(onMlKit.step1, 'done');
   assert.equal(onMlKit.step2, 'current');
@@ -308,7 +308,7 @@ test('the page moves up by exactly the field-to-keyboard overlap, and never the 
 });
 
 test('the action-area key carries the page\'s verified flag, so a done flip is never dropped', () => {
-  // The reader's own case: lookup already on, PP-OCRv6 Medium absent, primary "Done" enabled. The
+  // The reader's own case: lookup already on, Enhanced absent, primary "Done" enabled. The
   // install lands and selects itself — the label, the disabled state and the skip labels are all
   // identical, so only [done] can tell the shell its gate has opened.
   const facts = {
@@ -373,3 +373,8 @@ function gate(overrides) {
     ...overrides,
   };
 }
+
+test('a download that reports no bytes reads as working, not as a false 0%', () => {
+  const quiet = {engine: 'medium', phase: 'downloading', bytesDone: 0, bytesTotal: 76_600_000};
+  assert.equal(steps.downloadProgressText(quiet), 'Downloading…');
+});

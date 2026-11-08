@@ -8,12 +8,15 @@
  * Text recognition: the reader's manual engine choice, and the explicit confirmed downloads that put
  * an engine on the device.
  *
- * Two choices, no classifier. ML Kit is bundled and is the default: it reads out of the box with
- * nothing to download. PP-OCRv6 Medium (recommended) for ordinary screen and novel text downloads
- * only when its own button is pressed; the tap asks for confirmation first, warning that Wi-Fi is
- * recommended and mobile data may incur charges, then works offline. An unavailable engine still
- * selects, and lookups fall back to the bundled ML Kit. Whether a download is running is read from
- * the native module, so leaving and returning does not show a download as finished.
+ * Two choices, no classifier. Standard is bundled and is the default: it reads out of the box with
+ * nothing to download. Enhanced is the optional recommended reader for ordinary screen and novel
+ * text; it downloads only when its own button is pressed, asks for confirmation first (warning that
+ * Wi-Fi is recommended and mobile data may incur charges), then works offline. An unavailable engine
+ * still selects, and lookups fall back to Standard. Whether a download is running is read from the
+ * native module, so leaving and returning does not show a download as finished.
+ *
+ * The rows name the modes, not the models behind them: "Standard" is the bundled recognizer and
+ * "Enhanced" is the optional one, so the reader chooses a capability rather than a vendor.
  */
 import React, {useEffect, useRef, useState} from "react";
 import {Alert, AppState, Text, View} from "react-native";
@@ -38,9 +41,9 @@ import {
 const ML_KIT: RecognitionEngine = "ml_kit";
 
 const HELP_PARAGRAPHS = [
-  "Every lookup reads the selection with the engine you choose here. Google ML Kit's Japanese recognizer is included with Gaten, so text is read out of the box with nothing to download.",
-  "PP-OCRv6 Medium is recommended for screen and novel text. It downloads only when you press Download and confirm, then works offline. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
-  "ML Kit finds the lines in every mode. When the downloaded engine cannot read a selection — it is not installed yet, or its read fails or holds no Japanese — ML Kit reads it instead.",
+  "Every lookup reads the selection with the mode you choose here. Standard is included with Gaten, so text is read out of the box with nothing to download.",
+  "Enhanced is optional and downloads only when you press Download and confirm, then works offline. It is recommended for ordinary screen and novel text. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
+  "Standard finds the lines in every mode. When Enhanced cannot read a selection — it is not installed yet, or its read fails or holds no Japanese — Standard reads it instead.",
 ];
 
 /** The pinned download size as decimal MB, matching the size named in the docs and NOTICE. */
@@ -48,11 +51,13 @@ function formatMegabytes(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
-/** What an engine is for, so the row says more than its name. */
+/** What a mode is for, so the row says more than its name. */
 function engineUse(engine: EngineStatus): string {
   switch (engine.id) {
     case "ml_kit":
       return "Japanese text";
+    case "medium":
+      return "Screen and novels";
     default:
       return "Screen and novels";
   }
@@ -64,8 +69,8 @@ function engineState(engine: EngineStatus): string {
   return engine.installed ? "installed · works offline" : "not installed";
 }
 
-/** The note under a selected engine that is not installed: the bundled ML Kit reads meanwhile. */
-const ML_KIT_FALLBACK_NOTE = "Not installed · ML Kit reads text in the meantime.";
+/** The note under a selected engine that is not installed: Standard reads meanwhile. */
+const ML_KIT_FALLBACK_NOTE = "Not installed · Standard reads text in the meantime.";
 
 /** The "Recommended" marker beside the engine it names. */
 function RecommendedBadge({label}: {label: string}) {

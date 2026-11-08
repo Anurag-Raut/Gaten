@@ -6,7 +6,7 @@
 
 /**
  * The onboarding flow's one door to the recognition module: the settings read and the mode write it
- * already had, plus the PP-OCRv6 Medium download with its progress, its cancel and its failure
+ * already had, plus the Enhanced download with its progress, its cancel and its failure
  * classifier.
  *
  * The page talks to this small surface rather than to the native module directly, so the engine a
@@ -15,6 +15,7 @@
  */
 import {
   cancelDownload as nativeCancelDownload,
+  canCancelDownload as nativeCanCancelDownload,
   classifyDownloadError as nativeClassifyDownloadError,
   downloadRecognitionEngine,
   getRecognitionSettings as nativeGetRecognitionSettings,
@@ -38,14 +39,17 @@ export const getRecognitionSettings = (): Promise<RecognitionSettings> =>
 export const setRecognitionMode = (mode: RecognitionEngine): Promise<void> =>
   nativeSetRecognitionMode(mode);
 
-/** Downloads PP-OCRv6 Medium. Resolves when it is installed, rejects with the module's own code. */
+/** Downloads Enhanced. Resolves when it is installed, rejects with the module's own code. */
 export const downloadMedium = (): Promise<void> =>
   downloadRecognitionEngine("medium").then(() => undefined);
 
-/** Subscribes to PP-OCRv6 Medium's progress; returns the unsubscribe. */
+/** Subscribes to Enhanced's progress; returns the unsubscribe. */
 export const subscribeDownloadProgress = (
   listener: (progress: DownloadProgress) => void,
 ): (() => void) => nativeSubscribeDownloadProgress(listener);
+
+/** Whether this build can abort a download; Enhanced arrives through Play, which cannot be aborted. */
+export const canCancelDownload = (): boolean => nativeCanCancelDownload();
 
 /** Aborts the download running now; a quiet no-op when nothing is in flight. */
 export const cancelDownload = (): Promise<void> => nativeCancelDownload();

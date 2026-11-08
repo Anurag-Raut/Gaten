@@ -19,41 +19,23 @@ class RecognitionRoutingTest {
 
     @Test
     fun theCacheRevisionChangesWithTheMode() {
-        val bundled = recognitionRevision(RecognitionMode.ML_KIT, "manga", "pp")
-        assertNotEquals(bundled, recognitionRevision(RecognitionMode.MANGA_OCR, "manga", "pp"))
-        assertNotEquals(bundled, recognitionRevision(RecognitionMode.PP_MEDIUM, "manga", "pp"))
-        assertNotEquals(bundled, recognitionRevision(RecognitionMode.PP_MANGA, "manga", "pp"))
-        assertNotEquals(
-            recognitionRevision(RecognitionMode.PP_MEDIUM, "manga", "pp"),
-            recognitionRevision(RecognitionMode.PP_MANGA, "manga", "pp")
-        )
+        val bundled = recognitionRevision(RecognitionMode.ML_KIT, "pp")
+        assertNotEquals(bundled, recognitionRevision(RecognitionMode.PP_MEDIUM, "pp"))
     }
 
     @Test
     fun theCacheRevisionChangesWithTheInstalledPpRevision() {
         assertNotEquals(
-            recognitionRevision(RecognitionMode.PP_MEDIUM, "manga", "medium@a"),
-            recognitionRevision(RecognitionMode.PP_MEDIUM, "manga", "medium@b")
-        )
-        assertNotEquals(
-            recognitionRevision(RecognitionMode.PP_MEDIUM, "manga", "medium@a"),
-            recognitionRevision(RecognitionMode.PP_MEDIUM, "manga", "medium@a;manga@a")
-        )
-    }
-
-    @Test
-    fun theCacheRevisionChangesWithTheInstalledMangaFiles() {
-        assertNotEquals(
-            recognitionRevision(RecognitionMode.MANGA_OCR, "old", ""),
-            recognitionRevision(RecognitionMode.MANGA_OCR, "new", "")
+            recognitionRevision(RecognitionMode.PP_MEDIUM, "medium@a"),
+            recognitionRevision(RecognitionMode.PP_MEDIUM, "medium@b")
         )
     }
 
     @Test
     fun theSameInputsGiveTheSameRevision() {
         assertEquals(
-            recognitionRevision(RecognitionMode.PP_MANGA, "manga", "manga@x"),
-            recognitionRevision(RecognitionMode.PP_MANGA, "manga", "manga@x")
+            recognitionRevision(RecognitionMode.PP_MEDIUM, "medium@x"),
+            recognitionRevision(RecognitionMode.PP_MEDIUM, "medium@x")
         )
     }
 }

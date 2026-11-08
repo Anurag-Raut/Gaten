@@ -21,9 +21,10 @@ Gaten*).
    selection is highlighted, so the frozen screen stays uncluttered.
 4. **Read** — the selected recognition engine reads those lines in the background and replaces each
    one's text as it lands, biggest boxes first. Google ML Kit's Japanese recognizer is bundled, so it
-   is the default and reads out of the box with nothing downloaded; Manga OCR or a PP-OCRv6 engine can
-   be downloaded in Settings and chosen instead. A line the selected engine cannot read — a failure,
-   a model that is not installed, or an answer slower than 2.5 s — keeps ML Kit's own reading.
+   is the default and reads out of the box with nothing downloaded; PP-OCRv6 Medium can be chosen
+   instead, delivered in the background by Google Play's asset pack on a Play install. A line the
+   selected engine cannot read — a failure, a model that is not installed, or an answer slower than
+   2.5 s — keeps ML Kit's own reading.
 5. **Tap or circle** — tap text to select its entire indexed line and all its words, or circle some text.
    A tap highlights the whole box immediately and answers from the index, reading only that line.
    The lasso trail is visible only while drawing and disappears on finger lift; the selected region
@@ -255,30 +256,25 @@ fresh install reads text out of the box with nothing to download. A downloadable
 line box's crop into text and can be chosen in **Settings → Text recognition**:
 
 - **ML Kit** — bundled, always installed, and the default. Google's on-device Japanese text
-  recognition reads the lines it detects, so lookups work on a fresh install and it is what every
-  downloadable engine falls back to.
+  recognition reads the lines it detects, so lookups work on a fresh install and it is what the
+  optional engine falls back to.
 - **PP-OCRv6 Medium** — *recommended*. PaddlePaddle's
   [PP-OCRv6_medium_rec](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx) ONNX (76.6 MB),
-  for ordinary screen and novel text.
-- **PP-OCRv6 Manga v0.2** — the
-  [manga_rec_v0.2](https://huggingface.co/Kellenok/PP-OCRv6_manga) fine-tune (21.2 MB) for manga
-  lettering, stylized fonts and outlined thumbnail text.
-- **Manga OCR** — [manga-ocr](https://github.com/kha-white/manga-ocr), a ViT encoder plus a BERT
-  decoder run on [ONNX Runtime](https://onnxruntime.ai/), trained on exactly the stylized text ML Kit
-  misreads — outlined video-thumbnail text, hand-lettered manga lettering. 116.6 MB.
+  for ordinary screen and novel text. On a Google Play install it arrives in the background through a
+  fast-follow asset pack, with no settings trip and nothing to press; an install Google Play did not
+  make cannot get it.
 
 There is no automatic image classifier: the engine is the reader's manual choice. Only ML Kit ships
-with the app; the other three download on demand, and a selected engine that is not installed yet is
-simply read by ML Kit until it is. Pressing **Download** opens a confirmation with the model's name
-and size (Wi-Fi recommended; mobile data charges may apply); confirming fetches the engine's files
-once, over whatever connection the device has, verifies each by size and SHA-256 against a pinned
-upstream revision, and it works offline from then on. Selecting the engine alone downloads nothing,
-nothing is downloaded automatically, and an engine already present is kept and reused, so the upgrade
-does not re-download it. An engine that is not installed, fails, or returns nothing usable leaves ML
-Kit's reading in place — or, for a circle or a tap, has ML Kit read that crop — and a confident
-misread is not detected. All three downloads are recognition only — the line boxes always come from
-ML Kit — and they read one line at a time, so a selection spanning several lines, or vertical text,
-may read badly with a PP engine. The exact sources, hashes, input shapes and limits are in
+inside the app; PP-OCRv6 Medium ships in neither the APK nor the base module, and Google Play's
+fast-follow asset pack is the only way to get it — Play delivers the files and verifies the transfer,
+while Gaten never downloads the model itself, so a build Play did not install has no copy to read and
+keeps reading with ML Kit. Pressing **Download** on a Play install only asks Play for the pack (Play
+shows its own confirmation if the download needs the reader's agreement), and recognition works
+offline once the files land. An engine that is not installed, fails, or returns nothing usable leaves
+ML Kit's reading in place — or, for a circle or a tap, has ML Kit read that crop — and a confident
+misread is not detected. Recognition is recognition only — the line boxes always come from ML Kit —
+and it reads one line at a time, so a selection spanning several lines, or vertical text, may read
+badly. The exact sources, hashes, input shapes, delivery detail and limits are in
 [docs/ocr-engines.md](docs/ocr-engines.md).
 
 Whichever engine reads a line, the line's final text decides whether it stays: a line with no
@@ -301,11 +297,11 @@ builds them again from the installed local files.
 Cleanup waits for active recognition, including ML Kit tasks whose awaiting lookup was cancelled.
 The memory reduction has not been measured on the current version.
 
-None of the three downloadable recognition engines bundle their weights: the APK carries none of
-them, and all three are downloaded on demand from pinned revisions and then run offline. ML Kit's
-text-detection *and* recognition models are included and are the default, so a fresh install reads
-without a download. Installed files are kept out of cloud backup and device transfer.
-`tools/fetch_manga_ocr.sh [dir]` can still fetch the Manga OCR files for local development.
+No optional recognition weights are bundled: the APK and the base module carry none of them, and the
+model arrives only through Play's fast-follow asset pack, pinned to one upstream revision and verified
+when the pack is staged, and then runs offline. ML Kit's text-detection *and* recognition models are
+included and are the default, so a fresh install reads without a download. The model lives in Play's
+own storage, so there is nothing app-owned to keep out of backup or device transfer.
 
 ## Optional WaniKani reference pages
 
@@ -486,14 +482,16 @@ stay visible whatever their state, and the next review time is shown when WaniKa
   Settings tile, accessibility service.
 - `ocr/` — on-device OCR. ML Kit Japanese finds the lines, is the bundled default recognizer, and is
   the fallback reading; the full-screen text index (`ScreenText*`, `ScreenHits`) and `OcrRepair` live
-  here. Recognition is ML Kit plus three downloadable engines: `MangaOcrModel` / `MangaOcrEngine`
-  (with `OcrPreprocess` for its crop) and the PP-OCRv6 pair `PpOcrModel` / `PpOcrEngine` (with
-  `PpOcrGeometry`, `PpOcrPreprocess`, `PpOcrCtc` and `PpOcrVocabulary`). `RecognitionPreference`
+  here. Recognition is ML Kit plus one optional engine, PP-OCRv6 Medium: `PpOcrModel` owns the
+  catalogue (the file names and the exact sizes a complete pack must hold), `PpOcrPack` the Google
+  Play fast-follow asset pack that delivers those files, and `PpOcrEngine` (with `PpOcrGeometry`,
+  `PpOcrPreprocess`, `PpOcrCtc` and `PpOcrVocabulary`) runs the ONNX session. `RecognitionPreference`
   stores the selected `RecognitionMode`; `ScreenLineReader` is the per-session cache that replaces
   each line's text as the engine reads it and drops the lines whose final text has no Japanese;
-  `OcrModels` releases the engines when idle; `OcrLinePolicy` decides when an answer is kept. The
-  downloadable engines are the one part of `ocr/` that reaches the network, and only when the reader
-  starts a download. See [docs/ocr-engines.md](docs/ocr-engines.md). The app's other network code is the optional WaniKani
+  `OcrModels` releases the engines when idle; `OcrLinePolicy` decides when an answer is kept; and
+  `LineCrop` is the shared line-box geometry. The pack is the one part of `ocr/` that involves the
+  network, and only through Play's own API — the app never opens a model download. See
+  [docs/ocr-engines.md](docs/ocr-engines.md). The app's other network code is the optional WaniKani
   client in `wanikani/`.
 - `anki/` — AnkiDroid export plus deck, tags, field-mapping and card-template preferences, and the
   provider reader behind the in-app review screen (queue, rendered card HTML, rating).
@@ -521,8 +519,9 @@ stay visible whatever their state, and the next review time is shown when WaniKa
   overlay, the floating bubble and the RN theme bridge read) and `LauncherIcon` (the launcher entry
   those choices switch).
 - `tools/` — `build_jmdict_db.py`, `build_examples_db.py` and `build_rtk_db.py`, which build the
-  bundled database assets, and `fetch_manga_ocr.sh`, which fetches model assets used by local
-  builds.
+  bundled database assets.
+- `ppocr/` — the `ppocr` fast-follow asset pack (only in a bundle build, `-PplayBundle=true`), whose
+  `stagePpOcrAssets` task fetches and verifies the PP-OCRv6 Medium model into the pack.
 - `docs/` — the historical feasibility study (see `docs/README.md`).
 
 ## Privacy
@@ -530,14 +529,13 @@ stay visible whatever their state, and the next review time is shown when WaniKa
 Reading is offline and stays offline. Gaten makes optional network requests only when the reader asks
 for them; there are no automatic or periodic fetches:
 
-- **OCR models**, only when the reader presses **Download** for one of the downloadable engines in
-  **Settings → Text recognition**: a confirmation shows the model's name and size and warns that
-  Wi-Fi is recommended and mobile data charges may apply. Confirming downloads that engine's files
-  once, over whatever connection the device has, from the pinned upstream revision, and verifies each
-  file by size and SHA-256. Nothing is downloaded automatically, and selecting an engine alone
-  downloads nothing; recognition works offline afterwards, and the files are kept off the backup set.
-  A download that has started can keep running if the app is backgrounded, until it finishes or the
-  module is torn down. See
+- **OCR model**, on a Play install, through Google Play's own fast-follow asset pack: Play fetches and
+  verifies the files, and Gaten only reads the installed copy — it never downloads the model itself.
+  Pressing **Download** in **Settings → Text recognition** asks Play for the pack; if the download
+  needs the reader's agreement, Play shows its own confirmation, which names the size and warns about
+  mobile data. Nothing is fetched automatically by Gaten, recognition works offline once the files
+  land, and they stay in Play's storage rather than the app's backup set. An install Google Play did
+  not make has no pack to read and simply reads with ML Kit. See
   [docs/ocr-engines.md](docs/ocr-engines.md).
 - **WaniKani**, once a token is connected: connecting and rechecking send the token to
   `api.wanikani.com` for `GET /user` (the one account call, read only for the subscription's level
@@ -630,18 +628,12 @@ documented here rather than left implicit.
   build that bundles it is a release blocker to resolve first.
 - **Text detection and bundled recognition** — [ML Kit](https://developers.google.com/ml-kit/terms)
   (Google, ML Kit terms) finds the lines and their boxes and is the default recognizer; its reading
-  of a line is also what a downloadable engine falls back to.
-- **Optional OCR (Manga OCR)** — [manga-ocr](https://github.com/kha-white/manga-ocr) (kha-white,
-  Apache-2.0) through the ONNX export at
-  [onnx-community/manga-ocr-base-ONNX](https://huggingface.co/onnx-community/manga-ocr-base-ONNX),
-  run on [ONNX Runtime](https://onnxruntime.ai/) (Microsoft, MIT). Downloaded by the reader on demand
-  (not bundled) from pinned revisions; the Apache-2.0 text is at
-  `app/src/main/assets/licenses/manga-ocr-Apache-2.0.txt`.
-- **Recommended OCR** — [PP-OCRv6](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx)
-  medium recognition (PaddlePaddle, Apache-2.0) and the
-  [PP-OCRv6 Manga v0.2](https://huggingface.co/Kellenok/PP-OCRv6_manga) fine-tune (Kellenok,
-  Apache-2.0), with the shared `ppocrv6_dict.txt` from
-  [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) (Apache-2.0), all run on ONNX
-  Runtime. Both PP engines are recognition only, downloaded by the reader on demand (not bundled) from
-  pinned revisions; the attributions are in `NOTICE` and the Apache-2.0 text is at
-  `app/src/main/assets/licenses/PP-OCRv6-Apache-2.0.txt`.
+  of a line is also what the optional engine falls back to.
+- **Optional OCR (PP-OCRv6 Medium)** — [PP-OCRv6](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx)
+  medium recognition (PaddlePaddle, Apache-2.0) with `ppocrv6_dict.txt` from
+  [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) (Apache-2.0), run on ONNX
+  Runtime. Recognition only, and not bundled: a Play install receives it through Gaten's `ppocr`
+  fast-follow asset pack (delivered and verified by
+  [Google Play](https://developers.google.com/guide/playcore)), and Gaten never downloads the weights
+  itself, so only a Play install has them. The attributions are in `NOTICE` and the
+  Apache-2.0 text is at `app/src/main/assets/licenses/PP-OCRv6-Apache-2.0.txt`.

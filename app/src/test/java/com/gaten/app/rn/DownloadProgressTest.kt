@@ -22,37 +22,9 @@ class DownloadProgressTest {
     // ---- DownloadFailure.code: one code per reason, exactly what the JS contract names. ----
 
     @Test
-    fun `a transport failure is offline`() {
-        val error = PpOcrModel.DownloadException(
-            "Could not download rec.onnx",
-            IOException("connect timed out"),
-            PpOcrModel.DownloadException.Reason.TRANSPORT
-        )
-        assertEquals(DownloadFailure.OFFLINE, DownloadFailure.code(error))
-    }
-
-    @Test
-    fun `an integrity failure is verify`() {
-        val error = PpOcrModel.DownloadException("Checksum mismatch for rec.onnx")
-        assertEquals(DownloadFailure.VERIFY_FAILED, DownloadFailure.code(error))
-    }
-
-    @Test
-    fun `a storage failure falls back to the generic code`() {
-        val error = PpOcrModel.DownloadException(
-            "Could not publish the revision marker",
-            reason = PpOcrModel.DownloadException.Reason.STORAGE
-        )
+    fun `a pack failure is the generic code`() {
+        val error = PpOcrModel.DownloadException("Gaten was not installed by Google Play")
         assertEquals(DownloadFailure.GENERIC, DownloadFailure.code(error))
-    }
-
-    @Test
-    fun `the model reason beats a wrapped IOException`() {
-        val error = PpOcrModel.DownloadException(
-            "Checksum mismatch for rec.onnx",
-            IOException("the transport also complained")
-        )
-        assertEquals(DownloadFailure.VERIFY_FAILED, DownloadFailure.code(error))
     }
 
     @Test
@@ -78,8 +50,7 @@ class DownloadProgressTest {
         )
         val wrapped = PpOcrModel.DownloadException(
             "Could not write the revision marker",
-            IOException("No space left on device"),
-            PpOcrModel.DownloadException.Reason.STORAGE
+            IOException("No space left on device")
         )
         assertEquals(DownloadFailure.NO_SPACE, DownloadFailure.code(wrapped))
         val deep = RuntimeException("outer", IllegalStateException("inner", IOException("ENOSPC")))

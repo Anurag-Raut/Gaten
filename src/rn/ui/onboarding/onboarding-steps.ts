@@ -152,7 +152,7 @@ function stepSet(step1Done: boolean, step2Done: boolean): StepSet {
   };
 }
 
-/** Page 1's facts: the accessibility grant, and PP-OCRv6 Medium's install and selection. */
+/** Page 1's facts: the accessibility grant, and Enhanced's install and selection. */
 export type LookupFact = "checking" | "on" | "off" | "failed";
 export type MediumFact = "checking" | "absent" | "downloading" | "installed";
 
@@ -165,8 +165,8 @@ export interface LookupFacts {
 
 /**
  * Page 1: lookup mode is the step that advances it, and the second row is verified only when the
- * better reader is installed *and* selected. The bundled ML Kit default alone is never enough --
- * otherwise choosing or downloading PP-OCRv6 Medium would be unreachable -- so the reader resolves
+ * better reader is installed *and* selected. The bundled Standard default alone is never enough --
+ * otherwise choosing or downloading Enhanced would be unreachable -- so the reader resolves
  * this page's second row either by installing and selecting the better reader, or by the page's own
  * "Done".
  */
@@ -324,6 +324,8 @@ export function downloadPercent(progress: DownloadProgressLike): number {
  */
 export function downloadProgressText(progress: DownloadProgressLike): string {
   if (progress.phase === "verifying") return "Verifying\u2026";
+  // Play's pack transfer reports no bytes: say it is working rather than pin a false 0%.
+  if (progress.bytesDone <= 0) return "Downloading\u2026";
   const percent = downloadPercent(progress);
   return `Downloading\u2026 ${percent}% \u00b7 ${(progress.bytesDone / 1_000_000).toFixed(1)} of ${formatMegabytes(progress.bytesTotal)}`;
 }

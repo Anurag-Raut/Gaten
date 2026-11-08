@@ -30,17 +30,14 @@ internal object DownloadFailure {
     const val GENERIC = "RECOGNITION_DOWNLOAD_FAILED"
 
     /**
-     * The code for [error]. The transfer and integrity cases come from the model's own reason; a
+     * The code for [error]. A pack failure is generic; a
      * bare [IOException] is a transport fault; and a write refused for space is recognized by its
      * message even when the failure that wrapped it hides it further down the cause chain.
      */
     fun code(error: Throwable): String = when {
         isOutOfSpace(error) -> NO_SPACE
-        error is PpOcrModel.DownloadException -> when (error.reason) {
-            PpOcrModel.DownloadException.Reason.TRANSPORT -> OFFLINE
-            PpOcrModel.DownloadException.Reason.INTEGRITY -> VERIFY_FAILED
-            PpOcrModel.DownloadException.Reason.STORAGE -> GENERIC
-        }
+        // A pack Play could not deliver (or an install Play did not make) has no finer reason.
+        error is PpOcrModel.DownloadException -> GENERIC
         error is IOException -> OFFLINE
         else -> GENERIC
     }

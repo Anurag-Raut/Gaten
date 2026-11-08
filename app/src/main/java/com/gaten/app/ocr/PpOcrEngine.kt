@@ -25,19 +25,17 @@ import java.nio.FloatBuffer
 import kotlin.math.ceil
 
 /**
- * PP-OCRv6 line recognition, on the optional models [PpOcrModel] installs.
+ * PP-OCRv6 line recognition, on the optional model [PpOcrModel] installs.
  *
  * This is recognition only. The line box is decided by the caller — the same boxes ML Kit /
- * [ScreenLineReader] already produce — and this turns the crop into text with the selected engine.
- * Both graphs are the recognisers from the upstream PP-OCRv6 pair (medium for ordinary text, the
- * manga fine-tune for stylised text); they share a shape — input `x` `[N,3,48,W]` float32, output
- * `fetch_name_0` `[N,T,18710]` float32 with `T` about `W/8` — so one code path reads both. Inputs are BGR,
- * scaled to `[0,1]` and normalised with mean and std of 0.5, exactly as PaddleOCR's `RecResizeImg`
- * does; this is deliberately not [OcrPreprocess], whose grayscale square belongs to manga-ocr's ViT.
+ * [ScreenLineReader] already produce — and this turns the crop into text. The graph is the
+ * recogniser from the upstream PP-OCRv6 medium pair (ordinary screen and novel text): input `x`
+ * `[N,3,48,W]` float32, output `fetch_name_0` `[N,T,18710]` float32 with `T` about `W/8`. Inputs are
+ * BGR, scaled to `[0,1]` and normalised with mean and std of 0.5, exactly as PaddleOCR's
+ * `RecResizeImg` does; this is deliberately not a grayscale square.
  *
- * At most one engine is resident: switching engines closes the previous session, and [OcrModels]
- * releases the idle one, so the two models are never both held. Every call takes [mutex], so two
- * lookups cannot drive the session at once, and it is rebuilt when the files change.
+ * The session is rebuilt when the files behind it change, and [OcrModels] releases it once idle.
+ * Every call takes [mutex], so two lookups cannot drive the session at once.
  */
 object PpOcrEngine {
     private const val TAG = "GatenOcr"
@@ -68,18 +66,18 @@ object PpOcrEngine {
         context: Context,
         crop: Bitmap,
         engine: PpOcrModel.Engine,
-        priority: MangaOcrEngine.Priority = MangaOcrEngine.Priority.FOREGROUND
+        priority: OcrJobPriority = OcrJobPriority.FOREGROUND
     ): String? = withContext(Dispatchers.Default) {
         // The session is in use from here to the end of the call, so [OcrModels]' idle clock must
         // not run it out mid-inference: the use counts in on the way in and out on the way out.
         OcrModels.begin()
-        if (priority == MangaOcrEngine.Priority.FOREGROUND) OcrPriority.beginForeground()
+        if (priority == OcrJobPriority.FOREGROUND) OcrPriority.beginForeground()
         try {
             val queueStarted = SystemClock.elapsedRealtime()
             while (true) {
-                if (priority == MangaOcrEngine.Priority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
+                if (priority == OcrJobPriority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
                 mutex.lock()
-                if (priority == MangaOcrEngine.Priority.BACKGROUND && OcrPriority.foregroundPending()) {
+                if (priority == OcrJobPriority.BACKGROUND && OcrPriority.foregroundPending()) {
                     mutex.unlock()
                     continue
                 }
@@ -101,7 +99,7 @@ object PpOcrEngine {
                 mutex.unlock()
             }
         } finally {
-            if (priority == MangaOcrEngine.Priority.FOREGROUND) OcrPriority.endForeground()
+            if (priority == OcrJobPriority.FOREGROUND) OcrPriority.endForeground()
             OcrModels.end()
         }
     }
@@ -140,19 +138,19 @@ object PpOcrEngine {
     }
 
     /**
-     * The loaded session, built from the installed files when the requested engine is not already
-     * resident, or when the files behind it changed (a re-download or a remove). Switching engines
-     * closes the previous session first, so the two models are never held at once. Null when the
-     * engine is not installed (per [PpOcrModel.isInstalled], not a bare file test), or when it cannot
-     * be loaded at all.
+     * The loaded session, built from the pack's files when they are not already resident, or when the
+     * files behind it changed (a pack update or a removal). Null when the pack is not installed (per
+     * [PpOcrModel.isInstalled], not a bare file test), or when it cannot be loaded at all.
      */
     private fun load(context: Context, engine: PpOcrModel.Engine): Loaded? {
-        if (!PpOcrModel.isInstalled(context, engine)) {
+        val modelFile = PpOcrModel.modelFile(context) ?: run {
             close()
             return null
         }
-        val modelFile = PpOcrModel.modelFile(context, engine)
-        val dictFile = PpOcrModel.dictFile(context, engine)
+        val dictFile = PpOcrModel.dictFile(context) ?: run {
+            close()
+            return null
+        }
         if (!modelFile.isFile || !dictFile.isFile) {
             close()
             return null

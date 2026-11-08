@@ -43,13 +43,15 @@ function ankiSummary(status: AnkiStatus): string {
   }
 }
 
-/** The engine's short name for the hub row; the full names live on the recognition page. */
+/** The mode's short name for the hub row; the full names live on the recognition page. */
 function recognitionModeLabel(mode: RecognitionEngine): string {
   switch (mode) {
     case "ml_kit":
-      return "ML Kit";
+      return "Standard";
+    case "medium":
+      return "Enhanced";
     default:
-      return "PP-OCRv6 Medium";
+      return "Standard";
   }
 }
 

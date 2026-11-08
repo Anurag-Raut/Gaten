@@ -33,12 +33,10 @@
          analytics dashboard. It comes from api.wanikani.com, through the same allow-listed read-only
          client, is cached on the device, and is never sent anywhere else.
 
-         The OCR models use it the same way, and only when the user asks for one on the OCR settings
-         screen: the manga-ocr pair (ocr/MangaOcrModel.kt) and the optional PP-OCRv6 crop engines
-         (ocr/PpOcrModel.kt) are fetched on demand over HTTPS and verified by size and hash before use.
-         The download runs over whatever connection the device has — the settings screen confirms and
-         warns about mobile data before starting one — and there are no automatic model downloads;
-         recognition stays offline.
+         The OCR model no longer downloads anything in-app. On a Play install the optional PP-OCRv6
+         Medium model arrives through Google Play's own fast-follow asset pack (ocr/PpOcrPack.kt),
+         which Play fetches and verifies; Gaten only reads the installed files, and an install Play
+         did not make cannot get the engine at all — so this permission is not used by the OCR path.
 
          It also has to be declared rather than removed: ML Kit's transport library and ONNX Runtime
          both ask for it for their analytics and telemetry backends, and stripping it from the merged

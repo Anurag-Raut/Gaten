@@ -10,6 +10,7 @@ package com.gaten.app
 import android.content.Intent
 import android.os.Bundle
 import com.facebook.react.ReactActivity
+import com.gaten.app.ocr.PpOcrPack
 import com.gaten.app.rn.GatenBridgeEmitter
 import com.gaten.app.rn.ReactHostLifecycle
 import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
@@ -65,6 +66,9 @@ class MainActivity : ReactActivity() {
     override fun onResume() {
         super.onResume()
         ReactHostLifecycle.onActivityResumed(this)
+        // Play's fast-follow download keeps running while Gaten is in the background; re-reading its
+        // state here is what lets a settings screen opened later report the truth immediately.
+        PpOcrPack.refresh(this)
     }
 
     /**

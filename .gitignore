@@ -28,10 +28,15 @@ app/src/main/assets/db/examples.sqlite
 # redistribution rights have not been cleared (docs/jp-prototype/rtk/DATA.md).
 app/src/main/assets/db/rtk.sqlite
 
-# manga-ocr weights: no longer fetched by the build or bundled — the app downloads them on demand
-# (ocr/MangaOcrModel.kt) and the build excludes this directory from packaging. This entry just keeps
-# a stale ~117 MB local copy out of history.
+# Stale manga-ocr weights: the reader no longer carries that engine, and nothing fetches these. The
+# entry just keeps an old ~117 MB local copy out of history; the build also excludes the directory
+# from packaging (app/build.gradle.kts, androidResources.ignoreAssetsPattern).
 app/src/main/assets/manga-ocr/
+
+# The PP-OCRv6 Medium weights staged into the :ppocr fast-follow asset pack by its
+# stagePpOcrAssets task (ppocr/build.gradle.kts). They are fetched from the pinned upstream sources
+# at bundle-build time and are never committed.
+ppocr/src/main/assets/pp-ocr/
 
 # Device evidence screenshots stay out of history
 docs/jp-prototype/**/*.png

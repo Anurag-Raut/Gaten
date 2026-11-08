@@ -57,7 +57,7 @@ class ScreenLookupTest {
 
     @Test
     fun aTapAfterTheTextWasReplacedSelectsTheWholeBox() {
-        // ML Kit read three characters of this line; manga-ocr read five, so the boxes were rebuilt.
+        // ML Kit read three characters of this line; the engine read five, so the boxes were rebuilt.
         val line = screenLine("猫カド", top = 100).withText("猫がカード")
         val screen = screenOf(line)
         val lookup = dictionaryOf("猫", "カード")

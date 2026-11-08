@@ -1,9 +1,8 @@
 import {NativeEventEmitter, NativeModules} from "react-native";
 
 /**
- * Any of the selectable engines; also the persisted selected mode. `ml_kit` is bundled with the app
- * and always installed; `medium` (PP-OCRv6 Medium) is the one downloadable engine, recommended for
- * screen and novel text.
+ * Any of the selectable modes; also the persisted selected mode. `ml_kit` (Standard) is bundled with
+ * the app and always installed; `medium` (Enhanced) is downloaded on demand.
  */
 export type RecognitionEngine = "ml_kit" | "medium";
 
@@ -45,14 +44,15 @@ interface GatenRecognitionNative {
   getRecognitionSettings(): Promise<RecognitionSettings>;
   setRecognitionMode(mode: RecognitionEngine): Promise<void>;
   downloadRecognitionEngine(engine: RecognitionEngine): Promise<RecognitionSettings>;
-  cancelDownload(): Promise<void>;
+  /** Absent when the engine arrives through a Play asset pack, which this app cannot abort. */
+  cancelDownload?(): Promise<void>;
   /**
    * Kept for React Native's `NativeEventEmitter`: the bridge calls these as listeners come and go.
    * Only present so the emitter does not warn; the events themselves arrive through the device
    * emitter.
    */
-  addListener(eventName: string): void;
-  removeListeners(count: number): void;
+  addListener?(eventName: string): void;
+  removeListeners?(count: number): void;
 }
 
 const GatenRecognition = NativeModules.GatenRecognition as GatenRecognitionNative;
@@ -63,8 +63,12 @@ const nativeRecognition = NativeModules.GatenRecognition as GatenRecognitionNati
 /** The native event name; the payload is a [DownloadProgress]. */
 const DOWNLOAD_PROGRESS_EVENT = "GatenRecognitionDownloadProgress";
 
+// Only built where the module carries the emitter hooks (`addListener`/`removeListeners`); the
+// Play-delivered engine reports no byte progress, so a build without them simply never emits.
 const progressEmitter =
-  nativeRecognition != null ? new NativeEventEmitter(nativeRecognition) : null;
+  nativeRecognition != null && typeof nativeRecognition.addListener === "function"
+    ? new NativeEventEmitter(nativeRecognition as ConstructorParameters<typeof NativeEventEmitter>[0])
+    : null;
 
 export const getRecognitionSettings = (): Promise<RecognitionSettings> =>
   GatenRecognition.getRecognitionSettings();
@@ -83,11 +87,16 @@ export const downloadRecognitionEngine = (
  * with a `DOWNLOAD_CANCELLED` code, which [classifyDownloadError] reads as "cancelled". With
  * nothing in flight it resolves quietly.
  */
+export const canCancelDownload = (): boolean =>
+  typeof nativeRecognition?.cancelDownload === "function";
+
 export function cancelDownload(): Promise<void> {
   if (nativeRecognition == null) {
     return Promise.reject(new Error("GatenRecognition is not available on this platform."));
   }
-  return nativeRecognition.cancelDownload();
+  // Play's pack transfer cannot be aborted from here: with no native cancel there is nothing to
+  // stop, and the pending download keeps running to its own end.
+  return nativeRecognition.cancelDownload?.() ?? Promise.resolve();
 }
 
 /**

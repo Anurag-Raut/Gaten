@@ -85,7 +85,8 @@ test('classifyDownloadError answers unknown for anything else, never a guess', (
 });
 
 test('subscribeDownloadProgress forwards the event and unsubscribes', () => {
-  const recognition = loadRecognition({native: {}, Emitter: RecordingEmitter});
+  const native = {addListener() {}, removeListeners() {}};
+  const recognition = loadRecognition({native, Emitter: RecordingEmitter});
   const seen = [];
   const unsubscribe = recognition.subscribeDownloadProgress((progress) => seen.push(progress));
   const emitter = RecordingEmitter.last;
@@ -142,4 +143,17 @@ test('the existing exports are untouched', () => {
   assert.equal(typeof recognition.getRecognitionSettings, 'function');
   assert.equal(typeof recognition.setRecognitionMode, 'function');
   assert.equal(typeof recognition.downloadRecognitionEngine, 'function');
+});
+
+test('a module without the emitter hooks or a cancel (Play delivery) never builds an emitter and cancels quietly', async () => {
+  class ExplodingEmitter {
+    constructor() {
+      throw new Error('the emitter must not be built without addListener');
+    }
+  }
+  const recognition = loadRecognition({native: {}, Emitter: ExplodingEmitter});
+  assert.equal(recognition.canCancelDownload(), false);
+  const unsubscribe = recognition.subscribeDownloadProgress(() => {});
+  unsubscribe();
+  await recognition.cancelDownload();
 });
