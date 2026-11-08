@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.gaten.app.ocr.Box
+import com.gaten.app.ocr.ScreenLine
 
 /** Degenerate gestures (a tap or a sliver) are ignored below this side length, in view px. */
 internal const val MIN_SELECTION_PX = 24f
@@ -66,6 +68,47 @@ private val SelectionCorner = 4.dp
  * no accent wash, and nothing taken from the screenshot it covers.
  */
 private const val ScrimAlpha = 0.40f
+
+/** Opacity of the accent fill inside the loop while it is being drawn. */
+private const val LoopFillAlpha = 0.18f
+
+/** Opacity of the accent tint over the characters the lasso selected, once it is released. */
+private const val TextHighlightAlpha = 0.28f
+
+/** How far the selected-text highlight is rounded, in dp. */
+private val HighlightCorner = 4.dp
+
+/**
+ * Even-odd point-in-polygon test: true when ([x], [y]) is inside the closed loop through [polygon].
+ * The loop closes itself from the last point back to the first, as the drawn fill does.
+ */
+internal fun polygonContains(polygon: List<Offset>, x: Float, y: Float): Boolean {
+    if (polygon.size < 3) return false
+    var inside = false
+    var j = polygon.lastIndex
+    for (i in polygon.indices) {
+        val a = polygon[i]
+        val b = polygon[j]
+        if ((a.y > y) != (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside
+        j = i
+    }
+    return inside
+}
+
+/**
+ * The text a lasso selected: for each indexed line, one box spanning the characters whose centres
+ * fall inside [polygon]. Boxes and polygon share one coordinate space (the capture's pixels), blank
+ * characters never count, and a line with no character inside contributes nothing.
+ */
+internal fun lassoTextBoxes(lines: List<ScreenLine>, polygon: List<Offset>): List<Box> =
+    lines.mapNotNull { line ->
+        if (line.charBoxes.size != line.text.length) return@mapNotNull null
+        val hit = line.charBoxes.filterIndexed { i, box ->
+            !line.text[i].isWhitespace() && polygonContains(polygon, box.centreX.toFloat(), box.centreY.toFloat())
+        }
+        if (hit.isEmpty()) null
+        else Box(hit.minOf { it.left }, hit.minOf { it.top }, hit.maxOf { it.right }, hit.maxOf { it.bottom })
+    }
 
 /** A rounded [Stroke] of [width] dp, resolved once per density rather than per drawn frame. */
 @Composable
@@ -127,6 +170,7 @@ fun LassoLayer(
     screenshot: Bitmap?,
     points: List<Offset>,
     frozenBox: Rect?,
+    textHighlights: List<Rect>,
     interactive: Boolean,
     showingResult: Boolean,
     onLassoStart: (Offset) -> Unit,
@@ -143,8 +187,7 @@ fun LassoLayer(
     val currentEnd by rememberUpdatedState(onLassoEnd)
     val currentCancel by rememberUpdatedState(onLassoCancel)
     val currentTap by rememberUpdatedState(onTap)
-    val liveBox = remember(points) { boundingBoxOf(points) }
-    val box = frozenBox ?: liveBox
+    val box = frozenBox
 
     // Measured once: the scrim's outer rectangle is built in composition from the canvas size,
     // never inside the draw scope.
@@ -168,6 +211,17 @@ fun LassoLayer(
             scrimPath.addRoundRect(
                 RoundRect(hole, CornerRadius(cornerPx.coerceAtMost(minOf(hole.width, hole.height) / 2f)))
             )
+        }
+    }
+
+    // While the loop is being drawn the dim has the loop itself cut out of it, so the text inside
+    // reads clear under the accent fill. Rebuilt with the points, never inside the draw scope.
+    val loopScrim = remember { Path().apply { fillType = PathFillType.EvenOdd } }
+    remember(viewSize, points) {
+        loopScrim.reset()
+        if (points.size > 2 && viewSize.width > 0 && viewSize.height > 0) {
+            loopScrim.addRect(Rect(Offset.Zero, Size(viewSize.width.toFloat(), viewSize.height.toFloat())))
+            loopScrim.addPath(liveTrail)
         }
     }
 
@@ -209,7 +263,23 @@ fun LassoLayer(
         }
 
         val scrim = Color.Black.copy(alpha = ScrimAlpha)
-        if (box == null) {
+        if (textHighlights.isNotEmpty()) {
+            // Released: the loop and the dim are gone, and only the characters the lasso read are
+            // marked, each line as one rounded block in the reader's accent.
+            val corner = CornerRadius(cornerPx)
+            for (rect in textHighlights) {
+                drawRoundRect(
+                    color = primary.copy(alpha = TextHighlightAlpha),
+                    topLeft = rect.topLeft,
+                    size = rect.size,
+                    cornerRadius = corner
+                )
+            }
+        } else if (interactive && points.size > 2) {
+            // Drawing: the dim with the loop cut out, and the accent fill inside the loop.
+            drawPath(loopScrim, scrim)
+            drawPath(liveTrail, primary.copy(alpha = LoopFillAlpha))
+        } else if (box == null) {
             drawRect(scrim)
         } else {
             // One even-odd fill: the whole canvas less the rounded hole at the selection, so the
@@ -235,11 +305,11 @@ fun LassoLayer(
         }
         // The user's own stroke while drawing. A single sample — the first event of a drag — is a
         // dot, so the gesture is answered by the first touch rather than by the second.
-        if (interactive && points.size == 1) {
+        if (textHighlights.isEmpty() && interactive && points.size == 1) {
             val center = points[0]
             drawCircle(onPrimary, trailOuterStroke.width / 2f, center)
             drawCircle(primary, trailInnerStroke.width / 2f, center)
-        } else if (interactive && points.size > 1) {
+        } else if (textHighlights.isEmpty() && interactive && points.size > 1) {
             drawTrail(liveTrail)
         }
     }
