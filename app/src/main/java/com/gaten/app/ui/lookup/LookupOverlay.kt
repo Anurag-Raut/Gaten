@@ -212,6 +212,8 @@ fun LookupOverlay(
     // the ordinary indexed path once the index arrives, so the reader's first touch is not dropped.
     var pendingTap by remember { mutableStateOf<Offset?>(null) }
     var frozenBox by remember { mutableStateOf<Rect?>(null) }
+    // The characters a released lasso selected, one block per line, in view px; empty for a tap.
+    var textHighlights by remember { mutableStateOf(emptyList<Rect>()) }
     var result by remember { mutableStateOf<LookupResult?>(null) }
     // The lookup session the displayed result belongs to, and the anchor box (view px) its dock
     // was chosen from. Both change only when a result is published, so the exiting sheet keeps
@@ -513,6 +515,10 @@ fun LookupOverlay(
         // the capture's pixels, so the selection is converted on the way in.
         val bitmapBox = mapping.toBitmap(box)
         frozenBox = box
+        // Mark the text the loop enclosed instead of the loop's bounding box, when the screen index
+        // has it; with no index or no enclosed character the box stays as the fallback.
+        val loop = drawn.map { mapping.toBitmap(it.x, it.y) }
+        textHighlights = screen?.let { lassoTextBoxes(it.lines, loop).map { b -> mapping.toView(b) } }.orEmpty()
         lookupJob?.cancel()
         phase = Phase.Scanning
         sheetState.targetState = false
@@ -623,6 +629,7 @@ fun LookupOverlay(
         if (closing) return
         lookupJob?.cancel()
         frozenBox = null
+        textHighlights = emptyList()
         pendingTap = null
         phase = Phase.Selecting
         sheetState.targetState = false
@@ -666,6 +673,7 @@ fun LookupOverlay(
                 screenshot = screenshot,
                 points = points,
                 frozenBox = frozenBox,
+                textHighlights = textHighlights,
                 interactive = phase == Phase.Selecting && !closing,
                 showingResult = phase == Phase.Result,
                 // A drag takes the instruction away at once; a lasso that produced nothing puts it

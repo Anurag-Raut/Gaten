@@ -6,8 +6,10 @@
 
 package com.gaten.app.ui.lookup
 
+import android.content.res.Resources
 import android.os.Build
 import android.view.RoundedCorner
+import android.view.View
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -67,6 +69,7 @@ private const val RETRACT_MS = 420
 @Composable
 fun EdgeOutline(busy: Boolean, shown: Boolean, modifier: Modifier = Modifier) {
     val view = LocalView.current
+    val frameworkRadii = remember { frameworkCornerRadii() }
     val primary = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
     val tertiary = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f)
     val reveal = remember { Animatable(0f) }
@@ -106,12 +109,7 @@ fun EdgeOutline(busy: Boolean, shown: Boolean, modifier: Modifier = Modifier) {
         val progress = reveal.value
         if (progress <= 0f) return@Canvas
         val shift = sweep?.value ?: 0.5f
-        val radius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            view.rootWindowInsets?.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)
-                ?.radius?.toFloat() ?: 0f
-        } else {
-            0f
-        }
+        val radii = deviceCornerRadii(view, frameworkRadii)
         // The gradient is as long as the diagonal and slid by up to half of it, which keeps the
         // whole ring inside it: the drift moves the tertiary band along rather than off the screen.
         val span = size.width + size.height
@@ -127,9 +125,13 @@ fun EdgeOutline(busy: Boolean, shown: Boolean, modifier: Modifier = Modifier) {
         val top = inset
         val right = size.width - inset
         val bottom = size.height - inset
-        val corner = radius.coerceAtMost(min(right - left, bottom - top) / 2f)
-        rightHalf.halfRing(fromLeft = false, l = left, t = top, r = right, b = bottom, radius = corner)
-        leftHalf.halfRing(fromLeft = true, l = left, t = top, r = right, b = bottom, radius = corner)
+        // The ring's centreline sits half a stroke inside the screen edge, so each arc is that much
+        // tighter than the display's own corner to stay concentric with it, and each corner keeps
+        // its own radius: most panels round the top and the bottom differently.
+        val limit = min(right - left, bottom - top) / 2f
+        fun corner(index: Int) = (radii[index] - inset).coerceIn(0f, limit)
+        rightHalf.halfRing(false, left, top, right, bottom, bottomRadius = corner(BOTTOM_RIGHT), topRadius = corner(TOP_RIGHT))
+        leftHalf.halfRing(true, left, top, right, bottom, bottomRadius = corner(BOTTOM_LEFT), topRadius = corner(TOP_LEFT))
 
         // Each half grows from the bottom midpoint; the same fraction of both, so the two tips
         // stay level and meet at the top midpoint exactly when the reveal completes.
@@ -153,22 +155,73 @@ fun EdgeOutline(busy: Boolean, shown: Boolean, modifier: Modifier = Modifier) {
  * the bottom edge, around the near bottom corner, up the side, around the near top corner and in
  * to the top midpoint. [fromLeft] picks the left (counter-clockwise) or right (clockwise) half.
  */
-private fun Path.halfRing(fromLeft: Boolean, l: Float, t: Float, r: Float, b: Float, radius: Float) {
+private fun Path.halfRing(
+    fromLeft: Boolean,
+    l: Float,
+    t: Float,
+    r: Float,
+    b: Float,
+    bottomRadius: Float,
+    topRadius: Float
+) {
     reset()
     moveTo((l + r) / 2f, b)
-    if (radius <= 0f) {
-        lineTo(if (fromLeft) l else r, b)
-        lineTo(if (fromLeft) l else r, t)
-    } else if (fromLeft) {
-        lineTo(l + radius, b)
-        arcTo(Rect(l, b - 2 * radius, l + 2 * radius, b), 90f, 90f, false)
-        lineTo(l, t + radius)
-        arcTo(Rect(l, t, l + 2 * radius, t + 2 * radius), 180f, 90f, false)
+    if (fromLeft) {
+        lineTo(l + bottomRadius, b)
+        if (bottomRadius > 0f) arcTo(Rect(l, b - 2 * bottomRadius, l + 2 * bottomRadius, b), 90f, 90f, false)
+        lineTo(l, t + topRadius)
+        if (topRadius > 0f) arcTo(Rect(l, t, l + 2 * topRadius, t + 2 * topRadius), 180f, 90f, false)
+        lineTo(l + topRadius, t)
     } else {
-        lineTo(r - radius, b)
-        arcTo(Rect(r - 2 * radius, b - 2 * radius, r, b), 90f, -90f, false)
-        lineTo(r, t + radius)
-        arcTo(Rect(r - 2 * radius, t, r, t + 2 * radius), 0f, -90f, false)
+        lineTo(r - bottomRadius, b)
+        if (bottomRadius > 0f) arcTo(Rect(r - 2 * bottomRadius, b - 2 * bottomRadius, r, b), 90f, -90f, false)
+        lineTo(r, t + topRadius)
+        if (topRadius > 0f) arcTo(Rect(r - 2 * topRadius, t, r, t + 2 * topRadius), 0f, -90f, false)
+        lineTo(r - topRadius, t)
     }
     lineTo((l + r) / 2f, t)
+}
+
+private const val TOP_LEFT = 0
+private const val TOP_RIGHT = 1
+private const val BOTTOM_RIGHT = 2
+private const val BOTTOM_LEFT = 3
+
+/**
+ * The panel's four corner radii in px, in [TOP_LEFT], [TOP_RIGHT], [BOTTOM_RIGHT], [BOTTOM_LEFT]
+ * order. Each corner is read from the window's own insets first (API 31+), then from the display
+ * the window is on, and only then from the radius the system ships for that edge
+ * ([frameworkRadii]) — which is the only source below API 31 and on panels whose window reports
+ * no corner of its own. A corner nothing reports stays square.
+ */
+private fun deviceCornerRadii(view: View, frameworkRadii: FloatArray): FloatArray {
+    val radii = frameworkRadii.copyOf()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val positions = intArrayOf(
+            RoundedCorner.POSITION_TOP_LEFT, RoundedCorner.POSITION_TOP_RIGHT,
+            RoundedCorner.POSITION_BOTTOM_RIGHT, RoundedCorner.POSITION_BOTTOM_LEFT
+        )
+        val insets = view.rootWindowInsets
+        val display = view.display
+        for (i in positions.indices) {
+            val corner = insets?.getRoundedCorner(positions[i]) ?: display?.getRoundedCorner(positions[i])
+            if (corner != null && corner.radius > 0) radii[i] = corner.radius.toFloat()
+        }
+    }
+    return radii
+}
+
+/** The system's configured top and bottom corner radii (`rounded_corner_radius_*`), in px; 0 when absent. */
+private fun frameworkCornerRadii(): FloatArray {
+    fun dimen(name: String): Float {
+        val res = Resources.getSystem()
+        val id = res.getIdentifier(name, "dimen", "android")
+        return if (id == 0) 0f else res.getDimension(id)
+    }
+    val top = dimen("rounded_corner_radius_top")
+    val bottom = dimen("rounded_corner_radius_bottom")
+    val fallback = dimen("rounded_corner_radius")
+    val t = if (top > 0f) top else fallback
+    val b = if (bottom > 0f) bottom else fallback
+    return floatArrayOf(t, t, b, b)
 }
