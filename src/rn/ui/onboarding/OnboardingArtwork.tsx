@@ -5,28 +5,28 @@
  */
 
 /**
- * The first-run artwork as ONE persistent scene rather than three illustrations.
+ * The first-run artwork (v2): one persistent scene of three poses on a soft disc, driven by the single
+ * scene clock the flow owns. In every pose the word is 合点 (Gaten, the app's own name), reading
+ * がてん.
  *
- * The scene is a fixed 340 x 220 stage drawn at the flow's width, centred in a taller 340 x 268 hero
- * zone whose added margin a faint backdrop fills (see [HeroBackdrop]). Inside the core, one card
- * bearing the compound 合点 is the subject the whole flow is about: a reading pane the lens examines
- * on the lookup page, the front card of a deck on the Anki page, the subject card beside the torii on
- * the WaniKani page. It is the SAME card throughout — its pose (position, size, rotation) is
- * interpolated from the single scene clock the flow owns, so the card glides and resizes between
- * pages instead of one card leaving and another arriving. The two supporting Anki cards fan and
- * gather around it on the same clock, and the lens, the torii and the second subject card enter and
- * leave as coherent groups.
+ *  - Lookup (0): a screen card with 合点 highlighted, and a result card below it showing 合点 · がてん
+ *    with two meaning lines.
+ *  - Anki (1): three stacked flashcards, 合点 large with がてん beneath, and a row of four answer
+ *    pills of which the third ("Good") is filled with the accent.
+ *  - WaniKani (2): a torii in neutral ink, a 合点 card and a "Level 1" card with a short accent bar.
  *
- * Everything a page adds — the lens, the deck's supporting cards, the rating controls, the torii and
- * the second subject card — is one absolutely positioned layer over the stage, animated only by
- * numeric transforms and opacity on the UI thread. The card itself is a single layer, so its
- * inscription travels with it: the 合 and 点 outlines never move independently of their host.
+ * The three compositions cross-fade and drift on the scene clock, and the disc behind them (faintly
+ * tinted with the accent) stays put, so a step change and its reverse travel the same path. Every
+ * colour is a theme role (`surface`, `outline`, `onSurface`) except the accent, which is the app's
+ * default Indigo fixed per scheme (see `INDIGO_LIGHT` / `INDIGO_DARK`): light and dark repaint the
+ * same geometry, the reader's accent choice does not apply here.
  *
- * The kanji are the bundled face's own outlines, not approximations — see [GLYPH_AU] and
- * [GLYPH_TEN]. Every colour is a theme role (`surface` for the card, `surfaceVariant` for its
- * reading inset, `iconSecondary` for the drawn strokes, `onSurfaceVariant` for the kanji ink itself,
- * `accent` for the single meaningful mark a scene carries), so light and dark repaint the same
- * geometry and nothing is drawn in a literal white.
+ * The lettering is the bundled IBM Plex Sans JP's own outlines (Medium for the kanji and kana,
+ * SemiBold for "Level 1"), extracted from `app/src/main/res/font/ibm_plex_sans_jp_*.ttf` (unitsPerEm
+ * 1000, y up). The bundled face is the full font, so 合, 点, が, て and ん are all present; no subset
+ * is involved because the glyphs are drawn as paths, not rendered through a font at runtime.
+ *
+ * The whole artwork is decorative: hidden from screen readers and never a touch target.
  */
 import React from "react";
 import Animated, {
@@ -36,113 +36,94 @@ import Animated, {
   useAnimatedProps,
   useAnimatedStyle,
 } from "react-native-reanimated";
-import Svg, {
-  Circle,
-  ClipPath,
-  Defs,
-  Ellipse,
-  G,
-  Path,
-  type PathProps,
-  Rect,
-  type RectProps,
-} from "react-native-svg";
+import Svg, {Circle, Ellipse, G, Path, type PathProps, Rect} from "react-native-svg";
 import {useTheme} from "../theme";
 
 /** The shared stage. Every scene is drawn in this box and scales with the flow's width. */
 export const SCENE_WIDTH = 340;
-export const SCENE_HEIGHT = 220;
+/** The core stage is the disc: 176 dp across, so the artwork fits under a two-row step list. */
+export const SCENE_HEIGHT = 176;
 
-/**
- * The hero zone around the core stage. The first-run illustration reserves [HERO_PAD] of breathing
- * room above and below the unchanged 340 x 220 core, so the card keeps its proportions and the extra
- * height reads as a taller illustration zone rather than blank padding or a stretched card. At rest
- * the core is centred in this zone; as the WaniKani form takes over, the zone collapses on the same
- * clock to the compact [HERO_ANCHOR_HEIGHT] the core's own recede leaves behind.
- */
-const HERO_PAD = 24;
+/** Breathing room above and below the disc; at rest the disc is centred in this taller zone. */
+const HERO_PAD = 8;
 const HERO_HEIGHT = SCENE_HEIGHT + HERO_PAD * 2;
 
-/** The core's recede as the WaniKani form takes over; its 0.45 complement is the anchor height. */
+/** The core's recede as the WaniKani form takes over; its complement is the anchor height. */
 const CORE_RECEDE = 0.55;
 const HERO_ANCHOR_HEIGHT = SCENE_HEIGHT * (1 - CORE_RECEDE);
+
+const DISC_CX = SCENE_WIDTH / 2;
+const DISC_CY = SCENE_HEIGHT / 2;
+const DISC_R = SCENE_HEIGHT / 2;
 
 /** The scene clock's three stops, one per setup page. */
 const STOPS: number[] = [0, 1, 2];
 
-/** The 合点 card's own box, in stage units: the shape every pose scales. */
-const CARD_WIDTH = 184;
-const CARD_HEIGHT = 128;
+/** Glyph outlines: advance width and path in font units (1000 per em, y up). */
+const GLYPHS: Record<string, {w: number; d: string}> = {
+  "合": {w: 1000, d: "M551 840Q594 751 692.5 675.0Q791 599 978 511L929 423Q805 483 726 532V459H272V535Q190 481 72 423L22 512Q203 597 296.0 672.5Q389 748 433 840ZM706 545Q614 606 563.0 666.5Q512 727 496 794H488Q471 726 422.5 665.5Q374 605 287 545ZM240 -72H147V351H853V-72H760V-24H240ZM760 267H240V62H760Z"},
+  "点": {w: 1000, d: "M536 541H854V220H146V541H441V837H536V727H912V644H536ZM239 304H759V458H239ZM828 182Q905 79 953 -35L866 -73Q822 37 749 151ZM46 -27Q132 67 182 181L262 150Q218 32 126 -79ZM636 164Q679 56 704 -57L610 -77Q589 41 551 146ZM432 155Q454 55 461 -70L367 -80Q361 36 345 147Z"},
+  "が": {w: 1000, d: "M915 641Q861 744 816 806L880 837Q936 756 977 673ZM419 595Q429 596 449 596Q625 596 625 402Q625 216 607.0 124.5Q589 33 551.5 3.0Q514 -27 444 -27Q394 -27 305 -14L311 79Q380 68 426 68Q469 68 489.0 88.5Q509 109 518.5 180.5Q528 252 528 410Q528 458 508.0 481.5Q488 505 439 505Q424 505 416 504L339 497Q301 343 258.0 216.0Q215 89 158 -38L64 0Q119 118 161.0 234.5Q203 351 239 488L70 472L61 564L262 581Q290 703 309 804L402 789Q375 652 361 590ZM814 595Q898 429 938 239L842 212Q799 419 705 589L781 623Q740 701 702 753L766 784Q835 681 864 619Z"},
+  "て": {w: 1000, d: "M800 -29Q573 -17 462.0 61.5Q351 140 351 284Q351 379 395.5 453.5Q440 528 507 571Q559 603 632 618V624Q366 608 91 586L86 688Q498 714 905 733L908 641Q847 639 803.0 632.5Q759 626 708 608Q644 588 586.0 541.5Q528 495 492.0 432.5Q456 370 456 304Q456 231 491.5 183.0Q527 135 606.0 107.0Q685 79 816 71Z"},
+  "ん": {w: 1000, d: "M65 -12Q102 100 175 307Q214 418 301 642L371 822L471 789L377 556Q312 391 294 349L302 348Q370 462 463 462Q539 462 575.0 411.5Q611 361 611 250Q611 178 616.0 141.0Q621 104 637.5 86.0Q654 68 688 68Q740 68 779.0 135.0Q818 202 848 361L943 331Q907 143 844.0 54.0Q781 -35 680 -35Q590 -35 551.5 21.0Q513 77 513 203Q513 272 505.0 308.0Q497 344 478.5 358.5Q460 373 424 373Q377 373 335.0 337.5Q293 302 263 234Q244 191 225.5 140.5Q207 90 195.5 55.0Q184 20 178 4Q174 -10 170.0 -21.0Q166 -32 163 -42Z"},
+  "L": {w: 545, d: "M510 117V0H88V733H220V117Z"},
+  "e": {w: 584, d: "M42 274Q42 360 72.0 425.0Q102 490 159.5 525.0Q217 560 295 560Q376 560 431.5 523.5Q487 487 514.5 425.0Q542 363 542 285V242H176V227Q176 164 211.0 127.0Q246 90 311 90Q358 90 392.5 110.5Q427 131 453 167L523 91Q490 43 431.5 15.0Q373 -13 299 -13Q219 -13 161.5 22.0Q104 57 73.0 122.0Q42 187 42 274ZM176 321H408V331Q408 392 378.5 427.5Q349 463 296 463Q242 463 209.0 426.0Q176 389 176 329Z"},
+  "v": {w: 546, d: "M349 0H196L13 547H140L219 304L271 113H279L332 304L411 547H533Z"},
+  "l": {w: 306, d: "M209 0Q144 0 111.5 33.0Q79 66 79 127V777H207V102H280V0Z"},
+  "1": {w: 630, d: "M596 107V0H96V107H297V638H288L125 451L44 520L226 733H428V107Z"}
+};
 
-/** The card's pose per page: centre, scale and rotation. */
-const CARD_X: number[] = [153, 177, 217];
-const CARD_Y: number[] = [103, 101, 86];
-const CARD_SCALE: number[] = [1, 0.66, 0.46];
-const CARD_ROTATE: number[] = [-5, 5, 8];
-
-/** The Anki deck's supporting cards, drawn at the front card's Anki-page size. */
-const ANKI_CARD_WIDTH = CARD_WIDTH * CARD_SCALE[1];
-const ANKI_CARD_HEIGHT = CARD_HEIGHT * CARD_SCALE[1];
-
-/** The card layer's own box, overriding the full-stage size the other layers use. */
-const CARD_BOX_STYLE = {width: CARD_WIDTH, height: CARD_HEIGHT};
-
-/** A supporting deck card's own box: its rotation must pivot on the card, not the stage centre. */
-const DECK_BOX_STYLE = {width: ANKI_CARD_WIDTH, height: ANKI_CARD_HEIGHT};
-
-/**
- * The backdrop's own box: the full hero zone, raised by [HERO_PAD] so its centre lines up with the
- * core's centre and its added margin reaches [HERO_PAD] beyond the core on either side. Overrides
- * [LAYER_STYLE]'s top and height while keeping its width and absolute positioning.
- */
-const BACKDROP_BOX_STYLE = {top: -HERO_PAD, width: SCENE_WIDTH, height: HERO_HEIGHT};
-
-/**
- * 合 and 点 as IBM Plex Sans JP Regular's own outlines, extracted from the bundled
- * `app/src/main/res/font/ibm_plex_sans_jp_regular.ttf` (unitsPerEm 1000, y up) rather than redrawn
- * from strokes. Each is placed by the transform on its `<Inscription>` below, which fits the
- * outline's tight ink bounds into the box the card reserves for it — the same fitting the previous
- * 日 and 山 paths used. 合's ink bounds are x 28..972, y -69..837; 点's are x 53..948, y -75..834.
- */
-const GLYPH_AU =
-  "M28 496Q212 581 310 662Q408 743 454 837H530Q575 745 678.5 663.5Q782 582 972 495L939 435Q737 529 629.5 619Q522 709 495 804H488Q460 708 358 618Q256 528 62 435ZM726 472H272V532H726ZM157 343H843V-69H778V-16H222V-69H157ZM222 283V45H778V283Z";
-const GLYPH_TEN =
-  "M522 530H843V227H157V530H456V834H522V712H908V654H522ZM222 286H777V471H222ZM819 176Q895 80 948 -36L886 -64Q843 33 763 153ZM53 -33Q142 59 194 174L252 151Q204 33 110 -71ZM626 160Q671 53 695 -56L628 -71Q608 34 565 146ZM418 152Q441 49 448 -67L383 -75Q377 31 356 145Z";
-const GLYPH_MOUNTAIN = "M831 79V660H897V-64H831V16H170V-64H103V662H170V79H459V821H526V79Z";
-
-/** Every scene stands on the same ground: one flat ellipse at (170,184), barely there in either mode. */
-function Ground() {
-  const {colors} = useTheme();
-  return <Ellipse cx={170} cy={184} rx={82} ry={4} fill={colors.onSurfaceVariant} fillOpacity={0.04} />;
+/** Width of [text] at [size], in stage units. */
+function textWidth(text: string, size: number): number {
+  let w = 0;
+  for (const ch of text) w += (GLYPHS[ch]?.w ?? 260) * (size / 1000);
+  return w;
 }
 
 /**
- * One kanji in the glyph tone, placed by a `translate(…) scale(s -s)` that fits its ink bounds into
- * the box the caller reserves: the font draws y up, so the negative y scale flips it onto the
- * canvas. [opacity] lets the card's own inscription read a little stronger than the quiet 山 on the
- * secondary subject card.
+ * [text] as outlines: left edge (or centre, with `anchor="middle"`) at [x], alphabetic baseline at
+ * [y], em height [size]. Each glyph is one path under a `translate scale(s -s)` that flips the font's
+ * y-up outlines onto the canvas.
  */
-function Inscription({
-  outline,
-  transform,
-  opacity = 0.6,
+function Glyphs({
+  text,
+  x,
+  y,
+  size,
+  fill,
+  opacity = 1,
+  anchor = "start",
 }: {
-  outline: string;
-  transform: string;
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  fill: string;
   opacity?: number;
+  anchor?: "start" | "middle";
 }) {
-  const {colors} = useTheme();
+  const s = size / 1000;
+  let pen = anchor === "middle" ? x - textWidth(text, size) / 2 : x;
+  const parts: React.ReactNode[] = [];
+  [...text].forEach((ch, i) => {
+    const g = GLYPHS[ch];
+    if (!g) {
+      pen += 260 * s; // a space
+    } else {
+      parts.push(<Path key={i} d={g.d} transform={`translate(${pen.toFixed(2)} ${y}) scale(${s} ${-s})`} />);
+      pen += g.w * s;
+    }
+  });
   return (
-    <G transform={transform} fill={colors.onSurfaceVariant} fillOpacity={opacity}>
-      <Path d={outline} />
+    <G fill={fill} fillOpacity={opacity}>
+      {parts}
     </G>
   );
 }
 
-/** The stage's own box: absolutely positioned, one per animated layer, never a touch target. */
+/** One decorative layer: a full-stage box whose whole content moves and fades as a unit. */
 const LAYER_STYLE = {position: "absolute" as const, left: 0, top: 0, width: SCENE_WIDTH, height: SCENE_HEIGHT};
 
-/** One decorative layer: a full-stage box whose whole content moves and fades as a unit. */
 function Layer({style, children}: {style?: object; children: React.ReactNode}) {
   return (
     <Animated.View
@@ -152,179 +133,212 @@ function Layer({style, children}: {style?: object; children: React.ReactNode}) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      {children}
+      <Svg
+        width={SCENE_WIDTH}
+        height={SCENE_HEIGHT}
+        viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </Svg>
     </Animated.View>
   );
 }
 
-/** A full-stage SVG with the shared canvas settings every layer is drawn with. */
-function StageSvg({children}: {children: React.ReactNode}) {
+/**
+ * The artwork follows light/dark but not the reader's accent: onboarding is shown with the app's
+ * default Indigo, so its tones are fixed. Hex values are IndigoLight / IndigoDark in
+ * app/src/main/java/com/gaten/app/ui/theme/Color.kt (primary, and the onPrimary ink that reads on it).
+ */
+const INDIGO_LIGHT = {accent: "#4338CA", onAccent: "#FFFFFF"};
+const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111"};
+
+function useIndigo() {
+  const {dark} = useTheme();
+  return dark ? INDIGO_DARK : INDIGO_LIGHT;
+}
+
+/** The soft disc, faintly tinted with the accent over the surface variant. */
+function Disc() {
+  const {colors} = useTheme();
+  const {accent} = useIndigo();
   return (
-    <Svg
-      width={SCENE_WIDTH}
-      height={SCENE_HEIGHT}
-      viewBox={`0 0 ${SCENE_WIDTH} ${SCENE_HEIGHT}`}
-      fill="none"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      preserveAspectRatio="xMidYMid meet"
-    >
+    <>
+      {/* A flat ground shadow resting just inside the disc's lower edge. */}
+      <Ellipse cx={DISC_CX} cy={DISC_CY + DISC_R - 10} rx={38} ry={3} fill={colors.onSurface} fillOpacity={0.07} />
+      <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={colors.surfaceVariant} fillOpacity={0.6} />
+      <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={accent} fillOpacity={0.08} />
+    </>
+  );
+}
+
+/** A card: surface fill, hairline outline. */
+function Card({
+  x,
+  y,
+  w,
+  h,
+  r = 7,
+  rotate = 0,
+  accentEdge = false,
+  children,
+}: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  r?: number;
+  rotate?: number;
+  accentEdge?: boolean;
+  children?: React.ReactNode;
+}) {
+  const {colors} = useTheme();
+  const {accent} = useIndigo();
+  return (
+    <G transform={rotate ? `rotate(${rotate} ${x + w / 2} ${y + h / 2})` : undefined}>
+      <Rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={r}
+        fill={colors.surface}
+        stroke={accentEdge ? accent : colors.outline}
+        strokeOpacity={accentEdge ? 0.9 : 0.6}
+        strokeWidth={1.2}
+      />
       {children}
-    </Svg>
+    </G>
   );
 }
 
-/**
- * The hero zone's own backdrop, drawn behind the core on the taller stage. Two faint concentric
- * washes — the surface variant once and the accent almost not at all — ground the composition in
- * the full 340 x 268 zone, and three dashed ink guides (the same 3-8 rhythm the lookup guide uses)
- * carry the eye from the card out into the added top and bottom margin. Every tone is an existing
- * theme role and the whole layer stays quiet, so the card keeps its dominance; it is decorative
- * only and never a touch target.
- */
-function HeroBackdrop() {
+/** Placeholder text lines: quiet rules in the outline tone. */
+function Lines({x, y, widths, gap = 6}: {x: number; y: number; widths: number[]; gap?: number}) {
   const {colors} = useTheme();
-  const mid = HERO_HEIGHT / 2;
+  const d = widths.map((w, i) => `M${x} ${y + i * gap}H${x + w}`).join("");
+  return <Path d={d} stroke={colors.outline} strokeOpacity={0.55} strokeWidth={1.6} />;
+}
+
+function LookupScene() {
+  const {colors} = useTheme();
+  const {accent, onAccent} = useIndigo();
   return (
-    <Svg
-      width={SCENE_WIDTH}
-      height={HERO_HEIGHT}
-      viewBox={`0 0 ${SCENE_WIDTH} ${HERO_HEIGHT}`}
-      fill="none"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <Ellipse cx={170} cy={mid} rx={150} ry={130} fill={colors.surfaceVariant} fillOpacity={0.12} />
-      <Ellipse cx={170} cy={mid} rx={108} ry={96} fill={colors.accent} fillOpacity={0.04} />
-      <Path d="M170 14 V34 M170 234 V254" stroke={colors.iconSecondary} strokeOpacity={0.07} strokeWidth={1.5} strokeDasharray="3 8" />
-      <Path
-        d="M40 258 C18 196 26 96 70 30"
-        stroke={colors.iconSecondary}
-        strokeOpacity={0.07}
-        strokeWidth={1.5}
-        strokeDasharray="3 8"
-      />
-      <Path
-        d="M300 258 C322 196 314 96 270 30"
-        stroke={colors.iconSecondary}
-        strokeOpacity={0.07}
-        strokeWidth={1.5}
-        strokeDasharray="3 8"
-      />
-    </Svg>
+    <>
+      {/* The screen being read, with 合点 highlighted. */}
+      <Card x={102} y={36} w={104} h={72} r={8} rotate={-4}>
+        <Lines x={112} y={46} widths={[40]} />
+        <Rect
+          x={112}
+          y={54}
+          width={50}
+          height={20}
+          rx={4}
+          fill={accent}
+          fillOpacity={0.12}
+          stroke={accent}
+          strokeWidth={1.4}
+        />
+        <Glyphs text="合点" x={137} y={69} size={14} fill={colors.onSurface} anchor="middle" />
+        {/* The reading cursor under the highlight. */}
+        <Path d="M134 77.5H140M137 77.5V82.5M134 82.5H140" stroke={accent} strokeWidth={1.1} />
+        <Lines x={112} y={88} widths={[84, 70]} />
+        <Lines x={112} y={100} widths={[56]} />
+      </Card>
+      {/* The result card below it: 合点 · がてん with two meaning lines. */}
+      <Card x={134} y={92} w={96} h={50} r={8} accentEdge>
+        <Glyphs text="合点" x={143} y={110} size={12} fill={colors.onSurface} />
+        <Glyphs text="がてん" x={170} y={110} size={8} fill={accent} />
+        <Lines x={143} y={121} widths={[70, 52]} gap={7} />
+      </Card>
+    </>
   );
 }
 
-/**
- * The card's accent, animated. `strokeOpacity` and `fillOpacity` are numeric SVG props the renderer
- * takes directly, so the mark brightens on the UI thread when a WaniKani account is really
- * connected — the one place a real status reaches the artwork.
- */
-const AnimatedAccentRect = Animated.createAnimatedComponent(Rect);
-const AnimatedAccentRule = Animated.createAnimatedComponent(Path);
-
-/**
- * The one card, and its own local box: the rounded surface, its reading inset, the accent that marks
- * the inscription, and 合点 itself. Drawn in local coordinates so the layer around it can scale and
- * rotate the whole card — inscription included — as one object.
- *
- * [success] is the flow's real-connection accent, 0 to 1; it only brightens the mark the card
- * already carries, so a card that is not connected is exactly the card the other pages show.
- */
-function GatenCard({success}: {success: SharedValue<number>}) {
+function AnkiScene() {
   const {colors} = useTheme();
-  const accentProps = useAnimatedProps<RectProps>(() => ({
-    strokeOpacity: 0.32 + 0.38 * success.value,
-    fillOpacity: 0.03 + 0.07 * success.value,
-  }));
-  const ruleProps = useAnimatedProps<PathProps>(() => ({strokeOpacity: 0.7 * success.value}));
+  const {accent, onAccent} = useIndigo();
+  const pills = [0, 1, 2, 3];
   return (
-    <Svg
-      width={CARD_WIDTH}
-      height={CARD_HEIGHT}
-      viewBox={`0 0 ${CARD_WIDTH} ${CARD_HEIGHT}`}
-      fill="none"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <Rect
-        x={0.9}
-        y={0.9}
-        width={CARD_WIDTH - 1.8}
-        height={CARD_HEIGHT - 1.8}
-        rx={14}
-        fill={colors.surface}
-        stroke={colors.iconSecondary}
-        strokeOpacity={0.45}
-        strokeWidth={1.8}
-      />
-      <Path d="M20 20 H58" stroke={colors.iconSecondary} strokeOpacity={0.23} strokeWidth={1.7} />
-      <Rect x={33} y={28} width={118} height={64} rx={8} fill={colors.surfaceVariant} fillOpacity={0.5} />
-      <AnimatedAccentRect
-        x={43}
-        y={33}
-        width={98}
-        height={50}
-        rx={4}
-        fill={colors.accent}
-        stroke={colors.accent}
-        strokeWidth={1.8}
-        strokeOpacity={0.32}
-        fillOpacity={0.03}
-        animatedProps={accentProps}
-      />
-      {/* 合 and 点 side by side, each fitted to a 40-unit ink height and centred as one pair. */}
-      <Inscription outline={GLYPH_AU} transform="translate(47.733 74.954) scale(0.04415 -0.04415)" opacity={0.72} />
-      <Inscription outline={GLYPH_TEN} transform="translate(93.315 74.7) scale(0.044 -0.044)" opacity={0.72} />
-      <Path
-        d="M20 100 H164 M20 114 H120"
-        stroke={colors.iconSecondary}
-        strokeOpacity={0.23}
-        strokeWidth={1.7}
-      />
-      {/* The connected mark: a rule under the inscription that only a real connection draws. */}
-      <AnimatedAccentRule
-        d="M43 90 H141"
-        stroke={colors.accent}
-        strokeWidth={1.8}
-        strokeOpacity={0}
-        animatedProps={ruleProps}
-      />
-    </Svg>
+    <>
+      {/* Three stacked flashcards. */}
+      <Card x={122} y={32} w={100} h={72} r={8} rotate={-6} />
+      <Card x={122} y={32} w={100} h={72} r={8} rotate={4} />
+      <Card x={122} y={34} w={100} h={74} r={8}>
+        <Glyphs text="合点" x={172} y={78} size={28} fill={colors.onSurface} anchor="middle" />
+        <Glyphs text="がてん" x={172} y={96} size={9} fill={accent} anchor="middle" />
+      </Card>
+      {/* Four answer pills; the third, "Good", is filled with the accent. */}
+      {pills.map((i) => (
+        <G key={i}>
+          <Rect
+            x={121 + i * 26}
+            y={124}
+            width={22}
+            height={11}
+            rx={5.5}
+            fill={i === 2 ? accent : colors.surface}
+            stroke={i === 2 ? accent : colors.outline}
+            strokeOpacity={i === 2 ? 1 : 0.6}
+            strokeWidth={1.2}
+          />
+          <Path
+            d={`M${128 + i * 26} 129.5H${136 + i * 26}`}
+            stroke={i === 2 ? onAccent : colors.outline}
+            strokeOpacity={i === 2 ? 1 : 0.7}
+            strokeWidth={1.5}
+          />
+        </G>
+      ))}
+    </>
   );
 }
 
-/** One of the deck's plain supporting cards, in its own local box. */
-function DeckCard({width, height}: {width: number; height: number}) {
+/** The WaniKani level card's progress fill, brightened by a real connection. */
+const AnimatedBar = Animated.createAnimatedComponent(Rect);
+
+function WaniKaniScene({success}: {success: SharedValue<number>}) {
   const {colors} = useTheme();
+  const {accent} = useIndigo();
+  const barProps = useAnimatedProps<PathProps>(() => ({fillOpacity: 0.85 + 0.15 * success.value}) as PathProps);
+  const ink = colors.outline;
   return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none">
-      <Rect
-        x={0.9}
-        y={0.9}
-        width={width - 1.8}
-        height={height - 1.8}
-        rx={13}
-        fill={colors.surface}
-        stroke={colors.iconSecondary}
-        strokeOpacity={0.3}
-        strokeWidth={1.5}
-      />
-    </Svg>
+    <>
+      {/* The torii, in neutral ink. */}
+      <Path d="M80 62 Q112 69 144 62" stroke={ink} strokeOpacity={0.7} strokeWidth={2.6} />
+      <Path d="M88 75 H136" stroke={ink} strokeOpacity={0.6} strokeWidth={2} />
+      <Path d="M96 76 V130 M128 76 V130" stroke={ink} strokeOpacity={0.7} strokeWidth={2.4} />
+      {/* A 合点 card, and the Level 1 card with its short accent bar. */}
+      <Card x={158} y={38} w={54} h={34} r={7} rotate={6}>
+        <Glyphs text="合点" x={185} y={61} size={17} fill={colors.onSurface} anchor="middle" />
+      </Card>
+      <Card x={152} y={84} w={66} h={40} r={7} rotate={-5} accentEdge>
+        <Glyphs text="Level 1" x={161} y={101} size={9} fill={colors.onSurface} />
+        <Rect x={161} y={108} width={48} height={5} rx={2.5} fill={colors.outline} fillOpacity={0.35} />
+        <AnimatedBar
+          x={161}
+          y={108}
+          width={20}
+          height={5}
+          rx={2.5}
+          fill={accent}
+          animatedProps={barProps as never}
+        />
+      </Card>
+    </>
   );
 }
 
 /**
  * The persistent scene. [scene] is the flow's single clock, in page units (0 lookup, 1 Anki, 2
  * WaniKani); [entrance] is the first-run settle, 0 to 1; [formProgress] recedes the scene — and the
- * hero zone around the core — to the small anchor the WaniKani token form leaves behind, 0 to 1;
- * [success] is the card's real connection accent, 0 to 1, and only brightens the mark the card
- * already carries. The component owns its full layout height: the taller zone at rest, the core's
- * own anchor once the form is up.
+ * hero zone around it — to the small anchor the WaniKani token form leaves behind, 0 to 1; [success]
+ * brightens the Level 1 progress bar when a WaniKani account is really connected. The component owns
+ * its full layout height: the zone at rest, the core's own anchor once the form is up.
  *
  * Every layer's motion is a pure function of those values, so a step change and its reverse travel
- * the same path — back is the forward journey played backwards, never a second entrance.
+ * the same path.
  */
 export function OnboardingScene({
   width,
@@ -339,12 +353,8 @@ export function OnboardingScene({
   formProgress: SharedValue<number>;
   success: SharedValue<number>;
 }) {
-  const {colors} = useTheme();
   const scale = width / SCENE_WIDTH;
 
-  // The scene's own box: the full hero zone at rest, shrinking to the core's compact anchor as the
-  // WaniKani form takes the page over, and settling in on the first run. Both ends are the hero
-  // geometry times the window scale, so the added margin closes exactly as the core recedes.
   const boxStyle = useAnimatedStyle(() => ({
     height:
       interpolate(formProgress.value, [0, 1], [HERO_HEIGHT, HERO_ANCHOR_HEIGHT], Extrapolation.CLAMP) * scale,
@@ -352,236 +362,38 @@ export function OnboardingScene({
     transform: [{translateY: (1 - entrance.value) * 10}],
   }));
 
-  // The inner stage is a fixed 340 x 220 box scaled once for the window and again for the recede. It
-  // stays centred in the outer box, so the core sits [HERO_PAD] from each edge at rest and exactly
-  // flush at the anchor.
   const innerStyle = useAnimatedStyle(() => ({
     transform: [{scale: scale * (1 - CORE_RECEDE * formProgress.value)}],
   }));
 
-  // The card: one object gliding between the three poses. Its inscription is inside this layer, so
-  // host and lettering move as one.
-  const cardStyle = useAnimatedStyle(() => {
-    const s = scene.value;
-    return {
-      transform: [
-        {translateX: interpolate(s, STOPS, CARD_X, Extrapolation.CLAMP) - CARD_WIDTH / 2},
-        {translateY: interpolate(s, STOPS, CARD_Y, Extrapolation.CLAMP) - CARD_HEIGHT / 2},
-        {scale: interpolate(s, STOPS, CARD_SCALE, Extrapolation.CLAMP)},
-        {rotate: `${interpolate(s, STOPS, CARD_ROTATE, Extrapolation.CLAMP)}deg`},
-      ],
-    };
-  });
-
-  // The two supporting cards each carry their own small rotation and translation swing: gathered
-  // behind the front card at 0, fanned out at 1. How far the deck is dealt eases in and out across
-  // the two transitions, so the cards fan out on the way in and gather back on the way out.
-  const deckBackStyle = useAnimatedStyle(() => {
-    const d = interpolate(scene.value, [0.15, 0.8, 1.2, 1.85], [0, 1, 1, 0], Extrapolation.CLAMP);
-    return {
-      opacity: d,
-      transform: [
-        {translateX: interpolate(d, [0, 1], [172, 156]) - ANKI_CARD_WIDTH / 2},
-        {translateY: interpolate(d, [0, 1], [100, 96]) - ANKI_CARD_HEIGHT / 2},
-        {rotate: `${interpolate(d, [0, 1], [3, -12])}deg`},
-      ],
-    };
-  });
-
-  const deckMidStyle = useAnimatedStyle(() => {
-    const d = interpolate(scene.value, [0.15, 0.8, 1.2, 1.85], [0, 1, 1, 0], Extrapolation.CLAMP);
-    return {
-      opacity: d,
-      transform: [
-        {translateX: interpolate(d, [0, 1], [175, 166]) - ANKI_CARD_WIDTH / 2},
-        {translateY: interpolate(d, [0, 1], [100, 99]) - ANKI_CARD_HEIGHT / 2},
-        {rotate: `${interpolate(d, [0, 1], [4, -5])}deg`},
-      ],
-    };
-  });
-
-  // The rating controls rise into place a beat after the deck. They always leave downwards — 10
-  // units toward the WaniKani page, 14 back toward the lookup page — because they belong to the Anki
-  // page and drop away in whichever direction the reader leaves it.
-  const ratingsStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scene.value, [0.25, 0.85, 1.15, 1.85], [0, 1, 1, 0], Extrapolation.CLAMP),
-    transform: [
-      {
-        translateY: interpolate(scene.value, [0.25, 0.85, 1.15, 1.85], [14, 0, 0, 10], Extrapolation.CLAMP),
-      },
-    ],
+  // Each pose fades in and out around its own stop and drifts toward the pose it is leaving for.
+  const lookupStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scene.value, [0, 0.6], [1, 0], Extrapolation.CLAMP),
+    transform: [{translateX: interpolate(scene.value, STOPS, [0, -14, -14], Extrapolation.CLAMP)}],
   }));
-
-  // The torii and the second subject card settle in together once the card has arrived beside them.
-  const toriiStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scene.value, [1.15, 1.9], [0, 1], Extrapolation.CLAMP),
-    transform: [
-      {translateX: interpolate(scene.value, [1.15, 1.9], [-18, 0], Extrapolation.CLAMP)},
-    ],
+  const ankiStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scene.value, [0.4, 1, 1.6], [0, 1, 0], Extrapolation.CLAMP),
+    transform: [{translateX: interpolate(scene.value, [0, 1, 2], [14, 0, -14], Extrapolation.CLAMP)}],
   }));
-
-  // The lens examines the pane on the lookup page and withdraws up and to the right as the page
-  // leaves — the same path back.
-  const lensStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scene.value, [0, 0.5], [1, 0], Extrapolation.CLAMP),
-    transform: [
-      {translateX: interpolate(scene.value, [0, 0.5], [0, 30], Extrapolation.CLAMP)},
-      {translateY: interpolate(scene.value, [0, 0.5], [0, -24], Extrapolation.CLAMP)},
-    ],
-  }));
-
-  const guidesStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scene.value, [0, 0.45], [1, 0], Extrapolation.CLAMP),
-  }));
-
-  // The hero backdrop shares the scene's entrance and window scale, but its extra margin belongs to
-  // the roomy first run alone: it fades out by the time the WaniKani form is a third of the way in,
-  // so the compact anchor the form leaves behind stays clean.
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(formProgress.value, [0, 0.3], [1, 0], Extrapolation.CLAMP),
+  const wanikaniStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scene.value, [1.4, 2], [0, 1], Extrapolation.CLAMP),
+    transform: [{translateX: interpolate(scene.value, [1, 2], [14, 0], Extrapolation.CLAMP)}],
   }));
 
   return (
     <Animated.View style={[{width, alignItems: "center", justifyContent: "center"}, boxStyle]}>
       <Animated.View style={[{width: SCENE_WIDTH, height: SCENE_HEIGHT}, innerStyle]}>
-        {/* The hero zone's own backdrop: the wash and guides that fill the added margin. */}
-        <Layer style={[backdropStyle, BACKDROP_BOX_STYLE]}>
-          <HeroBackdrop />
-        </Layer>
-
-        {/* The ground never moves or leaves. */}
         <Layer>
-          <StageSvg>
-            <Ground />
-          </StageSvg>
+          <Disc />
         </Layer>
-
-        {/* Lookup: the quiet guide curve behind the pane. */}
-        <Layer style={guidesStyle}>
-          <StageSvg>
-            <Path
-              d="M66 128 C44 87 55 43 92 32"
-              stroke={colors.iconSecondary}
-              strokeOpacity={0.16}
-              strokeWidth={1.5}
-              strokeDasharray="3 8"
-            />
-          </StageSvg>
+        <Layer style={lookupStyle}>
+          <LookupScene />
         </Layer>
-
-        {/* Anki: the deck's two supporting cards, each fanning on its own swing. */}
-        <Layer style={[deckBackStyle, DECK_BOX_STYLE]}>
-          <DeckCard width={ANKI_CARD_WIDTH} height={ANKI_CARD_HEIGHT} />
+        <Layer style={ankiStyle}>
+          <AnkiScene />
         </Layer>
-        <Layer style={[deckMidStyle, DECK_BOX_STYLE]}>
-          <DeckCard width={ANKI_CARD_WIDTH} height={ANKI_CARD_HEIGHT} />
-        </Layer>
-
-        {/* Anki: the four quiet rating controls. */}
-        <Layer style={ratingsStyle}>
-          <StageSvg>
-            {[158, 191, 224, 257].map((x) => (
-              <Rect
-                key={x}
-                x={x}
-                y={145}
-                width={29}
-                height={30}
-                rx={7}
-                fill={colors.surfaceVariant}
-                fillOpacity={0.5}
-                stroke={colors.iconSecondary}
-                strokeOpacity={0.23}
-                strokeWidth={1.2}
-              />
-            ))}
-            <Path
-              d="M166 157 H179 M199 157 H212 M232 157 H245 M265 157 H278"
-              stroke={colors.iconSecondary}
-              strokeOpacity={0.23}
-              strokeWidth={1.7}
-            />
-            <Path d="M232 166 H245" stroke={colors.accent} strokeOpacity={0.32} strokeWidth={1.8} />
-          </StageSvg>
-        </Layer>
-
-        {/* WaniKani: the torii and the second subject card, settling as one group. */}
-        <Layer style={toriiStyle}>
-          <StageSvg>
-            <Path d="M72 72 Q120 87 168 72" stroke={colors.iconSecondary} strokeOpacity={0.55} strokeWidth={6} />
-            <Path d="M84 88 H156" stroke={colors.iconSecondary} strokeOpacity={0.5} strokeWidth={4} />
-            <Path d="M96 90 V170 M144 90 V170" stroke={colors.iconSecondary} strokeOpacity={0.55} strokeWidth={5} />
-            <Path d="M88 170 H152" stroke={colors.iconSecondary} strokeOpacity={0.4} strokeWidth={3} />
-            <Path
-              d="M112 106 V124 M128 106 V124 M108 126 H132"
-              stroke={colors.iconSecondary}
-              strokeOpacity={0.28}
-              strokeWidth={2}
-            />
-            <G transform="rotate(-7 248 143)">
-              <Rect
-                x={213}
-                y={109}
-                width={70}
-                height={68}
-                rx={11}
-                fill={colors.surface}
-                stroke={colors.iconSecondary}
-                strokeOpacity={0.45}
-                strokeWidth={1.8}
-              />
-              <Rect x={223} y={116} width={50} height={35} fill={colors.accent} fillOpacity={0.03} />
-              <Inscription
-                outline={GLYPH_MOUNTAIN}
-                transform="translate(231.616 145.903) scale(0.03277 -0.03277)"
-              />
-              <Path d="M227 161 H269" stroke={colors.accent} strokeOpacity={0.32} strokeWidth={1.8} />
-            </G>
-          </StageSvg>
-        </Layer>
-
-        {/* The one card. */}
-        <Layer style={[cardStyle, CARD_BOX_STYLE]}>
-          <GatenCard success={success} />
-        </Layer>
-
-        {/* Lookup: the lens examining the pane, in front of it. */}
-        <Layer style={lensStyle}>
-          <StageSvg>
-            <Defs>
-              <ClipPath id="lensAperture">
-                <Circle cx={227} cy={120} r={29} />
-              </ClipPath>
-            </Defs>
-            <Path d="M252 145 L280 174" stroke={colors.iconSecondary} strokeOpacity={0.65} strokeWidth={6} />
-            <Circle
-              cx={227}
-              cy={120}
-              r={35}
-              fill={colors.surface}
-              stroke={colors.iconSecondary}
-              strokeOpacity={0.65}
-              strokeWidth={3}
-            />
-            <Circle cx={227} cy={120} r={29} fill={colors.accent} fillOpacity={0.03} />
-            {/* The pane's own 点, enlarged and cut to the aperture, so the lens is looking at the same
-                compound the card carries rather than at empty glass. It is the bundled outline the
-                card's inscription uses, drawn in the same ink and inside this layer, so it withdraws
-                with the lens. */}
-            <G clipPath="url(#lensAperture)">
-              <Inscription
-                outline={GLYPH_TEN}
-                transform="translate(192.866 145.882) scale(0.0682 -0.0682)"
-                opacity={0.6}
-              />
-            </G>
-            <Path
-              d="M207 117 C208 109 213 103 220 101"
-              stroke={colors.iconSecondary}
-              strokeOpacity={0.2}
-              strokeWidth={2}
-            />
-          </StageSvg>
+        <Layer style={wanikaniStyle}>
+          <WaniKaniScene success={success} />
         </Layer>
       </Animated.View>
     </Animated.View>
