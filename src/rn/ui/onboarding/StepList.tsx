@@ -5,107 +5,256 @@
  */
 
 /**
- * The step list inside an onboarding page: hairline rows, no cards, one row per thing the reader
- * sets up here.
+ * The vertical stepper inside an onboarding page: a column of discs joined by a thin rail, one row
+ * per thing the reader sets up here — no hairlines, no cards.
  *
- * Each row's own header -- its mark, its title and its one line of detail -- is a single grouped
+ * Each row's own header -- its disc, its title and its one line of detail -- is a single grouped
  * accessibility element ("Step 1 of 2, Turn on lookup mode, current"), so a screen reader reads the
- * step once rather than the circle, the title and the detail three times, and a status change is
+ * step once rather than the disc, the title and the detail three times, and a status change is
  * announced politely. The step's content is not part of that element, so whatever interactive
- * control it carries keeps its own name and target.
+ * control it carries keeps its own name and target, and it sits in the row's right column so the
+ * rail is never drawn over.
+ *
+ * The disc's state cross-fades between the open mark (a haloed ring and dot for the current step, a
+ * pale disc with its number for an openable one, a pale disc with a small dot for a future one) and
+ * the done disc (the green check). The rail under a step fills as that step turns done, growing down
+ * from the top on transform/scaleY, and it stretches with the row's own content — a how-to, a form,
+ * a download's progress — because it is a flex child of the row, never a measured height.
  *
  * A step's content opens and closes on the UI thread: its height and its opacity ride one shared
  * value, from the height the content actually measured, so the row grows in place with no layout
  * jump and nothing shows before its container has finished sizing. Reduced motion opens it at once,
  * at the same end state.
  */
-import React, {useEffect, useRef} from "react";
-import {StyleSheet, Text, View, type StyleProp, type ViewStyle} from "react-native";
-import Animated, {useAnimatedStyle, useReducedMotion, useSharedValue, withTiming} from "react-native-reanimated";
+import React, {useEffect, useRef, useState} from "react";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import {Icon} from "../components";
 import {PAGE_EASING_REANIMATED, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {stepRowDuration} from "./onboarding-motion";
-import {stepStatusWord, type StepStatus} from "./onboarding-steps";
+import {
+  acceptStepContentHeight,
+  connectorStateAfter,
+  shouldMeasureStepContent,
+  stepStatusWord,
+  type StepStatus,
+} from "./onboarding-steps";
 
-/** One row's mark: a 24 dp disc holding the step's number, or a success check once it is done. */
-function StepMark({index, status}: {index: number; status: StepStatus}) {
+/** The stepper's geometry: the disc, and the rail that joins the discs. */
+export const STEP_DISC_SIZE = 28;
+/** The rail's width. */
+export const STEP_RAIL_WIDTH = 2;
+/** How much of the outline colour the pending rail keeps: enough to read as a line, not a hairline. */
+const RAIL_ALPHA = 0.32;
+
+/** [hex] with [alpha] (0..1) appended, for a rail the palette only hands out opaque. */
+function withAlpha(hex: string, alpha: number): string {
+  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `${hex}${a}`;
+}
+
+/** One rail segment: the pale base line and, over it, the filled line that grows down from the top. */
+function StepConnector({filled, style}: {filled: boolean; style?: StyleProp<ViewStyle>}) {
   const {colors} = useTheme();
-  const size = 24;
-  if (status === "done") {
+  const reducedMotion = useReducedMotion();
+  const duration = stepRowDuration(reducedMotion);
+  const fill = useSharedValue(filled ? 1 : 0);
+  useEffect(() => {
+    const next = filled ? 1 : 0;
+    fill.value =
+      duration === 0 ? next : withTiming(next, {duration, easing: PAGE_EASING_REANIMATED});
+  }, [filled, duration, fill]);
+  const fillStyle = useAnimatedStyle(() => ({
+    transformOrigin: "top" as const,
+    transform: [{scaleY: fill.value}],
+  }));
+  return (
+    <View
+      style={[
+        {width: STEP_RAIL_WIDTH, backgroundColor: withAlpha(colors.outline, RAIL_ALPHA)},
+        style,
+      ]}
+    >
+      <Animated.View
+        style={[StyleSheet.absoluteFill, {backgroundColor: colors.success}, fillStyle]}
+      />
+    </View>
+  );
+}
+
+/** The open mark inside a disc: what the step looks like before it is done. */
+function OpenMark({index, status}: {index: number; status: StepStatus}) {
+  const {colors} = useTheme();
+  if (status === "current") {
     return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: colors.success,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {/* The check reads against the disc, not the page, so it takes the page's own background
-            tone: dark ink on the light success disc of a dark theme, and the light page tone on the
-            green disc of a light one. */}
-        <Icon name="check" size={15} color={colors.background} />
+      <View style={{width: STEP_DISC_SIZE, height: STEP_DISC_SIZE, alignItems: "center", justifyContent: "center"}}>
+        {/* The halo: a soft accent field the ring sits in. */}
+        <View
+          style={{
+            position: "absolute",
+            width: STEP_DISC_SIZE,
+            height: STEP_DISC_SIZE,
+            borderRadius: STEP_DISC_SIZE / 2,
+            backgroundColor: colors.accent,
+            opacity: 0.14,
+          }}
+        />
+        <View
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            borderWidth: 2,
+            borderColor: colors.accent,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <View style={{width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent}} />
+        </View>
       </View>
     );
   }
-  const active = status === "current";
+  const pale: ViewStyle = {
+    width: STEP_DISC_SIZE,
+    height: STEP_DISC_SIZE,
+    borderRadius: STEP_DISC_SIZE / 2,
+    backgroundColor: colors.surfaceVariant,
+    alignItems: "center",
+    justifyContent: "center",
+  };
+  if (status === "available") {
+    return (
+      <View style={pale}>
+        <Text style={[typeScale.labelSmall, {color: colors.accent, lineHeight: 16}]}>{index}</Text>
+      </View>
+    );
+  }
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderWidth: active ? 2 : 1.5,
-        borderColor: active ? colors.accent : colors.outlineVariant,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Text
+    <View style={pale}>
+      <View style={{width: 8, height: 8, borderRadius: 4, backgroundColor: colors.onSurfaceVariant}} />
+    </View>
+  );
+}
+
+/** One row's mark: the disc, cross-fading between its open state and the done state. */
+function StepMark({index, status}: {index: number; status: StepStatus}) {
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const duration = stepRowDuration(reducedMotion);
+  const done = useSharedValue(status === "done" ? 1 : 0);
+  useEffect(() => {
+    const next = status === "done" ? 1 : 0;
+    done.value = duration === 0 ? next : withTiming(next, {duration, easing: PAGE_EASING_REANIMATED});
+  }, [status, duration, done]);
+  const doneStyle = useAnimatedStyle(() => ({opacity: done.value}));
+  const openStyle = useAnimatedStyle(() => ({opacity: 1 - done.value}));
+  return (
+    <View style={{width: STEP_DISC_SIZE, height: STEP_DISC_SIZE}}>
+      <Animated.View
         style={[
-          typeScale.labelSmall,
-          {color: active ? colors.accent : colors.onSurfaceVariant, lineHeight: 16},
+          StyleSheet.absoluteFill,
+          {alignItems: "center", justifyContent: "center"},
+          openStyle,
         ]}
       >
-        {index}
-      </Text>
+        <OpenMark index={index} status={status} />
+      </Animated.View>
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {alignItems: "center", justifyContent: "center"},
+          doneStyle,
+        ]}
+      >
+        <View
+          style={{
+            width: STEP_DISC_SIZE,
+            height: STEP_DISC_SIZE,
+            borderRadius: STEP_DISC_SIZE / 2,
+            backgroundColor: colors.success,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {/* The check reads against the disc, not the page, so it takes the page's own background
+              tone: dark ink on the light success disc of a dark theme, and the light page tone on the
+              green disc of a light one. */}
+          <Icon name="check" size={16} color={colors.background} />
+        </View>
+      </Animated.View>
     </View>
   );
 }
 
 /**
- * A step's content, clipped and grown to the height it measured. [shown] drives both the height and
- * the opacity over one clock, so the content is never readable before its container has made room;
- * a change inside an open row animates its own growth the same way, and the row's very first
- * measurement — a row that is already open on arrival — is applied at once, with no entrance.
+ * A step's content, clipped and grown to the height it measured.
+ *
+ * A measurement taken inside the clip is worthless: on device a child of a zero-height clipped
+ * container lays out at zero, so the first (and only) layout event reported 0, and a row that opens
+ * could never learn its height — it stayed shut. So an open content that nothing has measured yet is
+ * laid out at its natural height for its first frame (visible, at once, no entrance), and only once
+ * that real height is in hand does the clip take over. A zero or missing measurement is never
+ * accepted as a height.
+ *
+ * After that, [shown] drives both the height and the opacity over one clock, so the content is never
+ * readable before its container has made room; a change inside an open row animates its own growth
+ * the same way. Reduced motion lands at the same end state at once.
  */
 function StepContent({shown, children}: {shown: boolean; children: React.ReactNode}) {
   const reducedMotion = useReducedMotion();
   const duration = stepRowDuration(reducedMotion);
-  const measured = useSharedValue(0);
+  // The content's real height, or null until it has been measured at its natural height.
+  const [measured, setMeasured] = useState<number | null>(null);
+  const lastMeasured = useRef(0);
   const height = useSharedValue(0);
   const progress = useSharedValue(shown ? 1 : 0);
   const initialised = useRef(false);
+
+  // While nothing is measured the clip is not the thing on screen, so the open state is applied at
+  // once; once a height exists, opening and closing animate between it and zero.
   useEffect(() => {
+    if (shown && measured == null) {
+      progress.value = 1;
+      return;
+    }
     progress.value = withTiming(shown ? 1 : 0, {
       duration: stepRowDuration(reducedMotion),
       easing: PAGE_EASING_REANIMATED,
     });
-  }, [shown, reducedMotion, progress]);
+  }, [shown, measured, reducedMotion, progress]);
+
+  const measuring = shouldMeasureStepContent(shown, measured);
   const style = useAnimatedStyle(() => ({
     height: height.value * progress.value,
     opacity: progress.value,
   }));
   return (
-    <Animated.View style={[{overflow: "hidden"}, style]}>
+    <Animated.View style={[{overflow: "hidden"}, measuring ? {opacity: 1} : style]}>
       <View
+        // Never shrink below its content: the clip is the row's height, not the content's.
+        style={{flexShrink: 0}}
         onLayout={(event) => {
-          const next = event.nativeEvent.layout.height;
-          if (next === measured.value) return;
-          measured.value = next;
+          const next = acceptStepContentHeight(event.nativeEvent.layout.height);
+          if (next == null || next === lastMeasured.current) return;
+          lastMeasured.current = next;
+          setMeasured(next);
           if (!initialised.current) {
             initialised.current = true;
             height.value = next;
@@ -123,7 +272,7 @@ function StepContent({shown, children}: {shown: boolean; children: React.ReactNo
   );
 }
 
-/** The list itself: the top and bottom hairlines that bound the group, and the rows between them. */
+/** The list itself: the rows of the stepper, one under the next, joined by their own rails. */
 export function StepList({
   style,
   children,
@@ -131,21 +280,12 @@ export function StepList({
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }) {
-  const {colors} = useTheme();
-  return (
-    <View
-      style={[
-        {
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderColor: colors.outlineVariant,
-        },
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  );
+  return <View style={style}>{children}</View>;
+}
+
+/** The header row's own copy line, in the tone the step's state gives it. */
+function headerLineStyle(color: string): StyleProp<TextStyle> {
+  return [typeScale.description, {color, marginTop: spacing.xs}];
 }
 
 /**
@@ -154,73 +294,130 @@ export function StepList({
  * shows its title alone. [children] is the step's own content, shown only while it is current --
  * unless [showContent] overrides that, for the one step whose control must be reachable before the
  * step is current.
+ *
+ * A row can instead be [onPress]-openable: its whole header becomes a button (role, expanded state,
+ * a chevron and a short accent [hint]) whose content opens only while [expanded] is true. That is the
+ * WaniKani "Create a token" row, offered to the reader without ever being their current step.
+ *
+ * [previousStatus] is the row above's, and colours the rail segment that arrives at this disc; the
+ * rail below a row is coloured by the row's own [status]. The first row has no rail above it and the
+ * last row none below.
  */
 export function StepRow({
   index,
   total,
   title,
   status,
+  previousStatus,
   detail,
   summary,
   showContent,
+  hint,
+  onPress,
+  expanded,
+  accessibilityHint,
   children,
 }: {
   index: number;
   total: number;
   title: string;
   status: StepStatus;
+  /** The row above's status, for the rail segment that arrives at this disc. */
+  previousStatus?: StepStatus;
   detail?: string;
   summary?: string;
   showContent?: boolean;
+  /** A short accent line under the title, for a row that is opened rather than being current. */
+  hint?: string;
+  /** Makes the row's header a button that opens its content, for an openable row. */
+  onPress?: () => void;
+  /** The open state that button drives; the content shows only while it is true. */
+  expanded?: boolean;
+  accessibilityHint?: string;
   children?: React.ReactNode;
 }) {
   const {colors} = useTheme();
   const dim = status === "todo";
-  const contentShown = children != null && (showContent ?? status === "current");
-  return (
-    <View
-      style={{
-        borderTopWidth: index > 1 ? StyleSheet.hairlineWidth : 0,
-        borderColor: colors.outlineVariant,
-      }}
-    >
-      <View
-        accessible
-        accessibilityLabel={`Step ${index} of ${total}, ${title}, ${stepStatusWord(status)}`}
-        accessibilityLiveRegion="polite"
-        style={{
-          flexDirection: "row",
-          gap: spacing.m,
-          paddingTop: spacing.m,
-          paddingBottom: spacing.m,
-          minHeight: 48,
-          opacity: dim ? 0.55 : 1,
-        }}
-      >
-        <StepMark index={index} status={status} />
-        <View style={{flex: 1, minWidth: 0}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
-          {!dim && status === "current" && detail != null && (
-            <Text
-              style={[typeScale.description, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
-            >
-              {detail}
-            </Text>
-          )}
-          {dim && summary != null && (
-            <Text
-              style={[typeScale.description, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
-            >
-              {summary}
-            </Text>
-          )}
-        </View>
+  const contentShown =
+    children != null && (expanded !== undefined ? expanded : (showContent ?? status === "current"));
+  const headerStyle: StyleProp<ViewStyle> = {
+    flexDirection: "row",
+    gap: spacing.m,
+    paddingTop: spacing.m,
+    paddingBottom: spacing.m,
+    minHeight: 48,
+    opacity: dim ? 0.55 : 1,
+  };
+  const header = (
+    <>
+      <View style={{flex: 1, minWidth: 0}}>
+        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        {!dim && status === "current" && detail != null && (
+          <Text style={headerLineStyle(colors.onSurfaceVariant)}>{detail}</Text>
+        )}
+        {dim && summary != null && (
+          <Text style={headerLineStyle(colors.onSurfaceVariant)}>{summary}</Text>
+        )}
+        {hint != null && status !== "done" && (
+          <Text style={headerLineStyle(colors.accent)}>{hint}</Text>
+        )}
       </View>
-      {children != null && (
-        <StepContent shown={contentShown}>
-          <View style={{paddingBottom: spacing.m}}>{children}</View>
-        </StepContent>
+      {onPress != null && (
+        <View style={{justifyContent: "center"}}>
+          <Icon
+            name={expanded === true ? "keyboard_arrow_up" : "keyboard_arrow_down"}
+            size={22}
+            color={colors.onSurfaceVariant}
+          />
+        </View>
       )}
+    </>
+  );
+  return (
+    <View style={{flexDirection: "row", gap: spacing.m}}>
+      {/* The rail: the arriving segment, the disc, and the leaving segment. It stretches to the row's
+          own height, so the rail runs the full length of an open row's content too. */}
+      <View style={{width: STEP_DISC_SIZE, alignItems: "center"}}>
+        {index > 1 && (
+          <StepConnector
+            filled={connectorStateAfter(previousStatus ?? "todo") === "filled"}
+            style={{height: spacing.m}}
+          />
+        )}
+        <StepMark index={index} status={status} />
+        {index < total && (
+          <StepConnector filled={connectorStateAfter(status) === "filled"} style={{flex: 1}} />
+        )}
+      </View>
+      <View style={{flex: 1, minWidth: 0}}>
+        {onPress == null ? (
+          <View
+            accessible
+            accessibilityLabel={`Step ${index} of ${total}, ${title}, ${stepStatusWord(status)}`}
+            accessibilityLiveRegion="polite"
+            style={headerStyle}
+          >
+            {header}
+          </View>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Step ${index} of ${total}, ${title}, ${stepStatusWord(status)}`}
+            accessibilityHint={accessibilityHint}
+            accessibilityState={{expanded: expanded === true}}
+            accessibilityLiveRegion="polite"
+            onPress={onPress}
+            style={headerStyle}
+          >
+            {header}
+          </Pressable>
+        )}
+        {children != null && (
+          <StepContent shown={contentShown}>
+            <View style={{paddingBottom: spacing.m}}>{children}</View>
+          </StepContent>
+        )}
+      </View>
     </View>
   );
 }

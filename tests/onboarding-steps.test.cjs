@@ -99,6 +99,58 @@ test('a rejected token and a network failure never verify the WaniKani page', ()
   assert.deepEqual(pick(done), {step1: 'done', step2: 'done', verified: true});
 });
 
+test('the WaniKani page opens on the token step, with token creation an available row', () => {
+  // The reader pastes first: the token field is the current step, and "Create a token" is offered
+  // as an available (openable) row rather than being the step that holds the page.
+  for (const connected of [null, false]) {
+    const derived = steps.wanikaniSteps({connected});
+    assert.equal(derived.step1, 'available');
+    assert.equal(derived.step2, 'current');
+    assert.equal(derived.verified, false);
+  }
+  const connected = steps.wanikaniSteps({connected: true});
+  assert.deepEqual(pick(connected), {step1: 'done', step2: 'done', verified: true});
+});
+
+test('the WaniKani primary is never a dead tap: an empty token still crosses', () => {
+  // A stored token being read, and a check in flight, are the only disabled states.
+  assert.deepEqual(
+    steps.wanikaniPrimary({connected: null, connecting: false, retry: false, token: ''}),
+    {label: 'Checking\u2026', disabled: true, intent: 'none'},
+  );
+  const checkingToken = steps.wanikaniPrimary({
+    connected: false,
+    connecting: true,
+    retry: false,
+    token: 'abc',
+  });
+  assert.deepEqual(checkingToken, {label: 'Checking token\u2026', disabled: true, intent: 'none'});
+
+  // Empty field, not connected: enabled, and the press asks the reader for a token.
+  for (const token of ['', '   ']) {
+    assert.deepEqual(
+      steps.wanikaniPrimary({connected: false, connecting: false, retry: false, token}),
+      {label: 'Connect WaniKani', disabled: false, intent: 'prompt'},
+    );
+  }
+
+  // A token typed: the same button checks it, and a failed attempt keeps its own label.
+  assert.deepEqual(
+    steps.wanikaniPrimary({connected: false, connecting: false, retry: false, token: 'abc'}),
+    {label: 'Connect WaniKani', disabled: false, intent: 'connect'},
+  );
+  assert.deepEqual(
+    steps.wanikaniPrimary({connected: false, connecting: false, retry: true, token: 'abc'}),
+    {label: 'Try again', disabled: false, intent: 'connect'},
+  );
+
+  // Connected: the button finishes the page.
+  assert.deepEqual(
+    steps.wanikaniPrimary({connected: true, connecting: false, retry: false, token: ''}),
+    {label: 'Done', disabled: false, intent: 'advance'},
+  );
+});
+
 test('the connect readout keeps the exact copy and only offers a retry where it helps', () => {
   const labels = {OFFLINE: 'no connection', SERVER: 'WaniKani reported a server error'};
 
@@ -163,10 +215,10 @@ test('the last page finishes onboarding and other pages step forward', () => {
   assert.equal(steps.nextStep(3), 3);
 });
 
-test('a download line names its phase, its percent and its megabytes', () => {
+test('a download line reads the brief: phase, percent, the figure done and the total', () => {
   const downloading = {engine: 'medium', phase: 'downloading', bytesDone: 32_200_000, bytesTotal: 76_600_000};
   assert.equal(steps.downloadPercent(downloading), 42);
-  assert.equal(steps.downloadProgressText(downloading), 'Downloading\u2026 \u00b7 42% \u00b7 32.2 MB of 76.6 MB');
+  assert.equal(steps.downloadProgressText(downloading), 'Downloading\u2026 42% \u00b7 32.2 of 76.6 MB');
   assert.equal(
     steps.downloadProgressText({...downloading, phase: 'verifying'}),
     'Verifying\u2026',
@@ -178,7 +230,80 @@ test('a download line names its phase, its percent and its megabytes', () => {
 test('a row reads its own status word for its one grouped label', () => {
   assert.equal(steps.stepStatusWord('done'), 'done');
   assert.equal(steps.stepStatusWord('current'), 'current');
+  assert.equal(steps.stepStatusWord('available'), 'available');
   assert.equal(steps.stepStatusWord('todo'), 'not started');
+});
+
+test('the rail is only solid under a step that is really done', () => {
+  assert.equal(steps.connectorStateAfter('done'), 'filled');
+  for (const status of ['current', 'available', 'todo']) {
+    assert.equal(steps.connectorStateAfter(status), 'pending', `${status} must leave a pale rail`);
+  }
+});
+
+test('a step open before it was ever measured lays itself out at its natural height', () => {
+  // The device failure: an open step measured zero inside its own zero-height clip and stayed shut.
+  // It is laid out naturally until a real height exists, so the clip is never consulted at zero.
+  assert.equal(steps.shouldMeasureStepContent(true, null), true);
+  assert.equal(steps.shouldMeasureStepContent(true, 120), false);
+  assert.equal(steps.shouldMeasureStepContent(false, null), false);
+  assert.equal(steps.shouldMeasureStepContent(false, 120), false);
+});
+
+test('a clipped or missing measurement is never taken as the row height', () => {
+  for (const bad of [0, -1, Number.NaN, Infinity]) {
+    assert.equal(steps.acceptStepContentHeight(bad), null, `${bad} must not become a height`);
+  }
+  assert.equal(steps.acceptStepContentHeight(49), 49);
+});
+
+test('the action-area key carries the page\'s verified flag, so a done flip is never dropped', () => {
+  // The reader's own case: lookup already on, PP-OCRv6 Medium absent, primary "Done" enabled. The
+  // install lands and selects itself — the label, the disabled state and the skip labels are all
+  // identical, so only [done] can tell the shell its gate has opened.
+  const facts = {
+    step: 0,
+    label: 'Done',
+    disabled: false,
+    done: false,
+    saveError: false,
+    skipLabel: 'Skip',
+    skipAccessibilityLabel: 'Skip lookup mode setup',
+  };
+  const beforeInstall = steps.lookupSteps({lookup: 'on', medium: 'absent', mediumSelected: false});
+  const afterInstall = steps.lookupSteps({lookup: 'on', medium: 'installed', mediumSelected: true});
+  assert.equal(beforeInstall.verified, false);
+  assert.equal(afterInstall.verified, true);
+  assert.notEqual(
+    steps.actionAreaKey({...facts, done: beforeInstall.verified}),
+    steps.actionAreaKey({...facts, done: afterInstall.verified}),
+  );
+
+  // Every other thing the shell reads is in the key too, and identical facts are one key.
+  const key = steps.actionAreaKey(facts);
+  assert.equal(steps.actionAreaKey({...facts}), key);
+  assert.notEqual(key, steps.actionAreaKey({...facts, disabled: true}));
+  assert.notEqual(key, steps.actionAreaKey({...facts, saveError: true}));
+  assert.notEqual(key, steps.actionAreaKey({...facts, step: 1}));
+  assert.notEqual(key, steps.actionAreaKey({...facts, label: 'Continue'}));
+});
+
+test('a connect handler the shell keeps reads the token at press time, not at capture time', () => {
+  let token = '';
+  let busy = false;
+  // Made once — the shell stores the page's primary and keeps it — and every press must see what the
+  // reader has typed since. A handler that closed over its first snapshot would return "a" here.
+  const storedHandler = () => steps.tokenToCheck(() => ({token, busy}));
+
+  assert.equal(storedHandler(), null);
+  token = 'a';
+  assert.equal(storedHandler(), 'a');
+  token = 'a-token-typed-in-full';
+  assert.equal(storedHandler(), 'a-token-typed-in-full');
+  token = '  spaced  ';
+  assert.equal(storedHandler(), 'spaced');
+  busy = true;
+  assert.equal(storedHandler(), null);
 });
 
 function pick(derived) {

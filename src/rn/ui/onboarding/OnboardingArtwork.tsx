@@ -9,8 +9,9 @@
  * scene clock the flow owns. In every pose the word is 合点 (Gaten, the app's own name), reading
  * がてん.
  *
- *  - Lookup (0): a screen card with 合点 highlighted, and a result card below it showing 合点 · がてん
- *    with two meaning lines.
+ *  - Lookup (0): a screen card with 合点 highlighted, a result card below it showing 合点 · がてん
+ *    with two meaning lines, and the floating trigger resting over the page beside the word: the
+ *    Gaten G button itself, not a search glyph.
  *  - Anki (1): three stacked flashcards, 合点 large with がてん beneath, and a row of four answer
  *    pills of which the third ("Good") is filled with the accent.
  *  - WaniKani (2): a torii in neutral ink, a 合点 card and a "Level 1" card with a short accent bar.
@@ -19,7 +20,9 @@
  * tinted with the accent) stays put, so a step change and its reverse travel the same path. Every
  * colour is a theme role (`surface`, `outline`, `onSurface`) except the accent, which is the app's
  * default Indigo fixed per scheme (see `INDIGO_LIGHT` / `INDIGO_DARK`): light and dark repaint the
- * same geometry, the reader's accent choice does not apply here.
+ * same geometry, the reader's accent choice does not apply here. The one drawn element that is
+ * neither: the floating trigger's own mark, the black Gaten G on its flat white disc, painted as the
+ * button actually ships and so the same in both schemes.
  *
  * The lettering is the bundled IBM Plex Sans JP's own outlines (Medium for the kanji and kana,
  * SemiBold for "Level 1"), extracted from `app/src/main/res/font/ibm_plex_sans_jp_*.ttf` (unitsPerEm
@@ -151,9 +154,15 @@ function Layer({style, children}: {style?: object; children: React.ReactNode}) {
  * The artwork follows light/dark but not the reader's accent: onboarding is shown with the app's
  * default Indigo, so its tones are fixed. Hex values are IndigoLight / IndigoDark in
  * app/src/main/java/com/gaten/app/ui/theme/Color.kt (primary, and the onPrimary ink that reads on it).
+ *
+ * `toriiInk` is the one neutral the WaniKani scene draws its torii in. It is fixed per scheme rather
+ * than read from `colors.outline`, because that outline is near the disc's own tone on the device
+ * theme (its contrast against the composited disc is ~1:1, so the gate vanished). Each value below is
+ * a muted neutral picked to clear 3:1 non-text contrast against that disc — the light disc composites
+ * to ~#EAE9F6, the dark to ~#22242E — while staying quieter than the cards' near-full-strength ink.
  */
-const INDIGO_LIGHT = {accent: "#4338CA", onAccent: "#FFFFFF"};
-const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111"};
+const INDIGO_LIGHT = {accent: "#4338CA", onAccent: "#FFFFFF", toriiInk: "#5B5B66"};
+const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111", toriiInk: "#9A9AA4"};
 
 function useIndigo() {
   const {dark} = useTheme();
@@ -221,6 +230,48 @@ function Lines({x, y, widths, gap = 6}: {x: number; y: number; widths: number[];
   return <Path d={d} stroke={colors.outline} strokeOpacity={0.55} strokeWidth={1.6} />;
 }
 
+/**
+ * The floating trigger's mark: the approved Gaten G, byte-for-byte the path in
+ * `app/src/main/res/drawable/ic_trigger_g.xml` (viewport 760x666, its group's own `translate(-6 -6)`
+ * dropping the launcher artwork's 6-unit margin so the viewport is the ink). One flat black shape
+ * under `evenodd`; never tinted.
+ */
+const TRIGGER_G =
+  "M 720 8 L 719 10 L 716 16 L 716 18 L 707 37 L 692 66 L 692 68 L 687 78 L 689 78 L 690 79 L 698 79 L 699 78 L 708 79 L 710 79 L 728 79 L 731 75 L 734 68 L 744 50 L 744 48 L 755 27 L 757 25 L 766 7 Z M 655 8 L 654 10 L 652 14 L 648 22 L 626 66 L 626 68 L 615 90 L 658 89 L 659 87 L 664 76 L 666 74 L 676 55 L 677 53 L 686 36 L 687 34 L 687 32 L 688 30 L 698 13 L 701 7 Z M 504 6 L 335 7 L 307 8 L 295 9 L 285 10 L 277 11 L 271 12 L 265 13 L 250 16 L 234 20 L 227 22 L 209 28 L 201 31 L 194 34 L 179 41 L 177 42 L 166 48 L 161 51 L 153 56 L 144 62 L 137 67 L 128 74 L 122 79 L 114 86 L 93 107 L 86 115 L 81 121 L 74 130 L 69 137 L 65 143 L 59 152 L 50 167 L 46 175 L 38 191 L 34 200 L 32 205 L 30 210 L 27 218 L 23 230 L 17 251 L 16 255 L 12 275 L 11 281 L 10 287 L 9 294 L 8 303 L 7 314 L 6 331 L 6 358 L 7 375 L 8 386 L 9 395 L 11 408 L 14 423 L 16 432 L 19 443 L 21 450 L 28 471 L 34 486 L 38 495 L 48 515 L 53 524 L 56 529 L 61 537 L 69 549 L 78 561 L 82 566 L 87 572 L 97 583 L 104 590 L 116 601 L 122 606 L 127 610 L 131 613 L 135 616 L 142 621 L 145 623 L 148 625 L 156 630 L 163 634 L 187 646 L 194 649 L 202 652 L 223 659 L 234 662 L 238 663 L 258 667 L 265 668 L 272 669 L 281 670 L 292 671 L 311 672 L 676 672 L 676 305 L 674 306 L 666 305 L 354 307 L 353 310 L 351 312 L 347 319 L 339 333 L 323 361 L 314 377 L 302 400 L 300 402 L 298 406 L 551 406 L 553 408 L 552 542 L 474 543 L 320 543 L 305 542 L 297 541 L 290 540 L 285 539 L 273 536 L 267 534 L 258 531 L 253 529 L 246 526 L 233 519 L 228 516 L 225 514 L 222 512 L 215 507 L 211 504 L 204 498 L 187 481 L 182 475 L 179 471 L 176 467 L 168 455 L 165 450 L 161 443 L 155 431 L 151 422 L 149 417 L 142 396 L 139 384 L 138 379 L 137 374 L 136 368 L 135 362 L 134 352 L 134 308 L 135 299 L 136 293 L 137 287 L 138 282 L 141 269 L 142 265 L 145 256 L 149 245 L 152 238 L 155 232 L 160 222 L 164 215 L 167 210 L 173 201 L 176 197 L 180 192 L 186 185 L 200 171 L 207 165 L 212 161 L 219 156 L 230 149 L 236 146 L 248 140 L 253 138 L 271 132 L 275 131 L 279 130 L 284 129 L 290 128 L 297 127 L 307 126 L 579 125 L 580 120 L 583 112 L 586 104 L 595 83 L 607 51 L 612 37 L 616 23 L 618 20 L 621 9 L 622 7 L 556 6 L 547 6 L 510 6 Z";
+
+/** The mark's own ink box and the app's trigger disc, all in stage units (the scene draws at 1:1 dp). */
+const TRIGGER_G_INK = {w: 760, h: 666};
+const TRIGGER_DISC_R = 24; // 48 dp across
+/** The G on that disc: 27 dp wide, its height the ink's own ratio (27 * 666/760 = 23.66 dp). */
+const TRIGGER_G_W = 27;
+
+/**
+ * The floating lookup button as it ships: the black Gaten G, centred on its ink box, on a flat white
+ * 48 dp disc with a hairline black keyline drawn just inside the edge. The mark is the app's own —
+ * white disc, black G, in every theme — so it is fixed here rather than read from the theme.
+ */
+function TriggerButton({cx, cy}: {cx: number; cy: number}) {
+  const scale = TRIGGER_G_W / TRIGGER_G_INK.w;
+  const x = cx - (TRIGGER_G_INK.w * scale) / 2;
+  const y = cy - (TRIGGER_G_INK.h * scale) / 2;
+  return (
+    <G>
+      <Circle
+        cx={cx}
+        cy={cy}
+        r={TRIGGER_DISC_R - 0.5}
+        fill="#FFFFFF"
+        stroke="#000000"
+        strokeOpacity={0.14}
+        strokeWidth={1}
+      />
+      <G transform={`translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${scale.toFixed(6)})`}>
+        <Path d={TRIGGER_G} transform="translate(-6 -6)" fill="#000000" fillRule="evenodd" />
+      </G>
+    </G>
+  );
+}
+
 function LookupScene() {
   const {colors} = useTheme();
   const {accent, onAccent} = useIndigo();
@@ -252,6 +303,8 @@ function LookupScene() {
         <Glyphs text="がてん" x={170} y={110} size={8} fill={accent} />
         <Lines x={143} y={121} widths={[70, 52]} gap={7} />
       </Card>
+      {/* The floating trigger over the page, beside the word it read. */}
+      <TriggerButton cx={220} cy={64} />
     </>
   );
 }
@@ -300,15 +353,15 @@ const AnimatedBar = Animated.createAnimatedComponent(Rect);
 
 function WaniKaniScene({success}: {success: SharedValue<number>}) {
   const {colors} = useTheme();
-  const {accent} = useIndigo();
+  const {accent, toriiInk} = useIndigo();
   const barProps = useAnimatedProps<PathProps>(() => ({fillOpacity: 0.85 + 0.15 * success.value}) as PathProps);
-  const ink = colors.outline;
+  const ink = toriiInk;
   return (
     <>
-      {/* The torii, in neutral ink. */}
-      <Path d="M80 62 Q112 69 144 62" stroke={ink} strokeOpacity={0.7} strokeWidth={2.6} />
-      <Path d="M88 75 H136" stroke={ink} strokeOpacity={0.6} strokeWidth={2} />
-      <Path d="M96 76 V130 M128 76 V130" stroke={ink} strokeOpacity={0.7} strokeWidth={2.4} />
+      {/* The torii, in the fixed neutral ink that reads against the disc. */}
+      <Path d="M80 62 Q112 69 144 62" stroke={ink} strokeWidth={2.6} />
+      <Path d="M88 75 H136" stroke={ink} strokeWidth={2} />
+      <Path d="M96 76 V130 M128 76 V130" stroke={ink} strokeWidth={2.4} />
       {/* A 合点 card, and the Level 1 card with its short accent bar. */}
       <Card x={158} y={38} w={54} h={34} r={7} rotate={6}>
         <Glyphs text="合点" x={185} y={61} size={17} fill={colors.onSurface} anchor="middle" />

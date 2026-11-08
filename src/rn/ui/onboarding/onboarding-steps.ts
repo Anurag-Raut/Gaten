@@ -17,12 +17,51 @@
  * confirm, and it never changes what [verified] means.
  */
 
-/** One row's state, as the page draws it: done, the reader's current step, or not started. */
-export type StepStatus = "done" | "current" | "todo";
+/**
+ * One row's state, as the page draws it: done, the reader's current step, an openable row that is
+ * not the reader's step but is offered to them (WaniKani's "Create a token"), or not started.
+ */
+export type StepStatus = "done" | "current" | "available" | "todo";
 
 /** The word a row's own state reads with, for its one grouped accessibility label. */
 export function stepStatusWord(status: StepStatus): string {
-  return status === "done" ? "done" : status === "current" ? "current" : "not started";
+  return status === "done"
+    ? "done"
+    : status === "current"
+      ? "current"
+      : status === "available"
+        ? "available"
+        : "not started";
+}
+
+/** How the rail segment below a row is drawn: solid once that step is done, the pale rail otherwise. */
+export type ConnectorState = "filled" | "pending";
+
+/**
+ * The rail segment a row's own step leaves below its disc. The stepper reads every segment this way,
+ * so a segment is only ever solid under a step that is really done — the one fact the page verified.
+ */
+export function connectorStateAfter(status: StepStatus): ConnectorState {
+  return status === "done" ? "filled" : "pending";
+}
+
+/**
+ * True while a step's content has to be laid out at its natural height so it can be measured: it is
+ * open, and nothing has measured it yet. A step that arrives open is laid out this way on its first
+ * frame, so it opens at once — measuring it inside a zero-height clip reports zero on device, which
+ * is exactly how a step used to stay shut forever.
+ */
+export function shouldMeasureStepContent(shown: boolean, measured: number | null): boolean {
+  return shown && measured == null;
+}
+
+/**
+ * The height a content measurement is allowed to set: the measured height when it is a real one, or
+ * null for a zero, negative or non-finite one. A closed row clips its content to nothing, and that
+ * clipped zero must never be taken as the height the row opens to.
+ */
+export function acceptStepContentHeight(height: number): number | null {
+  return Number.isFinite(height) && height > 0 ? height : null;
 }
 
 /** A page's two rows and its verified-completion gate. */
@@ -108,9 +147,55 @@ export interface WaniKaniFacts {
  * Page 3: the token is checked against WaniKani, not against anything Gaten can see, so both rows
  * are done only once the account is really connected. There is no partial state: a rejected token
  * and a network failure leave the page exactly where it was.
+ *
+ * Unlike the other pages the reader pastes first, so the row carrying the token field is the current
+ * one; "Create a token" is an available row they can open for the how-to, never the step that holds
+ * the page back and never drawn as done until the account really is.
  */
 export function wanikaniSteps(facts: WaniKaniFacts): StepSet {
-  return stepSet(facts.connected === true, facts.connected === true);
+  const connected = facts.connected === true;
+  return {
+    step1: connected ? "done" : "available",
+    step2: connected ? "done" : "current",
+    verified: connected,
+  };
+}
+
+/** What the WaniKani page's one filled action is, and what a press of it does, from live facts. */
+export interface WaniKaniPrimaryFacts {
+  /** Null while the stored token is being read. */
+  connected: boolean | null;
+  /** True while a connect attempt is in flight. */
+  connecting: boolean;
+  /** True when the last attempt failed in a way that is worth retrying. */
+  retry: boolean;
+  /** The token in the field right now. */
+  token: string;
+}
+
+/** The label that action wears, whether it can be pressed, and what a press of it means. */
+export interface WaniKaniPrimary {
+  label: string;
+  disabled: boolean;
+  /** "advance" finishes the page, "connect" checks the token, "prompt" asks the reader for one. */
+  intent: "advance" | "connect" | "prompt" | "none";
+}
+
+/**
+ * The WaniKani page's primary, from its live facts. The button is never a dead tap: with no token
+ * typed the press is still enabled and becomes a prompt for one — the field is focused and the inline
+ * hint shown — so a reader who taps "Connect WaniKani" before pasting is told what to do instead of
+ * getting silence.
+ */
+export function wanikaniPrimary(facts: WaniKaniPrimaryFacts): WaniKaniPrimary {
+  if (facts.connected == null) return {label: "Checking\u2026", disabled: true, intent: "none"};
+  if (facts.connecting) return {label: "Checking token\u2026", disabled: true, intent: "none"};
+  if (facts.connected) return {label: "Done", disabled: false, intent: "advance"};
+  return {
+    label: facts.retry ? "Try again" : "Connect WaniKani",
+    disabled: false,
+    intent: facts.token.trim() === "" ? "prompt" : "connect",
+  };
 }
 
 /** The page [step] moves on to: the last page finishes onboarding (3). */
@@ -167,13 +252,60 @@ export function downloadPercent(progress: DownloadProgressLike): number {
   return Math.max(0, Math.min(100, percent));
 }
 
-/** The one line a reader's download row shows: its phase, its percent, and its megabytes so far. */
+/**
+ * The one line a reader's download row shows, in the brief's own shape: its phase, its percent, the
+ * figure done, and the total with the unit — "Downloading… 42% · 32.2 of 76.6 MB".
+ */
 export function downloadProgressText(progress: DownloadProgressLike): string {
   if (progress.phase === "verifying") return "Verifying\u2026";
   const percent = downloadPercent(progress);
-  const done = formatMegabytes(progress.bytesDone);
-  const total = formatMegabytes(progress.bytesTotal);
-  return `Downloading\u2026 \u00b7 ${percent}% \u00b7 ${done} of ${total}`;
+  return `Downloading\u2026 ${percent}% \u00b7 ${(progress.bytesDone / 1_000_000).toFixed(1)} of ${formatMegabytes(progress.bytesTotal)}`;
+}
+
+/**
+ * The token a stored connect handler checks: read when the press happens, never captured when the
+ * handler was made. The shell keeps one primary for the whole flow, so a handler that closed over a
+ * keystroke's snapshot would keep checking the first character the reader typed; the page hands this
+ * function live getters instead, and a press always reads what is in the field now.
+ */
+export function tokenToCheck(read: () => {token: string; busy: boolean}): string | null {
+  const {token, busy} = read();
+  const value = token.trim();
+  return value === "" || busy ? null : value;
+}
+
+/** What the action-area key reads: the committed step, and everything the buttons draw. */
+export interface ActionAreaFacts {
+  step: number;
+  label: string;
+  disabled: boolean;
+  /**
+   * The page's verified-completion flag. Part of the key on purpose: [done] can flip while the
+   * label, the disabled state and the save error stay the same — the Medium install landing on page
+   * 1 is exactly that — and a key that ignored it would keep the shell's gate shut (and stale).
+   */
+  done: boolean;
+  saveError: boolean;
+  skipLabel: string;
+  skipAccessibilityLabel: string;
+}
+
+/**
+ * A key for the action area alone: the shell re-renders on this and never on a page's whole view, so
+ * the buttons are not remounted, and do not lose their surface, just because a page re-reported.
+ * Everything the shell reads for its gate or its press is in the key, so nothing a page changes can
+ * be dropped; two pages that share a label and a disabled state still hand over a fresh handler
+ * because the step is in it too.
+ */
+export function actionAreaKey(facts: ActionAreaFacts): string {
+  return [
+    `step:${facts.step}`,
+    `${facts.label}:${facts.disabled ? 1 : 0}`,
+    facts.done ? "done" : "",
+    facts.saveError ? "error" : "",
+    facts.skipLabel,
+    facts.skipAccessibilityLabel,
+  ].join("|");
 }
 
 /** What the WaniKani connect form checks a token against, as the page reads it back. */
