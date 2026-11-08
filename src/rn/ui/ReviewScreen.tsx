@@ -200,7 +200,11 @@ export function ReviewScreen({
 }) {
   const theme = useTheme();
   const {colors} = theme;
-  const review = useReview();
+  // A settings page this page opened: WaniKani's, whose Get a token hands the reader to the browser.
+  // While it is over this page the card must not move (see `useReview`); it is cleared the moment
+  // the reader is back here.
+  const [settingsDetour, setSettingsDetour] = useState(false);
+  const review = useReview(settingsDetour);
   const isFocused = useIsFocused();
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [ankiHelpOpen, setAnkiHelpOpen] = useState(false);
@@ -220,10 +224,25 @@ export function ReviewScreen({
   const wasFocused = useRef(isFocused);
   useEffect(() => {
     if (isFocused && !wasFocused.current) {
+      // Back here: the detour is over, and both the detour and the open reference look again.
+      setSettingsDetour(false);
       setReferenceReload((count) => count + 1);
     }
     wasFocused.current = isFocused;
   }, [isFocused]);
+
+  /**
+   * The page's own route into WaniKani's settings, marking the detour on the way: the settings
+   * page's Get a token leaves Gaten for the browser, and the card must not move while the reader is
+   * away — nor may the reference they tapped Connect from close under them.
+   */
+  const openWaniKaniSettings =
+    onOpenSettingsPage == null
+      ? undefined
+      : () => {
+          setSettingsDetour(true);
+          onOpenSettingsPage("wanikani");
+        };
 
   /**
    * Back from this screen. Work in progress asks first — the Anki card, the WaniKani review and the
@@ -347,7 +366,7 @@ export function ReviewScreen({
             onKanji={(character) => reviewActions.toggleKanji(character)}
             onRadical={(id) => reviewActions.toggleRadical(id)}
             onCloseDetails={() => reviewActions.closeDetails()}
-            onOpenSettingsPage={onOpenSettingsPage}
+            onOpenSettings={openWaniKaniSettings}
             referenceReload={referenceReload}
           />
         ) : step.kind === "wkConnect" ? (
@@ -570,7 +589,7 @@ function AnkiSession({
   onKanji,
   onRadical,
   onCloseDetails,
-  onOpenSettingsPage,
+  onOpenSettings,
   referenceReload,
 }: {
   theme: Theme;
@@ -584,8 +603,8 @@ function AnkiSession({
   onKanji: (character: string) => void;
   onRadical: (id: number) => void;
   onCloseDetails: () => void;
-  /** The page's own route to WaniKani's settings, for the panels' connect action. */
-  onOpenSettingsPage?: (page: "wanikani") => void;
+  /** The panels' connect action: this page's own route to WaniKani's settings, detour marked. */
+  onOpenSettings?: () => void;
   /** Bumped when the reader returns to this page, so an open reference page looks again. */
   referenceReload: number;
 }) {
@@ -598,9 +617,6 @@ function AnkiSession({
   // The same choice the reference pages read: a kanji tapped during review opens whichever
   // reference the reader selected, with no account needed for Remembering the Kanji.
   const kanjiReference = useKanjiReferenceSource();
-  // The panels' connect action, offered only when this page really can open WaniKani's settings.
-  const onWaniKaniSettings =
-    onOpenSettingsPage == null ? undefined : () => onOpenSettingsPage("wanikani");
   // The note's own sentence is the example source: it is already on the device, so the answer never
   // waits on a network and stays readable with no connection at all.
   // The corpus is the example source; the note's own sentence is the fallback for a word the
@@ -809,7 +825,7 @@ function AnkiSession({
                           compact={false}
                           embedded
                           onRadical={onRadical}
-                          onSettings={onWaniKaniSettings}
+                          onSettings={onOpenSettings}
                           reloadKey={referenceReload}
                         />
                         {/* One level deeper: the radical is a page opened inside the kanji's
@@ -829,7 +845,7 @@ function AnkiSession({
                                   compact={false}
                                   embedded
                                   onRadical={onRadical}
-                                  onSettings={onWaniKaniSettings}
+                                  onSettings={onOpenSettings}
                                   reloadKey={referenceReload}
                                 />
                               </View>
@@ -921,7 +937,8 @@ function CardHtml({
         card.ord,
         colors.onSurface,
         colors.background,
-        cardRule(!revealed, colors.outlineVariant)
+        cardRule(!revealed, colors.outlineVariant),
+        !revealed
       ),
     [
       card.css,
@@ -964,7 +981,7 @@ const CARD_FONT_FILES: Array<[weight: number, file: string]> = [
  * WebView cannot see the family React Native registered, so each weight is declared here over
  * [CARD_FONT_HOST] and served from the bundled resources; the family is then stated on the card's
  * elements with `!important`, beside the ink, so a note type's own `font-family` cannot win. Sizes,
- * weights, line heights, layout, ruby and the note's own markup are still untouched.
+ * line heights, layout, ruby and the note's own markup are still untouched.
  */
 function cardFontCss(): string {
   const faces = CARD_FONT_FILES.map(
@@ -991,9 +1008,18 @@ function cardFontCss(): string {
  * note type's CSS and with `!important`.
  *
  * Replacing a note type's own foreground colours is deliberate: readable text on the app's
- * background is worth more than a template's arbitrary palette. The ink and the face are what is
- * stated (see [cardFontCss]); sizes, weights, line heights, layout, ruby and the note's own markup
- * are untouched, so a card's *structure* is preserved exactly. Backgrounds keep the narrower boundary
+ * background is worth more than a template's arbitrary palette. The ink, the face (see
+ * [cardFontCss]) — and, on the question side only, the weight — are what is stated; sizes, line
+ * heights, layout, ruby and the note's own markup are untouched, so a card's *structure* is
+ * preserved exactly.
+ *
+ * The question's weight is stated for the same reason the answer's is drawn at
+ * `typeScale.displayMedium`: the question and the revealed answer must read as the same word, and a
+ * template is free to set its own weight (this deck's is lighter than the answer's headword). A
+ * weight stated on the root alone would lose to a template's own rule on a descendant, so it is
+ * stated on `#content` and every element inside it, after the note type's CSS and with `!important`.
+ * The answer side states none: there the note type's own lettering stays its own, as it always has.
+ * Backgrounds keep the narrower boundary
  * they had: the content root and its first wrapper are forced transparent, because that is where a
  * note type paints the page-like background meant to cover the card, while anything deeper keeps its
  * colour — a box drawn inside a card is the note type's own formatting, and the app cannot tell a
@@ -1009,7 +1035,8 @@ function cardDocument(
   ord: number,
   onSurface: string,
   canvas: string,
-  frontRule: string
+  frontRule: string,
+  frontWord: boolean
 ): string {
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
@@ -1026,9 +1053,13 @@ function cardDocument(
     // card, not just its root. A template written for a light page colours its fields itself — this
     // deck paints its expression nearly black and its sentence grey — and a colour stated on a
     // descendant beats anything inherited, which is why stating the ink on the roots alone left the
-    // card unreadable once the canvas followed the theme. The ink and the family are stated; sizes,
-    // weights, line heights, layout, ruby, backgrounds and the note's own markup are left alone.
+    // card unreadable once the canvas followed the theme. The ink, the family, and — on the
+    // question side only — the weight are stated; sizes, line heights, layout, ruby, backgrounds
+    // and the note's own markup are left alone.
     `<style>#content,#content *{color:${onSurface} !important}` +
+    (frontWord
+      ? `#content,#content *{font-weight:${typeScale.displayMedium.fontWeight} !important}`
+      : "") +
     `${cardFontCss()}</style></head>` +
     `<body class="card card${ord + 1}"><div id="content" dir="auto">${stripMediaTags(html)}</div></body></html>`
   );
@@ -1158,6 +1189,9 @@ function displayAnkiField(value: string): string {
  * The question keeps its existing display treatment. The answer uses the app's body size and
  * natural document height so imported templates that set a page-sized card do not push the
  * WaniKani supplement away from the answer. Descendant sizing and media layout remain template-owned.
+ *
+ * The question's *weight* is not stated here: a rule this early loses to the note type's own CSS, so
+ * it is stated later with `!important` (see [cardDocument]), where the ink and the face already win.
  */
 function cardRule(frontWord: boolean, divider: string): string {
   if (!frontWord) {
