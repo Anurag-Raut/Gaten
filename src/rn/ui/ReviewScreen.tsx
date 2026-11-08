@@ -983,13 +983,16 @@ const CARD_FONT_FILES: Array<[weight: number, file: string]> = [
  * elements with `!important`, beside the ink, so a note type's own `font-family` cannot win. Sizes,
  * line heights, layout, ruby and the note's own markup are still untouched.
  */
+let cardFontCssCache: string | null = null;
 function cardFontCss(): string {
+  if (cardFontCssCache != null) return cardFontCssCache;
   const faces = CARD_FONT_FILES.map(
     ([weight, file]) =>
       `@font-face{font-family:"${APP_FONT}";font-style:normal;font-weight:${weight};` +
       `src:url("${CARD_FONT_HOST}/${file}") format("truetype")}`
   ).join("");
-  return faces + `#content,#content *{font-family:"${APP_FONT}" !important}`;
+  cardFontCssCache = faces + `#content,#content *{font-family:"${APP_FONT}" !important}`;
+  return cardFontCssCache;
 }
 
 /**

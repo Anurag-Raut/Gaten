@@ -40,6 +40,7 @@ import {
   SearchIdlePrompt,
   SearchField,
   SearchRowItem,
+  searchRowKey,
   SearchRowSeparator,
   searchRows,
   type SearchRow,
@@ -348,7 +349,10 @@ export function HomeScreen({
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           data={rows}
-          keyExtractor={(row) => row.key}
+          keyExtractor={searchRowKey}
+          initialNumToRender={8}
+          windowSize={7}
+          removeClippedSubviews
           renderItem={({item}) => (
             <Animated.View
               entering={FadeInDown.duration(motionDuration).easing(PAGE_EASING_REANIMATED)}
