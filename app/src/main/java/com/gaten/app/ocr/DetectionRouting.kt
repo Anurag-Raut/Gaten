@@ -26,7 +26,7 @@ internal object DetectionRouting {
 
     /**
      * The source whose lines are used, given what the PP path produced: [ppLineCount] is null when it
-     * was not tried or failed, and the number of readable lines otherwise. Zero lines is an empty
+     * was not tried or failed, and the number of boxes otherwise. Zero lines is an empty
      * result and falls back to ML Kit like every other failure.
      */
     fun choose(mode: RecognitionMode, ppLineCount: Int?): DetectionSource =

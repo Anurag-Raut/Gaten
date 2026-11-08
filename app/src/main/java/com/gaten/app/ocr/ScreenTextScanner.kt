@@ -22,17 +22,18 @@ import kotlinx.coroutines.CancellationException
  * ([ScreenHits]) with no further recognition.
  *
  * The layout the index is made of comes from ML Kit, or — in [RecognitionMode.PP_MEDIUM] with the
- * PP-OCRv6 detector installed — from that detector ([JapaneseOcr.detectWithPpOcr]), whose boxes are
- * read by the PP recogniser as they are found. [RecognitionMode.ML_KIT] is ML Kit throughout, and a
- * missing, failing or empty PP detector falls back to ML Kit. The overlay goes ready the moment its
- * index exists.
+ * PP-OCRv6 detector installed — from that detector ([JapaneseOcr.detectBoxesWithPpOcr]). The
+ * detector only finds boxes: nothing is read until the reader taps or circles one, and those
+ * gestures read their own crop. [RecognitionMode.ML_KIT] is ML Kit throughout, and a missing,
+ * failing or empty PP detector falls back to ML Kit. The overlay goes ready the moment its index
+ * exists.
  *
  * Every line ML Kit read is kept, whatever script it is in — a line it read as Latin can still be
  * stylized Japanese, which the selected engine may well read correctly — and each one's box is
  * trimmed onto its ink with [InkProjection] so a tap lands on the glyphs, not on ML Kit's padding.
  *
- * This is the detector, not the reader: what it returns is ML Kit's reading of each line (or the PP
- * engine's, for lines the PP detector found), and it is what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines the engine
+ * This is the detector, not the reader: what it returns is ML Kit's reading of each line, and it is
+ * what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines the engine
  * reads, leaving these boxes — which every gesture is hit-tested against — where they are, and drops
  * the lines whose final text turns out to have no Japanese in it.
  */
@@ -40,9 +41,9 @@ object ScreenTextScanner {
     private const val TAG = "GatenOcr"
 
     /**
-     * Recognises the whole [bitmap] and returns its index: the lines of the PP-OCR detector when
-     * [context]'s mode and installed pack call for it, else ML Kit's lines in the order it reported
-     * them, each tightened onto its ink.
+     * Returns the index of the whole [bitmap]: the PP detector's boxes when [context]'s mode and
+     * installed pack call for it — lines with no text yet, one cell covering the box — else ML Kit's
+     * lines, in the order it reported them, each tightened onto its ink.
      *
      * Returns null — i.e. [ScanState.Unavailable] for the caller — only when recognition fails. A
      * successful scan that read no line at all is still an index, an empty one. On failure the
@@ -51,9 +52,9 @@ object ScreenTextScanner {
     suspend fun scan(context: Context, bitmap: Bitmap): ScreenText? {
         val startedAt = SystemClock.elapsedRealtime()
         val lines = try {
-            val pp = JapaneseOcr.detectWithPpOcr(context, bitmap)
-            if (pp != null) {
-                pp.mapNotNull { toScreenLine(bitmap, it.text, it.bounds, symbols = emptyList(), engineRead = true) }
+            val boxes = JapaneseOcr.detectBoxesWithPpOcr(context, bitmap)
+            if (boxes != null) {
+                boxes.map { boxOnlyLine(it) }
             } else {
                 JapaneseOcr.mlKitResult(bitmap).textBlocks
                     .flatMap { it.lines }
@@ -69,76 +70,59 @@ object ScreenTextScanner {
         return ScreenText(lines, bitmap.width, bitmap.height)
     }
 
+    /**
+     * A detected box with no reading yet: empty text and a single cell over the box, so a tap
+     * hit-tests it ([ScreenHits.hitTestLine] needs a cell) and the gesture's own read supplies the
+     * text. The axis is guessed from the box alone.
+     */
+    private fun boxOnlyLine(box: Box): ScreenLine =
+        ScreenLine("", box, vertical = box.height > box.width * 1.5, charBoxes = listOf(box))
+
     /** Margin, in px, the line is cropped with before the ink profile is read. */
     private const val TIGHTEN_MARGIN = 2
 
     /** A crop of [bitmap] to profile: where it starts and how big it is. */
     private class Crop(val left: Int, val top: Int, val width: Int, val height: Int)
 
-    /** One ML Kit line as a [ScreenLine]; see the detector-agnostic overload below. */
-    private fun toScreenLine(bitmap: Bitmap, line: Text.Line): ScreenLine? {
-        val rect = line.boundingBox ?: return null
-        val symbols = line.elements.flatMap { it.symbols }.mapNotNull { symbol ->
-            symbol.boundingBox?.let { symbol.text to Box(it.left, it.top, it.right, it.bottom) }
-        }
-        return toScreenLine(bitmap, line.text, Box(rect.left, rect.top, rect.right, rect.bottom), symbols)
-    }
-
     /**
-     * One detected line as a [ScreenLine], or null when the line is blank or boxless. [symbols] are
-     * the detector's own per-character boxes with their text, when it has any (ML Kit does; the PP
-     * detector does not, so those lines are interpolated). [engineRead] marks a line whose [rawText]
-     * is already the selected engine's reading.
+     * One ML Kit line as a [ScreenLine], or null when the line is blank or boxless.
      *
      * A line whose text has no Japanese in it is kept: the engine may still read Japanese out of the
      * glyphs ML Kit saw as Latin, and [ScreenLineReader] drops the line if it does not.
      *
-     * The detector's box is loose, so the line is cropped (a small margin) and run through
+     * The model's box is loose, so the line is cropped (a small margin) and run through
      * [InkProjection]: the ink trims the box, and for a full-width line the character cells are cut
      * from the tightened span instead of an even split of the loose box. A tightening that comes
-     * back under half the line's length is a threshold failure, not text, so the detector's own box
-     * is kept.
+     * back under half the line's length is a threshold failure, not text, so ML Kit's own box is
+     * kept.
      */
-    private fun toScreenLine(
-        bitmap: Bitmap,
-        rawText: String,
-        mlKit: Box,
-        symbols: List<Pair<String, Box>>,
-        engineRead: Boolean = false
-    ): ScreenLine? {
-        val text = rawText.trim()
+    private fun toScreenLine(bitmap: Bitmap, line: Text.Line): ScreenLine? {
+        val text = line.text.trim()
         if (text.isEmpty()) return null
+        val rect = line.boundingBox ?: return null
+        val mlKit = Box(rect.left, rect.top, rect.right, rect.bottom)
         val vertical = mlKit.height > mlKit.width * 1.5 && text.length > 1
 
         val crop = cropFor(bitmap, mlKit)
-            ?: return ScreenLine(
-                text, mlKit, vertical, fallbackCharBoxes(symbols, text, mlKit, vertical),
-                engineRead = engineRead
-            )
+            ?: return ScreenLine(text, mlKit, vertical, fallbackCharBoxes(line, text, mlKit, vertical))
 
         val gray = luminance(bitmap, crop)
         val span = InkProjection.tighten(gray, crop.width, crop.height, vertical)
         val originalMain = if (vertical) mlKit.height else mlKit.width
         if (span == null || (span.mainEnd - span.mainStart) * 2 < originalMain) {
-            return ScreenLine(
-                text, mlKit, vertical, fallbackCharBoxes(symbols, text, mlKit, vertical),
-                engineRead = engineRead
-            )
+            return ScreenLine(text, mlKit, vertical, fallbackCharBoxes(line, text, mlKit, vertical))
         }
 
         val bounds = tightenedBounds(span, crop.left, crop.top, mlKit, vertical)
         if (bounds.width <= 0 || bounds.height <= 0) {
-            return ScreenLine(
-                text, mlKit, vertical, fallbackCharBoxes(symbols, text, mlKit, vertical),
-                engineRead = engineRead
-            )
+            return ScreenLine(text, mlKit, vertical, fallbackCharBoxes(line, text, mlKit, vertical))
         }
         val boxes = if (isFullWidthText(text)) {
             gridCharBoxes(gray, crop, span, text, vertical, bounds)
         } else {
-            fallbackCharBoxes(symbols, text, bounds, vertical)
+            fallbackCharBoxes(line, text, bounds, vertical)
         }
-        return ScreenLine(text, bounds, vertical, boxes, detectorBounds = mlKit, engineRead = engineRead)
+        return ScreenLine(text, bounds, vertical, boxes, detectorBounds = mlKit)
     }
 
     /** The line's [bounds] grown by [TIGHTEN_MARGIN] px and clamped to [bitmap]'s edges, or null. */
@@ -226,20 +210,17 @@ object ScreenTextScanner {
      * reported differently never lines up, so the interpolation is a normal outcome, not an error
      * path.
      */
-    private fun fallbackCharBoxes(
-        symbols: List<Pair<String, Box>>,
-        text: String,
-        bounds: Box,
-        vertical: Boolean
-    ): List<Box> {
+    private fun fallbackCharBoxes(line: Text.Line, text: String, bounds: Box, vertical: Boolean): List<Box> {
         // Full-width text sits on an even grid, and the model's own symbol boxes drift off it (on
         // a measured line they ran half a character past the glyphs by the end), so an even split
         // of the line box is the more accurate of the two. Symbol boxes are kept for mixed lines,
         // where Latin and digits make the widths uneven.
         if (isFullWidthText(text)) return interpolateCharBoxes(text, bounds, vertical)
 
-        if (symbols.size == text.length && symbols.joinToString("") { it.first } == text) {
-            return symbols.map { it.second }
+        val symbols = line.elements.flatMap { it.symbols }
+        val rects = symbols.mapNotNull { it.boundingBox }
+        if (rects.size == text.length && symbols.joinToString("") { it.text } == text) {
+            return rects.map { Box(it.left, it.top, it.right, it.bottom) }
         }
         return interpolateCharBoxes(text, bounds, vertical)
     }

@@ -84,16 +84,15 @@ object JapaneseOcr {
     }
 
     /**
-     * The lines of the whole [bitmap] as the PP-OCRv6 detector and recogniser see them, or null when
-     * ML Kit must find them instead: Standard mode, the detector or the recogniser not installed,
-     * the detector failing or finding nothing, or no detected box reading as Japanese. See
-     * [DetectionRouting]. Never throws except to propagate cancellation.
+     * The text boxes of the whole [bitmap] from the PP-OCRv6 detector, or null when ML Kit must find
+     * the lines instead: Standard mode, the detector or the recogniser not installed, or the
+     * detector failing or finding nothing. See [DetectionRouting]. Never throws except to propagate
+     * cancellation.
      *
-     * The detector's boxes carry no text, so each one is read here with [readLine] (foreground
-     * priority: the overlay is waiting on the index). Boxes that read as nothing, a placeholder or
-     * non-Japanese text are left out, as [readLine] defines them.
+     * Boxes only, nothing is read here: the reader's tap or circle reads the box it picks (see
+     * [readLine]), so opening the overlay costs one detector pass however many boxes there are.
      */
-    internal suspend fun detectWithPpOcr(context: Context, bitmap: Bitmap): List<OcrLine>? {
+    internal suspend fun detectBoxesWithPpOcr(context: Context, bitmap: Bitmap): List<Box>? {
         val mode = RecognitionPreference.mode(context)
         // Standard never looks at the pack: decide on the mode before any install check runs.
         if (mode != RecognitionMode.PP_MEDIUM) return null
@@ -105,14 +104,8 @@ object JapaneseOcr {
         ) {
             return null
         }
-        val lines = try {
-            val boxes = PpOcrDetector.detect(context, bitmap).orEmpty()
-            val read = ArrayList<OcrLine>(boxes.size)
-            for (box in boxes) {
-                val text = readLine(context, bitmap, box)?.trim()
-                if (!text.isNullOrEmpty()) read.add(OcrLine(text, box))
-            }
-            read
+        val boxes = try {
+            PpOcrDetector.detect(context, bitmap)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -122,7 +115,7 @@ object JapaneseOcr {
             Log.w(TAG, "PP-OCR detection ran out of memory", e)
             null
         }
-        return lines?.takeIf {
+        return boxes?.takeIf {
             DetectionRouting.choose(mode, it.size) == DetectionSource.PP_DETECTOR
         }
     }

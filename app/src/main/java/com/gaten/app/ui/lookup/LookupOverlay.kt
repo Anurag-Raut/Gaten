@@ -438,7 +438,8 @@ fun LookupOverlay(
     // Read the screen in the background as soon as the index is in, biggest boxes first.
     LaunchedEffect(reader) {
         val current = screen ?: return@LaunchedEffect
-        reader?.prefetch(prefetchOrder(current))
+        // Lines the PP detector found carry no text yet: they are read when picked, not ahead.
+        reader?.prefetch(prefetchOrder(current).filter { current.lines[it].text.isNotEmpty() })
     }
 
     // Open the offline dictionary once and keep it warm for the whole overlay lifetime.

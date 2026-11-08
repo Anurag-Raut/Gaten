@@ -34,8 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
  * better text as it arrives.
  *
  * The overlay's index is ML Kit's — boxes, lines and a first reading — and it is built instantly so
- * the overlay is usable at once. (When the PP-OCR detector found the lines, [ScreenLine.engineRead]
- * marks them as already read by the engine and this class leaves them as they are.) This class is what happens next: every line is read in the
+ * the overlay is usable at once. This class is what happens next: every line is read in the
  * background (see [prefetchOrder]) and [text] republishes the index with each line's text replaced
  * as it lands. A gesture asks for the lines it touched with [read], which waits for them and falls
  * back to ML Kit's text when the selected engine is unavailable, fails, or takes longer than
@@ -174,11 +173,6 @@ class ScreenLineReader(
         priority: OcrJobPriority,
         reader: suspend (ScreenLine) -> String?
     ): String {
-        if (line.engineRead) {
-            // The PP detector's lines were read when they were found; there is nothing to read again.
-            read.add(lineIndex)
-            return line.text
-        }
         val startedAt = System.nanoTime()
         var timedOut = false
         if (priority == OcrJobPriority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
