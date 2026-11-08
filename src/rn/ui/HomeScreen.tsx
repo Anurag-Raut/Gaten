@@ -78,7 +78,7 @@ export function HomeScreen({
   const contentInset = contentInsetFor(width);
   const reducedMotion = useReducedMotion();
   const focused = useIsFocused();
-  const home = useHomeDashboard();
+  const home = useHomeDashboard(focused);
   const lookup = useLookupStatus(focused);
 
   const searchState = store.useSearchState();

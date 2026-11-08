@@ -270,9 +270,16 @@ function ankiCard(decks: AnkiDecksState, completedToday: number | null): HomeAnk
 /**
  * Loads home data once when the screen mounts — every tab is mounted up front, so the numbers are
  * already there when the reader swipes to Home — and refreshes again when the app returns to the
- * foreground. Independent reads keep a history failure from masking either study service.
+ * foreground or Home comes back to the front of its own stack. Independent reads keep a history
+ * failure from masking either study service.
+ *
+ * [focused] is Home's own visibility, as the screen's `useIsFocused` reports it. The recent lookups
+ * follow it: a word opened from Home's search or from the lookup overlay is recorded while Home sits
+ * behind that page, so the list is read again as soon as Home is back in front. The study services
+ * are only read on a mount or a foreground return, which is what keeps a tab switch from asking
+ * AnkiDroid anything.
  */
-export function useHomeDashboard(): HomeDashboardData {
+export function useHomeDashboard(focused: boolean): HomeDashboardData {
   const waniKaniStats = useWaniKaniStats();
   const decks = useAnkiDecks();
   const [daily, setDaily] = useState<Array<number | null> | null>(null);
@@ -319,28 +326,38 @@ export function useHomeDashboard(): HomeDashboardData {
       });
   }, []);
 
-  const load = useCallback(() => {
-    void loadAnkiDecks();
-    loadStudyDays();
-    loadRecentLookups();
-  }, [loadStudyDays, loadRecentLookups]);
-
-  /** The card's own retry: the shared deck list and Home's week, both read again. */
-  const refreshAnki = useCallback(() => {
+  /**
+   * The two reads a mount, a foreground return and the Anki card's own retry all want: the shared
+   * deck list and Home's week of study days. The recent lookups are deliberately not in here — they
+   * follow Home's own visibility below, which a foreground return does not change.
+   */
+  const loadServices = useCallback(() => {
     void loadAnkiDecks();
     loadStudyDays();
   }, [loadStudyDays]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadServices();
+  }, [loadServices]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (status) => {
-      if (status === "active") load();
+      if (status !== "active") return;
+      loadServices();
+      loadRecentLookups();
     });
     return () => subscription.remove();
-  }, [load]);
+  }, [loadServices, loadRecentLookups]);
+
+  // Nothing tells Home that the lookup history grew — the word was opened from a page pushed over it
+  // — so the list is read again every time Home is back in front, not only at startup. A tab switch
+  // counts: the reader may have looked a word up from the lookup mode's own overlay while away. The
+  // study reads above are left out of this, so a tab switch never asks AnkiDroid anything.
+  useEffect(() => {
+    if (focused) {
+      loadRecentLookups();
+    }
+  }, [focused, loadRecentLookups]);
 
   const anki = ankiCard(decks, daily?.[0] ?? null);
   const accessLost =
@@ -399,7 +416,7 @@ export function useHomeDashboard(): HomeDashboardData {
     recentLookups,
     recentLookupsStatus,
     recentLookupsError,
-    refreshAnki,
+    refreshAnki: loadServices,
     refreshWaniKani: waniKaniStats.refresh,
     refreshRecentLookups: loadRecentLookups,
   };
