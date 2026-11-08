@@ -14,7 +14,7 @@ import {
   type TextLayoutEvent,
 } from "react-native";
 import {useTheme} from "../theme";
-import {Icon} from "../components";
+import {Icon, StatusDot} from "../components";
 import {Collapsible} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {APP_FONT, shape, spacing, typeScale} from "../tokens";
@@ -402,11 +402,6 @@ function ServiceCard({
   const ink = colors.onSurface;
   const muted = colors.onSurfaceVariant;
   const statusColor = statusTone === "error" ? colors.error : muted;
-  const statusDotColor = statusTone === "connected"
-    ? colors.success
-    : statusTone === "error"
-      ? colors.warning
-      : colors.iconSecondary;
   const visibleDescription = count != null
     ? `${count} ${countLabel}`
     : actionLabel
@@ -430,7 +425,9 @@ function ServiceCard({
             {loading ? (
               <ActivityIndicator size={12} color={colors.accent} />
             ) : (
-              <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
+              <StatusDot
+                tone={statusTone === "connected" ? "connected" : statusTone === "error" ? "warning" : "neutral"}
+              />
             )}
             <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceStatus, {color: statusColor}]}>{status}</Text>
           </View>
@@ -724,7 +721,6 @@ const styles = StyleSheet.create({
   },
   serviceTitles: {flex: 1, minWidth: 0},
   serviceStatusRow: {marginTop: spacing.xs, flexDirection: "row", alignItems: "center", gap: spacing.xs},
-  serviceStatusDot: {width: 6, height: 6, borderRadius: 3},
   serviceStatus: {flexShrink: 1},
   serviceFooter: {flexShrink: 1, maxWidth: 132, flexDirection: "row", alignItems: "center", gap: 7},
   serviceFooterScaled: {width: "100%", maxWidth: "100%", alignSelf: "flex-end", justifyContent: "flex-end"},

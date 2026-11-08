@@ -48,12 +48,8 @@ function recognitionModeLabel(mode: RecognitionEngine): string {
   switch (mode) {
     case "ml_kit":
       return "ML Kit";
-    case "medium":
-      return "PP-OCRv6 Medium";
-    case "manga":
-      return "PP-OCRv6 Manga";
     default:
-      return "Manga OCR";
+      return "PP-OCRv6 Medium";
   }
 }
 

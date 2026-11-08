@@ -565,7 +565,8 @@ export function useLookupModeRequest() {
       onDismiss={() => setShowDisclosure(false)}
     />
   ) : null;
-  return {request, dialog};
+  // [open] lets an onboarding page keep its own done state false while the dialog owns the scene.
+  return {request, dialog, open: showDisclosure};
 }
 
 /**

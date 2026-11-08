@@ -8,10 +8,9 @@
  * Text recognition: the reader's manual engine choice, and the explicit confirmed downloads that put
  * an engine on the device.
  *
- * Four choices, no classifier. ML Kit is bundled and is the default: it reads out of the box with
- * nothing to download. The other three — PP-OCRv6 Medium (recommended) for ordinary screen and novel
- * text, PP-OCRv6 Manga for stylized lettering and video thumbnails, and Manga OCR — download only
- * when their own button is pressed; each tap asks for confirmation first, warning that Wi-Fi is
+ * Two choices, no classifier. ML Kit is bundled and is the default: it reads out of the box with
+ * nothing to download. PP-OCRv6 Medium (recommended) for ordinary screen and novel text downloads
+ * only when its own button is pressed; the tap asks for confirmation first, warning that Wi-Fi is
  * recommended and mobile data may incur charges, then works offline. An unavailable engine still
  * selects, and lookups fall back to the bundled ML Kit. Whether a download is running is read from
  * the native module, so leaving and returning does not show a download as finished.
@@ -40,9 +39,8 @@ const ML_KIT: RecognitionEngine = "ml_kit";
 
 const HELP_PARAGRAPHS = [
   "Every lookup reads the selection with the engine you choose here. Google ML Kit's Japanese recognizer is included with Gaten, so text is read out of the box with nothing to download.",
-  "The other engines are optional and download only when you press Download and confirm, then work offline. PP-OCRv6 Medium is recommended for ordinary screen and novel text; PP-OCRv6 Manga suits manga lettering, stylized fonts and outlined video thumbnails; Manga OCR suits Japanese and stylized text. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
-  "PP-OCRv6 engines read a single line at a time. For a multiline selection, or a vertical result that reads poorly, choose Manga OCR.",
-  "ML Kit finds the lines in every mode. When a downloaded engine cannot read a selection — it is not installed yet, or its read fails or holds no Japanese — ML Kit reads it instead.",
+  "PP-OCRv6 Medium is recommended for screen and novel text. It downloads only when you press Download and confirm, then works offline. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
+  "ML Kit finds the lines in every mode. When the downloaded engine cannot read a selection — it is not installed yet, or its read fails or holds no Japanese — ML Kit reads it instead.",
 ];
 
 /** The pinned download size as decimal MB, matching the size named in the docs and NOTICE. */
@@ -55,12 +53,8 @@ function engineUse(engine: EngineStatus): string {
   switch (engine.id) {
     case "ml_kit":
       return "Japanese text";
-    case "medium":
-      return "Screen and novels";
-    case "manga":
-      return "Manga, stylized and thumbnails";
     default:
-      return "Japanese and stylized text";
+      return "Screen and novels";
   }
 }
 

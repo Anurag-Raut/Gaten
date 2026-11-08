@@ -2,9 +2,10 @@ import {NativeModules} from "react-native";
 
 /**
  * Any of the selectable engines; also the persisted selected mode. `ml_kit` is bundled with the app
- * and always installed; `manga_ocr`, `medium` and `manga` are downloaded on demand.
+ * and always installed; `medium` (PP-OCRv6 Medium) is the one downloadable engine, recommended for
+ * screen and novel text.
  */
-export type RecognitionEngine = "ml_kit" | "manga_ocr" | "medium" | "manga";
+export type RecognitionEngine = "ml_kit" | "medium";
 
 /** One engine as the settings screen shows it. */
 export interface EngineStatus {
@@ -27,20 +28,12 @@ export interface RecognitionSettings {
 }
 
 interface GatenRecognitionNative {
-  isMangaOcrEnabled(): Promise<boolean>;
-  setMangaOcrEnabled(enabled: boolean): Promise<void>;
   getRecognitionSettings(): Promise<RecognitionSettings>;
   setRecognitionMode(mode: RecognitionEngine): Promise<void>;
   downloadRecognitionEngine(engine: RecognitionEngine): Promise<RecognitionSettings>;
 }
 
 const GatenRecognition = NativeModules.GatenRecognition as GatenRecognitionNative;
-
-export const isMangaOcrEnabled = (): Promise<boolean> =>
-  GatenRecognition.isMangaOcrEnabled();
-
-export const setMangaOcrEnabled = (enabled: boolean): Promise<void> =>
-  GatenRecognition.setMangaOcrEnabled(enabled);
 
 export const getRecognitionSettings = (): Promise<RecognitionSettings> =>
   GatenRecognition.getRecognitionSettings();

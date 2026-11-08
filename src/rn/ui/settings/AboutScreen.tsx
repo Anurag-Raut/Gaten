@@ -29,9 +29,7 @@ const PRIVACY_POLICY_URL = "https://anurag-raut.github.io/Gaten/privacy/";
 
 /** Where each attribution and licence lives. Opened in the browser, which may be nowhere. */
 const EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html";
-const MANGA_OCR_URL = "https://github.com/kha-white/manga-ocr";
 const PADDLE_OCR_URL = "https://github.com/PaddlePaddle/PaddleOCR";
-const PP_OCR_MANGA_URL = "https://huggingface.co/Kellenok/PP-OCRv6_manga";
 const MLKIT_TERMS_URL = "https://developers.google.com/ml-kit/terms";
 const WANIKANI_URL = "https://www.wanikani.com/";
 const GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html";
@@ -87,21 +85,9 @@ export function AboutScreen({onClose}: {onClose: () => void}) {
         />
         <SettingsRow
           icon="public"
-          title="manga-ocr"
-          summary="On-demand reader by kha-white · Apache-2.0 · ONNX Runtime"
-          onPress={() => open(MANGA_OCR_URL)}
-        />
-        <SettingsRow
-          icon="public"
           title="PP-OCRv6"
-          summary="Recommended on-demand recognition models by PaddlePaddle · Apache-2.0 · ONNX Runtime"
+          summary="Recommended on-demand recognition model by PaddlePaddle · Apache-2.0 · ONNX Runtime"
           onPress={() => open(PADDLE_OCR_URL)}
-        />
-        <SettingsRow
-          icon="public"
-          title="PP-OCRv6 Manga v0.2"
-          summary="Manga fine-tune by Kellenok · Apache-2.0"
-          onPress={() => open(PP_OCR_MANGA_URL)}
         />
         <SettingsRow
           icon="public"
