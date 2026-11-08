@@ -26,6 +26,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -64,7 +65,6 @@ internal object PpOcrPack {
     private val _status = MutableStateFlow(AssetPackStatus.UNKNOWN)
 
     private var manager: AssetPackManager? = null
-    private var listener: AssetPackStateUpdateListener? = null
 
     /**
      * True while Play is actually moving bytes. `WAITING_FOR_WIFI` and a user-confirmation prompt
@@ -97,19 +97,29 @@ internal object PpOcrPack {
         return directory.takeIf { candidate -> files.all { it.isPresentIn(candidate) } }
     }
 
-    /** Re-reads the pack's state from Play; it can have changed while this process was not watching. */
-    fun refresh(context: Context) {
+    /**
+     * Re-reads the pack's state from Play and waits for the answer; it can have changed while this
+     * process was not watching. Suspending, so a caller that is about to *report* the state (the
+     * settings read) cannot resolve before the answer arrives and call a live transfer "not
+     * downloading" — a mistake nothing on the JS side would ever correct, because it only re-reads
+     * on demand.
+     */
+    suspend fun refreshNow(context: Context) {
         val manager = manager(context) ?: return
-        scope.launch {
-            try {
-                val state = manager.getPackStates(listOf(PACK_NAME)).await().packStates()[PACK_NAME]
-                if (state != null) _status.value = state.status()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not read the recognition pack's state", e)
-            }
+        try {
+            val state = manager.getPackStates(listOf(PACK_NAME)).await().packStates()[PACK_NAME]
+            if (state != null) _status.value = state.status()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read the recognition pack's state", e)
         }
+    }
+
+    /** Fire-and-forget [refreshNow], for callers that have no coroutine: module init, app foreground. */
+    fun refresh(context: Context) {
+        if (manager(context) == null) return
+        scope.launch { refreshNow(context) }
     }
 
     /**
@@ -121,7 +131,10 @@ internal object PpOcrPack {
      * [PpOcrModel.DownloadException], so a failed Play transfer is never papered over with a
      * surprise 76 MB in-app download. Every way the wait can end is terminal — including
      * `WAITING_FOR_WIFI`, where Play has queued the fetch but will not move bytes — so a request
-     * always answers instead of leaving the settings screen on "Downloading…" until it times out.
+     * always answers instead of leaving the settings screen on "Downloading…" until it times out. A
+     * request Play rejects outright ends the wait at once, carrying Play's own reason, and each
+     * request arms the watch with a non-terminal state first, so a terminal state an earlier attempt
+     * left behind can never answer a new one.
      *
      * [activity] is only used to raise Play's own confirmation prompt when the download needs the
      * user's agreement (size or cellular); without one the prompt falls back to Play's notification.
@@ -135,7 +148,21 @@ internal object PpOcrPack {
         val manager = manager(context) ?: return false
         if (!isPlayInstall(context)) return false
 
-        manager.fetch(listOf(PACK_NAME))
+        // Arm the watch before the fetch. The state flow is conflated: it holds the last value Play
+        // (or a previous attempt) left there, so `first {}` would answer this new request from an
+        // earlier FAILED/CANCELED *synchronously*, while the fetch it just made is still running —
+        // reporting a false failure for a download that is going fine. Overwriting the value with a
+        // non-terminal one first makes the first matching emission necessarily this attempt's.
+        // [fetchError] carries a rejection Play reports through the Task rather than as a state.
+        val fetchError = AtomicReference<String?>(null)
+        _status.value = AssetPackStatus.PENDING
+        manager.fetch(listOf(PACK_NAME)).addOnFailureListener { error ->
+            // Play can reject the request outright, with no listener state to follow it, so the
+            // rejection itself is what ends the wait — promptly, carrying Play's own reason, rather
+            // than leaving the caller on the timeout.
+            fetchError.set(error.message ?: error.toString())
+            _status.value = AssetPackStatus.FAILED
+        }
 
         // The prompt is raised once, off the state watch: it is a dialog the user may leave open, and
         // blocking the watch on it would stop the very state that reports the download it authorised.
@@ -156,11 +183,18 @@ internal object PpOcrPack {
                     else -> false
                 }
             }
-        } ?: throw PpOcrModel.DownloadException(
-            "Play did not finish delivering the ${PACK_NAME} pack."
-        )
+        } ?: run {
+            // Nothing became terminal within the budget: stop reporting a transfer this request no
+            // longer owns, so a parked settings screen cannot read the armed sentinel as a download
+            // that is still running. Play's own state, if it ever speaks, overwrites this.
+            _status.value = AssetPackStatus.FAILED
+            throw PpOcrModel.DownloadException("Play did not finish delivering the ${PACK_NAME} pack.")
+        }
         if (terminal != AssetPackStatus.COMPLETED) {
-            throw PpOcrModel.DownloadException(refusal(terminal))
+            throw PpOcrModel.DownloadException(
+                fetchError.get()?.let { "Google Play refused the ${PACK_NAME} download: $it" }
+                    ?: refusal(terminal)
+            )
         }
         if (completeDir(context, files) == null) {
             throw PpOcrModel.DownloadException(
@@ -204,10 +238,9 @@ internal object PpOcrPack {
         } ?: return null
         // Attached before the manager is published, so no fetch or location query can precede it:
         // the callback writes every state Play reports into _status, which is what the fetch watch
-        // and isTransferring read.
-        val attached = AssetPackStateUpdateListener { state -> _status.value = state.status() }
-        created.registerListener(attached)
-        listener = attached
+        // and isTransferring read. Play Core keeps the listener alive for the life of the manager,
+        // so no reference is held here.
+        created.registerListener(AssetPackStateUpdateListener { state -> _status.value = state.status() })
         manager = created
         created
     }

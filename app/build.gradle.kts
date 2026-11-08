@@ -107,6 +107,12 @@ android {
     // on a Play install. Only a bundle can carry an asset pack, so it is declared only for the
     // bundle build — the same condition that puts `:ppocr` in the build graph at all
     // (settings.gradle.kts). An APK build therefore produces no pack and never touches the model.
+    //
+    // Side effect of the same flag: `-PplayBundle=true` also disables the ABI splits below, so the
+    // APK variants built under it are universal. Those APKs would carry this `assetPacks` entry too
+    // (an entry is inert without an asset-pack plugin in the same build, and it is only set when the
+    // pack is in the graph), but they are never the shipped artifact: the bundle is. If an APK is
+    // ever wanted with the pack declared, the split flag needs its own condition first.
     if (playBundle) assetPacks += ":ppocr"
 
     compileOptions {

@@ -136,7 +136,11 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         super.invalidate()
     }
 
-    private fun settings(context: Context): WritableMap {
+    private suspend fun settings(context: Context): WritableMap {
+        // Awaited, not fired and forgotten: this read is what the settings screen shows, and a
+        // refresh that resolved after it would report a live fast-follow transfer as not
+        // downloading — a claim the JS side never re-checks on its own.
+        PpOcrPack.refreshNow(context)
         val map = Arguments.createMap()
         map.putString("mode", RecognitionPreference.mode(context).id)
         val engines = Arguments.createArray()

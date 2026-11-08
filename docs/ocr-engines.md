@@ -44,7 +44,11 @@ itself, so `ocr/PpOcrPack.kt` reads the files straight out of
   (`AssetPackManager.showConfirmationDialog`) so the JS contract has no dialog of its own. Every way
   the wait can end is terminal — `COMPLETED`, `FAILED`, `CANCELED` and `WAITING_FOR_WIFI`, the last
   reported as "waiting for Wi-Fi" because Play will not move bytes for that request now — so an
-  explicit download always answers instead of hanging on "Downloading…" until the timeout.
+  explicit download always answers instead of hanging on "Downloading…" until the timeout. A request
+  Play rejects outright ends the wait immediately with Play's own reason (the fetch `Task`'s failure
+  listener, since no state update follows a rejected request), and each request arms the watch with a
+  non-terminal state first, so a conflated terminal state left by an earlier attempt cannot answer a
+  new one.
 - Both files are always resolved from **one** directory: the pack's copy when both pinned sizes are
   present, the in-app copy otherwise. A `getPackLocation` result on its own is not "installed", so a
   half-extracted pack is never handed to ONNX Runtime.
