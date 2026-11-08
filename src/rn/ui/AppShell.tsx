@@ -16,10 +16,13 @@
  * Studying is one of those pushed pages, not a tab: Home's two service cards ask the review store for
  * a step and push the flow onto Home's own stack.
  */
-import React, {useCallback, useEffect, useMemo, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
+  Animated,
+  BackHandler,
   DeviceEventEmitter,
   StatusBar,
+  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -70,6 +73,8 @@ import {
 } from "./navigation";
 import * as ShellBridge from "../native/GatenShell";
 import * as GatenAppInfo from "../native/GatenAppInfo";
+import {primeOnboardingStep, resetOnboardingStepPrime} from "./boot";
+import {HandoffReadinessProvider, useHandoffReadiness} from "./handoff";
 import {OnboardingFlow} from "./onboarding/OnboardingFlow";
 import {reviewStore} from "./review/review-store";
 import * as searchStore from "./search/searchStore";
@@ -170,12 +175,15 @@ function whenFocused(navigation: HomeStackNavigation, run: () => void): void {
  * whatever the reader opened rather than a jump to another tab.
  */
 function HomeRoute({navigation}: HomeRouteProps<"HomeTab">) {
+  const handoff = useHandoffReadiness();
   return (
     <HomeScreen
       // HomeScreen is drawn by this route rather than registered as a screen, so React Navigation
       // never hands it a navigation of its own: the lookup mark's page and the review flow's two
       // screens are reached through Home's stack only because it is passed down here.
       navigation={navigation}
+      // The completed setup's handoff waits for Home's real first layout before it reveals it.
+      onReady={handoff?.reportHomeReady}
       onOpenWord={(entryId) => {
         // A second tap on the same row must not stack a second copy of the page it just opened —
         // the same guard the reference chips use for their own toggle.
@@ -299,13 +307,19 @@ const STACK_SCREEN_OPTIONS: NativeStackNavigationOptions = {
  * - `animationEnabled` off when the system asks for reduced motion, so a tap lands on the spot
  *   instead of sliding there. A swipe is the reader's own gesture and stays available.
  *
- * Every tab's scene is mounted up front (`lazy: false`). With lazy mounting, a tap that crosses a
- * tab the reader has never opened mounts that screen — its native stack and its first render —
- * inside the pager's own animation, which is exactly where a dropped frame is most visible. A
- * three-tab bar is small enough to keep all three scenes alive; each screen's data work is already
- * gated on focus, so nothing is fetched until its tab is actually selected.
+ * Only the focused tab's scene is mounted (`lazy: true`, no preload distance): Home while it is
+ * focused, and the other two deferred to their first selection. With every scene eager, the commit
+ * that revealed Home also mounted Analytics' and Settings' native stacks and first renders. Lazy
+ * mounting keeps the mount to Home and the bar — and Home's own mount is moved off the reveal
+ * entirely: the shell mounts the tabs beneath the flow one macrotask after the flow's last page
+ * appears, so the completed setup's reveal is a commit and an [HANDOFF_FADE_MS] fade rather than a
+ * mount. Each screen's data work is already gated on focus, so nothing is fetched until its tab is
+ * actually selected.
  */
 const Tab = createMaterialTopTabNavigator<RootTabParamList>();
+
+/** The completed setup's whole-page crossfade, in ms: inside the tap-to-Home budget. */
+const HANDOFF_FADE_MS = 50;
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const AnalyticsStack = createNativeStackNavigator<AnalyticsStackParamList>();
@@ -392,10 +406,51 @@ export function AppShell() {
   // reader may still owe.
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
   const [stepReadFailed, setStepReadFailed] = useState(false);
+  // The warm mount: the tabs are mounted beneath the flow once the flow reaches its last page, one
+  // macrotask after that page appears, so the final tap finds Home and the bar already laid out.
+  // The deferral keeps the mount off the transition onto that page (and the first frame is never
+  // touched); a reader who completes before it lands still waits for readiness, never a blank Home.
+  const [prewarm, setPrewarm] = useState(false);
+  // The completed handoff: the tabs are mounted beneath the setup flow while Home and the bar
+  // settle, and the flow is only removed once it has faded. [handoffFading] is the second half —
+  // the fade has started, so the flow is inert and the tabs own the screen. With the warm mount the
+  // tabs are normally already laid out by this point; this handoff still carries the case where the
+  // reader completed before the mount landed.
+  const [handoff, setHandoff] = useState(false);
+  const [handoffFading, setHandoffFading] = useState(false);
+  const [homeReady, setHomeReady] = useState(false);
+  const [barReady, setBarReady] = useState(false);
+  const overlayOpacity = useRef(new Animated.Value(1)).current;
+  const overlayAnimation = useRef<Animated.CompositeAnimation | null>(null);
+  const handoffLive = useRef(true);
+  // Once the completed step is saved, the flow is still mounted for its own handoff: a late Back,
+  // Skip or swipe write must not put an earlier step back on top of the one already saved.
+  const completed = useRef(false);
 
-  const readOnboardingStep = useCallback(() => {
+  // Readiness as reported, and whether both had reported when the final advance was entered: the
+  // fallback wait (and its extra frame) is needed only when one of them had not.
+  const readyRef = useRef({home: false, bar: false});
+  const prewarmedAtEntry = useRef(false);
+
+  const reportHomeReady = useCallback(() => {
+    readyRef.current.home = true;
+    setHomeReady(true);
+  }, []);
+  const reportBarReady = useCallback(() => {
+    readyRef.current.bar = true;
+    setBarReady(true);
+  }, []);
+  const handoffReadiness = useMemo(
+    () => ({reportHomeReady, reportBarReady}),
+    [reportHomeReady, reportBarReady],
+  );
+
+  const readOnboardingStep = useCallback((fresh = false) => {
     setStepReadFailed(false);
-    void GatenAppInfo.getOnboardingStep()
+    if (fresh) {
+      resetOnboardingStepPrime();
+    }
+    void primeOnboardingStep()
       // Clamped to the four legal values, so a corrupt or older value can never draw a page that
       // does not exist: anything past the flow's last page opens the tabs.
       .then((step) => setOnboardingStep(Math.max(0, Math.min(3, step))))
@@ -410,8 +465,26 @@ export function AppShell() {
   // so the flow can offer its retry instead of silently moving on.
   const advanceOnboarding = useCallback(
     async (next: number): Promise<boolean> => {
+      if (completed.current) {
+        // The flow is only still on screen for the handoff fade. Answering `true` keeps it where it
+        // is without writing: the completed step stands, and the write's own retry path is untouched.
+        return true;
+      }
+      if (next >= 3) {
+        // Whether Home and the bar had already reported: only then can the reveal skip its settling
+        // frame. Read before the write, so it is the state the tap found.
+        prewarmedAtEntry.current = readyRef.current.home && readyRef.current.bar;
+      }
       try {
         await GatenAppInfo.setOnboardingStep(next);
+        // The primed read now answers with the step from before this write; drop it so a later shell
+        // remount under the same JS runtime reads the step just persisted instead of the old one. A
+        // failed write keeps the primed read for the flow's own retry, which reads fresh.
+        resetOnboardingStepPrime();
+        if (next >= 3) {
+          completed.current = true;
+          setHandoff(true);
+        }
         setOnboardingStep(next);
         return true;
       } catch {
@@ -421,18 +494,36 @@ export function AppShell() {
     [],
   );
 
-  const tabsMounted = onboardingStep !== null && onboardingStep >= 3;
+  // Setup is done and the tabs are the app. [tabsMounted] can be true earlier — the warm mount
+  // mounts the tabs beneath the flow's last page — so anything that must not act while the flow
+  // owns the screen (the outside-launch settings request below) keys off this instead.
+  const setupDone = onboardingStep !== null && onboardingStep >= 3;
+  const tabsMounted = setupDone || prewarm;
+  const flowMounted = onboardingStep !== null && (onboardingStep < 3 || handoff);
+
+  // The warm mount: on the flow's last page, mount the tabs one macrotask later. The timer is
+  // dropped if the step leaves that page first, and the completion path's readiness gate then
+  // carries the handoff as it always did.
+  useEffect(() => {
+    // The flow's last page is step 2 (its pages are 0, 1, 2); only there is the tabs' mount moved
+    // earlier. Any other step leaves the completion path to mount them itself.
+    if (prewarm || onboardingStep !== 2) {
+      return;
+    }
+    const timer = setTimeout(() => setPrewarm(true), 0);
+    return () => clearTimeout(timer);
+  }, [onboardingStep, prewarm]);
 
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
   // state when it is already mounted, so a page the reader left open is stacked above rather than
   // swapped for the new one — and every request, matched or not, is consumed exactly once.
   //
-  // It is read only once the tabs are mounted: while the setup flow owns the screen there is no
-  // navigator to push into, and a request must not be consumed into nothing. The pending request
-  // waits in the bridge until the tabs arrive.
+  // It is read only once setup is done: while the setup flow owns the screen there is no navigator
+  // to push into, and a request must not be consumed into nothing — nor push onto a warm-mounted
+  // navigator the reader cannot see. The pending request waits in the bridge until then.
   useEffect(() => {
-    if (!tabsMounted) {
+    if (!setupDone) {
       return;
     }
     let live = true;
@@ -491,7 +582,7 @@ export function AppShell() {
       live = false;
       subscription.remove();
     };
-  }, [navigationRef, tabsMounted]);
+  }, [navigationRef, setupDone]);
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     return {
@@ -516,6 +607,85 @@ export function AppShell() {
   // A tap on a tab slides the pager to it (that is what `animationEnabled` means to the library);
   // with reduced motion on it lands on the spot, as every other animation in the app does.
   const reducedMotion = useReducedMotion();
+
+  // The fade itself: one whole-overlay opacity, native driver, [HANDOFF_FADE_MS]. Reduced motion
+  // drops the flow on the frame its replacement is ready, with no animation. The animation is
+  // stopped and the state writes are dropped if the shell has already unmounted.
+  const finishHandoff = useCallback(() => {
+    if (handoffLive.current) {
+      setHandoff(false);
+      setHandoffFading(false);
+    }
+  }, []);
+
+  const startHandoff = useCallback(() => {
+    if (!handoffLive.current || handoffFading) {
+      return;
+    }
+    if (reducedMotion) {
+      finishHandoff();
+      return;
+    }
+    setHandoffFading(true);
+    overlayAnimation.current?.stop();
+    const animation = Animated.timing(overlayOpacity, {
+      toValue: 0,
+      duration: HANDOFF_FADE_MS,
+      useNativeDriver: true,
+    });
+    overlayAnimation.current = animation;
+    animation.start(({finished}) => {
+      overlayAnimation.current = null;
+      if (finished) {
+        finishHandoff();
+      }
+    });
+  }, [finishHandoff, handoffFading, overlayOpacity, reducedMotion]);
+
+  // The flow goes only once the frame it reveals is settled: Home has laid out with its insets and
+  // the bottom bar has drawn its measured form. When the warm mount already satisfied both, the
+  // frame the fade reveals is long committed and the fade starts in this commit; otherwise — the
+  // reader completed before Home or the bar had reported — one more animation frame lets the frame
+  // that just became ready commit, so the fade can never uncover a half-built Home.
+  useEffect(() => {
+    if (!handoff || handoffFading || !homeReady || !barReady) {
+      return;
+    }
+    if (prewarmedAtEntry.current) {
+      startHandoff();
+      return;
+    }
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      if (!cancelled) {
+        startHandoff();
+      }
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [barReady, handoff, handoffFading, homeReady, startHandoff]);
+
+  // A completed flow is still mounted for the handoff: Back must belong to the shell, not to the
+  // flow, until it has gone. Registered after the flow's own listener, so it is the one called.
+  useEffect(() => {
+    if (!handoff) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+    return () => subscription.remove();
+  }, [handoff]);
+
+  useEffect(() => {
+    // The ref outlives an effect replay (StrictMode, Fast Refresh), so the setup restores it: the
+    // cleanup still drops the flag on a real unmount, and the callbacks keep guarding on it.
+    handoffLive.current = true;
+    return () => {
+      handoffLive.current = false;
+      overlayAnimation.current?.stop();
+    };
+  }, []);
 
   // The setup flow owns the screen until the stored step reaches 3. The step is read first, so the
   // first frame is never the tabs over a flow the reader still owes; a read that failed offers a
@@ -542,66 +712,91 @@ export function AppShell() {
             >
               Couldn't save setup progress. Try again.
             </Text>
-            <Button label="Try again" onPress={readOnboardingStep} />
+            <Button label="Try again" onPress={() => readOnboardingStep(true)} />
           </View>
         )}
       </View>
     );
   }
 
-  if (onboardingStep < 3) {
-    return (
-      <View style={{flex: 1, backgroundColor: colors.background}}>
-        <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
-        <OnboardingFlow step={onboardingStep} onAdvance={advanceOnboarding} />
-      </View>
-    );
-  }
+  // The tabs are mounted beneath the flow from its last page and stay inert — to touch and to the
+  // accessibility tree — the whole time the flow is on screen: the flow is the one thing the reader
+  // can see and reach. Once the fade starts the two swap, the flow goes inert and the tabs take
+  // over; with no flow at all they are live from their first frame.
+  const underlayInert = (onboardingStep < 3 || handoff) && !handoffFading;
 
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
-      <StatusBar
-        barStyle={dark ? "light-content" : "dark-content"}
-      />
-      <NavigationContainer ref={navigationRef} theme={navigationTheme}>
-        <Tab.Navigator
-          tabBarPosition="bottom"
-          initialLayout={{width}}
-          // The keyboard goes when the tab under the reader changes — by tap or by swipe — so a
-          // Search field can never follow the reader onto another tab. That is the library's own
-          // `auto`, and nothing in the shell asks for the field to be focused any more (the field
-          // opens the keyboard only when the reader taps it), so there is no focus to preserve and no
-          // reason to hold the dismissal back.
-          keyboardDismissMode="auto"
-          tabBar={(props) => (
-            <>
-              <SwipeGate
-                state={props.state}
-                descriptors={props.descriptors}
-              />
-              <BottomBar
-                {...props}
-                searchActive={
-                  searchActive && props.state.routes[props.state.index]?.name === "Home"
-                }
-              />
-            </>
-          )}
-          // `route.state` is the tab's own stack (the pager keeps one per tab); the typed route for a
-          // tab whose params are `undefined` does not declare it, which is why the route here is
-          // `NavigationRoute`.
-          screenOptions={({route}: {route: NavigationRoute<ParamListBase, string>}) => ({
-            headerShown: false,
-            lazy: false,
-            animationEnabled: !reducedMotion,
-            swipeEnabled: (route.state?.index ?? 0) === 0,
-          })}
+      <StatusBar barStyle={dark ? "light-content" : "dark-content"} />
+      {tabsMounted && (
+        <HandoffReadinessProvider value={handoffReadiness}>
+          <View
+            style={{flex: 1}}
+            pointerEvents={underlayInert ? "none" : "auto"}
+            accessibilityElementsHidden={underlayInert}
+            importantForAccessibility={underlayInert ? "no-hide-descendants" : "auto"}
+          >
+            <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+              <Tab.Navigator
+                tabBarPosition="bottom"
+                initialLayout={{width}}
+                // The keyboard goes when the tab under the reader changes — by tap or by swipe — so a
+                // Search field can never follow the reader onto another tab. That is the library's own
+                // `auto`, and nothing in the shell asks for the field to be focused any more (the field
+                // opens the keyboard only when the reader taps it), so there is no focus to preserve and no
+                // reason to hold the dismissal back.
+                keyboardDismissMode="auto"
+                tabBar={(props) => (
+                  <>
+                    <SwipeGate
+                      state={props.state}
+                      descriptors={props.descriptors}
+                    />
+                    <BottomBar
+                      {...props}
+                      searchActive={
+                        searchActive && props.state.routes[props.state.index]?.name === "Home"
+                      }
+                      onReady={reportBarReady}
+                    />
+                  </>
+                )}
+                // `route.state` is the tab's own stack (the pager keeps one per tab); the typed route for a
+                // tab whose params are `undefined` does not declare it, which is why the route here is
+                // `NavigationRoute`.
+                screenOptions={({route}: {route: NavigationRoute<ParamListBase, string>}) => ({
+                  headerShown: false,
+                  lazy: true,
+                  lazyPreloadDistance: 0,
+                  animationEnabled: !reducedMotion,
+                  swipeEnabled: (route.state?.index ?? 0) === 0,
+                })}
+              >
+                <Tab.Screen name="Home" component={HomeTabStack} />
+                <Tab.Screen name="Analytics" component={AnalyticsTabStack} />
+                <Tab.Screen name="Settings" component={SettingsTabStack} />
+              </Tab.Navigator>
+            </NavigationContainer>
+          </View>
+        </HandoffReadinessProvider>
+      )}
+      {flowMounted && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, {opacity: overlayOpacity}]}
+          // The flow stops taking touches the moment the completed step is saved, not when the fade
+          // starts: a tap on the old Connect form after the final Skip must not open it.
+          pointerEvents={handoff ? "none" : "auto"}
+          accessibilityElementsHidden={handoffFading}
+          importantForAccessibility={handoffFading ? "no-hide-descendants" : "auto"}
         >
-          <Tab.Screen name="Home" component={HomeTabStack} />
-          <Tab.Screen name="Analytics" component={AnalyticsTabStack} />
-          <Tab.Screen name="Settings" component={SettingsTabStack} />
-        </Tab.Navigator>
-      </NavigationContainer>
+          <View style={{flex: 1, backgroundColor: colors.background}}>
+            <OnboardingFlow
+              step={Math.min(onboardingStep, 2)}
+              onAdvance={advanceOnboarding}
+            />
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }

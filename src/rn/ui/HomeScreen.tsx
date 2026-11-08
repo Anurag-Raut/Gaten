@@ -14,7 +14,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useIsFocused} from "@react-navigation/native";
 import type {CompositeScreenProps} from "@react-navigation/native";
 import type {MaterialTopTabScreenProps} from "@react-navigation/material-top-tabs";
@@ -61,6 +61,8 @@ type HomeScreenProps = Partial<
   onOpenAnki?: () => void;
   /** Opens the review flow on WaniKani — its connection state, or its queue. */
   onOpenWaniKani?: () => void;
+  /** Reports the root's first real layout, for the completed setup's handoff. */
+  onReady?: () => void;
 };
 
 export function HomeScreen({
@@ -68,6 +70,7 @@ export function HomeScreen({
   onOpenWord,
   onOpenAnki,
   onOpenWaniKani,
+  onReady,
 }: HomeScreenProps) {
   const {colors} = useTheme();
   const {width, fontScale} = useWindowDimensions();
@@ -261,7 +264,21 @@ export function HomeScreen({
       );
 
   return (
-    <SafeAreaView style={[styles.root, {backgroundColor: colors.background}]} edges={["top", "left", "right"]}>
+    <View
+      onLayout={onReady}
+      style={[
+        styles.root,
+        {
+          backgroundColor: colors.background,
+          // The context insets are already resolved when this screen mounts, so the first frame is
+          // laid out with them. The native SafeAreaView applied its padding through a state update
+          // after attach, which let the first frame draw with the wordmark under the status bar.
+          paddingTop: insets.top,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+      ]}
+    >
       <KeyboardAvoidingView behavior="padding" style={styles.root}>
         <View style={styles.topHeader}>
           <Animated.View style={[styles.headerColumn, {paddingHorizontal: contentInset}]} layout={layoutTransition}>
@@ -373,7 +390,7 @@ export function HomeScreen({
           scrollEventThrottle={16}
         />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -278,8 +278,8 @@ export function WaniKaniHome({
         title="WaniKani"
         onBack={onBack}
         trailing={
-          // Refresh keeps its own 44 dp chip inside a 48 dp target, and the help stands beside it
-          // rather than replacing it: a refresh in flight quiets the chip alone, never the help.
+          // Refresh is a bare glyph on its own 48 dp target, like the bare help beside it: a
+          // refresh in flight quiets the glyph alone, never the help.
           <View style={styles.headerActions}>
             <PressableScale
               accessibilityRole="button"
@@ -289,13 +289,11 @@ export function WaniKaniHome({
               onPress={onRetrySync}
               style={styles.refreshTarget}
             >
-              <View style={[styles.refreshChip, {backgroundColor: colors.surfaceVariant}]}>
-                <Icon
-                  name="refresh"
-                  size={22}
-                  color={locked ? colors.onSurfaceVariant : colors.accent}
-                />
-              </View>
+              <Icon
+                name="refresh"
+                size={22}
+                color={locked ? colors.onSurfaceVariant : colors.accent}
+              />
             </PressableScale>
             {/* The help's own "Open token form" is this hub's own way in: the same step the card
                 opens, so the reader lands on the token field rather than being told to find it. */}
@@ -437,10 +435,9 @@ const styles = StyleSheet.create({
   // The bar's trailing group: Refresh then Help, each on its own target, one small step apart so the
   // two never overlap.
   headerActions: {flexDirection: "row", alignItems: "center", gap: spacing.xs},
-  // Refresh keeps the analytics page's quiet circular chip at 44 dp, with the 48 dp ring around it
-  // every bar control answers to.
-  refreshTarget: {width: 48, height: 48, alignItems: "center", justifyContent: "center"},
-  refreshChip: {width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center"},
+  // Refresh keeps the 48 dp ring every bar control answers to, drawn bare — no chip, fill, or
+  // outline — so it reads exactly like the help beside it.
+  refreshTarget: {width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center"},
   subtitle: {fontFamily: APP_FONT, fontSize: 12, lineHeight: 17, marginTop: spacing.s},
   updating: {marginTop: 4},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
