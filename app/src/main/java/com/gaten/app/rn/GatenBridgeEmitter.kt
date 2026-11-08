@@ -45,6 +45,13 @@ object GatenBridgeEmitter {
      */
     const val FLOATING_BUTTON_CHANGED = "gaten.floatingButtonChanged"
 
+    /**
+     * One recognition model download advancing: its engine id, phase ("downloading" or
+     * "verifying") and cumulative byte counts. Emitted, throttled, by [GatenRecognitionModule]
+     * while a download runs, and never after its promise settles.
+     */
+    const val RECOGNITION_DOWNLOAD_PROGRESS = "GatenRecognitionDownloadProgress"
+
     private val reactContext = AtomicReference<ReactContext?>(null)
 
     /** Records the context events are sent through. Called by every module on creation. */
@@ -81,6 +88,11 @@ object GatenBridgeEmitter {
         payload: com.facebook.react.bridge.WritableMap
     ) {
         emit(LOOKUP_SHEET_STATE, payload)
+    }
+
+    /** Sends one model-download progress event; the module owns its payload and its rate. */
+    fun emitRecognitionDownloadProgress(payload: com.facebook.react.bridge.WritableMap) {
+        emit(RECOGNITION_DOWNLOAD_PROGRESS, payload)
     }
 
     /** Sends one event through the shared context; quiet when JS is not listening yet. */

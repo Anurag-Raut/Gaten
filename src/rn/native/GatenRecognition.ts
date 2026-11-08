@@ -1,4 +1,4 @@
-import {NativeModules} from "react-native";
+import {NativeEventEmitter, NativeModules} from "react-native";
 
 /**
  * Any of the selectable modes; also the persisted selected mode. `ml_kit` (Standard) is bundled with
@@ -26,13 +26,49 @@ export interface RecognitionSettings {
   downloading: RecognitionEngine[];
 }
 
+/**
+ * One live report from a running download. `bytesTotal` is the engine's real expected size, so a
+ * `bytesDone`/`bytesTotal` ratio is the bar; the phase turns to "verifying" once every byte is in.
+ */
+export type DownloadProgress = {
+  engine: "medium";
+  phase: "downloading" | "verifying";
+  bytesDone: number;
+  bytesTotal: number;
+};
+
+/** The failure kinds a download rejection is distilled into, one per actionable remedy. */
+export type DownloadFailure = "offline" | "storage" | "verify" | "cancelled" | "unknown";
+
 interface GatenRecognitionNative {
   getRecognitionSettings(): Promise<RecognitionSettings>;
   setRecognitionMode(mode: RecognitionEngine): Promise<void>;
   downloadRecognitionEngine(engine: RecognitionEngine): Promise<RecognitionSettings>;
+  /** Absent when the engine arrives through a Play asset pack, which this app cannot abort. */
+  cancelDownload?(): Promise<void>;
+  /**
+   * Kept for React Native's `NativeEventEmitter`: the bridge calls these as listeners come and go.
+   * Only present so the emitter does not warn; the events themselves arrive through the device
+   * emitter.
+   */
+  addListener?(eventName: string): void;
+  removeListeners?(count: number): void;
 }
 
 const GatenRecognition = NativeModules.GatenRecognition as GatenRecognitionNative;
+
+/** The same module, seen as possibly absent, so a subscription can no-op off-device. */
+const nativeRecognition = NativeModules.GatenRecognition as GatenRecognitionNative | undefined;
+
+/** The native event name; the payload is a [DownloadProgress]. */
+const DOWNLOAD_PROGRESS_EVENT = "GatenRecognitionDownloadProgress";
+
+// Only built where the module carries the emitter hooks (`addListener`/`removeListeners`); the
+// Play-delivered engine reports no byte progress, so a build without them simply never emits.
+const progressEmitter =
+  nativeRecognition != null && typeof nativeRecognition.addListener === "function"
+    ? new NativeEventEmitter(nativeRecognition as ConstructorParameters<typeof NativeEventEmitter>[0])
+    : null;
 
 export const getRecognitionSettings = (): Promise<RecognitionSettings> =>
   GatenRecognition.getRecognitionSettings();
@@ -45,3 +81,61 @@ export const downloadRecognitionEngine = (
   engine: RecognitionEngine,
 ): Promise<RecognitionSettings> =>
   GatenRecognition.downloadRecognitionEngine(engine);
+
+/**
+ * Aborts the download running now, if any; the pending [downloadRecognitionEngine] promise rejects
+ * with a `DOWNLOAD_CANCELLED` code, which [classifyDownloadError] reads as "cancelled". With
+ * nothing in flight it resolves quietly.
+ */
+export const canCancelDownload = (): boolean =>
+  typeof nativeRecognition?.cancelDownload === "function";
+
+export function cancelDownload(): Promise<void> {
+  if (nativeRecognition == null) {
+    return Promise.reject(new Error("GatenRecognition is not available on this platform."));
+  }
+  // Play's pack transfer cannot be aborted from here: with no native cancel there is nothing to
+  // stop, and the pending download keeps running to its own end.
+  return nativeRecognition.cancelDownload?.() ?? Promise.resolve();
+}
+
+/**
+ * Listens for download progress and returns the unsubscribe. Safe where the native module is
+ * absent: the call then no-ops and the returned function is a no-op too, so a screen can subscribe
+ * unconditionally and only unsubscribe on unmount.
+ */
+export function subscribeDownloadProgress(
+  listener: (progress: DownloadProgress) => void,
+): () => void {
+  if (progressEmitter == null) return () => {};
+  const subscription = progressEmitter.addListener(DOWNLOAD_PROGRESS_EVENT, listener);
+  return () => subscription.remove();
+}
+
+/** The `code` React Native attaches to a rejected promise, when there is one. */
+function rejectionCode(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null) {
+    const code = (error as {code?: unknown}).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
+}
+
+/**
+ * Maps a download rejection to the kind the UI branches on. Anything unrecognized — a non-error, an
+ * unexpected code, or the generic native fallback — is "unknown", never a guess.
+ */
+export function classifyDownloadError(error: unknown): DownloadFailure {
+  switch (rejectionCode(error)) {
+    case "DOWNLOAD_OFFLINE":
+      return "offline";
+    case "DOWNLOAD_NO_SPACE":
+      return "storage";
+    case "DOWNLOAD_VERIFY_FAILED":
+      return "verify";
+    case "DOWNLOAD_CANCELLED":
+      return "cancelled";
+    default:
+      return "unknown";
+  }
+}

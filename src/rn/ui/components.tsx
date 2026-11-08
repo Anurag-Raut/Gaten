@@ -57,6 +57,22 @@ export function Icon({
   );
 }
 
+/**
+ * The house status dot: 6 dp, rounded, at one of the status tones — `success` for connected,
+ * `warning` for attention, the quiet neutral otherwise. Colour alone is never the message (§13):
+ * the caller pairs the dot with a word in the same row.
+ */
+export function StatusDot({tone}: {tone: "connected" | "warning" | "neutral"}) {
+  const {colors} = useTheme();
+  const color =
+    tone === "connected"
+      ? colors.success
+      : tone === "warning"
+        ? colors.warning
+        : colors.iconSecondary;
+  return <View style={{width: 6, height: 6, borderRadius: 3, backgroundColor: color}} />;
+}
+
 /** Flat content surface; screens use spacing and separators to establish grouping. */
 export function Card({
   style,
@@ -277,6 +293,7 @@ export function Button({
   fullWidth = false,
   leading = null,
   accessibilityLabel,
+  accessibilityHint,
   pressScale,
   surfaceWhileDisabled = false,
   style,
@@ -288,6 +305,8 @@ export function Button({
   fullWidth?: boolean;
   leading?: React.ReactNode;
   accessibilityLabel?: string;
+  /** What the press does, for a label that does not say it (§13's readable secondary detail). */
+  accessibilityHint?: string;
   /** Scale down on press, back up on release, with a held fill; see [PressScale]. */
   pressScale?: PressScale;
   /**
@@ -340,6 +359,7 @@ export function Button({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{disabled}}
       pressScale={pressScale}
       style={[container, style]}

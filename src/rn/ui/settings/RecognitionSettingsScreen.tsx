@@ -59,7 +59,7 @@ function engineUse(engine: EngineStatus): string {
     case "medium":
       return "Screen and novels";
     default:
-      return "Japanese and stylized text";
+      return "Screen and novels";
   }
 }
 
