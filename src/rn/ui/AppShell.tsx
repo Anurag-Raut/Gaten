@@ -76,6 +76,7 @@ import * as GatenAppInfo from "../native/GatenAppInfo";
 import {primeOnboardingStep, resetOnboardingStepPrime} from "./boot";
 import {HandoffReadinessProvider, useHandoffReadiness} from "./handoff";
 import {OnboardingFlow} from "./onboarding/OnboardingFlow";
+import {STEP_SCENE_MS} from "./onboarding/onboarding-motion";
 import {reviewStore} from "./review/review-store";
 import * as searchStore from "./search/searchStore";
 
@@ -510,7 +511,11 @@ export function AppShell() {
     if (prewarm || onboardingStep !== 2) {
       return;
     }
-    const timer = setTimeout(() => setPrewarm(true), 0);
+    // The warm mount is a head start for the final tap, not part of the page's arrival: mounting
+    // Home and the bar on the same commit as the scene's 340 ms handoff made the last page's
+    // transition drop 150-250 ms frames on the phone. Let the scene land first, then mount behind
+    // it — still well before the reader can reach the final action.
+    const timer = setTimeout(() => setPrewarm(true), STEP_SCENE_MS + 120);
     return () => clearTimeout(timer);
   }, [onboardingStep, prewarm]);
 
