@@ -27,8 +27,9 @@ Gaten*).
    2.5 s — keeps ML Kit's own reading.
 5. **Tap or circle** — tap text to select its entire indexed line and all its words, or circle some text.
    A tap highlights the whole box immediately and answers from the index, reading only that line.
-   The lasso trail is visible only while drawing and disappears on finger lift; the selected region
-   stays marked while the lookup runs and the result is shown.
+   While drawing, the loop is cut clear of the dim and filled with a soft wash of your accent; on
+   finger lift the loop and the dim disappear and only the characters it enclosed stay marked, one
+   rounded accent-tinted block per line, while the lookup runs and the result is shown.
    A circle always crops the exact rectangle that was drawn and reads it with the selected engine —
    index or no index, Japanese in the index or not — and the index lines the loop actually covered
    then add the words they hold behind that reading, deduplicated. The rest of the screen keeps being
