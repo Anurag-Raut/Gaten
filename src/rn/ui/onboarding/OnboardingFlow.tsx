@@ -6,7 +6,7 @@
 
 /**
  * The first-run setup flow: three pages, one per thing a reader sets up before the app is theirs —
- * lookup mode, AnkiDroid, WaniKani.
+ * lookup mode, AnkiDroid, WaniKani — and two steps inside each page.
  *
  * The shell shows it in place of the tabs while the stored onboarding step is below 3, and it is
  * shown on the first launch only. Each page does, or hands off to, the real setup for its item and
@@ -16,18 +16,23 @@
  * opens the app that owns it.
  *
  * The shell is one persistent frame — the back row, the progress row, the artwork scene and the
- * scroller are mounted once and never swapped — and the three pages are controllers that fill it.
- * A page owns the setup state for its item (the lookup grant, the AnkiDroid read, the WaniKani
- * token) and hands the shell a plain view of what to show; the shell draws the frame, the artwork
- * and the content, so a step change moves ONE scene rather than replacing one page with another.
+ * scroller are mounted once and never swapped — and the three pages are controllers that fill it
+ * with their step rows. A page owns the setup state for its item (the lookup grant, the reader, the
+ * AnkiDroid read, the WaniKani token) and hands the shell the one action it offers; the shell draws
+ * the frame and the artwork, so a step change moves ONE scene rather than replacing one page with
+ * another.
  *
- * The shell owns the step, exactly as before: a page advances by writing the next step first, and
- * the shell shows the next page once that write lands. A write that cannot be saved keeps the page
- * and offers a retry rather than silently skipping the reader forward.
+ * A page's own steps are its render: the rows grow in place as the device verifies them, and the
+ * flow's auto-advance is the same verified gate the rows are built from (see `onboarding-steps`), so
+ * a page cannot draw itself complete and advance while saying otherwise. The shell owns the step,
+ * exactly as before: a page advances by writing the next step first, and the shell shows the next
+ * page once that write lands. A write that cannot be saved keeps the page and offers a retry rather
+ * than silently skipping the reader forward.
  */
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {
   AccessibilityInfo,
+  Alert,
   AppState,
   BackHandler,
   findNodeHandle,
@@ -37,6 +42,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
 import Animated, {
   cancelAnimation,
@@ -54,14 +60,15 @@ import Animated, {
 import {Gesture, GestureDetector} from "react-native-gesture-handler";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
-import * as GatenRecognition from "../../native/GatenRecognition";
+import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {downloadAnkiDroid} from "../anki/anki-actions";
-import {Button, IconButton, StatusDot} from "../components";
-import {WaniKaniConnect} from "../review/WaniKaniConnect";
+import {Button, Icon, IconButton} from "../components";
+import {PressableScale} from "../PressableScale";
 import type {WaniKaniConnectOutcome} from "../review/review-store";
-import {useLookupModeRequest} from "../settings/settings-components";
+import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
+import {TextField, useLookupModeRequest} from "../settings/settings-components";
 import {useTheme} from "../theme";
 import {
   CONTENT_COLUMN,
@@ -72,6 +79,30 @@ import {
   typeScale,
 } from "../tokens";
 import {OnboardingScene, SCENE_WIDTH} from "./OnboardingArtwork";
+import {STEP_SCENE_MS, travelDirection} from "./onboarding-motion";
+import {StepList, StepRow} from "./StepList";
+import {
+  ankiSteps,
+  connectReadout,
+  downloadPercent,
+  downloadProgressText,
+  formatMegabytes,
+  lookupSteps,
+  nextStep,
+  shouldAutoAdvance,
+  wanikaniSteps,
+  type AdvanceGate,
+} from "./onboarding-steps";
+import {
+  cancelDownload,
+  classifyDownloadError,
+  downloadMedium,
+  getRecognitionSettings,
+  setRecognitionMode,
+  subscribeDownloadProgress,
+  type DownloadFailure,
+  type DownloadProgress,
+} from "./recognition-port";
 
 /**
  * Each page's own copy, shared by its live controller and by the swipe's pure previews, so a peer's
@@ -102,15 +133,8 @@ const PAGES = [
 /** The scene clock's three stops, one per page. */
 const STOPS: number[] = [0, 1, 2];
 
-/**
- * The step transition, in ms. Longer than the review screen's 260 ms page slide: this one carries a
- * whole scene — the card's pose, the deck, the torii, the progress bar and the content — so the eye
- * needs a beat more to read it as one action. Inside the brief's 300-380 ms window.
- */
-const STEP_SCENE_MS = 340;
-
-/** The WaniKani token form's own enter and exit. */
-const FORM_MS = 300;
+/** The artwork's accent fade when a WaniKani account is really connected. */
+const ACCENT_FADE_MS = 300;
 
 /**
  * The auto-advance beat: a page's own done state stays readable this long — the dot and its word —
@@ -123,13 +147,6 @@ const AUTO_ADVANCE_BEAT_MS = 600;
  * settling re-checks this often instead of firing, until the scene is idle or the gate drops.
  */
 const AUTO_ADVANCE_RETRY_MS = 200;
-
-/**
- * The outlined action's label swap — "Install text recognition · 77 MB" to "Downloading…" — in ms:
- * a subtle crossfade on the app's emphasized curve, inside §12's 220-300 ms window. Reduced motion
- * runs it at 0.
- */
-const LABEL_CROSSFADE_MS = 240;
 
 /** The one header row: the bare back target's own 48 dp, and the gap it leaves before the artwork. */
 const HEADER_ROW_HEIGHT = 48;
@@ -218,11 +235,9 @@ const TRACK_WIDTH = 3 * TRACK_SEGMENT + 2 * TRACK_GAP;
  * once during a step change.
  */
 const TEXT_TRAVEL = 28;
-/** The WaniKani form's own rise: the page leaves and the form arrives over the same travel. */
-const FORM_TRAVEL = 24;
 
 /**
- * A handoff's phasing on a 0→1 clock, shared by the step text and the WaniKani form: the outgoing is
+ * A handoff's phasing on a 0→1 clock, shared by the step text and the step rows: the outgoing is
  * gone inside the first [PHASE_EXIT_BY], the incoming does not appear until [PHASE_ENTER_AT], and the
  * same two formulas run backwards when the clock runs back, so nothing is ever readable twice.
  */
@@ -309,43 +324,26 @@ function narrativePose(
   return {opacity: 0, x: direction * TEXT_TRAVEL};
 }
 
-/** One action the footer can offer: a filled primary, a quiet outlined alternative, or a text one. */
+/** One action the footer can offer: the page's filled action, or its Skip. */
 interface Action {
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  /** What the press does when the label alone does not say it (the model download's fallback). */
-  accessibilityHint?: string;
-  /** What the control is called when the label alone does not say it (the offer's own dismissal). */
-  accessibilityLabel?: string;
 }
 
 /**
- * What a page hands the shell to draw: its own status and its actions. The heading and explanation
- * are the shell's fixed copies, so a page cannot restyle or swap them. Plain data, so the shell can
- * keep the previous page's view as a purely visual outgoing layer — rendering it again runs no page
- * logic and makes no second native call.
+ * What a page hands the shell to draw: the one filled action it offers and its Skip. The heading and
+ * explanation are the shell's fixed copies, so a page cannot restyle or swap them; the step rows and
+ * every control inside them are the page's own render. Plain data, so the shell can keep the
+ * previous page's view as a purely visual outgoing layer — rendering it again runs no page logic and
+ * makes no second native call.
  */
 interface StepVisual {
-  /** The page's live status, drawn by the shell's fixed copy under its explanation. */
-  status: React.ReactNode;
+  primary: Action;
   /**
-   * A semantic key for [status]: the controller state the node reads, not the node itself. The shell
-   * caches one status per page and replaces it only when this key changes, so a re-report never
-   * re-renders and a leaving copy keeps the status it had while its own text hands over.
-   */
-  statusKey: string;
-  primary: Action | null;
-  outlined: Action | null;
-  /**
-   * A quiet text alternative above the filled action and Skip — the caption slot the shell draws
-   * there, never one of the always-mounted buttons (so a page that resolves it, like the model
-   * offer's "Not now", does not remount the primary). Absent when the page has none.
-   */
-  quiet?: Action | null;
-  /**
-   * True when this page's completion read says the step is done: the flow's auto-advance gate. The
-   * page keeps it false while anything of its own — a dialog — still owns the scene.
+   * True when every step on this page was verified from the device: the flow's auto-advance gate.
+   * The page keeps it false while anything of its own — a dialog, a read, a write — still owns the
+   * scene.
    */
   done: boolean;
   skipLabel: string;
@@ -356,30 +354,15 @@ interface StepVisual {
 }
 
 /**
- * The two actions a view draws: the filled one is its primary, or — when the page has no primary —
- * the outlined action it does have, so the filled slot is never empty and no placeholder is invented.
- * The quiet alternative is the outlined one only when it sits beside a real primary.
- */
-function actionsFor(visual: StepVisual): {primary: Action | null; alternative: Action | null} {
-  return visual.primary != null
-    ? {primary: visual.primary, alternative: visual.outlined}
-    : {primary: visual.outlined, alternative: null};
-}
-
-/**
  * A key for the action area alone — the committed step plus everything the shell's buttons draw. The
  * shell re-renders on this and never on a page's whole view, so the buttons are not remounted, and do
- * not lose their surface, just because a page re-reported its status. The step is in the key so two
- * pages that happen to share a label and a disabled state still hand over a fresh handler.
+ * not lose their surface, just because a page re-reported. The step is in the key so two pages that
+ * happen to share a label and a disabled state still hand over a fresh handler.
  */
 function actionAreaKey(step: number, visual: StepVisual): string {
-  const {primary, alternative} = actionsFor(visual);
-  const quiet = visual.quiet ?? null;
   return [
     `step:${step}`,
-    primary == null ? "" : `${primary.label}:${primary.disabled ? 1 : 0}`,
-    alternative == null ? "" : `${alternative.label}:${alternative.disabled ? 1 : 0}`,
-    quiet == null ? "" : `${quiet.label}:${quiet.disabled ? 1 : 0}`,
+    `${visual.primary.label}:${visual.primary.disabled ? 1 : 0}`,
     visual.saveError ? "error" : "",
     visual.skipLabel,
     visual.skipAccessibilityLabel,
@@ -431,11 +414,6 @@ const NARRATIVE_BODY = {
   alignSelf: "center" as const,
   textAlign: "center" as const,
 };
-const NARRATIVE_STATUS = {
-  marginTop: spacing.l,
-  maxWidth: NARRATIVE_WIDTH,
-  alignSelf: "center" as const,
-};
 /** The narrative slot: the live narrative's own top offset and centring, in the scroller's flow. */
 const NARRATIVE_SLOT = {
   alignItems: "center" as const,
@@ -479,7 +457,6 @@ function NarrativeCopy({
   contentProgress,
   swipePose,
   headingRef,
-  status,
   swipeDistance,
 }: {
   index: number;
@@ -493,8 +470,6 @@ function NarrativeCopy({
   contentProgress: SharedValue<number>;
   swipePose: SwipePose;
   headingRef: React.RefObject<Text | null>;
-  /** This page's own cached status, drawn under its explanation and posed with it. */
-  status: React.ReactNode;
   /** One full page step in dp: the copy's horizontal page coordinate during a swipe. */
   swipeDistance: number;
 }) {
@@ -534,96 +509,22 @@ function NarrativeCopy({
       <Text style={[typeScale.bodyMedium, NARRATIVE_BODY, {color: colors.onSurfaceVariant}]}>
         {PAGES[index].explanation}
       </Text>
-      {status != null && <View style={NARRATIVE_STATUS}>{status}</View>}
     </Animated.View>
-  );
-}
-
-/**
- * The outlined action, drawn so its label and disabled state swap in place over a subtle crossfade:
- * the recognition model's "Install text recognition · 77 MB" becomes "Downloading…" without the
- * control moving. Reduced motion swaps the label at once. The button keeps its own width and height
- * throughout — the label is the only thing that changes.
- */
-function OutlinedAction({action, busy}: {action: Action; busy: boolean}) {
-  const reducedMotion = useReducedMotion();
-  const opacity = useSharedValue(1);
-  // The label plus the disabled state is the swap's identity: a state-only change is a swap too,
-  // and must not skip the fade.
-  const identity = `${action.label}:${action.disabled ? 1 : 0}`;
-  const previous = useRef<string | null>(null);
-  useEffect(() => {
-    if (previous.current == null) {
-      // First paint: the button arrives without a fade, so a step change never replays one.
-      previous.current = identity;
-      return;
-    }
-    if (previous.current === identity) return;
-    previous.current = identity;
-    if (reducedMotion) return;
-    opacity.value = 0;
-    opacity.value = withTiming(1, {duration: LABEL_CROSSFADE_MS, easing: PAGE_EASING_REANIMATED});
-  }, [identity, reducedMotion, opacity]);
-  return (
-    <Animated.View style={{opacity}}>
-      <Button
-        variant="outlined"
-        label={action.label}
-        onPress={action.onPress}
-        accessibilityHint={action.accessibilityHint}
-        disabled={action.disabled || busy}
-        fullWidth
-      />
-    </Animated.View>
-  );
-}
-
-/**
- * The done line: the house status dot plus the word it stands for, in the status slot's own quiet
- * styling — the dot carries the success colour (§2.1), the word stays in onSurfaceVariant, so
- * colour alone is never the message (§13). [live] marks a line that can arrive mid-scene, like the
- * recognition model finishing its install under the reader's eyes.
- */
-function DoneLine({word, live = false}: {word: string; live?: boolean}) {
-  const {colors} = useTheme();
-  return (
-    <View
-      accessibilityLiveRegion={live ? "polite" : undefined}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.xs,
-        justifyContent: "center",
-        maxWidth: "100%",
-      }}
-    >
-      <StatusDot tone="connected" />
-      {/* [flexShrink] lets the word wrap within the column instead of clipping at 160% text. */}
-      <Text
-        style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant, flexShrink: 1}]}
-      >
-        {word}
-      </Text>
-    </View>
   );
 }
 
 /**
  * The flow's one action area, drawn by the shell outside every page: it is the same element for the
  * whole flow, so a step change — or a swipe — only ever swaps a label, a disabled state and what the
- * press does. The filled slot is the page's primary, or its outlined action when that is the only one
- * it has, so the surface is never empty. The filled action and the Skip are the last two slots; above
- * them sit, in order, the quiet text alternative (a page's "Not now") and the outlined one — the
- * caption slot the brief assigns there — with the save-error line above all. The primary keeps its
- * fill while a page is checking, and the buttons sit at the end of the page's own scroller, so large
- * text and short screens still reach them.
+ * press does. The filled action and the Skip are the two slots, with the save-error line above them.
+ * The primary keeps its fill while a page is checking, and the buttons sit at the end of the page's
+ * own scroller, so large text and short screens still reach them.
  */
 function StepActions({visual, busy}: {visual: StepVisual | null; busy: boolean}) {
   const {colors} = useTheme();
   if (visual == null) {
     return null;
   }
-  const {primary, alternative} = actionsFor(visual);
   return (
     <View style={{gap: spacing.s, marginTop: spacing.xxl}}>
       {/* Every child is keyed so the buttons keep their identity — and their surface — when a
@@ -637,21 +538,6 @@ function StepActions({visual, busy}: {visual: StepVisual | null; busy: boolean})
           Couldn't save setup progress. Try again.
         </Text>
       )}
-      {alternative != null && (
-        <OutlinedAction key="alternative" action={alternative} busy={busy} />
-      )}
-      {visual.quiet != null && (
-        <Button
-          key="quiet"
-          variant="text"
-          label={visual.quiet.label}
-          accessibilityLabel={visual.quiet.accessibilityLabel}
-          accessibilityHint={visual.quiet.accessibilityHint}
-          onPress={visual.quiet.onPress}
-          disabled={visual.quiet.disabled || busy}
-          fullWidth
-        />
-      )}
       {visual.saveError ? (
         <Button
           key="primary"
@@ -662,16 +548,14 @@ function StepActions({visual, busy}: {visual: StepVisual | null; busy: boolean})
           surfaceWhileDisabled
         />
       ) : (
-        primary != null && (
-          <Button
-            key="primary"
-            label={primary.label}
-            onPress={primary.onPress}
-            disabled={primary.disabled || busy}
-            fullWidth
-            surfaceWhileDisabled
-          />
-        )
+        <Button
+          key="primary"
+          label={visual.primary.label}
+          onPress={visual.primary.onPress}
+          disabled={visual.primary.disabled || busy}
+          fullWidth
+          surfaceWhileDisabled
+        />
       )}
       <Button
         key="skip"
@@ -755,25 +639,12 @@ export function OnboardingFlow({
   // reported for: the auto-advance must read the committed page's done state, never a predecessor's
   // last report from the frame before the new page first reports.
   const [actions, setActions] = useState<{step: number; visual: StepVisual} | null>(null);
-  // One live status per page, keyed by the controller state it reads, so the fixed copies can draw
-  // their own status and a handover poses it exactly like the heading.
-  const [statuses, setStatuses] = useState<Record<number, {key: string; node: React.ReactNode}>>({});
   // The key of the view [actions] currently holds, so a report that would draw the same buttons is
   // dropped — and the committed step stays in the comparison instead of cancelling itself out.
   const reportedActionKey = useRef<string | null>(null);
   // Held true for exactly the commit a step change lands on, so the live text paints its entering
   // pose while the clock's reset is still on its way to the UI thread.
   const [entering, setEntering] = useState(false);
-  // The WaniKani token form rises over the WaniKani page; the flow owns the flag so Back can close
-  // it before it means "the previous page". The form is mounted on its first open and then kept —
-  // its token, message and scroll position are the reader's work, and closing the form must not
-  // throw them away.
-  const [formOpen, setFormOpen] = useState(false);
-  const [formMounted, setFormMounted] = useState(false);
-  // True when the form's own rise or fall has finished. The page's actions are handed back only once
-  // the page is really on screen again, never while it is still invisible under the form.
-  const [formSettled, setFormSettled] = useState(true);
-  const formRun = useRef(0);
   const pending = useRef(step);
 
   /**
@@ -789,7 +660,7 @@ export function OnboardingFlow({
 
   // The auto-advance session: one timer, owned by the flow, booked for one page visit. Every manual
   // navigation — Continue, Skip, Back, hardware Back, all through [write] — invalidates it
-  // synchronously, as do the swipe's activation, the WaniKani form and a backgrounding. The fire
+  // synchronously, as do the swipe's activation and a backgrounding. The fire
   // re-checks the live scene before it writes, and each visit fires at most once, so a still-mounted
   // last page cannot schedule a second write while the handoff to the tabs is in flight.
   const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -797,7 +668,7 @@ export function OnboardingFlow({
   // re-arms, even once its write settles, and a timer is only ever live for its own visit.
   const autoArmedVisit = useRef<number>(-1);
   const autoFiredVisit = useRef<number>(-1);
-  // True from any invalidation — a manual press, a swipe activation, the form, a backgrounding —
+  // True from any invalidation — a manual press, a swipe activation, a backgrounding —
   // until the scene is idle again. The arming effect reads it, so the beat re-arms when it lifts.
   const [beatSuspended, setBeatSuspended] = useState(false);
   // True when this visit arrived by going back: the page may already read done, and Back must stay
@@ -811,8 +682,8 @@ export function OnboardingFlow({
     actions: {step: number; visual: StepVisual} | null;
     writePending: boolean;
     saveError: boolean;
-    formOpen: boolean;
-    formSettled: boolean;
+    arrivedBackwards: boolean;
+    screenReader: boolean;
     suspended: boolean;
   } | null>(null);
 
@@ -820,7 +691,7 @@ export function OnboardingFlow({
     clearTimeout(autoTimer.current);
     autoTimer.current = null;
     // The suspension is state, not a ref: the arming effect re-runs on it, so the beat re-arms the
-    // moment the scene is idle again (a cancelled swipe, a closed form, a foreground return).
+    // moment the scene is idle again (a cancelled swipe, a foreground return).
     setBeatSuspended(true);
   }, []);
 
@@ -863,7 +734,10 @@ export function OnboardingFlow({
   // units, and is the only thing the artwork reads.
   const scene = useSharedValue(step);
   const entrance = useSharedValue(reducedMotion ? 1 : 0);
-  const formProgress = useSharedValue(formOpen ? 1 : 0);
+  // The artwork's recede into the WaniKani token form's anchor: onboarding draws its token field
+  // inside the page's own step, so the scene is never receded and this stays a fixed zero the scene
+  // still reads.
+  const formProgress = useSharedValue(0);
   // The content's own clock: 0 at a step change, 1 when the new page has settled. Kept separate
   // from the scene so the content can trail the artwork by a beat.
   const contentProgress = useSharedValue(1);
@@ -871,9 +745,6 @@ export function OnboardingFlow({
   // page's own native read reports it. Nothing else draws it.
   const success = useSharedValue(0);
   const [wanikaniConnected, setWanikaniConnected] = useState(false);
-  // Bumped when the embedded form stores a working token, so the WaniKani page re-reads the real
-  // store rather than trusting the form's own outcome.
-  const [connectRevision, setConnectRevision] = useState(0);
   // TalkBack: a fixed beat can cut the heading announcement off mid-speech, so with a screen reader
   // on the flow keeps the manual Continue and never times a page away.
   const [screenReader, setScreenReader] = useState(false);
@@ -1007,7 +878,7 @@ export function OnboardingFlow({
   if (nav.step !== step) {
     // Read before the clock is reset, so the page being left exits from where it actually was.
     const outgoingProgress = contentProgress.value;
-    const outgoingDirection = nav.step > nav.from ? 1 : -1;
+    const outgoingDirection = travelDirection(nav.from, nav.step);
     // A step change that lands on the swipe's target is the gesture's own commit: the scene and the
     // copy are already at that page's pose, so nothing may be reset or replayed. The session ends
     // only once the spring has landed too (or immediately if it already had).
@@ -1059,21 +930,11 @@ export function OnboardingFlow({
       }
     }
   }
-  const direction = nav.step > nav.from ? 1 : -1;
+  const direction = travelDirection(nav.from, nav.step);
 
   const report = useCallback(
     (visual: StepVisual) => {
       reported.current = visual;
-      // The page's status is cached here and replaced only when the controller's own semantic key
-      // changes — never by comparing the node, so a re-report cannot loop, and the leaving copy keeps
-      // the status it had. It is drawn by the fixed copies, not by the page.
-      setStatuses((current) => {
-        const cached = current[step];
-        if (cached != null && cached.key === visual.statusKey) {
-          return current;
-        }
-        return {...current, [step]: {key: visual.statusKey, node: visual.status}};
-      });
       // The action area is the shell's own, drawn once for the whole flow: it takes the freshest view
       // whose buttons actually differ, so a step change swaps a label and nothing else. The committed
       // step is part of the key, so two pages that share a label and a disabled state still hand over
@@ -1086,10 +947,6 @@ export function OnboardingFlow({
       setActions({step, visual});
     },
     [step],
-  );
-  const statusNodes = useMemo(
-    () => PAGES.map((_, index) => statuses[index]?.node ?? null),
-    [statuses],
   );
 
   // The outgoing layer goes once the scene has landed. The run id comes back from the UI thread so a
@@ -1136,48 +993,6 @@ export function OnboardingFlow({
     entrance.value = withTiming(1, {duration: STEP_SCENE_MS, easing: PAGE_EASING_REANIMATED});
   }, [reducedMotion, entrance]);
 
-  // The form's own transition. Its target is read during render, so the very commit that opens or
-  // closes the form already treats the page as covered — the actions' interactivity and the form's
-  // own a11y hand-off must never read the previous transition's settled value.
-  const formTarget = formOpen ? 1 : 0;
-  const [formTargetSeen, setFormTargetSeen] = useState(formTarget);
-  if (formTargetSeen !== formTarget) {
-    setFormTargetSeen(formTarget);
-    setFormSettled(false);
-  }
-
-  // A finish from an older run must not report the current transition settled.
-  const settleForm = useCallback((run: number) => {
-    if (run === formRun.current) setFormSettled(true);
-  }, []);
-
-  // The WaniKani form's own rise and fall, and the recede of the scene behind it. The form stays
-  // mounted after its first open, so closing it only animates it away; [formSettled] marks the moment
-  // the rise or the fall has actually finished, and a run id keeps a superseded finish from clearing
-  // it early.
-  useEffect(() => {
-    const target = formOpen ? 1 : 0;
-    if (formProgress.value === target) {
-      setFormSettled(true);
-      return;
-    }
-    const run = ++formRun.current;
-    if (reducedMotion) {
-      formProgress.value = target;
-      setFormSettled(true);
-      return;
-    }
-    setFormSettled(false);
-    formProgress.value = withTiming(target, {duration: FORM_MS, easing: PAGE_EASING_REANIMATED}, (finished) => {
-      "worklet";
-      if (finished) runOnJS(settleForm)(run);
-    });
-  }, [formOpen, reducedMotion, formProgress, settleForm]);
-
-  if (formOpen && !formMounted) {
-    setFormMounted(true);
-  }
-
   // The accent follows the real connection state and only the WaniKani page carries it, so it is
   // never lit on a page that has nothing to say about the account. Reduced motion sets it directly,
   // keeping the state without the sweep.
@@ -1187,53 +1002,23 @@ export function OnboardingFlow({
       ? accentOn
         ? 1
         : 0
-      : withTiming(accentOn ? 1 : 0, {duration: FORM_MS, easing: PAGE_EASING_REANIMATED});
+      : withTiming(accentOn ? 1 : 0, {duration: ACCENT_FADE_MS, easing: PAGE_EASING_REANIMATED});
   }, [accentOn, reducedMotion, success]);
 
-  // The embedded form stored a working token: the form goes, and the page re-reads the real store.
-  const onFormConnected = useCallback(() => {
-    setFormOpen(false);
-    setConnectRevision((current) => current + 1);
-  }, []);
-
-  // A new page starts fresh: the WaniKani form closes, and the incoming heading takes the reader's
-  // focus. The heading carries the step in its own label, so one focus announcement says where the
-  // reader is and what the page is — a separate step announcement would read it twice.
+  // A new page starts fresh, and the incoming heading takes the reader's focus. The heading carries
+  // the step in its own label, so one focus announcement says where the reader is and what the page
+  // is — a separate step announcement would read it twice.
   useEffect(() => {
-    setFormOpen(false);
     const node = findNodeHandle(headingRef.current);
     if (node != null) AccessibilityInfo.setAccessibilityFocus(node);
   }, [step]);
 
-  // Closing the form puts the reader back on the page it was covering — once the page is really back
-  // on screen ([formSettled]), so focus never lands on content that is still invisible under the
-  // form's exit.
-  const formWasOpen = useRef(formOpen);
-  useEffect(() => {
-    if (formOpen) {
-      formWasOpen.current = true;
-      return;
-    }
-    if (formWasOpen.current && formSettled) {
-      formWasOpen.current = false;
-      // The page is really back on screen, so the beat may re-arm.
-      setBeatSuspended(false);
-      const node = findNodeHandle(headingRef.current);
-      if (node != null) AccessibilityInfo.setAccessibilityFocus(node);
-    }
-  }, [formOpen, formSettled]);
-
   // Android Back: while a step is being saved it does nothing at all — a second write must not race
-  // the one in flight. Otherwise it closes the WaniKani form first, goes back a page on pages 2 and
-  // 3, and on the first page is left to the platform — which leaves the app without finishing the
-  // flow.
+  // the one in flight. Otherwise it goes back a page on pages 2 and 3, and on the first page is left
+  // to the platform — which leaves the app without finishing the flow.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (persisting.current) {
-        return true;
-      }
-      if (formOpen) {
-        setFormOpen(false);
         return true;
       }
       if (step === 0) {
@@ -1243,12 +1028,12 @@ export function OnboardingFlow({
       return true;
     });
     return () => subscription.remove();
-  }, [step, formOpen, write]);
+  }, [step, write]);
 
   // Auto-advance: when the committed page's own completion read says done, show the success beat —
   // long enough for the dot and its word — and then write the next step through the same guarded
   // write the Continue button and a swipe use. The booking carries the visit ([nav.run]) and the
-  // step; a manual navigation, a swipe activation, the WaniKani form, a backgrounding or an unmount
+  // step; a manual navigation, a swipe activation, a backgrounding or an unmount
   // all invalidate it synchronously. The fire re-checks the live scene — the swipe session, the
   // content clock, the write, the completion state — so nothing the render cannot see advances the
   // page, and a failed write stays on the page's own visible "Try again" with no auto-retry.
@@ -1258,18 +1043,16 @@ export function OnboardingFlow({
     actions,
     writePending,
     saveError,
-    formOpen,
-    formSettled,
+    arrivedBackwards,
+    screenReader,
     suspended: beatSuspended,
   };
-  // [formSettled] is the steady state — the form is down and its exit has finished — so the gate
-  // holds exactly when the scene is the page's own, the same condition the swipe uses.
+  // A page reports [done] only when every step on it was verified from the device, so this holds
+  // exactly when the committed page is complete and nothing of the flow's own is in flight.
   const doneReady =
     actions != null &&
     actions.step === step &&
     actions.visual.done &&
-    formSettled &&
-    !formOpen &&
     !writePending &&
     !saveError &&
     !screenReader &&
@@ -1288,32 +1071,37 @@ export function OnboardingFlow({
       swipePose.role.value === SWIPE_IDLE &&
       swipeTarget.current == null &&
       !swipeOwnsClock.current;
-    // The state gate, re-checked live against the freshest render: a stale timer from another visit
-    // refuses here, and so does a visit whose beat already fired.
-    const gateHolds =
-      autoArmedVisit.current === inputs.navRun &&
-      autoFiredVisit.current !== inputs.navRun &&
-      inputs.actions != null &&
-      inputs.actions.step === inputs.step &&
-      inputs.actions.visual.done &&
-      !inputs.writePending &&
-      !persisting.current &&
-      !inputs.saveError &&
-      !inputs.formOpen &&
-      inputs.formSettled &&
-      !inputs.suspended;
-    if (!gateHolds) return;
-    if (!swipeIdle || contentProgress.value < 1) {
-      // The gate holds but the scene is mid-gesture or the arrival has not settled: re-check shortly
-      // instead of firing. A retry is still this visit's own timer — the arming effect clears
-      // whatever is booked the moment a dep changes, and the armed visit check refuses strays.
+    // The one-shot booking is what makes a fire this visit's own: a stale timer from another visit,
+    // or one whose beat already fired, refuses outright.
+    if (autoArmedVisit.current !== inputs.navRun || autoFiredVisit.current === inputs.navRun) {
+      return;
+    }
+    const gate: AdvanceGate = {
+      verified:
+        inputs.actions != null &&
+        inputs.actions.step === inputs.step &&
+        inputs.actions.visual.done,
+      arrivedBackwards: inputs.arrivedBackwards,
+      screenReader: inputs.screenReader,
+      suspended: inputs.suspended,
+      writePending: inputs.writePending || persisting.current,
+      saveError: inputs.saveError,
+      sceneIdle: swipeIdle,
+      contentSettled: contentProgress.value >= 1,
+    };
+    if (!shouldAutoAdvance(gate)) {
+      // The gate cannot be made true by waiting (a page whose steps are not verified never will be),
+      // so it refuses; but one that is only waiting on the scene's own settle re-checks shortly
+      // instead. A retry is still this visit's own timer — the arming effect clears whatever is
+      // booked the moment a dep changes, and the booking check above refuses strays.
+      if (!shouldAutoAdvance({...gate, sceneIdle: true, contentSettled: true})) return;
       autoTimer.current = setTimeout(fireAutoAdvance, AUTO_ADVANCE_RETRY_MS);
       return;
     }
     // The one-shot booking is spent only on the write that actually happens: a transient refusal
     // leaves the visit re-armable.
     autoFiredVisit.current = inputs.navRun;
-    write(inputs.step === 2 ? 3 : inputs.step + 1);
+    write(nextStep(inputs.step));
   }, [write, swipePose, contentProgress]);
 
   useEffect(() => {
@@ -1368,43 +1156,24 @@ export function OnboardingFlow({
       outgoingDirection={nav.outgoingDirection}
       entering={entering}
       writePending={writePending}
-      formOpen={formOpen}
-      formMounted={formMounted}
-      formSettled={formSettled}
       swipePose={swipePose}
       headingRef={headingRef}
-      statusNodes={statusNodes}
       actions={actions?.visual ?? null}
       onSwipeStep={swipeToStep}
       onSwipeStart={swipeStarted}
       onSwipeSettled={swipeSettled}
-      onCloseForm={() => setFormOpen(false)}
-      onFormConnected={onFormConnected}
       onBack={
-        formOpen
-          ? () => setFormOpen(false)
-          : step > 0
-            ? () => {
-                if (persisting.current) return;
-                write(step - 1);
-              }
-            : null
+        step > 0
+          ? () => {
+              if (persisting.current) return;
+              write(step - 1);
+            }
+          : null
       }
     >
       {step === 0 && <LookupPage {...shared} />}
       {step === 1 && <AnkiPage {...shared} />}
-      {step === 2 && (
-        <WaniKaniPage
-          {...shared}
-          connectRevision={connectRevision}
-          onConnectedChange={setWanikaniConnected}
-          onOpenForm={() => {
-            // The form owns the scene from the moment it opens, not from when it settles.
-            clearAutoAdvance();
-            setFormOpen(true);
-          }}
-        />
-      )}
+      {step === 2 && <WaniKaniPage {...shared} onConnectedChange={setWanikaniConnected} />}
     </OnboardingShell>
   );
 }
@@ -1432,18 +1201,12 @@ function OnboardingShell({
   outgoingDirection,
   entering,
   writePending,
-  formOpen,
-  formMounted,
-  formSettled,
   swipePose,
   headingRef,
-  statusNodes,
   actions,
   onSwipeStep,
   onSwipeStart,
   onSwipeSettled,
-  onCloseForm,
-  onFormConnected,
   onBack,
   children,
 }: {
@@ -1463,16 +1226,10 @@ function OnboardingShell({
   /** True for the one commit after a step change, while the content clock's reset is in flight. */
   entering: boolean;
   writePending: boolean;
-  formOpen: boolean;
-  formMounted: boolean;
-  /** True when the form's rise or fall has finished, so the page is really on screen again. */
-  formSettled: boolean;
   /** The swipe's pose: the scene clock plus the copy's fraction map. */
   swipePose: SwipePose;
   /** The heading the flow focuses when a page arrives: the committed copy's own heading. */
   headingRef: React.RefObject<Text | null>;
-  /** One cached status per page, by [PAGES] index, drawn by that page's fixed copy. */
-  statusNodes: React.ReactNode[];
   /** The live action area, held by the flow so the buttons survive every page swap. */
   actions: StepVisual | null;
   /** Commits a swiped step through the flow's persisted write; `onResult` answers whether it saved. */
@@ -1481,8 +1238,6 @@ function OnboardingShell({
   onSwipeStart: () => void;
   /** The swipe's settle landed; `accepted` says whether the step was a committed target. */
   onSwipeSettled: (accepted: boolean) => void;
-  onCloseForm: () => void;
-  onFormConnected: () => void;
   onBack: (() => void) | null;
   children: React.ReactNode;
 }) {
@@ -1511,12 +1266,9 @@ function OnboardingShell({
   const [region, setRegion] = useState<number | null>(null);
   const regionHeight =
     region ?? Math.max(0, height - insets.top - insets.bottom - HEADER_ROW_HEIGHT - HEADER_GAP);
-  // The mode is latched while the WaniKani form is up: the soft keyboard resizes the window, and
-  // the artwork must not collapse under a form the reader is already filling in. It re-decides the
-  // moment the form closes.
   const decidedMode = artworkModeFor(fontScale, regionHeight);
   const [mode, setMode] = useState<ArtworkMode>(decidedMode);
-  if (!formOpen && mode !== decidedMode) {
+  if (mode !== decidedMode) {
     setMode(decidedMode);
   }
   const innerColumnWidth = Math.min(width, MAX_CONTENT_WIDTH) - 2 * inset;
@@ -1529,29 +1281,23 @@ function OnboardingShell({
     mode === "capped" ? ARTWORK_CAPPED_WIDTH : ARTWORK_WIDTH,
   );
 
-  // The form's handoff, on its own clock and the same two phases as the step text: the page's body
-  // and actions are gone inside the first [PHASE_EXIT_BY], the form's do not appear until
-  // [PHASE_ENTER_AT], and the same formulas run backwards as the form closes — so the form always
-  // leaves before the page returns and the two are never readable at once. The scene's recede stays
-  // on the whole 0→1 clock, so it is continuous in both directions.
-  const contentAreaStyle = useAnimatedStyle(() => {
-    const t = Math.min(1, formProgress.value / PHASE_EXIT_BY);
-    return {opacity: 1 - t, transform: [{translateY: -FORM_TRAVEL * t}]};
-  });
-  const formStyle = useAnimatedStyle(() => {
-    const t = easedPhase(Math.max(0, Math.min(1, (formProgress.value - PHASE_ENTER_AT) / (1 - PHASE_ENTER_AT))));
-    return {opacity: t, transform: [{translateY: FORM_TRAVEL * (1 - t)}]};
+  // The page's own steps arrive on the content clock, exactly like the narrative copy above them, so
+  // the heading and the list it heads hand over as one movement. Only the live page's steps exist,
+  // so this arrival is the whole of the step list's own motion.
+  const stepsStyle = useAnimatedStyle(() => {
+    const pose = entering ? textArrival(0, direction) : textArrival(contentProgress.value, direction);
+    return {opacity: pose.opacity, transform: [{translateX: pose.x}]};
   });
 
   // The step swipe: one horizontal pan that previews the adjacent page on the same scene clock the
   // artwork and the track already draw with, then commits through the flow's persisted write. It
   // takes only clearly horizontal intent and gives up early on vertical movement, so the page still
-  // scrolls and the buttons still take their taps. It is off while the form is up or a save is in
-  // flight, and it never changes the step itself — a swipe is exactly the Continue write.
+  // scrolls and the buttons still take their taps. It is off while a save is in flight, and it never
+  // changes the step itself — a swipe is exactly the Continue write.
   const dragBase = useSharedValue(0);
   const commitDistance = Math.min(width * SWIPE_COMMIT_FRACTION, SWIPE_COMMIT_MAX);
   const rtl = I18nManager.isRTL ? -1 : 1;
-  const swipeEnabled = !formOpen && formSettled && !writePending;
+  const swipeEnabled = !writePending;
 
   // A settle reports only while the session is still live: the flow ends the role the moment a
   // session is superseded, so a spring that was cancelled or replaced can never report for a newer
@@ -1676,7 +1422,7 @@ function OnboardingShell({
         })
         .onEnd((event, success) => {
           "worklet";
-          // Superseded before the finger lifted (a step change, the form, an ended session): this
+          // Superseded before the finger lifted (a step change, an ended session): this
           // release owns nothing and must not commit or settle over the new page.
           if (swipePose.role.value !== SWIPE_DRAG) return;
           const travel = Math.abs(event.translationX);
@@ -1752,7 +1498,7 @@ function OnboardingShell({
 
   // The one physical driver: while the copy settles, the scene is a lerp of the settle progress, so
   // the art and the text are the same clock with mapped outputs. Nothing runs outside a settle, so a
-  // button's or the form's own timing can never be written over.
+  // button's own timing can never be written over.
   useAnimatedReaction(
     () => swipePose.q.value,
     (progress) => {
@@ -1760,18 +1506,6 @@ function OnboardingShell({
       scene.value =
         swipePose.sceneFrom.value + (swipePose.sceneTo.value - swipePose.sceneFrom.value) * progress;
     },
-  );
-
-  // The embedded form's own connect: the token is checked natively, and only a real connection
-  // closes the form and asks the WaniKani page to re-read the store. A refused or failed token
-  // leaves the form up with its own message.
-  const connect = useCallback(
-    async (token: string) => {
-      const outcome = await connectWaniKani(token);
-      if (outcome.status === "connected") onFormConnected();
-      return outcome;
-    },
-    [onFormConnected],
   );
 
   // A new page starts at its own top: the scroller is one instance for the whole flow, so a reader
@@ -1785,8 +1519,7 @@ function OnboardingShell({
     <SafeAreaView style={{flex: 1, backgroundColor: colors.background}} edges={["top", "left", "right"]}>
       {/* One header row: the bare back target, the compact step track centred on the row, and the
           step in words. Every step reserves the back target's slot, so neither the row's height nor
-          the track's centre moves as the reader goes back and forward; while the WaniKani form is up
-          the target closes the form rather than leaving the page. */}
+          the track's centre moves as the reader goes back and forward. */}
       <View
         style={[
           CONTENT_COLUMN,
@@ -1880,12 +1613,7 @@ function OnboardingShell({
           )}
 
           <View style={{flex: 1}}>
-            <Animated.View
-              style={[{flex: 1}, contentAreaStyle]}
-              pointerEvents={formOpen || !formSettled ? "none" : "auto"}
-              accessibilityElementsHidden={formOpen || !formSettled}
-              importantForAccessibility={formOpen || !formSettled ? "no-hide-descendants" : "auto"}
-            >
+            <KeyboardAvoidingView style={{flex: 1}} behavior="padding">
               <ScrollView
                 ref={scrollRef}
                 // A swipe's text rides the artwork's page coordinate, so copies travel outside the
@@ -1895,6 +1623,7 @@ function OnboardingShell({
                 removeClippedSubviews={false}
                 showsVerticalScrollIndicator={false}
                 showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
                 contentContainerStyle={[
                   CONTENT_COLUMN,
                   {
@@ -1923,12 +1652,12 @@ function OnboardingShell({
                       contentProgress={contentProgress}
                       swipePose={swipePose}
                       headingRef={headingRef}
-                      status={statusNodes[index] ?? null}
                       swipeDistance={swipeDistance}
                     />
                   ))}
                 </View>
-                <Animated.View key="incoming" style={{flexGrow: 1}}>
+                {/* The committed page's own steps, arriving on the same clock as the copy above. */}
+                <Animated.View key="steps" style={[{flexGrow: 1}, stepsStyle]}>
                   {children}
                 </Animated.View>
                 {/* The one action area, outside every page: the same element for the whole flow, so a
@@ -1936,25 +1665,7 @@ function OnboardingShell({
                     does. It stays in the scroller's own flow, so large text and short screens reach it. */}
                 <StepActions key="actions" visual={actions} busy={writePending} />
               </ScrollView>
-            </Animated.View>
-
-            {formMounted && (
-              <Animated.View
-                style={[{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}, formStyle]}
-                pointerEvents={formOpen ? "auto" : "none"}
-                accessibilityElementsHidden={!formOpen}
-                importantForAccessibility={formOpen ? "auto" : "no-hide-descendants"}
-              >
-                <WaniKaniConnect
-                  embedded
-                  active={formOpen && formSettled}
-                  rejected={false}
-                  busy={false}
-                  onBack={onCloseForm}
-                  onConnect={connect}
-                />
-              </Animated.View>
-            )}
+            </KeyboardAvoidingView>
           </View>
         </View>
       </GestureDetector>
@@ -1962,91 +1673,222 @@ function OnboardingShell({
   );
 }
 
+
 type LookupState = "checking" | "on" | "off" | "failed";
 
-/** The recognition model's install state, as the lookup page's own action shows it. */
+/** The PP-OCRv6 Medium install, as the reader rows show it. */
 type OcrState = "checking" | "absent" | "downloading" | "installed";
 
-/** The download size named in the action's label: decimal MB with one place of decimals. */
-function ocrSizeLabel(bytes: number): string {
-  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+/** Where a token is created, opened in the browser from the WaniKani page. */
+const WANIKANI_TOKEN_URL = "https://www.wanikani.com/settings/personal_access_tokens";
+
+/** The "Recommended" marker beside the reader it names. */
+function RecommendedPill({label}: {label: string}) {
+  const {colors} = useTheme();
+  return (
+    <View
+      style={{
+        backgroundColor: colors.accentSubtle,
+        borderRadius: 6,
+        paddingHorizontal: spacing.s,
+        paddingVertical: 1,
+      }}
+    >
+      <Text style={[typeScale.labelSmall, {color: colors.onPrimaryContainer}]}>{label}</Text>
+    </View>
+  );
 }
 
-/** Page 1: the accessibility grant that lookup mode is, read afresh on every arrival. */
+/** A radio: an accent ring and dot when chosen, a quiet outline when not. */
+function RadioMark({selected}: {selected: boolean}) {
+  const {colors} = useTheme();
+  return (
+    <View
+      style={{
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: selected ? colors.accent : colors.outlineVariant,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {selected && (
+        <View style={{width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent}} />
+      )}
+    </View>
+  );
+}
+
+/** One selectable reader: its name, its mark, and the one line that stands for its state. */
+function ReaderRow({
+  title,
+  badge,
+  summary,
+  selected,
+  disabled,
+  hint,
+  onPress,
+}: {
+  title: string;
+  badge?: string;
+  summary: string | null;
+  selected: boolean;
+  disabled?: boolean;
+  hint?: string;
+  onPress: () => void;
+}) {
+  const {colors} = useTheme();
+  return (
+    <PressableScale
+      accessibilityRole="radio"
+      accessibilityState={{selected, disabled: disabled === true}}
+      accessibilityLabel={badge != null ? `${title}, ${badge}` : title}
+      accessibilityHint={hint}
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.m,
+        minHeight: 48,
+        paddingVertical: spacing.s,
+        opacity: disabled === true ? 0.5 : 1,
+      }}
+    >
+      <View style={{flex: 1, minWidth: 0}}>
+        <View style={{flexDirection: "row", alignItems: "center", gap: spacing.s}}>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+          {badge != null && <RecommendedPill label={badge} />}
+        </View>
+        {summary != null && (
+          <Text
+            style={[typeScale.description, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
+          >
+            {summary}
+          </Text>
+        )}
+      </View>
+      <RadioMark selected={selected} />
+    </PressableScale>
+  );
+}
+
+/** The 4 dp download bar under its own percentage line; the bar itself is decorative. */
+function DownloadBar({percent}: {percent: number}) {
+  const {colors} = useTheme();
+  return (
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityValue={{min: 0, max: 100, now: percent, text: `${percent}%`}}
+      style={{height: 4, borderRadius: 2, backgroundColor: colors.outlineVariant, overflow: "hidden"}}
+    >
+      <View style={{height: 4, width: `${percent}%`, backgroundColor: colors.accent}} />
+    </View>
+  );
+}
+
+/** The one line a failed download leaves: what went wrong, in the reader's own words. */
+function downloadFailureText(failure: DownloadFailure): string {
+  switch (failure) {
+    case "offline":
+      return "Couldn't download PP-OCRv6 Medium: no connection.";
+    case "storage":
+      return "Couldn't download PP-OCRv6 Medium: not enough storage on this device";
+    case "verify":
+      return "Couldn't download PP-OCRv6 Medium: the file did not pass its check";
+    case "cancelled":
+      return "Cancelled.";
+    default:
+      return "Couldn't download PP-OCRv6 Medium.";
+  }
+}
+
+/**
+ * Page 1: the accessibility grant that lookup mode is, read afresh on every arrival, and the reader
+ * the lookups will be read with.
+ *
+ * The grant is the step that advances the page; the better reader is the second row's own
+ * verification, and the bundled ML Kit default never verifies it, so the reader either installs and
+ * selects PP-OCRv6 Medium or resolves the page with its own "Done". Nothing here is inferred from a
+ * return to the app: the grant is re-read, and an "off" stays off, however the reader came back.
+ */
 function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
   const {colors} = useTheme();
   const {request, dialog, open: dialogOpen} = useLookupModeRequest();
-  const [state, setState] = useState<LookupState>("checking");
+  const [lookup, setLookup] = useState<LookupState>("checking");
   // Whether the app has come back to the foreground while this page was up: only then does an "off"
   // read mean "you returned without enabling it", rather than the first look at the page.
   const [returned, setReturned] = useState(false);
-  // The PP-OCRv6 Medium install, as a read of the recognition settings reports it. The install
-  // never advances this step — lookup mode being on does — but its action and its "Installed" line
-  // live here, so recognition is set up on the scene the reader will use it from.
-  const [ocr, setOcr] = useState<OcrState>("checking");
-  const [ocrBytes, setOcrBytes] = useState(0);
+  const [medium, setMedium] = useState<OcrState>("checking");
+  const [mediumBytes, setMediumBytes] = useState(0);
+  const [mediumSelected, setMediumSelected] = useState(false);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const [failure, setFailure] = useState<DownloadFailure | null>(null);
   // True while a foreground re-read is on its way: the shown success stays, but the beat waits.
   const [revalidating, setRevalidating] = useState(false);
-  // True while the installed model's own mode selection is being written: the advance waits for it.
+  // True while the installed reader's own mode selection is being written: the advance waits for it.
   const [modeSettling, setModeSettling] = useState(false);
-  // True once the reader has resolved the install offer with "Not now": the offer and its quiet
-  // alternative go, and the step is free to advance without the model — lookup mode being on is the
-  // step's own completion, and the install is an offer, never a requirement.
-  const [offerDismissed, setOfferDismissed] = useState(false);
   const readSeq = useRef(0);
   const ocrSeq = useRef(0);
-  // The mode switch fires once per observation of an installed model, never once per re-read.
+  // The mode switch fires once per observation of an installed reader, never once per re-read.
   const mediumApplied = useRef(false);
-  // False once the page has unmounted, so a native read that lands late cannot set state.
+  const unsubscribe = useRef<(() => void) | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      unsubscribe.current?.();
+      unsubscribe.current = null;
     };
   }, []);
 
   const read = useCallback((showChecking: boolean) => {
     readSeq.current += 1;
     const seq = readSeq.current;
-    if (showChecking) setState("checking");
+    if (showChecking) setLookup("checking");
     else setRevalidating(true);
     void GatenAppInfo.isLookupModeActive()
       .then((active) => {
         if (!mounted.current || seq !== readSeq.current) return;
-        setState(active ? "on" : "off");
+        setLookup(active ? "on" : "off");
         setRevalidating(false);
       })
       .catch(() => {
         if (!mounted.current || seq !== readSeq.current) return;
-        setState("failed");
+        setLookup("failed");
         setRevalidating(false);
       });
   }, []);
 
-  /** Reads the recognition settings and, once the model is installed, selects it exactly once. */
-  const readOcr = useCallback(() => {
+  /** Reads the recognition settings and, once the reader is installed, selects it exactly once. */
+  const readOcr = useCallback((showChecking: boolean) => {
     ocrSeq.current += 1;
     const seq = ocrSeq.current;
-    void GatenRecognition.getRecognitionSettings()
+    if (showChecking) setMedium("checking");
+    void getRecognitionSettings()
       .then((settings) => {
         if (!mounted.current || seq !== ocrSeq.current) return;
-        const medium = settings.engines.find((engine) => engine.id === "medium");
-        setOcrBytes(medium?.downloadBytes ?? 0);
-        setOcr(
+        const engine = settings.engines.find((candidate) => candidate.id === "medium");
+        setMediumBytes(engine?.downloadBytes ?? 0);
+        setMediumSelected(settings.mode === "medium");
+        setMedium(
           settings.downloading.includes("medium")
             ? "downloading"
-            : medium?.installed
+            : engine?.installed
               ? "installed"
               : "absent",
         );
         // An install is only used when it is the selected mode, so one that finishes here — or was
         // already on the device when the reader arrived — selects itself. Skipped, ML Kit stays.
         // The advance waits for this selection write to settle, whatever it answers.
-        if (medium?.installed && settings.mode !== "medium" && !mediumApplied.current) {
+        if (engine?.installed && settings.mode !== "medium" && !mediumApplied.current) {
           mediumApplied.current = true;
           setModeSettling(true);
-          void GatenRecognition.setRecognitionMode("medium")
+          void setRecognitionMode("medium")
             .catch(() => {})
             .finally(() => {
               if (mounted.current) setModeSettling(false);
@@ -2054,145 +1896,131 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
         }
       })
       .catch(() => {
-        // No error state: the action simply reflects not installed.
+        // No error state of its own: the row simply reflects not installed.
         if (!mounted.current || seq !== ocrSeq.current) return;
-        setOcr("absent");
+        setMedium("absent");
       });
   }, []);
 
-  /** The install: the Play asset pack fetch on Play, the in-app download otherwise. */
-  const install = useCallback(() => {
-    setOcr("downloading");
-    // A failure leaves no error state: the re-read simply reports not installed again.
-    void GatenRecognition.downloadRecognitionEngine("medium").then(
-      () => readOcr(),
-      () => readOcr(),
-    );
-  }, [readOcr]);
-
   // The grant is given in system Settings, so it is read on arrival and again every time the app
   // comes back to the foreground; a return is never treated as success. The recognition settings
-  // ride the same reads, so a download that finishes elsewhere — including a Play fast-follow —
-  // resolves to installed while the page is up.
+  // ride the same reads, so a download that finishes elsewhere resolves while the page is up.
   useEffect(() => {
     read(true);
-    readOcr();
+    readOcr(true);
     const subscription = AppState.addEventListener("change", (next) => {
       if (next === "active") {
         setReturned(true);
         read(false);
-        readOcr();
+        readOcr(false);
       }
     });
     return () => subscription.remove();
   }, [read, readOcr]);
 
-  // A download is native module state that outlives this page, so while one runs it is observed at
-  // a low rate — the settings screen's own pattern — until it lands or the page goes.
+  // A download is native module state that outlives this page, so while one runs it is observed at a
+  // low rate until it lands or the page goes — the settings screen's own pattern.
   useEffect(() => {
-    if (ocr !== "downloading") return;
-    const timer = setInterval(readOcr, 2000);
+    if (medium !== "downloading") return;
+    const timer = setInterval(() => readOcr(false), 2000);
     return () => clearInterval(timer);
-  }, [ocr, readOcr]);
+  }, [medium, readOcr]);
+
+  /** The install itself: progress rides the module's own events, and cancel is the row's own tap. */
+  const startDownload = useCallback(() => {
+    if (!mounted.current) return;
+    setFailure(null);
+    setProgress({engine: "medium", phase: "downloading", bytesDone: 0, bytesTotal: mediumBytes});
+    setMedium("downloading");
+    unsubscribe.current?.();
+    unsubscribe.current = subscribeDownloadProgress((next) => {
+      if (mounted.current) setProgress(next);
+    });
+    void downloadMedium().then(
+      () => {
+        unsubscribe.current?.();
+        unsubscribe.current = null;
+        if (mounted.current) {
+          setProgress(null);
+          readOcr(false);
+        }
+      },
+      (error: unknown) => {
+        unsubscribe.current?.();
+        unsubscribe.current = null;
+        if (!mounted.current) return;
+        setProgress(null);
+        setFailure(classifyDownloadError(error));
+        setMedium("absent");
+      },
+    );
+  }, [mediumBytes, readOcr]);
+
+  /** A Download tap: nothing is fetched until the reader confirms, as the settings screen does. */
+  const confirmDownload = useCallback(() => {
+    if (medium === "downloading") return;
+    Alert.alert(
+      "Download PP-OCRv6 Medium?",
+      mediumBytes > 0
+        ? `PP-OCRv6 Medium is ${formatMegabytes(mediumBytes)}. Wi-Fi is recommended. Downloading on mobile data may incur charges.`
+        : "Wi-Fi is recommended. Downloading on mobile data may incur charges.",
+      [
+        {text: "Cancel", style: "cancel"},
+        {
+          text: "Download",
+          onPress: () => {
+            if (mounted.current) startDownload();
+          },
+        },
+      ],
+      {cancelable: true},
+    );
+  }, [medium, mediumBytes, startDownload]);
+
+  const selectMedium = useCallback(() => {
+    if (medium !== "installed" || mediumSelected) return;
+    void setRecognitionMode("medium")
+      .then(() => {
+        if (mounted.current) setMediumSelected(true);
+      })
+      .catch(() => {});
+  }, [medium, mediumSelected]);
+
+  const selectMlKit = useCallback(() => {
+    if (!mediumSelected) return;
+    void setRecognitionMode("ml_kit")
+      .then(() => {
+        if (mounted.current) setMediumSelected(false);
+      })
+      .catch(() => {});
+  }, [mediumSelected]);
+
+  const steps = lookupSteps({lookup, medium, mediumSelected});
+  const active = steps.step1 === "current" ? 1 : 2;
 
   const primary: Action =
-    state === "checking"
-      ? {label: "Checking…", onPress: () => {}, disabled: true}
-      : state === "on"
-        ? {label: "Continue", onPress: () => onAdvance(step + 1)}
-        : state === "failed"
+    active === 2
+      ? {label: "Done", onPress: () => onAdvance(nextStep(step))}
+      : lookup === "checking"
+        ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
+        : lookup === "failed"
           ? {label: "Try again", onPress: () => read(true)}
-          : {
-              label: "Turn on lookup mode",
-              onPress: () => request(),
-            };
-
-  const statusLines: React.ReactNode[] = [];
-  if (state === "on") {
-    statusLines.push(<DoneLine key="lookup" word="On" />);
-    statusLines.push(
-      <Text key="lookup-on" style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-        Lookup mode is on.
-      </Text>,
-    );
-    statusLines.push(
-      <Text
-        key="lookup-hint"
-        style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}
-      >
-        To start a lookup, turn on Floating button or add the Quick Settings tile in Screen
-        lookup settings.
-      </Text>,
-    );
-  }
-  if (state === "off" && returned) {
-    statusLines.push(
-      <Text key="lookup-off" style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-        Lookup mode is still off.
-      </Text>,
-    );
-  }
-  if (state === "failed") {
-    statusLines.push(
-      <Text key="lookup-failed" style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-        Couldn't check lookup mode.
-      </Text>,
-    );
-  }
-  if (ocr === "installed") {
-    statusLines.push(<DoneLine key="ocr" word="Installed" live />);
-  }
-
-  // The outlined slot is the install action while the offer is unresolved; installed, or dismissed
-  // with "Not now", it goes and the success line above says so. While downloading the label swaps
-  // and the button disables in place.
-  let outlined: Action | null = null;
-  if (ocr === "absent" && !offerDismissed) {
-    const size = ocrBytes > 0 ? ocrSizeLabel(ocrBytes) : "";
-    outlined = {
-      label: size !== "" ? `Install text recognition · ${size}` : "Install text recognition",
-      accessibilityHint:
-        "Recommended. Downloads PP-OCRv6 Medium for screen and novel text; ML Kit reads text in the meantime.",
-      onPress: install,
-    };
-  } else if (ocr === "downloading") {
-    outlined = {label: "Downloading…", onPress: () => {}, disabled: true};
-  }
-
-  // The offer's own dismissal, in the shell's quiet/caption slot above the filled action: while the
-  // model is absent and the reader has not resolved the offer, they may decline it. Resolving it
-  // puts the install and this alternative away, and the step is then free to advance.
-  const quiet: Action | null =
-    ocr === "absent" && !offerDismissed
-      ? {
-          label: "Not now",
-          accessibilityLabel: "Not now, skip installing text recognition",
-          onPress: () => setOfferDismissed(true),
-        }
-      : null;
+          : {label: "Turn on lookup mode", onPress: () => request()};
 
   const visual: StepVisual = {
-    statusKey: `${state}:${returned ? 1 : 0}:${ocr}:${colors.onSurfaceVariant}`,
-    status: statusLines.length === 0 ? null : <View style={{gap: spacing.s}}>{statusLines}</View>,
     primary,
-    outlined,
-    quiet,
-    // The step is done when lookup mode is on — and only once the scene is the page's own: the
-    // disclosure dialog holds it, and so does any recognition work in flight (a re-validation, the
-    // install itself, or the mode selection an install triggers). The install offer holds it too
-    // until the reader resolves it, one way or the other: installed, or dismissed with "Not now".
-    // The grant and the install stay separate rows: "On" advances this step, "Installed" never does.
+    // The page verifies only when the grant is on *and* the better reader is installed and selected;
+    // the disclosure dialog and every read or write in flight hold the beat.
     done:
-      state === "on" &&
+      steps.verified &&
       !dialogOpen &&
       !revalidating &&
       !modeSettling &&
-      ocr !== "checking" &&
-      ocr !== "downloading" &&
-      (ocr === "installed" || offerDismissed),
+      medium !== "checking" &&
+      medium !== "downloading",
     skipLabel: "Skip",
     skipAccessibilityLabel: "Skip lookup mode setup",
-    onSkip: () => onAdvance(step + 1),
+    onSkip: () => onAdvance(nextStep(step)),
     saveError,
     onRetry,
   };
@@ -2203,8 +2031,102 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     report(visual);
   });
 
+  const progressShown =
+    progress ?? {engine: "medium" as const, phase: "downloading" as const, bytesDone: 0, bytesTotal: mediumBytes};
+  const mediumSummary =
+    medium === "installed"
+      ? "Installed \u00b7 offline"
+      : medium === "downloading"
+        ? null
+        : mediumBytes > 0
+          ? `${formatMegabytes(mediumBytes)} download`
+          : "Download";
+
   return (
-    <>{dialog}</>
+    <>
+      {dialog}
+      <StepList style={{marginTop: spacing.l}}>
+        <StepRow
+          index={1}
+          total={2}
+          status={steps.step1}
+          title={steps.step1 === "done" ? "Lookup mode is on" : "Turn on lookup mode"}
+          detail="Android needs Gaten as an accessibility service."
+        >
+          {returned && lookup === "off" && (
+            <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>
+              Still off. Turn on Gaten in accessibility settings.
+            </Text>
+          )}
+        </StepRow>
+        <StepRow
+          index={2}
+          total={2}
+          status={steps.step2}
+          title="Choose text recognition"
+          summary="ML Kit or PP-OCRv6 Medium"
+        >
+          <View>
+            <ReaderRow
+              title="ML Kit"
+              summary="Included \u00b7 offline"
+              hint="Japanese text, included with Gaten"
+              selected={!mediumSelected}
+              disabled={medium === "downloading"}
+              onPress={selectMlKit}
+            />
+            <ReaderRow
+              title="PP-OCRv6 Medium"
+              badge="Recommended"
+              summary={mediumSummary}
+              hint={
+                medium === "installed"
+                  ? "Installed. Use it for screen and novel text"
+                  : "Downloads PP-OCRv6 Medium for screen and novel text"
+              }
+              selected={mediumSelected}
+              disabled={medium === "downloading"}
+              onPress={medium === "installed" ? selectMedium : confirmDownload}
+            />
+            {medium === "downloading" && (
+              <View style={{gap: spacing.s, paddingBottom: spacing.s}}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}
+                >
+                  {downloadProgressText(progressShown)}
+                </Text>
+                <DownloadBar percent={downloadPercent(progressShown)} />
+                <Button
+                  variant="text"
+                  label="Cancel"
+                  onPress={() => {
+                    void cancelDownload().catch(() => {});
+                  }}
+                  fullWidth
+                />
+              </View>
+            )}
+            {failure != null && medium !== "downloading" && (
+              <View style={{gap: spacing.s, paddingBottom: spacing.s}}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[typeScale.bodySmall, {color: colors.error, flexShrink: 1}]}
+                >
+                  {downloadFailureText(failure)}
+                </Text>
+                <Button
+                  variant="text"
+                  label={failure === "cancelled" ? "Download" : "Try again"}
+                  onPress={confirmDownload}
+                  fullWidth
+                />
+              </View>
+            )}
+          </View>
+        </StepRow>
+      </StepList>
+    </>
   );
 }
 
@@ -2222,7 +2144,9 @@ type AnkiPageState =
 /** The `code` a bridge rejection carried, or "" when it carried none. */
 function errorCode(error: unknown): string {
   if (typeof error === "object" && error != null && "code" in error) {
-    return typeof error.code === "string" ? error.code : "";
+    return typeof (error as {code: unknown}).code === "string"
+      ? (error as {code: string}).code
+      : "";
   }
   return "";
 }
@@ -2241,14 +2165,23 @@ function openAnkiDroid() {
   void GatenAnki.openAnkiDroid().catch(() => {});
 }
 
-/** Page 2: AnkiDroid installed, allowed and with a collection to read — done in place. */
+/**
+ * Page 2: AnkiDroid installed, allowed and with a collection to read.
+ *
+ * The first row is the app being on the device at all; the second is the collection really being
+ * read. A denied permission, a collection that is not set up or a read that failed is installed but
+ * not read, so the row says what to do next and the page never verifies. The permission prompt
+ * fires only on the reader's own tap.
+ */
 function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
   const {colors} = useTheme();
   const [state, setState] = useState<AnkiPageState>({kind: "checking"});
   // True while a foreground re-read is on its way: the shown success stays, but the beat waits.
   const [revalidating, setRevalidating] = useState(false);
+  // Whether the app has come back to the foreground while this page was up: only then does a
+  // still-missing AnkiDroid read as "you returned without installing it".
+  const [returned, setReturned] = useState(false);
   const readSeq = useRef(0);
-  // False once the page has unmounted, so a native read that lands late cannot set state.
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -2305,7 +2238,10 @@ function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
   useEffect(() => {
     read(true);
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next === "active") read(false);
+      if (next === "active") {
+        setReturned(true);
+        read(false);
+      }
     });
     return () => subscription.remove();
   }, [read]);
@@ -2313,7 +2249,7 @@ function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
   const grant = () => {
     void GatenAnki.requestPermission()
       .then((granted) => {
-        if (granted) read(true);
+        if (granted) read(false);
         else if (mounted.current) setState({kind: "denied"});
       })
       .catch(() => {
@@ -2321,80 +2257,72 @@ function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
       });
   };
 
-  let primary: Action | null = null;
-  let outlined: Action | null = null;
-  let status: React.ReactNode = null;
+  const steps = ankiSteps({
+    status: state.kind,
+    collectionEmpty: state.kind === "connected" ? state.empty : false,
+  });
+  const notInstalled = state.kind === "notInstalled";
 
-  switch (state.kind) {
-    case "checking":
-      primary = {label: "Checking Anki…", onPress: () => {}, disabled: true};
-      break;
-    case "notInstalled":
-      primary = {label: "Download Anki", onPress: () => void downloadAnkiDroid()};
-      break;
-    case "needsPermission":
-      primary = {label: "Allow access", onPress: grant};
-      break;
-    case "notSetUp":
-      outlined = {label: "Open Anki", onPress: openAnkiDroid};
-      status = (
-        <View style={{gap: spacing.s}}>
-          <Text style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-            Finish setup in Anki, then come back.
-          </Text>
-        </View>
-      );
-      break;
-    case "denied":
-      primary = {label: "Try again", onPress: () => read(true)};
-      status = (
-        <View style={{gap: spacing.s}}>
-          <Text style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-            Access wasn't allowed. Try again or skip.
-          </Text>
-        </View>
-      );
-      break;
-    case "failure":
-      primary = {label: "Try again", onPress: () => read(true)};
-      outlined = {label: "Open Anki", onPress: openAnkiDroid};
-      status = (
-        <View style={{gap: spacing.s}}>
-          <Text style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-            Couldn't read Anki. Open it, then try again.
-          </Text>
-        </View>
-      );
-      break;
-    case "connected":
-      primary = {label: "Continue", onPress: () => onAdvance(step + 1)};
-      status = (
-        <View style={{gap: spacing.s}}>
-          <DoneLine word="Connected" />
-          <Text style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-            Anki is connected.
-          </Text>
-          {state.empty && (
-            <Text style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-              Create or import a deck when you're ready.
-            </Text>
-          )}
-        </View>
-      );
-      break;
+  const primary: Action =
+    state.kind === "checking"
+      ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
+      : steps.step1 === "current"
+        ? notInstalled && returned
+          ? {label: "Check again", onPress: () => read(true)}
+          : {label: "Install AnkiDroid", onPress: () => void downloadAnkiDroid()}
+        : state.kind === "needsPermission"
+          ? {label: "Allow access", onPress: grant}
+          : state.kind === "notSetUp"
+            ? {label: "Open AnkiDroid", onPress: openAnkiDroid}
+            : state.kind === "denied" || state.kind === "failure"
+              ? {label: "Try again", onPress: () => read(true)}
+              : {label: "Done", onPress: () => onAdvance(nextStep(step))};
+
+  let step1Note: React.ReactNode = null;
+  if (notInstalled && returned) {
+    step1Note = (
+      <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>Not installed yet.</Text>
+    );
+  }
+  let step2Note: React.ReactNode = null;
+  if (state.kind === "needsPermission") {
+    step2Note = (
+      <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>
+        Allow Gaten to read your AnkiDroid collection.
+      </Text>
+    );
+  } else if (state.kind === "notSetUp") {
+    step2Note = (
+      <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>
+        Open AnkiDroid once to finish setup.
+      </Text>
+    );
+  } else if (state.kind === "denied") {
+    step2Note = (
+      <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>
+        Access not allowed.
+      </Text>
+    );
+  } else if (state.kind === "failure") {
+    step2Note = (
+      <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>
+        Couldn't read AnkiDroid.
+      </Text>
+    );
+  } else if (state.kind === "connected" && state.empty) {
+    step2Note = (
+      <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>
+        Create or import a deck when you're ready.
+      </Text>
+    );
   }
 
   const visual: StepVisual = {
-    statusKey: `${
-      state.kind === "connected" ? `connected:${state.empty ? 1 : 0}` : state.kind
-    }:${colors.onSurfaceVariant}`,
-    status,
     primary,
-    outlined,
-    done: state.kind === "connected" && !revalidating,
+    done: steps.verified && !revalidating,
     skipLabel: "Skip",
     skipAccessibilityLabel: "Skip Anki setup",
-    onSkip: () => onAdvance(step + 1),
+    onSkip: () => onAdvance(nextStep(step)),
     saveError,
     onRetry,
   };
@@ -2405,9 +2333,28 @@ function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     report(visual);
   });
 
-  // The page draws nothing itself: its copy and status are the shell's fixed copies, and its actions
-  // are the shell's action area. Only its dialogs and native reads live here.
-  return null;
+  return (
+    <StepList style={{marginTop: spacing.l}}>
+      <StepRow
+        index={1}
+        total={2}
+        status={steps.step1}
+        title={steps.step1 === "done" ? "AnkiDroid is installed" : "Install AnkiDroid"}
+        detail="A separate app from Google Play."
+      >
+        {step1Note}
+      </StepRow>
+      <StepRow
+        index={2}
+        total={2}
+        status={steps.step2}
+        title="Allow access"
+        detail="Read decks, record answers, add words."
+      >
+        {step2Note}
+      </StepRow>
+    </StepList>
+  );
 }
 
 /** Every WaniKani failure the bridge names, so a code from the wire is validated, not trusted. */
@@ -2427,7 +2374,7 @@ function waniKaniFailureOf(error: unknown): WaniKaniFailure {
   return WANIKANI_FAILURES.find((candidate) => candidate === named) ?? "SERVER";
 }
 
-/** The token check the onboarding flow hands the embedded connect form. */
+/** The token check the WaniKani page hands the bridge. */
 async function connectWaniKani(token: string): Promise<WaniKaniConnectOutcome> {
   try {
     const result = await GatenWaniKani.connect(token);
@@ -2441,37 +2388,40 @@ async function connectWaniKani(token: string): Promise<WaniKaniConnectOutcome> {
 }
 
 /**
- * Page 3: connect a WaniKani account with a personal access token. The connection form is the app's
- * own — the token is checked with WaniKani before it is stored — but onboarding owns the outcome and
- * stays here: a working token shows the connected state and a "Get started", never the review hub or
- * a study queue.
+ * Page 3: connect a WaniKani account with a personal access token.
  *
- * The page reads the real store on arrival and again whenever [connectRevision] changes (the
- * embedded form stored a token), and reports what it found up to the flow, which is what draws the
- * connected accent on the artwork. Nothing here is inferred from a Skip or a return from the OS.
+ * The token is checked with WaniKani before it is stored, so the page's own rows are done only once
+ * the account is really connected — there is no partial state, and a rejected token or a network
+ * failure leaves the page exactly where it was. The typed token lives here, so the browser trip to
+ * create it and back does not throw it away.
  */
 function WaniKaniPage({
-  step,
   onAdvance,
   saveError,
   onRetry,
   report,
-  connectRevision,
   onConnectedChange,
-  onOpenForm,
 }: PageProps & {
-  connectRevision: number;
   onConnectedChange: (connected: boolean) => void;
-  onOpenForm: () => void;
 }) {
   const {colors} = useTheme();
   // Null while the stored token is being read; true or false once it is known.
   const [connected, setConnected] = useState<boolean | null>(null);
-  // True while a foreground re-read is on its way: the shown success stays, but the beat waits.
   const [revalidating, setRevalidating] = useState(false);
-  // Bumped on every foreground return, so a token stored or revoked outside this page is re-read.
+  const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [retry, setRetry] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [foregroundRev, setForegroundRev] = useState(0);
   const readSeq = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     readSeq.current += 1;
@@ -2479,7 +2429,6 @@ function WaniKaniPage({
     let live = true;
     void GatenWaniKani.isConfigured()
       .then((configured) => {
-        // A superseded read (a newer foreground return) leaves the revalidation flag alone.
         if (live && seq === readSeq.current) {
           setConnected(configured);
           setRevalidating(false);
@@ -2496,7 +2445,7 @@ function WaniKaniPage({
     return () => {
       live = false;
     };
-  }, [connectRevision, foregroundRev]);
+  }, [foregroundRev]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
@@ -2513,29 +2462,44 @@ function WaniKaniPage({
     onConnectedChange(connected === true);
   }, [connected, onConnectedChange]);
 
+  const connect = () => {
+    const value = token.trim();
+    if (value === "" || connecting) return;
+    setConnecting(true);
+    setMessage(null);
+    void connectWaniKani(value)
+      .then((outcome) => {
+        const readout = connectReadout(outcome, FAILURE_LABELS);
+        if (!mounted.current) return;
+        setMessage(readout.message);
+        setRetry(readout.retry);
+        if (outcome.status === "connected") {
+          setToken("");
+          setConnected(true);
+        }
+      })
+      .finally(() => {
+        if (mounted.current) setConnecting(false);
+      });
+  };
+
+  const steps = wanikaniSteps({connected});
+  const ready = token.trim() !== "";
+
   const primary: Action =
     connected == null
-      ? {label: "Checking…", onPress: () => {}, disabled: true}
-      : connected
-        ? {label: "Get started", onPress: () => onAdvance(3)}
-        : {label: "Connect WaniKani", onPress: onOpenForm};
+      ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
+      : connecting
+        ? {label: "Checking token\u2026", onPress: () => {}, disabled: true}
+        : connected
+          ? {label: "Done", onPress: () => onAdvance(3)}
+          : message != null && retry
+            ? {label: "Try again", onPress: connect, disabled: !ready}
+            : {label: "Connect WaniKani", onPress: connect, disabled: !ready};
 
   const visual: StepVisual = {
-    statusKey: `${connected == null ? "checking" : connected ? "connected" : "disconnected"}:${colors.onSurfaceVariant}`,
-    status:
-      connected === true ? (
-        <View style={{gap: spacing.s}}>
-          <DoneLine word="Connected" />
-          <Text style={[typeScale.bodySmall, NARRATIVE_LINE, {color: colors.onSurfaceVariant}]}>
-            WaniKani is connected.
-          </Text>
-        </View>
-      ) : null,
     primary,
-    outlined: null,
-    // The flow's last step: done here finishes onboarding, through the same write as "Get started" —
-    // and never while the store is being re-read in the background.
-    done: connected === true && !revalidating,
+    done: steps.verified && !revalidating && !connecting,
     skipLabel: "Skip",
     skipAccessibilityLabel: "Skip WaniKani setup and finish",
     onSkip: () => onAdvance(3),
@@ -2549,7 +2513,66 @@ function WaniKaniPage({
     report(visual);
   });
 
-  // The page draws nothing itself: its copy and status are the shell's fixed copies, and its actions
-  // are the shell's action area. Only its dialogs and native reads live here.
-  return null;
+  return (
+    <StepList style={{marginTop: spacing.l}}>
+      <StepRow index={1} total={2} status={steps.step1} title="Create a token" detail="Select every permission.">
+        <PressableScale
+          accessibilityRole="link"
+          accessibilityLabel="Open wanikani.com"
+          accessibilityHint="Opens your WaniKani personal access tokens in the browser"
+          onPress={() => {
+            void GatenPlatform.openUrl(WANIKANI_TOKEN_URL).catch(() => {});
+          }}
+          style={{minHeight: 48, justifyContent: "center"}}
+        >
+          <Text style={[typeScale.bodyMedium, {color: colors.accent}]}>Open wanikani.com</Text>
+          <Icon name="open_in_new" size={16} color={colors.accent} />
+        </PressableScale>
+      </StepRow>
+      <StepRow
+        index={2}
+        total={2}
+        status={steps.step2}
+        title="Paste it here"
+        showContent
+      >
+        <View style={{position: "relative", justifyContent: "center"}}>
+          <TextField
+            value={token}
+            onChangeText={setToken}
+            placeholder="Paste your token"
+            secureTextEntry={!showToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!connecting}
+            returnKeyType="go"
+            accessibilityLabel="WaniKani personal access token"
+            onSubmitEditing={connect}
+            style={{paddingRight: 72}}
+          />
+          <View
+            style={{position: "absolute", right: 0, top: 0, bottom: 0, justifyContent: "center"}}
+          >
+            <Button
+              variant="text"
+              label={showToken ? "Hide" : "Show"}
+              accessibilityLabel={showToken ? "Hide token" : "Show token"}
+              onPress={() => setShowToken((current) => !current)}
+            />
+          </View>
+        </View>
+        {message != null && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[
+              typeScale.bodySmall,
+              {color: colors.error, marginTop: spacing.m, flexShrink: 1},
+            ]}
+          >
+            {message}
+          </Text>
+        )}
+      </StepRow>
+    </StepList>
+  );
 }
