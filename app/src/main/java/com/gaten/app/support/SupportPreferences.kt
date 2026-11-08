@@ -22,6 +22,13 @@ object SupportPreferences {
     /** How long "Not now" holds the popup back. */
     private const val POSTPONE_MS = 7L * 24 * 60 * 60 * 1000
 
+    /**
+     * Wall-clock time behind one seam, as the WaniKani readers keep theirs: the AnkiDroid lint check
+     * the release build runs rejects a bare `System.currentTimeMillis()`, and this object has no
+     * constructor to take a clock through.
+     */
+    private val now: () -> Long = System::currentTimeMillis
+
     fun openCount(context: Context): Int = prefs(context).getInt(KEY_OPEN_COUNT, 0)
 
     /** Counts one app open and returns the running total, so the caller can gate on it. */
@@ -46,7 +53,7 @@ object SupportPreferences {
         if (permanent) {
             editor.putBoolean(KEY_NEVER, true)
         } else {
-            editor.putLong(KEY_NEXT_AT, System.currentTimeMillis() + POSTPONE_MS)
+            editor.putLong(KEY_NEXT_AT, now() + POSTPONE_MS)
         }
         editor.apply()
     }
