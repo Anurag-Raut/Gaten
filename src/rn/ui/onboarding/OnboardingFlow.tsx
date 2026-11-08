@@ -114,6 +114,8 @@ const FORM_MS = 300;
 /** The one header row: the bare back target's own 48 dp, and the gap it leaves before the artwork. */
 const HEADER_ROW_HEIGHT = 48;
 const HEADER_GAP = 10;
+/** The back target's own appearance once, when a step with nowhere to go gains or loses it. */
+const HEADER_BACK_MS = 170;
 
 /**
  * The step swipe. A pan has to travel [SWIPE_ACTIVATE_X] dp sideways to take the gesture, and gives
@@ -1203,6 +1205,20 @@ function OnboardingShell({
   const inset = contentInsetFor(width);
   // Gestures still change the step with reduced motion on; they just never draw the drag or settle.
   const reducedMotion = useReducedMotion();
+  // The back target is one element for the whole flow and is always mounted: only its opacity
+  // changes, briefly and once, when the first step gains the target or the reader returns to it.
+  // Nothing about a save's progress ever touches it — the write's own synchronous guard, not a dim,
+  // is what keeps the arrow from racing a save.
+  const hasBack = onBack != null;
+  const backOpacity = useSharedValue(hasBack ? 1 : 0);
+  useEffect(() => {
+    backOpacity.value = reducedMotion
+      ? hasBack
+        ? 1
+        : 0
+      : withTiming(hasBack ? 1 : 0, {duration: HEADER_BACK_MS, easing: PAGE_EASING_REANIMATED});
+  }, [hasBack, reducedMotion, backOpacity]);
+  const backStyle = useAnimatedStyle(() => ({opacity: backOpacity.value}));
   // The height left for the scene and the scroller together; the window stands in until the first
   // layout, so a page decides its artwork mode from its first frame.
   const [region, setRegion] = useState<number | null>(null);
@@ -1497,18 +1513,23 @@ function OnboardingShell({
         ]}
       >
         <View style={{width: HEADER_ROW_HEIGHT, height: HEADER_ROW_HEIGHT, justifyContent: "center"}}>
-          {onBack != null && (
-            // While a step is being saved the chevron is dimmed and inert: the frame's actions
-            // already hold, and a second write must not race the one in flight.
-            <View style={{opacity: writePending ? 0.4 : 1}}>
-              <IconButton
-                name="arrow_back"
-                accessibilityLabel="Back"
-                onPress={writePending ? () => {} : onBack}
-                color={colors.onSurface}
-              />
-            </View>
-          )}
+          {/* Always mounted, so no step change — and no save — remounts or restyles the arrow. On the
+              first step it is the same element at zero opacity, inert and out of the accessibility
+              tree; while a save is in flight its press is the existing no-op, whose protection is the
+              flow's synchronous write guard rather than any change of appearance. */}
+          <Animated.View
+            style={backStyle}
+            pointerEvents={hasBack ? "auto" : "none"}
+            accessibilityElementsHidden={!hasBack}
+            importantForAccessibility={hasBack ? "auto" : "no-hide-descendants"}
+          >
+            <IconButton
+              name="arrow_back"
+              accessibilityLabel="Back"
+              onPress={writePending ? () => {} : onBack ?? (() => {})}
+              color={colors.onSurface}
+            />
+          </Animated.View>
         </View>
 
         {/* The step in words carries the row's accessible name as the full "Step N of 3": the row

@@ -451,7 +451,8 @@ export function BottomBar({
   position,
   layout,
   searchActive = false,
-}: MaterialTopTabBarProps & {searchActive?: boolean}) {
+  onReady,
+}: MaterialTopTabBarProps & {searchActive?: boolean; onReady?: () => void}) {
   const {colors, dark} = useTheme();
   // The selected tab is the one drawn in the reader's accent. The bar already paints its own
   // surface, so the selection is ink on it rather than a pill filled inside it — and the accent is
@@ -685,6 +686,7 @@ export function BottomBar({
       ]}
     >
       <View
+        onLayout={onReady}
         style={[
           styles.surface,
           {

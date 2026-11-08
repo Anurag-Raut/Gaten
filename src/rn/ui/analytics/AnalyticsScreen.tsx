@@ -440,7 +440,7 @@ export function AnalyticsScreen({
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const focused = useIsFocused();
-  const anki = useAnkiStats();
+  const anki = useAnkiStats(focused);
   const wanikani = useWaniKaniStats();
   const scroll = useRef<ScrollView | null>(null);
   // The highlighted category of each distribution chart, by its stable key. The two are separate
