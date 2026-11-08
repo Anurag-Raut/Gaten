@@ -65,6 +65,7 @@ object OcrModels {
             }
         }
         release { PpOcrEngine.release() }
+        release { PpOcrDetector.release() }
         release { JapaneseOcr.release() }
         if (released) Log.i(TAG, "Released the idle OCR models")
         cancelled?.let { throw it }

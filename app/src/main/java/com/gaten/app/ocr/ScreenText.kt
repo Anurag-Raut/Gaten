@@ -23,7 +23,12 @@ data class ScreenLine(
     val vertical: Boolean,
     val charBoxes: List<Box>,
     /** Original detector extent for tap crop margins; outlines and hit tests still use [bounds]. */
-    val detectorBounds: Box = bounds
+    val detectorBounds: Box = bounds,
+    /**
+     * True when [text] is already the selected engine's own reading (the PP detector's lines are
+     * read as they are found), so [ScreenLineReader] has nothing left to read.
+     */
+    val engineRead: Boolean = false
 )
 
 /** Everything OCR found on one screen: the lines in reading order, plus the bitmap they came from. */
