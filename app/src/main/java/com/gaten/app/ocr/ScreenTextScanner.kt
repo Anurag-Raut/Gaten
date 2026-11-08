@@ -24,11 +24,11 @@ import kotlinx.coroutines.CancellationException
  * exists.
  *
  * Every line ML Kit read is kept, whatever script it is in — a line it read as Latin can still be
- * stylized Japanese, which is what manga-ocr is for — and each one's box is trimmed onto its ink
- * with [InkProjection] so a tap lands on the glyphs, not on ML Kit's padding.
+ * stylized Japanese, which the selected engine may well read correctly — and each one's box is
+ * trimmed onto its ink with [InkProjection] so a tap lands on the glyphs, not on ML Kit's padding.
  *
  * This is the detector, not the reader: what it returns is ML Kit's reading of each line, and it is
- * what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines manga-ocr
+ * what the overlay goes ready with. [ScreenLineReader] then replaces the text of the lines the engine
  * reads, leaving these boxes — which every gesture is hit-tested against — where they are, and drops
  * the lines whose final text turns out to have no Japanese in it.
  */
@@ -68,7 +68,7 @@ object ScreenTextScanner {
     /**
      * One ML Kit line as a [ScreenLine], or null when the line is blank or boxless.
      *
-     * A line whose text has no Japanese in it is kept: manga-ocr may still read Japanese out of the
+     * A line whose text has no Japanese in it is kept: the engine may still read Japanese out of the
      * glyphs ML Kit saw as Latin, and [ScreenLineReader] drops the line if it does not.
      *
      * The model's box is loose, so the line is cropped (a small margin) and run through

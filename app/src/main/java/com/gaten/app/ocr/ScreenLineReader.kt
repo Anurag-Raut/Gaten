@@ -51,7 +51,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * The recogniser arrives as [readLine], so the whole class is free of Android and its cache, its
  * timeouts and its fallbacks are unit-tested; the app passes a lambda that crops the line's box and
- * runs [MangaOcrEngine].
+ * runs the selected engine.
  */
 class ScreenLineReader(
     private val screen: ScreenText,
@@ -79,25 +79,25 @@ class ScreenLineReader(
 
     private val _text = MutableStateFlow(screen)
 
-    /** The index as it is read: ML Kit's lines, with the text manga-ocr read in place. */
+    /** The index as it is read: ML Kit's lines, with the text the selected engine read in place. */
     val text: StateFlow<ScreenText> = _text.asStateFlow()
 
     /**
-     * The text of line [lineIndex]: manga-ocr's when it read the line in time, ML Kit's otherwise.
+     * The text of line [lineIndex]: the engine's when it read the line in time, ML Kit's otherwise.
      * Waits at most [timeoutMillis] for an answer, so a gesture can rely on it returning.
      */
     suspend fun read(lineIndex: Int): String {
         val line = _text.value.lines.getOrNull(lineIndex) ?: return ""
         val alreadyRead = lineIndex in read
-        val deferred = deferredFor(lineIndex, MangaOcrEngine.Priority.FOREGROUND) ?: return line.text
+        val deferred = deferredFor(lineIndex, OcrJobPriority.FOREGROUND) ?: return line.text
 
         val text = withTimeoutOrNull(timeoutMillis) { deferred.await() }
         if (text == null) {
-            onLog("manga-ocr read \"${line.text}\" timed out after $timeoutMillis ms; keeping ML Kit's text")
+            onLog("engine read \"${line.text}\" timed out after $timeoutMillis ms; keeping ML Kit's text")
             return line.text
         }
         if (alreadyRead) {
-            onLog("manga-ocr read \"${line.text}\" -> \"$text\" in 0 ms (cache hit)")
+            onLog("engine read \"${line.text}\" -> \"$text\" in 0 ms (cache hit)")
         }
         return text
     }
@@ -111,7 +111,7 @@ class ScreenLineReader(
         prefetchJob?.cancel()
         prefetchJob = scope.launch {
             for (lineIndex in order) {
-                val deferred = deferredFor(lineIndex, MangaOcrEngine.Priority.BACKGROUND) ?: continue
+                val deferred = deferredFor(lineIndex, OcrJobPriority.BACKGROUND) ?: continue
                 // Awaiting one before starting the next is what keeps a tap from queueing behind a
                 // whole screen's worth of reads.
                 try {
@@ -123,7 +123,7 @@ class ScreenLineReader(
                     results[lineIndex]?.takeUnless { it === deferred }?.await()
                 }
             }
-            onLog("manga-ocr prefetch finished (${order.size} lines)")
+            onLog("prefetch finished (${order.size} lines)")
         }
     }
 
@@ -141,12 +141,12 @@ class ScreenLineReader(
      */
     private fun deferredFor(
         lineIndex: Int,
-        priority: MangaOcrEngine.Priority
+        priority: OcrJobPriority
     ): Deferred<String>? {
         val line = _text.value.lines.getOrNull(lineIndex) ?: return null
         return synchronized(results) {
             results[lineIndex]?.let { existing ->
-                if (priority == MangaOcrEngine.Priority.FOREGROUND &&
+                if (priority == OcrJobPriority.FOREGROUND &&
                     !existing.isCompleted && lineIndex !in foregroundReads
                 ) {
                     existing.cancel()
@@ -154,13 +154,13 @@ class ScreenLineReader(
                     return@synchronized existing
                 }
             }
-            if (priority == MangaOcrEngine.Priority.FOREGROUND) foregroundReads.add(lineIndex)
+            if (priority == OcrJobPriority.FOREGROUND) foregroundReads.add(lineIndex)
             scope.async {
                 readOnce(
                     lineIndex,
                     line,
                     priority,
-                    if (priority == MangaOcrEngine.Priority.BACKGROUND) readLineBackground else readLine
+                    if (priority == OcrJobPriority.BACKGROUND) readLineBackground else readLine
                 )
             }.also { results[lineIndex] = it }
         }
@@ -170,12 +170,12 @@ class ScreenLineReader(
     private suspend fun readOnce(
         lineIndex: Int,
         line: ScreenLine,
-        priority: MangaOcrEngine.Priority,
+        priority: OcrJobPriority,
         reader: suspend (ScreenLine) -> String?
     ): String {
         val startedAt = System.nanoTime()
         var timedOut = false
-        if (priority == MangaOcrEngine.Priority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
+        if (priority == OcrJobPriority.BACKGROUND) OcrPriority.awaitBackgroundTurn()
         val raw = mutex.withLock {
             try {
                 // withTimeout rather than withTimeoutOrNull: a read that returns nothing (the model
@@ -187,15 +187,15 @@ class ScreenLineReader(
             }
         }
         val elapsed = (System.nanoTime() - startedAt) / 1_000_000
-        val accepted = raw?.takeIf { OcrLinePolicy.acceptsMangaText(line.text, it) }
+        val accepted = raw?.takeIf { OcrLinePolicy.acceptsEngineText(line.text, it) }
         if (raw != null) {
             read.add(lineIndex)
             onLog(
-                "manga-ocr read \"${line.text}\" -> \"${accepted ?: line.text}\" in $elapsed ms" +
+                "engine read \"${line.text}\" -> \"${accepted ?: line.text}\" in $elapsed ms" +
                     " (cache miss)" + if (accepted == null) " [rejected]" else ""
             )
         } else if (timedOut) {
-            onLog("manga-ocr read \"${line.text}\" timed out after $timeoutMillis ms; keeping ML Kit's text")
+            onLog("engine read \"${line.text}\" timed out after $timeoutMillis ms; keeping ML Kit's text")
         }
 
         val text = accepted ?: line.text

@@ -9,10 +9,10 @@ package com.gaten.app.ocr
 /**
  * Puts a re-read line's characters back onto the boxes the detector drew for it.
  *
- * ML Kit finds the line and, when it can, one box per symbol; manga-ocr then reads the same line
- * again, and its reading rarely matches character for character — it spells `…` as three dots,
- * widens ASCII to full width, and now and then adds or drops a character. Rebuilding the line's
- * boxes from scratch would throw away the only per-symbol geometry on the screen, so the two
+ * ML Kit finds the line and, when it can, one box per symbol; the selected engine then reads the
+ * same line again, and its reading rarely matches character for character — it spells `…` as three
+ * dots, widens ASCII to full width, and now and then adds or drops a character. Rebuilding the
+ * line's boxes from scratch would throw away the only per-symbol geometry on the screen, so the two
  * readings are aligned instead and every character the boxes already describe keeps its own: a tap
  * or a highlight then lands on the glyph the reader pointed at, not on the slice of the line box a
  * character count happened to fall on.
@@ -187,7 +187,7 @@ object CharBoxAlign {
     /**
      * The character a comparison looks at: full-width ASCII folded to half-width (`ＡＢＣ１` reads as
      * `ABC1`), the ideographic space to a space, and the middle dot to a full stop, so the dot run
-     * manga-ocr writes for an ellipsis matches the dots the ellipsis was spelled out as. Kana is
+     * the engine writes for an ellipsis matches the dots the ellipsis was spelled out as. Kana is
      * left alone — hiragana and katakana are different characters, and folding one into the other
      * would put a box on the wrong glyph.
      */

@@ -31,10 +31,21 @@ class RecognitionPreferenceTest {
     }
 
     @Test
-    fun missingLegacyAndUnknownValuesUseTheBundledDefault() {
+    fun missingAndUnknownValuesUseTheBundledDefault() {
         for (value in listOf(null, "", "PP-OCRv6", "manga_ocr_enabled", "MEDIUM")) {
             assertEquals(RecognitionMode.ML_KIT, RecognitionMode.fromId(value))
         }
+    }
+
+    /**
+     * The withdrawn Manga OCR ids migrate to the recommended downloadable engine instead of falling
+     * to the bundled default, so a reader who had chosen one keeps a downloadable engine after the
+     * upgrade rather than silently moving to ML Kit.
+     */
+    @Test
+    fun theRetiredMangaIdsMigrateToTheRecommendedEngine() {
+        assertEquals(RecognitionMode.PP_MEDIUM, RecognitionMode.fromId("manga_ocr"))
+        assertEquals(RecognitionMode.PP_MEDIUM, RecognitionMode.fromId("manga"))
     }
 
     /** The old ML Kit-era value is the bundled mode now, not a retired alias for another engine. */
@@ -54,14 +65,11 @@ class RecognitionPreferenceTest {
     @Test
     fun theBundledModeHasNoPpEngine() {
         assertNull(RecognitionMode.ML_KIT.ppEngine())
-        // Manga OCR is its own engine, not a PP one; both modes answer null here.
-        assertNull(RecognitionMode.MANGA_OCR.ppEngine())
     }
 
     @Test
-    fun theManualModesMapToTheirPpEngine() {
+    fun theOptionalModeMapsToItsPpEngine() {
         assertEquals(PpOcrModel.Engine.MEDIUM, RecognitionMode.PP_MEDIUM.ppEngine())
-        assertEquals(PpOcrModel.Engine.MANGA, RecognitionMode.PP_MANGA.ppEngine())
     }
 
     /**
@@ -70,11 +78,7 @@ class RecognitionPreferenceTest {
      */
     @Test
     fun theEngineIdsAreTheBridgeVocabulary() {
-        assertEquals(
-            listOf("ml_kit", "manga_ocr", "medium", "manga"),
-            RecognitionMode.entries.map { it.id }
-        )
+        assertEquals(listOf("ml_kit", "medium"), RecognitionMode.entries.map { it.id })
         assertEquals(RecognitionMode.PP_MEDIUM.id, PpOcrModel.Engine.MEDIUM.id)
-        assertEquals(RecognitionMode.PP_MANGA.id, PpOcrModel.Engine.MANGA.id)
     }
 }
