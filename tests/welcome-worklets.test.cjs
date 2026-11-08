@@ -1,6 +1,6 @@
 /**
  * A static guard for the mistake that a headless stub render cannot catch: a function called from
- * inside `useAnimatedStyle` / `useAnimatedProps` runs on the UI runtime, so it must itself be a
+ * inside `useAnimatedStyle` / `useAnimatedProps` / `useDerivedValue` runs on the UI runtime, so it must itself be a
  * worklet. A closure returned from a hook is not one, and calling it there throws
  * "[Worklets] Tried to synchronously call a Remote Function" on the device.
  *
@@ -73,7 +73,7 @@ function insideParens(text, open) {
 /** Every animated callback's own text, in order. */
 function animatedCallbacks(text) {
   const found = [];
-  const pattern = /use(?:AnimatedStyle|AnimatedProps)\(/g;
+  const pattern = /use(?:AnimatedStyle|AnimatedProps|DerivedValue)\(/g;
   let match = pattern.exec(text);
   while (match != null) {
     found.push(insideParens(text, match.index + match[0].length - 1));

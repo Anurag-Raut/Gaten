@@ -38,6 +38,7 @@ import Animated, {
   cancelAnimation,
   useAnimatedProps,
   useAnimatedStyle,
+  useDerivedValue,
   useReducedMotion,
   useSharedValue,
   withRepeat,
@@ -68,6 +69,7 @@ import {
   WELCOME_LABEL,
   welcomeFrameFor,
   wordGeometry,
+  type WelcomeFrame,
   type WordGeometry,
 } from "./welcome-timeline";
 
@@ -147,23 +149,19 @@ const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111"};
 /** One caption layer: the active scene's text, cross-fading on its own two-second window. */
 function Caption({
   index,
-  clock,
-  reduced,
-  word,
+  frame,
   color,
   fontSize,
   lineHeight,
 }: {
   index: number;
-  clock: SharedValue<number>;
-  reduced: boolean;
-  word: WordGeometry;
+  frame: SharedValue<WelcomeFrame>;
   color: string;
   fontSize: number;
   lineHeight: number;
 }) {
   const style = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     const active = f.captionIndex === index;
     return {
       opacity: active ? f.captionOpacity : 0,
@@ -196,21 +194,17 @@ function Caption({
 /** One hairline progress segment, filled left to right by a scaled accent bar. */
 function Segment({
   index,
-  clock,
-  reduced,
-  word,
+  frame,
   track,
   fill,
 }: {
   index: number;
-  clock: SharedValue<number>;
-  reduced: boolean;
-  word: WordGeometry;
+  frame: SharedValue<WelcomeFrame>;
   track: string;
   fill: string;
 }) {
   const style = useAnimatedStyle(() => ({
-    transform: [{scaleX: welcomeFrameFor(clock.value, reduced, word).segments[index]}],
+    transform: [{scaleX: frame.value.segments[index]}],
   }));
   return (
     <View style={{flex: 1, height: 3, borderRadius: 2, backgroundColor: track, overflow: "hidden"}}>
@@ -287,21 +281,25 @@ export function WelcomeScreen({out, onStart}: {out: SharedValue<number>; onStart
     opacity: 1 - out.value,
     transform: [{translateX: -out.value * width * 0.25}],
   }));
-  const sheetStyle = useAnimatedStyle(() => ({opacity: welcomeFrameFor(clock.value, reduced, word).sheetOpacity}));
-  const dimStyle = useAnimatedStyle(() => ({opacity: welcomeFrameFor(clock.value, reduced, word).dim}));
+  // One derived frame per clock tick. The loop's ~24 animated styles all read this object instead
+  // of each calling welcomeFrameFor() on the UI thread: the ~28-value pose is computed once per
+  // frame, and each style only reads the field it draws with.
+  const frame = useDerivedValue(() => welcomeFrameFor(clock.value, reduced, word));
+  const sheetStyle = useAnimatedStyle(() => ({opacity: frame.value.sheetOpacity}));
+  const dimStyle = useAnimatedStyle(() => ({opacity: frame.value.dim}));
   const highlightStyle = useAnimatedStyle(() => ({
-    opacity: welcomeFrameFor(clock.value, reduced, word).highlightOpacity,
+    opacity: frame.value.highlightOpacity,
   }));
   const bubbleStyle = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {opacity: f.bubbleOpacity, transform: [{translateX: f.bubbleX}, {scale: f.bubbleScale}]};
   });
   const rippleStyle = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {opacity: f.rippleOpacity, transform: [{scale: f.rippleScale}]};
   });
   const cursorStyle = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {
       opacity: f.cursorOpacity,
       transform: [
@@ -311,36 +309,36 @@ export function WelcomeScreen({out, onStart}: {out: SharedValue<number>; onStart
     };
   });
   const ellipseProps = useAnimatedProps(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {
       strokeDashoffset: word.circumference * (1 - f.ellipseDraw),
       opacity: f.ellipseOpacity,
     };
   });
   const resultStyle = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {opacity: f.resultOpacity, transform: [{translateY: f.resultY}]};
   });
   const pillStyle = useAnimatedStyle(() => ({
-    transform: [{scale: welcomeFrameFor(clock.value, reduced, word).addScale}],
+    transform: [{scale: frame.value.addScale}],
   }));
   // The two pill states are exclusive by opacity, never superimposed: the green fill, the resting
   // label and the ✓ Added label cross over at the same moment, so exactly one is ever painted.
   const addedStyle = useAnimatedStyle(() => ({
-    opacity: welcomeFrameFor(clock.value, reduced, word).added ? 1 : 0,
+    opacity: frame.value.added ? 1 : 0,
   }));
   const restingStyle = useAnimatedStyle(() => ({
-    opacity: welcomeFrameFor(clock.value, reduced, word).added ? 0 : 1,
+    opacity: frame.value.added ? 0 : 1,
   }));
   const ankiStyle = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {opacity: f.ankiOpacity, transform: [{scale: f.ankiScale}]};
   });
   const plusStyle = useAnimatedStyle(() => ({
-    opacity: welcomeFrameFor(clock.value, reduced, word).plusOpacity,
+    opacity: frame.value.plusOpacity,
   }));
   const flyStyle = useAnimatedStyle(() => {
-    const f = welcomeFrameFor(clock.value, reduced, word);
+    const f = frame.value;
     return {
       opacity: f.flyOpacity,
       transform: [{translateX: f.flyX}, {translateY: f.flyY}, {scale: f.flyScale}],
@@ -821,9 +819,7 @@ export function WelcomeScreen({out, onStart}: {out: SharedValue<number>; onStart
                   <Caption
                     key={index}
                     index={index}
-                    clock={clock}
-                    reduced={reduced}
-                    word={word}
+                    frame={frame}
                     color={colors.onSurface}
                     fontSize={captionFontSize}
                     lineHeight={captionLineHeight}
@@ -835,9 +831,7 @@ export function WelcomeScreen({out, onStart}: {out: SharedValue<number>; onStart
                   <Segment
                     key={index}
                     index={index}
-                    clock={clock}
-                    reduced={reduced}
-                    word={word}
+                    frame={frame}
                     track={colors.outline}
                     fill={colors.accent}
                   />
