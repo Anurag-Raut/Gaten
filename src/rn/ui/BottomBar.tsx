@@ -454,10 +454,11 @@ export function BottomBar({
   onReady,
 }: MaterialTopTabBarProps & {searchActive?: boolean; onReady?: () => void}) {
   const {colors, dark} = useTheme();
-  // The selected tab is the one drawn in the reader's accent. The bar already paints its own
-  // surface, so the selection is ink on it rather than a pill filled inside it — and the accent is
-  // still always visible here.
-  const capsuleInk = colors.accent;
+  // The selected pill wears the reader's accent, not the neutral action fill: the bar's active
+  // state is the one place the accent is always visible, and `onPrimary` is already the ink that
+  // reads on that tone in either mode.
+  const capsuleColor = colors.accent;
+  const capsuleInk = colors.onPrimary;
   const barColor = colors.bottom;
   const iconColor = colors.fine;
   const insets = useSafeAreaInsets();
@@ -736,12 +737,33 @@ export function BottomBar({
           />
         ))}
         {/*
-          The selection, as ink rather than as a pill: the bar paints its own surface, so the
-          selected tab is the one drawn in the accent, carried by the same travelling frame the
-          pill used — cross-faded and drifted per tab, so it reads as the selected item opening
-          rather than as two labels swapping. The tap's settle wraps that frame, so the accent
-          content moves as one object.
+          The capsule: one accent pill carrying its own glyph and label, cross-faded and drifted per
+          tab, so it reads as the selected item opening rather than as two pills swapping. The fill
+          and the content are two nodes over one box — the fill paints below the plain glyphs, the
+          content above them — so the tap's settle wraps both: same box, same offset, and the pill
+          moves as one object.
         */}
+        <Animated.View
+          pointerEvents="none"
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          style={[
+            styles.capsulePosition,
+            {
+              width: widestCapsuleWidth,
+              transform: [{translateX: capsuleOffsetX}],
+            },
+          ]}
+        >
+          <Reanimated.View style={[styles.capsuleInner, capsuleSettle]}>
+            <Animated.View
+              style={[
+                styles.capsuleFill,
+                {backgroundColor: capsuleColor, transform: [{scaleX: capsuleScaleX}]},
+              ]}
+            />
+          </Reanimated.View>
+        </Animated.View>
         <Animated.View
           pointerEvents="none"
           accessible={false}
@@ -812,9 +834,9 @@ export function BottomBar({
           </Reanimated.View>
         </Animated.View>
         {/*
-          The selection's own touch shield: it swallows taps that land on the selected tab (which,
-          as before, do nothing) instead of letting them reach the glyph slot underneath, whose
-          shifted box can sit under the label end of the selection.
+          The capsule's own touch shield: it swallows taps that land on the selected pill (which, as
+          before, do nothing) instead of letting them reach the glyph slot underneath, whose shifted
+          box can sit under the label end of the capsule.
         */}
         <Animated.View
           style={[
@@ -856,6 +878,18 @@ const styles = StyleSheet.create({
   measureRow: {position: "absolute", flexDirection: "row", opacity: 0},
   slot: {position: "absolute", top: 0, bottom: 0},
   slotPress: {flex: 1, alignItems: "center", justifyContent: "center"},
+  capsulePosition: {
+    position: "absolute",
+    top: (BAR_HEIGHT - CAPSULE_HEIGHT) / 2,
+    start: 0,
+    height: CAPSULE_HEIGHT,
+  },
+  capsuleFill: {
+    flex: 1,
+    borderRadius: shape.navActive,
+    overflow: "hidden",
+  },
+  capsuleInner: {flex: 1},
   capsuleContentFrame: {
     position: "absolute",
     top: (BAR_HEIGHT - CAPSULE_HEIGHT) / 2,
