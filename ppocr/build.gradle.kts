@@ -10,8 +10,9 @@ import java.security.MessageDigest
 import org.gradle.api.artifacts.ConfigurablePublishArtifact
 
 /**
- * The `ppocr` fast-follow asset pack: the optional PP-OCRv6 Medium recognition model, delivered by
- * Google Play instead of an in-app download.
+ * The `ppocr` fast-follow asset pack: the optional PP-OCRv6 Medium recognition model, its
+ * dictionary and the optional PP-OCRv6 Medium detector, delivered by Google Play instead of an
+ * in-app download.
  *
  * The pack is this module's `src/main/assets/pp-ocr/medium/…`, which Google Play serves verbatim;
  * `ocr/PpOcrPack.kt` in the app reads it back through `AssetPackLocation.assetsPath()`. Nothing here
@@ -46,7 +47,10 @@ val packAssetPath = "pp-ocr/medium"
  */
 data class PinnedAsset(val name: String, val url: String, val sha256: String, val size: Long)
 
-/** PaddlePaddle's official PP-OCRv6 medium recogniser and the dictionary it decodes through. */
+/**
+ * PaddlePaddle's official PP-OCRv6 medium recogniser, the dictionary it decodes through, and the
+ * optional detector that finds the lines the recogniser reads.
+ */
 val pinnedAssets = listOf(
     PinnedAsset(
         name = "rec.onnx",
@@ -61,6 +65,13 @@ val pinnedAssets = listOf(
             "b03f46425e8ff4442b268ce449e3eef758146cd4/ppocr/utils/dict/ppocrv6_dict.txt",
         sha256 = "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
         size = 74_947L
+    ),
+    PinnedAsset(
+        name = "det.onnx",
+        url = "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/" +
+            "61323801669c338b7891481ec7bac61ce31b576a/inference.onnx",
+        sha256 = "eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1",
+        size = 62_032_837L
     )
 )
 

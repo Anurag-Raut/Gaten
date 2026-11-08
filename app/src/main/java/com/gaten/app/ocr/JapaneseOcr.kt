@@ -27,11 +27,13 @@ data class OcrLine(val text: String, val bounds: Box)
 /**
  * On-device Japanese OCR for a single cropped box.
  *
- * ML Kit finds lines and their boxes, and is also the bundled recognizer: [RecognitionMode.ML_KIT]
- * reads with the ML Kit pass the screen index already holds, so a fresh install reads with nothing
- * to download. [RecognitionMode.PP_MEDIUM] is installed on demand in Settings and never ships in
- * the APK, so a read can only use it once it is installed; a selected engine that is missing, fails,
- * or returns blank / placeholder / no-Japanese text falls back to ML Kit.
+ * ML Kit is the bundled detector and recognizer: [RecognitionMode.ML_KIT] finds lines and reads them
+ * with ML Kit alone — it never touches the PP detector — so a fresh install reads with nothing to
+ * download. [RecognitionMode.PP_MEDIUM] is installed on demand in Settings and never ships in the
+ * APK, so a read can only use it once it is installed. Once it is, the screen's lines come from the
+ * PP-OCRv6 detector too when the pack carries it ([detectWithPpOcr]); a missing or failing detector
+ * leaves ML Kit finding the lines, and a selected engine that is missing, fails, or returns blank /
+ * placeholder / no-Japanese text falls back to ML Kit for the reading.
  * Every path that reads a box — the overlay's index line by line, and a circle's whole selection —
  * reads it through [readLine] (or [readWithMlKit] where the index holds no ML Kit reading of the
  * box), so they crop and route the same way.
@@ -57,7 +59,9 @@ object JapaneseOcr {
     }
 
     /**
-     * The lines ML Kit reads in [bitmap], in the order it reported them. Never throws: a failed pass
+     * The lines ML Kit reads in [bitmap], in the order it reported them. Always ML Kit, never the PP
+     * detector: it is the fallback the region path takes after the PP engine read nothing, and a
+     * second PP pass over that same crop would only repeat the failure. Never throws: a failed pass
      * is an empty list, which the region path answers by reading the selection box itself.
      */
     suspend fun detectLines(bitmap: Bitmap): List<OcrLine> = try {
@@ -77,6 +81,43 @@ object JapaneseOcr {
     } catch (e: Exception) {
         Log.w(TAG, "ML Kit Japanese OCR failed", e)
         emptyList()
+    }
+
+    /**
+     * The text boxes of the whole [bitmap] from the PP-OCRv6 detector, or null when ML Kit must find
+     * the lines instead: Standard mode, the detector or the recogniser not installed, or the
+     * detector failing or finding nothing. See [DetectionRouting]. Never throws except to propagate
+     * cancellation.
+     *
+     * Boxes only, nothing is read here: the reader's tap or circle reads the box it picks (see
+     * [readLine]), so opening the overlay costs one detector pass however many boxes there are.
+     */
+    internal suspend fun detectBoxesWithPpOcr(context: Context, bitmap: Bitmap): List<Box>? {
+        val mode = RecognitionPreference.mode(context)
+        // Standard never looks at the pack: decide on the mode before any install check runs.
+        if (mode != RecognitionMode.PP_MEDIUM) return null
+        if (!DetectionRouting.shouldTryDetector(
+                mode,
+                detectorInstalled = PpOcrModel.isDetectorInstalled(context),
+                recognizerInstalled = PpOcrModel.isInstalled(context)
+            )
+        ) {
+            return null
+        }
+        val boxes = try {
+            PpOcrDetector.detect(context, bitmap)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "PP-OCR detection failed", e)
+            null
+        } catch (e: OutOfMemoryError) {
+            Log.w(TAG, "PP-OCR detection ran out of memory", e)
+            null
+        }
+        return boxes?.takeIf {
+            DetectionRouting.choose(mode, it.size) == DetectionSource.PP_DETECTOR
+        }
     }
 
     /**

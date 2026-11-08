@@ -13,8 +13,9 @@ import java.io.File
 /**
  * The optional PP-OCRv6 Medium recognition model, delivered by Google Play.
  *
- * A line recogniser only: the boxes come from the detector that is already there (ML Kit /
- * [ScreenLineReader]), so nothing here detects or captures. The weights ship in neither the APK nor
+ * A line recogniser, plus an optional detector ([PpOcrDetector]): the boxes come from the PP-OCRv6
+ * detector when the pack carries it, and from ML Kit (see [ScreenTextScanner]) otherwise. Nothing
+ * here captures. The weights ship in neither the APK nor
  * the base module; on a Play install they arrive through the `ppocr` fast-follow asset pack
  * ([PpOcrPack]) — Play fetches it after install, without the reader opening Settings, and verifies
  * the transfer itself — and [PpOcrEngine] then reads the files straight out of the pack's directory.
@@ -51,6 +52,9 @@ object PpOcrModel {
     internal const val MODEL_FILE = "rec.onnx"
     internal const val DICT_FILE = "dict.txt"
 
+    /** The optional DB text detector, beside the recogniser under the pack's `pp-ocr/medium` directory. */
+    internal const val DET_FILE = "det.onnx"
+
     // PaddlePaddle/PP-OCRv6_medium_rec_onnx @ 50c7eacafc52fa7bcf4194e8cd08e46f8558504b
     // (ONNX IR 6, opset 11; dict: PaddlePaddle/PaddleOCR @ b03f46425e8ff4442b268ce449e3eef758146cd4).
     /**
@@ -67,6 +71,16 @@ object PpOcrModel {
         PackFile(DICT_FILE, 74_947L)
     )
 
+    // PaddlePaddle/PP-OCRv6_medium_det_onnx @ 61323801669c338b7891481ec7bac61ce31b576a
+    // (inference.onnx staged under the pack name det.onnx).
+    /**
+     * The detector, kept apart from [files] on purpose: [isInstalled] means "the recogniser can read",
+     * and a pack that carries only the recogniser and its dictionary must keep reading, with ML Kit
+     * still finding the lines. [PpOcrDetector] runs only when [isDetectorInstalled] says this file is
+     * there at its pinned size as well.
+     */
+    internal val detectorFile = PackFile(DET_FILE, 62_032_837L)
+
     /** The pack's directory when it holds a complete copy, else null — there is no other copy. */
     internal fun dir(context: Context): File? = PpOcrPack.completeDir(context, files)
 
@@ -75,6 +89,16 @@ object PpOcrModel {
 
     /** The character dictionary, or null when the pack is not installed. */
     internal fun dictFile(context: Context): File? = dir(context)?.let { File(it, DICT_FILE) }
+
+    /** The ONNX detector, or null when the pack does not carry it complete. Independent of [dir]. */
+    internal fun detFile(context: Context): File? =
+        PpOcrPack.completeDir(context, listOf(detectorFile))?.let { File(it, DET_FILE) }
+
+    /**
+     * True when the detector is on disk. Says nothing about the recogniser: a detector is only useful
+     * with one, so callers that need both also ask [isInstalled].
+     */
+    fun isDetectorInstalled(context: Context): Boolean = detFile(context) != null
 
     /** True when the pack's complete copy is on disk, which is the only way this engine exists. */
     fun isInstalled(context: Context): Boolean = dir(context) != null

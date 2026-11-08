@@ -83,6 +83,8 @@ object ScreenHits {
         val spans = ArrayList<LineSpan>()
 
         screen.lines.forEachIndexed { lineIndex, line ->
+            // A box-only line (not read yet) has no text for a span to address.
+            if (line.text.isEmpty()) return@forEachIndexed
             var first = -1
             var last = -1
             line.charBoxes.forEachIndexed { charIndex, box ->
@@ -93,7 +95,9 @@ object ScreenHits {
             }
 
             if (first >= 0) {
-                spans.add(LineSpan(lineIndex, first, last + 1))
+                // Spans index the line's text, so never past its end.
+                val end = minOf(last + 1, line.text.length)
+                if (first < end) spans.add(LineSpan(lineIndex, first, end))
             }
         }
 

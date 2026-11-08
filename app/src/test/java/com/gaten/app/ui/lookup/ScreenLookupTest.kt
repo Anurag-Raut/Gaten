@@ -10,6 +10,7 @@ import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.dictionaryOf
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.ScreenHits
+import com.gaten.app.ocr.ScreenLine
 import com.gaten.app.ocr.withText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -191,5 +192,18 @@ class ScreenLookupTest {
         // 水 is under the tap; 猫 and 飲む tie at one character's gap, so their scan order stands.
         assertEquals(listOf("水", "猫", "飲む"), tap!!.result.words.map { it.surface })
         assertEquals(screen.lines.single().bounds, tap.selectionBox)
+    }
+
+    @Test
+    fun aBoxOnlyLineIsSkippedByALassoAndATap() {
+        val box = Box(0, 100, 400, 160)
+        val screen = screenOf(ScreenLine("", box, vertical = false, charBoxes = listOf(box)))
+
+        val lasso = lookupFromSelection(screen, Box(0, 90, 400, 170), { emptyList() })
+        val tap = lookupFromTap(screen, x = 10, y = 120, tolerancePx = 0, lookup = { emptyList() })
+
+        assertEquals("", lasso.ocrText)
+        assertTrue(lasso.words.isEmpty())
+        assertNull(tap)
     }
 }

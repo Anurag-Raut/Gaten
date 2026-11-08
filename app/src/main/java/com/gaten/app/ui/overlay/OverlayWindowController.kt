@@ -142,7 +142,7 @@ class OverlayWindowController(
             val startedAt = android.os.SystemClock.elapsedRealtime()
             Log.d(TAG, "Early screen scan submitted" +
                 " (+${GatenAccessibilityService.elapsedSinceTrigger()} ms since the trigger)")
-            val result = ScreenTextScanner.scan(bitmap)
+            val result = ScreenTextScanner.scan(context, bitmap)
             Log.d(TAG, "Early screen scan ${if (result == null) "unavailable" else "ready"}" +
                 " in ${android.os.SystemClock.elapsedRealtime() - startedAt} ms")
             result

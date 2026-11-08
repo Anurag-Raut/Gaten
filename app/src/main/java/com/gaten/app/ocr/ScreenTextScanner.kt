@@ -6,6 +6,7 @@
 
 package com.gaten.app.ocr
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
@@ -20,7 +21,11 @@ import kotlinx.coroutines.CancellationException
  * every line, with a box per character, so a tap or a lasso can be answered from the index
  * ([ScreenHits]) with no further recognition.
  *
- * ML Kit reports the layout the index is made of, so the overlay goes ready the moment its index
+ * The layout the index is made of comes from ML Kit, or — in [RecognitionMode.PP_MEDIUM] with the
+ * PP-OCRv6 detector installed — from that detector ([JapaneseOcr.detectBoxesWithPpOcr]). The
+ * detector only finds boxes: nothing is read until the reader taps or circles one, and those
+ * gestures read their own crop. [RecognitionMode.ML_KIT] is ML Kit throughout, and a missing,
+ * failing or empty PP detector falls back to ML Kit. The overlay goes ready the moment its index
  * exists.
  *
  * Every line ML Kit read is kept, whatever script it is in — a line it read as Latin can still be
@@ -36,28 +41,42 @@ object ScreenTextScanner {
     private const val TAG = "GatenOcr"
 
     /**
-     * Recognises the whole [bitmap] and returns its index: ML Kit's lines, in the order it reported
-     * them, each tightened onto its ink.
+     * Returns the index of the whole [bitmap]: the PP detector's boxes when [context]'s mode and
+     * installed pack call for it — lines with no text yet, one cell covering the box — else ML Kit's
+     * lines, in the order it reported them, each tightened onto its ink.
      *
      * Returns null — i.e. [ScanState.Unavailable] for the caller — only when recognition fails. A
      * successful scan that read no line at all is still an index, an empty one. On failure the
      * region path still works, so nothing is logged as a crash. Never throws.
      */
-    suspend fun scan(bitmap: Bitmap): ScreenText? {
+    suspend fun scan(context: Context, bitmap: Bitmap): ScreenText? {
         val startedAt = SystemClock.elapsedRealtime()
         val lines = try {
-            JapaneseOcr.mlKitResult(bitmap).textBlocks
-                .flatMap { it.lines }
-                .mapNotNull { toScreenLine(bitmap, it) }
+            val boxes = JapaneseOcr.detectBoxesWithPpOcr(context, bitmap)
+            if (boxes != null) {
+                boxes.map { boxOnlyLine(it) }
+            } else {
+                JapaneseOcr.mlKitResult(bitmap).textBlocks
+                    .flatMap { it.lines }
+                    .mapNotNull { toScreenLine(bitmap, it) }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Full-screen OCR failed", e)
             return null
         }
-        Log.d(TAG, "Indexed ${lines.size} ML Kit lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
+        Log.d(TAG, "Indexed ${lines.size} lines in ${SystemClock.elapsedRealtime() - startedAt} ms")
         return ScreenText(lines, bitmap.width, bitmap.height)
     }
+
+    /**
+     * A detected box with no reading yet: empty text and a single cell over the box, so a tap
+     * hit-tests it ([ScreenHits.hitTestLine] needs a cell) and the gesture's own read supplies the
+     * text. The axis is guessed from the box alone.
+     */
+    private fun boxOnlyLine(box: Box): ScreenLine =
+        ScreenLine("", box, vertical = box.height > box.width * 1.5, charBoxes = listOf(box))
 
     /** Margin, in px, the line is cropped with before the ink profile is read. */
     private const val TIGHTEN_MARGIN = 2
