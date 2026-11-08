@@ -53,6 +53,7 @@ import {
   SearchField,
   SearchIdlePrompt,
   SearchRowItem,
+  searchRowKey,
   SearchRowSeparator,
   searchRows,
   type SearchRow,
@@ -434,7 +435,10 @@ function LookupSheetRoot({sessionId}: {sessionId?: string}) {
             </View>
             <FlatList<SearchRow>
               data={searchRowsData}
-              keyExtractor={(row) => row.key}
+              keyExtractor={searchRowKey}
+          initialNumToRender={8}
+          windowSize={7}
+          removeClippedSubviews
               renderItem={({item}) => <SearchRowItem flat row={item} onOpen={pickSearched} />}
               ItemSeparatorComponent={FlatRowSeparator}
               contentContainerStyle={[

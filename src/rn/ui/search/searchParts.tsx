@@ -108,7 +108,7 @@ export function searchRows(state: store.SearchState): SearchRow[] {
 }
 
 /** One result row: the count line, a prefix header, or the card for a hit. */
-export function SearchRowItem({
+export const SearchRowItem = React.memo(function SearchRowItem({
   row,
   onOpen,
   flat = false,
@@ -134,7 +134,10 @@ export function SearchRowItem({
     );
   }
   return <ResultCard hit={row.hit} onOpen={onOpen} flat={flat} />;
-}
+});
+
+/** Stable key extractor so the list does not see a new function every render. */
+export const searchRowKey = (row: SearchRow) => row.key;
 
 /**
  * The gap between two rows of the results. A flat list has no card fill to part its rows, so the gap
@@ -300,7 +303,7 @@ export function SearchField({
 }
 
 /** One dictionary entry as a card: the headword, its reading, its first glosses and its part of speech. */
-export function ResultCard({
+export const ResultCard = React.memo(function ResultCard({
   hit,
   onOpen,
   flat = false,
@@ -361,7 +364,7 @@ export function ResultCard({
       </View>
     </PressableCard>
   );
-}
+});
 
 /** The box a results list puts its rows in: the app's content column, with the screen's rhythm. */
 export const SEARCH_LIST_CONTENT = {
