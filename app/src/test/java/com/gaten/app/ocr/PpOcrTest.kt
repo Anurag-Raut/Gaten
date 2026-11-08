@@ -6,18 +6,14 @@
 
 package com.gaten.app.ocr
 
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.FloatBuffer
-import java.nio.file.Files
-import java.security.MessageDigest
 
-/** Geometry, CTC decoding, the dictionary layout and the downloader's verification. */
+/** Geometry, CTC decoding, the dictionary layout, and the pack's file catalogue. */
 class PpOcrTest {
 
     // ---- PpOcrGeometry: the crop is turned when tall; width is ratio-preserving, padded and bounded. ----
@@ -119,124 +115,20 @@ class PpOcrTest {
         assertEquals(listOf("blank", "A", "B", " "), PpOcrVocabulary.load(file))
     }
 
-    // ---- PpOcrFetch: verifies size and hash, cleans up partials, bounds redirects. ----
-
-    private fun tempDirectory(): File = Files.createTempDirectory("pp-ocr-test").toFile()
-
-    private fun sha256(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
-
-    /** Runs a download that must fail with the terminal error. */
-    private fun downloadFailure(block: suspend () -> Unit) {
-        val error = runCatching { runBlocking { block() } }.exceptionOrNull()
-        assertTrue("expected DownloadException, got $error", error is PpOcrModel.DownloadException)
-    }
+    // ---- The pack catalogue: what Gaten reads out of Google Play's asset pack. ----
 
     @Test
-    fun aVerifiedDownloadIsInstalledUnderItsRealName() {
-        val body = ByteArray(2048) { it.toByte() }
-        FakeHttpServer().use { server ->
-            server.serve("/model", body = body)
-            server.start()
-            val directory = tempDirectory()
-            val destination = File(directory, "rec.onnx")
-            runBlocking {
-                PpOcrFetch.fetch(server.url("/model"), destination, body.size.toLong(), sha256(body))
-            }
-            assertTrue(destination.isFile)
-            assertEquals(body.size.toLong(), destination.length())
-            assertTrue(destination.readBytes().contentEquals(body))
-            assertFalse(File(directory, "rec.onnx.part").exists())
-        }
-    }
-
-    @Test
-    fun aSameProtocolRedirectIsFollowed() {
-        val body = ByteArray(1024) { (it * 3).toByte() }
-        FakeHttpServer().use { server ->
-            server.serve("/real", body = body)
-            server.serve("/model", status = 302, location = server.url("/real"))
-            server.start()
-            val destination = File(tempDirectory(), "rec.onnx")
-            runBlocking {
-                PpOcrFetch.fetch(server.url("/model"), destination, body.size.toLong(), sha256(body))
-            }
-            assertTrue(destination.readBytes().contentEquals(body))
-        }
-    }
-
-    @Test
-    fun anEndlessRedirectChainIsRefused() {
-        val body = ByteArray(64)
-        FakeHttpServer().use { server ->
-            for (hop in 0 until 10) {
-                server.serve("/hop$hop", status = 302, location = server.url("/hop${hop + 1}"))
-            }
-            server.serve("/hop10", body = body)
-            server.start()
-            val directory = tempDirectory()
-            downloadFailure {
-                PpOcrFetch.fetch(server.url("/hop0"), File(directory, "rec.onnx"), body.size.toLong(), sha256(body))
-            }
-            assertFalse(File(directory, "rec.onnx").exists())
-            assertFalse(File(directory, "rec.onnx.part").exists())
-        }
-    }
-
-    @Test
-    fun aServerThatDeclaresTooManyBytesIsRejectedAndLeavesNoPartial() {
-        val body = ByteArray(512) { it.toByte() }
-        FakeHttpServer().use { server ->
-            server.serve("/model", body = body, declaredLength = 4096)
-            server.start()
-            val directory = tempDirectory()
-            downloadFailure {
-                PpOcrFetch.fetch(server.url("/model"), File(directory, "rec.onnx"), 4096, sha256(body))
-            }
-            assertFalse(File(directory, "rec.onnx").exists())
-            assertFalse(File(directory, "rec.onnx.part").exists())
-        }
-    }
-
-    @Test
-    fun aHashMismatchIsRejectedAndLeavesNoPartial() {
-        val body = ByteArray(777) { (it * 7 + 1).toByte() }
-        FakeHttpServer().use { server ->
-            server.serve("/model", body = body)
-            server.start()
-            val directory = tempDirectory()
-            downloadFailure {
-                PpOcrFetch.fetch(
-                    server.url("/model"),
-                    File(directory, "rec.onnx"),
-                    body.size.toLong(),
-                    sha256(ByteArray(777))
-                )
-            }
-            assertFalse(File(directory, "rec.onnx").exists())
-            assertFalse(File(directory, "rec.onnx.part").exists())
-        }
-    }
-
-    @Test
-    fun aRetainedFileCanBeRehashedAndAMissingOneReadsAsNull() {
-        val content = "the dictionary".toByteArray()
-        val file = File.createTempFile("retained", ".bin").apply {
-            writeBytes(content)
-            deleteOnExit()
-        }
-        assertEquals(sha256(content), PpOcrFetch.sha256Of(file))
-        assertNull(PpOcrFetch.sha256Of(File(file.parentFile, "missing.bin")))
-    }
-
-    @Test
-    fun theCatalogPinsEveryFileToAnHttpsUrlHashAndSize() {
+    fun theCatalogPinsThePackFileNamesAndTheirExactSizes() {
         val files = PpOcrModel.files
-        assertEquals(2, files.size)
-        assertTrue(files.all { it.url.startsWith("https://") })
-        assertTrue(files.all { it.sha256.length == 64 })
-        assertTrue(files.all { it.size > 0 })
+
+        // The names are the paths PpOcrEngine opens inside the pack; the sizes are what
+        // PpOcrPack.completeDir checks, so a wrong number would either read a half-delivered pack as
+        // installed or never accept a complete one.
+        assertEquals(listOf("rec.onnx", "dict.txt"), files.map { it.name })
+        assertEquals(76_554_979L, files.first { it.name == PpOcrModel.MODEL_FILE }.size)
+        assertEquals(74_947L, files.first { it.name == PpOcrModel.DICT_FILE }.size)
+
+        // And the size the settings screen advertises as the download is exactly their sum.
         assertEquals(PpOcrModel.Engine.MEDIUM.approximateDownloadBytes, files.sumOf { it.size })
     }
 }

@@ -35,8 +35,9 @@ import kotlin.coroutines.resumeWithException
  *
  * On a Play install the `:ppocr` pack carries `pp-ocr/medium/rec.onnx` and `dict.txt`; Play fetches
  * it after install — without the reader opening Settings — and verifies every byte of the transfer,
- * so [PpOcrModel] hands ONNX Runtime files straight out of the pack's directory. Anywhere else the
- * pack does not exist, and [PpOcrModel.download] uses the in-app downloader instead.
+ * so [PpOcrModel] hands ONNX Runtime files straight out of the pack's directory. This is the model's
+ * only delivery path: a build Play did not install (a sideloaded APK, an image without Play) has no
+ * pack to read and, per [PpOcrModel.download], cannot install the engine at all.
  *
  * Play reports a fetch as soon as it has *accepted* it: `fetch()` resolving means "the request is
  * queued", not "the files are on disk". Completion is the pack reaching [AssetPackStatus.COMPLETED],
@@ -92,7 +93,7 @@ internal object PpOcrPack {
      * disk, so each file's pinned size is checked here, keeping a half-delivered pack from being
      * handed to ONNX Runtime.
      */
-    fun completeDir(context: Context, files: List<PpOcrModel.ModelFile>): File? {
+    fun completeDir(context: Context, files: List<PpOcrModel.PackFile>): File? {
         val manager = manager(context) ?: return null
         val assetsPath = try {
             manager.getPackLocation(PACK_NAME)?.assetsPath()
@@ -137,13 +138,13 @@ internal object PpOcrPack {
      * Makes the pack's copy of [files] available, driving Play's fetch when it is not there yet.
      *
      * Returns true once the files are on disk, and false when this install has no pack to offer —
-     * not installed from Play, or Play's delivery is unavailable on the device — which sends the
-     * caller to the in-app downloader. A delivery Play accepted but could not finish throws
-     * [PpOcrModel.DownloadException], so a failed Play transfer is never papered over with a
-     * surprise 76 MB in-app download. Every way the wait can end is terminal — including
-     * `WAITING_FOR_WIFI`, where Play has queued the fetch but will not move bytes — so a request
-     * always answers instead of leaving the settings screen on "Downloading…" until it times out. A
-     * request Play rejects outright ends the wait at once, carrying Play's own reason, and each
+     * not installed from Play, or Play's delivery is unavailable on the device — which
+     * [PpOcrModel.download] turns into a refusal; there is no in-app downloader behind this. A
+     * delivery Play accepted but could not finish throws [PpOcrModel.DownloadException], so a failed
+     * Play transfer is never mistaken for a delivered one. Every way the wait can end is terminal —
+     * including `WAITING_FOR_WIFI`, where Play has queued the fetch but will not move bytes — so a
+     * request always answers instead of leaving the settings screen on "Downloading…" until it times
+     * out. A request Play rejects outright ends the wait at once, carrying Play's own reason, and each
      * request arms the watch with a non-terminal state first, so a terminal state an earlier attempt
      * left behind can never answer a new one.
      *
@@ -152,7 +153,7 @@ internal object PpOcrPack {
      */
     suspend fun ensureInstalled(
         context: Context,
-        files: List<PpOcrModel.ModelFile>,
+        files: List<PpOcrModel.PackFile>,
         activity: Activity?
     ): Boolean {
         if (completeDir(context, files) != null) return true
@@ -295,7 +296,7 @@ internal object PpOcrPack {
         }
     }
 
-    private fun PpOcrModel.ModelFile.isPresentIn(directory: File): Boolean {
+    private fun PpOcrModel.PackFile.isPresentIn(directory: File): Boolean {
         val file = File(directory, name)
         return file.isFile && file.length() == size
     }

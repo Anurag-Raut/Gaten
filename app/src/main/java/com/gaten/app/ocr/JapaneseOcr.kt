@@ -145,7 +145,7 @@ object JapaneseOcr {
         priority: OcrJobPriority
     ): String? {
         // Cheap check first: an uninstalled engine never allocates a crop it cannot use.
-        if (!PpOcrModel.isInstalled(context, engine)) return null
+        if (!PpOcrModel.isInstalled(context)) return null
         val crop = rgbCrop(bitmap, bounds) ?: return null
         return try {
             // PpOcrEngine counts its own use against OcrModels' idle clock.

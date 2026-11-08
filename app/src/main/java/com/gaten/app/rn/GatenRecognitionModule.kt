@@ -28,16 +28,16 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The text recognition settings bridge: the selected mode, install state for every engine (the
- * bundled ML Kit and the optional PP-OCRv6 Medium download), and the explicit download that puts the
- * optional engine on the device. The bundled ML Kit has no download; PP-OCRv6 Medium ships no
- * weights in the APK — Play's fast-follow asset pack on a Play install, the in-app downloader
- * otherwise.
+ * bundled ML Kit and the optional PP-OCRv6 Medium), and the explicit download that asks Google Play
+ * for the optional engine's asset pack. The bundled ML Kit has no download, and PP-OCRv6 Medium ships
+ * no weights in the APK: on a Play install it arrives through Play's `ppocr` fast-follow asset pack,
+ * and on an install Play did not make it cannot be installed at all.
  *
  * Every call that touches storage runs on [Dispatchers.IO]. The reader confirms the download in the
- * settings UI — which warns that mobile data may incur charges — and the delivery path verifies
- * what it installs ([PpOcrModel.download]). An engine already downloading rejects a second request
- * here instead of racing two writes over the same files. The scope is cancelled with the module, so
- * an in-flight download is cancelled rather than finishing into a dead React context.
+ * settings UI — which warns that mobile data may incur charges — and Play verifies the transfer it
+ * makes ([PpOcrModel.download]). An engine already downloading rejects a second request here instead
+ * of issuing a second fetch. The scope is cancelled with the module, so an in-flight request is
+ * abandoned rather than finishing into a dead React context.
  */
 class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -178,14 +178,14 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     private fun engineBytes(engine: RecognitionMode): Long =
         engine.ppEngine()?.approximateDownloadBytes ?: 0L
 
-    /** Installed means the engine's own files are complete; the bundled recognizer always is. */
+    /** Installed means the pack's files are complete; the bundled recognizer always is. */
     private fun isInstalled(context: Context, engine: RecognitionMode): Boolean {
         if (engine.bundled) return true
-        val pp = engine.ppEngine() ?: return false
-        return PpOcrModel.isInstalled(context, pp)
+        if (engine.ppEngine() == null) return false
+        return PpOcrModel.isInstalled(context)
     }
 
-    /** Runs the delivery path that owns [engine]'s model; it verifies what it installs itself. */
+    /** Drives Play's fetch for [engine]'s model, and Play verifies the transfer itself. */
     private suspend fun download(context: Context, engine: RecognitionMode, activity: Activity?) {
         val pp = engine.ppEngine() ?: return
         PpOcrModel.download(context, pp, activity)
@@ -194,7 +194,7 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     companion object {
         const val NAME = "GatenRecognition"
 
-        private const val ML_KIT_NAME = "ML Kit"
+        private const val ML_KIT_NAME = "Standard"
 
         /** Every engine, in the order the settings screen shows them (the bundled ML Kit first). */
         private val ENGINES = RecognitionMode.entries

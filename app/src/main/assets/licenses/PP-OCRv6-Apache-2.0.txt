@@ -5,10 +5,10 @@ PaddlePaddle PP-OCRv6_medium_rec_onnx — https://huggingface.co/PaddlePaddle/PP
 PaddlePaddle/PaddleOCR — https://github.com/PaddlePaddle/PaddleOCR
   revision b03f46425e8ff4442b268ce449e3eef758146cd4 (ppocr/utils/dict/ppocrv6_dict.txt)
 
-These model files are not bundled in the app: a Google Play install receives them through Gaten's
-`ppocr` fast-follow asset pack, and every other install downloads them on demand. They are licensed
-under the Apache License, Version 2.0, reproduced below. Copyright in the model belongs to its
-authors (PaddlePaddle).
+These model files are not bundled in the app: on a Google Play install they arrive through Gaten's
+`ppocr` fast-follow asset pack, which Play fetches and verifies. Gaten never downloads them itself,
+so an install Google Play did not make has no copy of them. They are licensed under the Apache
+License, Version 2.0, reproduced below. Copyright in the model belongs to its authors (PaddlePaddle).
 
 
                                  Apache License

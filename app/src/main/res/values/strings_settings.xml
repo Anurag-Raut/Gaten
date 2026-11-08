@@ -118,7 +118,7 @@
     <string name="settings_about_plex">SIL Open Font License 1.1 &#8212; IBM Corp. and the Plex Project Authors. Bundled to draw Gaten&#8217;s Latin and Japanese text.</string>
     <string name="settings_about_wanakana">MIT licence &#8212; the Kotlin port of WanaKana. Turns typed romaji into kana for dictionary search.</string>
     <string name="settings_about_dict">JMdict and JMnedict, the dictionary Gaten reads: © EDRDG, CC BY-SA 4.0</string>
-    <string name="settings_about_ocr">Optional recommended reader for ordinary screen and novel text (PaddlePaddle, Apache-2.0) run on ONNX Runtime; delivered by Google Play or downloaded in the app</string>
+    <string name="settings_about_ocr">Optional recommended reader for ordinary screen and novel text (PaddlePaddle, Apache-2.0) run on ONNX Runtime; delivered by Google Play</string>
     <string name="settings_about_mlkit">Google&#8217;s on-device text recognition, bundled with Gaten and the default reader</string>
     <string name="settings_about_wanikani">Reference content © Tofugu LLC. Gaten is not affiliated with WaniKani, and nothing from it is bundled with the app.</string>
     <string name="settings_about_licence_title">Licence</string>

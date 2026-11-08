@@ -138,17 +138,19 @@ object PpOcrEngine {
     }
 
     /**
-     * The loaded session, built from the installed files when they are not already resident, or when
-     * the files behind it changed (a re-install or a remove). Null when the engine is not installed
-     * (per [PpOcrModel.isInstalled], not a bare file test), or when it cannot be loaded at all.
+     * The loaded session, built from the pack's files when they are not already resident, or when the
+     * files behind it changed (a pack update or a removal). Null when the pack is not installed (per
+     * [PpOcrModel.isInstalled], not a bare file test), or when it cannot be loaded at all.
      */
     private fun load(context: Context, engine: PpOcrModel.Engine): Loaded? {
-        if (!PpOcrModel.isInstalled(context, engine)) {
+        val modelFile = PpOcrModel.modelFile(context) ?: run {
             close()
             return null
         }
-        val modelFile = PpOcrModel.modelFile(context, engine)
-        val dictFile = PpOcrModel.dictFile(context, engine)
+        val dictFile = PpOcrModel.dictFile(context) ?: run {
+            close()
+            return null
+        }
         if (!modelFile.isFile || !dictFile.isFile) {
             close()
             return null

@@ -16,15 +16,19 @@ with ML Kit's own Japanese text recognition. PP-OCRv6 Medium can be chosen inste
 | Engine | Role | Delivered how |
 | --- | --- | --- |
 | ML Kit (Japanese text recognition, `com.google.mlkit:text-recognition-japanese`) | Default recognizer out of the box, and the fallback for the optional engine | Bundled in the app |
-| PP-OCRv6 Medium (`PP-OCRv6_medium_rec`, 76.6 MB) | *Recommended* optional engine: ordinary screen and novel text | Google Play fast-follow asset pack (`ppocr`) on a Play install; the in-app downloader everywhere else |
+| PP-OCRv6 Medium (`PP-OCRv6_medium_rec`, 76.6 MB) | *Recommended* optional engine: ordinary screen and novel text | Google Play fast-follow asset pack (`ppocr`); no other install can get it |
 
-Neither engine's weights are downloaded automatically by Gaten: the pack is Play's own delivery and
-the in-app downloader runs only from the reader's **Download** button.
+Gaten itself downloads neither engine's weights: the pack is Google Play's own delivery, and the
+reader's **Download** only asks Play for it. An install Google Play did not make — a sideloaded APK,
+an F-Droid build, an image without Play — has no pack to read, so it cannot install the optional
+engine at all and reads with ML Kit.
 
 ## Delivery
 
-PP-OCRv6 Medium has two delivery paths, and `ocr/PpOcrModel.kt` treats them as one thing — the files
-end up in a directory the ONNX session reads from, and the reader never chooses a path.
+PP-OCRv6 Medium has exactly one delivery path: the `ppocr` fast-follow asset pack on Google Play.
+`ocr/PpOcrModel.kt` resolves the files inside the pack and `ocr/PpOcrEngine.kt` opens the ONNX model
+straight from that directory — nothing is copied out, and there is no second copy to fall back to or
+to reconcile.
 
 **Google Play (fast-follow asset pack).** The `:ppocr` module is a `com.android.asset-pack` module
 with `packName = "ppocr"` and `deliveryType = "fast-follow"`, which carries
@@ -50,18 +54,16 @@ itself, so `ocr/PpOcrPack.kt` reads the files straight out of
   non-terminal state first, so a conflated terminal state left by an earlier attempt cannot answer a
   new one. The settings read that answers the JS is itself bounded at 2 s, so a Play service that
   stops answering leaves the last reported state standing rather than an unpopulated screen.
-- Both files are always resolved from **one** directory: the pack's copy when both pinned sizes are
-  present, the in-app copy otherwise. A `getPackLocation` result on its own is not "installed", so a
-  half-extracted pack is never handed to ONNX Runtime.
+- Both files are resolved from **one** directory — the pack's — and only when both pinned sizes are
+  present; a `getPackLocation` result on its own is not "installed", so a half-extracted pack is never
+  handed to ONNX Runtime, and a pack that is missing or incomplete reads as "not installed".
 
-**In-app downloader (everywhere else).** A build that was not installed by Google Play uses the
-in-app downloader deliberately, rather than waiting on a pack that cannot exist; so does a Play
-install whose pack cannot be served, in which case the pack path reports it cannot deliver and the
-downloader takes over. It fetches the pinned files from the upstream sources over the device's
-current connection, verifies each by exact size and SHA-256, and only then renames it into place
-(`ModelInstall` / `PpOcrFetch`). Files live under `noBackupFilesDir`, so Android's backup never
-carries them, and the in-app copy is kept strictly apart from the pack's copy — a fallback download
-and a pack install can never be confused for one another.
+**No other delivery path.** A build Google Play did not install, or a Play install whose pack cannot
+be served because Play Core is unavailable on the device, cannot install the engine:
+`PpOcrModel.download` refuses with a clear message — there is no downloader behind this to reach for
+— and Gaten keeps no copy of the model of its own, so nothing is written to app storage and there is
+no second copy to exclude from backup or to reconcile. Selecting PP-OCRv6 Medium on such a build
+simply reads with ML Kit, exactly as an uninstalled engine on a Play install does.
 
 This is a *delivery* improvement, not an APK-size reduction. The PP weights were already excluded
 from the app before the pack existed; the ~100 MB base download is the bundled dictionaries
@@ -81,8 +83,7 @@ dialog. The `ppocr` pack is 76.6 MB of one model plus its dictionary, far inside
 time, checking each against its exact size and SHA-256 (the hashes below) and writing through a
 `.part` file, so a truncated or replaced local copy can never be staged. A file already at its
 pinned size and hash is left alone, so the network is needed once. Because the hash was checked at
-build time, the app trusts a pack file by size alone; the in-app downloader has no build step to lean
-on, so it re-verifies both size and hash at runtime.
+build time, the app trusts the pack's files by size alone.
 
 ## Pinned sources
 
@@ -92,8 +93,10 @@ on, so it re-verifies both size and hash at runtime.
 | Dictionary | [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) @ `b03f46425e8ff4442b268ce449e3eef758146cd4`, `ppocr/utils/dict/ppocrv6_dict.txt` | 74,947 | `b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d` |
 
 Total 76,629,926 B (76.6 MB, model + dictionary), the same catalogue the settings screen reports as
-the download size. Both `ocr/PpOcrModel.kt` (the in-app downloader) and `ppocr/build.gradle.kts` (the
-pack) carry these pins; they must agree.
+the download size. `ppocr/build.gradle.kts` carries these source pins and verifies them when it stages
+the pack; `ocr/PpOcrModel.kt` carries only the file names and their exact sizes, which is what it
+checks on the pack Play delivered. The two lists must agree — a stale size there would read a
+half-delivered pack as installed.
 
 ## Graph contract
 
@@ -127,8 +130,9 @@ default, so a reader who had chosen a downloadable engine keeps one; a missing o
 becomes `ml_kit`.
 
 At most one ONNX session is resident. `OcrModels` releases it after 90 seconds idle, and the session
-is rebuilt (and its path, size and modification time re-checked) when the files behind it change, so
-a switch from the pack's copy to an in-app copy — or a re-install — is picked up.
+is rebuilt when the pack's files change — their path, size and modification time are the key — so a
+pack update, whose extraction path differs, is picked up instead of being served from a stale
+session.
 
 ## Limits
 
@@ -185,9 +189,10 @@ terms of service; Play Core's asset-delivery client is Google's, under the Play 
 
 The Apache-2.0 text is bundled at `app/src/main/assets/licenses/PP-OCRv6-Apache-2.0.txt`; the
 attributions are recorded in `NOTICE` and the README credits. Gaten does not redistribute the
-weights in its APK or base module: the pack is a separate Play-delivered module, and the in-app
-downloader fetches from the pinned locations above. ML Kit's models are bundled through Google's own
-dependency, under the ML Kit terms. ONNX Runtime (Microsoft, MIT) is already attributed.
+weights in its APK or base module, and it never downloads them itself: the pack is a separate
+Play-delivered module, so only a Google Play install has the files. ML Kit's models are bundled
+through Google's own dependency, under the ML Kit terms. ONNX Runtime (Microsoft, MIT) is already
+attributed.
 
 ## Verification
 

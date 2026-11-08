@@ -10,13 +10,13 @@
 <!--
    Backup rules for API 30 and below (data_extraction_rules.xml covers API 31+).
 
-   The optional PP-OCRv6 Medium model is a ~77 MB download under the in-app model directory, so it is
-   excluded here and from device transfer: restoring or transferring it would only waste quota on
-   files the app can fetch again (and would leave a half-written set if the transfer were partial).
-   The file already lives under no_backup, which Android never backs up — the exclusion keeps that
-   guarantee explicit. A copy delivered by Google Play's asset pack lives in Play's own storage and
-   is not part of the app's backup either.
+   Nothing has to be excluded. The optional PP-OCRv6 Medium model is no longer app data at all: it
+   lives in Google Play's asset-pack storage and Gaten only reads it (ocr/PpOcrPack.kt), so the file
+   this rule used to exclude — the in-app model directory of the removed downloader — is never
+   written. What does stay app-owned is small and outside Android's backup by construction: the
+   WaniKani token and its cache sit under noBackupFilesDir, which is never backed up or transferred.
+
+   The file stays because the manifest points at it; an empty rules document means the platform's
+   defaults, which is what this app wants.
 -->
-<full-backup-content>
-    <exclude domain="file" path="pp-ocr" />
-</full-backup-content>
+<full-backup-content />

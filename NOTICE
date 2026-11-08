@@ -52,9 +52,9 @@ Licence: Apache License 2.0
 https://github.com/PaddlePaddle/PaddleOCR
 (revision b03f46425e8ff4442b268ce449e3eef758146cd4)
 
-Not bundled: on a Google Play install the files arrive through Gaten's `ppocr` fast-follow asset
-pack, which Play fetches and verifies; anywhere else the reader downloads them on demand from the
-pinned sources above and verifies them by size and SHA-256. The Apache License 2.0 text is bundled at
+Not bundled, and not downloaded by Gaten: on a Google Play install the files arrive through Gaten's
+`ppocr` fast-follow asset pack, which Play fetches and verifies; an install Google Play did not make
+has no copy of them. The Apache License 2.0 text is bundled at
 assets/licenses/PP-OCRv6-Apache-2.0.txt.
 
 Play Asset Delivery (asset-pack client)
