@@ -158,15 +158,24 @@ object PpOcrModel {
      * backoff; an integrity failure stops immediately.
      *
      * Safe to call from several coroutines: installs are serialised on one lock.
+     *
+     * [onProgress] is called with the cumulative bytes written and the engine's total as the
+     * download advances, and once more at [total, total] when the bytes are all in; it is never
+     * called after [download] returns.
      */
-    suspend fun download(context: Context, engine: Engine) {
+    suspend fun download(
+        context: Context,
+        engine: Engine,
+        onProgress: ((bytesDone: Long, bytesTotal: Long) -> Unit)? = null
+    ) {
         ModelInstall.install(
             displayName = engine.displayName,
             directory = dir(context, engine),
             markerName = REVISION_FILE,
             revision = engine.revision,
             files = files(engine),
-            installed = { isInstalled(context, engine) }
+            installed = { isInstalled(context, engine) },
+            onProgress = onProgress
         )
     }
 
@@ -179,8 +188,24 @@ object PpOcrModel {
         .filter { isInstalled(context, it) }
         .joinToString(";") { "${it.id}@${it.revision}" }
 
-    /** A download that cannot be completed: wrong size or hash, or transport gave up. */
-    class DownloadException(message: String, cause: Throwable? = null) : Exception(message, cause)
+    /**
+     * A download that cannot be completed. [reason] says which part failed, so a caller can tell a
+     * transfer that may succeed on a fresh connection from bytes that will never pass their check.
+     */
+    class DownloadException(
+        message: String,
+        cause: Throwable? = null,
+        val reason: Reason = Reason.INTEGRITY
+    ) : Exception(message, cause) {
+        enum class Reason {
+            /** Wrong size or hash, or a download that cannot be trusted; a retry would not change it. */
+            INTEGRITY,
+            /** The connection failed: DNS, a connect or read timeout, or a refused hop. */
+            TRANSPORT,
+            /** The filesystem refused a write or a rename. */
+            STORAGE
+        }
+    }
 
     private fun ModelFile.isPresentIn(directory: File): Boolean {
         val file = File(directory, name)
@@ -216,21 +241,32 @@ internal object ModelInstall {
         markerName: String,
         revision: String,
         files: List<PpOcrModel.ModelFile>,
-        installed: () -> Boolean
+        installed: () -> Boolean,
+        onProgress: ((bytesDone: Long, bytesTotal: Long) -> Unit)? = null
     ) {
         lock.withLock {
             withContext(Dispatchers.IO) {
                 if (installed()) return@withContext
                 if (!directory.isDirectory && !directory.mkdirs() && !directory.isDirectory) {
-                    throw PpOcrModel.DownloadException("Could not create the model directory for $displayName")
+                    throw PpOcrModel.DownloadException(
+                        "Could not create the model directory for $displayName",
+                        reason = PpOcrModel.DownloadException.Reason.STORAGE
+                    )
                 }
+                val total = files.sumOf { it.size }
+                var done = 0L
                 for (file in files) {
                     val destination = File(directory, file.name)
                     val alreadyVerified = destination.isFile &&
                         destination.length() == file.size &&
                         PpOcrFetch.sha256Of(destination) == file.sha256
-                    if (alreadyVerified) continue
-                    fetchWithRetry(file, destination)
+                    if (!alreadyVerified) {
+                        fetchWithRetry(file, destination) { fileBytes ->
+                            onProgress?.invoke(done + fileBytes, total)
+                        }
+                    }
+                    done += file.size
+                    onProgress?.invoke(done, total)
                 }
                 publishMarker(directory, markerName, revision, displayName)
                 if (!installed()) {
@@ -249,21 +285,32 @@ internal object ModelInstall {
             part.writeText(revision)
         } catch (e: IOException) {
             part.delete()
-            throw PpOcrModel.DownloadException("Could not write the revision marker for $displayName", e)
+            throw PpOcrModel.DownloadException(
+                "Could not write the revision marker for $displayName",
+                e,
+                PpOcrModel.DownloadException.Reason.STORAGE
+            )
         }
         if (marker.exists() && !marker.delete()) {
             part.delete()
-            throw PpOcrModel.DownloadException("Could not replace the revision marker for $displayName")
+            throw PpOcrModel.DownloadException(
+                "Could not replace the revision marker for $displayName",
+                reason = PpOcrModel.DownloadException.Reason.STORAGE
+            )
         }
         if (!part.renameTo(marker)) {
             part.delete()
-            throw PpOcrModel.DownloadException("Could not publish the revision marker for $displayName")
+            throw PpOcrModel.DownloadException(
+                "Could not publish the revision marker for $displayName",
+                reason = PpOcrModel.DownloadException.Reason.STORAGE
+            )
         }
     }
 
     private suspend fun fetchWithRetry(
         file: PpOcrModel.ModelFile,
-        destination: File
+        destination: File,
+        onBytes: ((Long) -> Unit)? = null
     ) {
         var last: IOException? = null
         if (!file.url.startsWith("https://")) {
@@ -271,7 +318,7 @@ internal object ModelInstall {
         }
         for (attempt in 0 until MAX_ATTEMPTS) {
             try {
-                PpOcrFetch.fetch(file.url, destination, file.size, file.sha256)
+                PpOcrFetch.fetch(file.url, destination, file.size, file.sha256, onBytes)
                 return
             } catch (e: CancellationException) {
                 throw e
@@ -284,7 +331,11 @@ internal object ModelInstall {
                 if (attempt < MAX_ATTEMPTS - 1) delay(RETRY_BACKOFF_MS shl attempt)
             }
         }
-        throw PpOcrModel.DownloadException("Could not download ${file.name}", last)
+        throw PpOcrModel.DownloadException(
+            "Could not download ${file.name}",
+            last,
+            PpOcrModel.DownloadException.Reason.TRANSPORT
+        )
     }
 
     private const val MAX_ATTEMPTS = 3
@@ -297,7 +348,8 @@ internal object ModelInstall {
  *
  * Redirects are followed explicitly and bounded, and every hop must keep the original URL's protocol
  * (an HTTPS model may not be redirected onto HTTP). Cancellation is checked between reads, so an
- * abandoned download stops before the next chunk.
+ * abandoned download stops before the next chunk. [onBytes] is called with the bytes written so far
+ * after every chunk, so a caller can report progress.
  *
  * Any failure — a bad status, a redirected-away protocol, too many redirects, a body larger than
  * expected, a bad size or hash, a cancellation — deletes the `.part` file and rethrows. Integrity and
@@ -314,7 +366,8 @@ internal object PpOcrFetch {
         url: String,
         destination: File,
         expectedSize: Long,
-        expectedSha256: String
+        expectedSha256: String,
+        onBytes: ((Long) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
         destination.parentFile?.mkdirs()
         val part = File(destination.parentFile, "${destination.name}.part")
@@ -363,6 +416,7 @@ internal object PpOcrFetch {
                                 output.write(buffer, 0, read)
                                 digest.update(buffer, 0, read)
                                 total += read
+                                onBytes?.invoke(total)
                                 if (total > expectedSize) {
                                     throw PpOcrModel.DownloadException(
                                         "${destination.name} is larger than the pinned $expectedSize bytes"

@@ -7,6 +7,7 @@
 package com.gaten.app.rn
 
 import android.content.Context
+import android.os.SystemClock
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -20,6 +21,7 @@ import com.gaten.app.ocr.RecognitionPreference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -33,15 +35,30 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Every call that touches storage runs on [Dispatchers.IO]. The reader confirms each download in the
  * settings UI — which warns that mobile data may incur charges — and the model downloaders
- * ([PpOcrModel.download], [MangaOcrModel.download]) verify their files. An engine already
- * downloading rejects a second request here instead of racing two writes over the same files. The
- * scope is cancelled with the module, so an in-flight download is cancelled rather than finishing
- * into a dead React context.
+ * ([PpOcrModel.download], [MangaOcrModel.download]) verify their files. Only one download runs at a
+ * time: a second request while one is in flight is refused here rather than racing two writes over
+ * the same files. The scope is cancelled with the module, so an in-flight download is cancelled
+ * rather than finishing into a dead React context.
+ *
+ * While a download runs the module emits [GatenBridgeEmitter.RECOGNITION_DOWNLOAD_PROGRESS], at most
+ * about five times a second, carrying the engine, the phase (`downloading` or `verifying`) and the
+ * cumulative byte counts; the events stop when the download's promise settles. [cancelDownload]
+ * aborts the download in flight, and its promise rejects with `DOWNLOAD_CANCELLED`; a failed one
+ * rejects with `DOWNLOAD_OFFLINE`, `DOWNLOAD_NO_SPACE`, `DOWNLOAD_VERIFY_FAILED`, or the generic
+ * `RECOGNITION_DOWNLOAD_FAILED` ([DownloadFailure]).
  */
 class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The download running now, and the lock that guards it. The React bridge calls
+     * [downloadRecognitionEngine] and [cancelDownload] on one thread, but the download itself
+     * finishes on [Dispatchers.IO] and clears these, so both sides meet here.
+     */
+    private val downloadLock = Any()
+    private var activeDownload: Job? = null
 
     /** Engine ids with a download running; guarded by its own concurrent set. */
     private val downloading = ConcurrentHashMap.newKeySet<String>()
@@ -102,7 +119,11 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /** Downloads one engine (Manga OCR or a PP-OCRv6 model), then answers with the refreshed state. */
+    /**
+     * Downloads one engine (Manga OCR or a PP-OCRv6 model), reporting progress as it goes, then
+     * answers with the refreshed state. Refused while another download is in flight, and before it
+     * starts when the device has too little free storage.
+     */
     @ReactMethod
     fun downloadRecognitionEngine(engineId: String, promise: Promise) {
         val engine = ENGINES.firstOrNull { it.id == engineId }
@@ -120,26 +141,92 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         val context = reactApplicationContext
         // The reader has already confirmed this tap in the settings UI, which warns about mobile
         // data; the model downloader owns the transfer and its file verification.
-        if (!downloading.add(engine.id)) {
-            promise.reject(CODE_DOWNLOAD_IN_PROGRESS, "That model is already downloading.")
+        synchronized(downloadLock) {
+            if (activeDownload != null) {
+                promise.reject(CODE_DOWNLOAD_IN_PROGRESS, "A model is already downloading.")
+                return
+            }
+            // The model is written beside its files under noBackupFilesDir; refuse before a byte is
+            // written if the free space cannot hold it. A zero answer (unknown) is not a refusal.
+            val needed = engineBytes(engine)
+            val free = context.noBackupFilesDir.usableSpace
+            if (free in 1 until needed) {
+                promise.reject(
+                    DownloadFailure.NO_SPACE,
+                    "Not enough free storage to download ${engineName(engine)}."
+                )
+                return
+            }
+            downloading.add(engine.id)
+            activeDownload = scope.launch { runDownload(context, engine, promise) }
+        }
+    }
+
+    /**
+     * Aborts the download running now, if any: its pending promise rejects with
+     * `DOWNLOAD_CANCELLED`, and the downloader removes the partial file. With nothing in flight it
+     * answers quietly.
+     */
+    @ReactMethod
+    fun cancelDownload(promise: Promise) {
+        val job = synchronized(downloadLock) { activeDownload }
+        if (job == null) {
+            promise.resolve(null)
             return
         }
-        scope.launch {
-            try {
-                download(context, engine)
-                // Publish the finished state: the id must be out of [downloading] before the
-                // refreshed settings are read, or they would still report the download running.
+        job.cancel()
+        promise.resolve(null)
+    }
+
+    /**
+     * Required by React Native's `NativeEventEmitter` on Android; the listener count is managed by
+     * the device emitter, so nothing is retained here. The event stream itself is emitted through
+     * [GatenBridgeEmitter].
+     */
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    /** See [addListener]. */
+    @ReactMethod
+    fun removeListeners(count: Double) {}
+
+    /** Runs one download to its end and settles its promise, reporting progress as it goes. */
+    private suspend fun runDownload(context: Context, engine: RecognitionMode, promise: Promise) {
+        val throttle = DownloadProgressThrottle(
+            intervalMs = PROGRESS_INTERVAL_MS,
+            nowMs = { SystemClock.uptimeMillis() },
+            emit = { phase, bytesDone, bytesTotal ->
+                emitProgress(engine.id, phase, bytesDone, bytesTotal)
+            }
+        )
+        try {
+            download(context, engine) { bytesDone, bytesTotal -> throttle.onBytes(bytesDone, bytesTotal) }
+            // Publish the finished state: the id must be out of [downloading] before the refreshed
+            // settings are read, or they would still report the download running.
+            downloading.remove(engine.id)
+            promise.resolve(settings(context))
+        } catch (e: CancellationException) {
+            promise.reject(CODE_DOWNLOAD_CANCELLED, "The model download was cancelled.")
+            throw e
+        } catch (e: Exception) {
+            promise.reject(DownloadFailure.code(e), e.message ?: "The model could not be downloaded.", e)
+        } finally {
+            throttle.stop()
+            synchronized(downloadLock) {
                 downloading.remove(engine.id)
-                promise.resolve(settings(context))
-            } catch (e: CancellationException) {
-                promise.reject(CODE_DOWNLOAD_CANCELLED, "The model download was cancelled.")
-                throw e
-            } catch (e: Exception) {
-                promise.reject(CODE_DOWNLOAD_FAILED, e.message ?: "The model could not be downloaded.", e)
-            } finally {
-                downloading.remove(engine.id)
+                activeDownload = null
             }
         }
+    }
+
+    /** One progress event: the engine, the phase, and the cumulative byte counts. */
+    private fun emitProgress(engineId: String, phase: String, bytesDone: Long, bytesTotal: Long) {
+        val payload = Arguments.createMap()
+        payload.putString("engine", engineId)
+        payload.putString("phase", phase)
+        payload.putDouble("bytesDone", bytesDone.toDouble())
+        payload.putDouble("bytesTotal", bytesTotal.toDouble())
+        GatenBridgeEmitter.emitRecognitionDownloadProgress(payload)
     }
 
     override fun invalidate() {
@@ -190,11 +277,15 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         else PpOcrModel.isInstalled(context, pp)
     }
 
-    /** Runs the downloader that owns [engine]; each verifies its own files. */
-    private suspend fun download(context: Context, engine: RecognitionMode) {
+    /** Runs the downloader that owns [engine]; each verifies its own files and reports progress. */
+    private suspend fun download(
+        context: Context,
+        engine: RecognitionMode,
+        onProgress: (bytesDone: Long, bytesTotal: Long) -> Unit
+    ) {
         val pp = engine.ppEngine()
-        if (pp == null) MangaOcrModel.download(context)
-        else PpOcrModel.download(context, pp)
+        if (pp == null) MangaOcrModel.download(context, onProgress)
+        else PpOcrModel.download(context, pp, onProgress)
     }
 
     companion object {
@@ -214,6 +305,8 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         private const val CODE_ALREADY_BUNDLED = "ENGINE_ALREADY_BUNDLED"
         private const val CODE_DOWNLOAD_IN_PROGRESS = "DOWNLOAD_IN_PROGRESS"
         private const val CODE_DOWNLOAD_CANCELLED = "DOWNLOAD_CANCELLED"
-        private const val CODE_DOWNLOAD_FAILED = "RECOGNITION_DOWNLOAD_FAILED"
+
+        /** At most one progress event per this many milliseconds; the contract asks for about five a second. */
+        private const val PROGRESS_INTERVAL_MS = 200L
     }
 }

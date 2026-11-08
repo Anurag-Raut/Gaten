@@ -105,14 +105,18 @@ object MangaOcrModel {
      * each file is pinned by HTTPS revision, size and SHA-256, installed atomically, with partial
      * downloads cleaned up. Throws [PpOcrModel.DownloadException] when it cannot complete.
      */
-    suspend fun download(context: Context) {
+    suspend fun download(
+        context: Context,
+        onProgress: ((bytesDone: Long, bytesTotal: Long) -> Unit)? = null
+    ) {
         ModelInstall.install(
             displayName = DISPLAY_NAME,
             directory = dir(context),
             markerName = REVISION_FILE,
             revision = REVISION,
             files = files,
-            installed = { isInstalled(context) }
+            installed = { isInstalled(context) },
+            onProgress = onProgress
         )
     }
 }
