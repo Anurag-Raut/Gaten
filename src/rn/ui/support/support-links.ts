@@ -17,12 +17,8 @@ export const REVIEW_URL = "https://play.google.com/store/apps/details?id=com.gat
 /** Said when a hand-off fails, and when a destination has not been filled in yet. */
 const OPEN_FAILED = "Couldn't open the page. Try again.";
 
-// TODO(owner): fill in the three donor urls when the pages exist. Until then every empty one
-// reports the failed hand-off rather than opening anything.
 export const SUPPORT_LINKS: ReadonlyArray<{label: string; url: string; icon: IconName}> = [
-  {label: "Buy Me a Coffee", url: "", icon: "open_in_new"},
-  {label: "Ko-fi", url: "", icon: "open_in_new"},
-  {label: "GitHub Sponsors", url: "", icon: "open_in_new"},
+  {label: "Buy Me a Coffee", url: "https://buymeacoffee.com/anuragraut", icon: "open_in_new"},
 ];
 
 /**
