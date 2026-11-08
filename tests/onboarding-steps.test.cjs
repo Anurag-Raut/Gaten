@@ -257,6 +257,56 @@ test('a clipped or missing measurement is never taken as the row height', () => 
   assert.equal(steps.acceptStepContentHeight(49), 49);
 });
 
+test('reduced motion lands a stepper on its end state at once, never on a zero-length clock', () => {
+  // The device case: a step read as expanded — chevron up, container sized — while a zero-duration
+  // withTiming never landed, so its opacity and height stayed at zero and the how-to stayed invisible.
+  for (const reduced of [true, false]) {
+    assert.deepEqual(steps.stepTarget(true, reduced), {value: 1, instant: reduced});
+    assert.deepEqual(steps.stepTarget(false, reduced), {value: 0, instant: reduced});
+  }
+  // The rule the stepper relies on: an instant target is written straight in, so it always lands.
+  assert.deepEqual(steps.stepTarget(true, true), {value: 1, instant: true});
+});
+
+test('a step opens, closes and opens again, however often the reader taps', () => {
+  // The device case: open worked, close worked, and the second open never came. The shrink of the
+  // close fed its own frames back in as measurements, overwriting the content's height with a sliver.
+  const read = (state, height, open) => steps.stepContentReducer(state, {height, open});
+
+  // Mounted shut, the content still lays itself out and is measured at its own height.
+  let state = read({measured: null}, 196, false);
+  assert.equal(state.measured, 196);
+
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    // Open: the readings are the content's own, and they cannot take the height away.
+    state = read(state, 196, true);
+    // Closing: the clip shrinks through a sliver to nothing; none of it is the content's height.
+    for (const clipFrame of [120, 40, 0]) {
+      state = read(state, clipFrame, false);
+    }
+    assert.equal(state.measured, 196, `cycle ${cycle + 1} must keep the content's height`);
+  }
+
+  // A change inside the open row (the hint line appearing) still raises the height.
+  assert.equal(read(state, 240, true).measured, 240);
+  // And a clipped zero while shut never takes it away again.
+  assert.equal(read(read(state, 240, true), 0, false).measured, 240);
+  // A reading that says nothing new is the same state object, so a layout event never loops.
+  const settled = {measured: 196};
+  assert.equal(read(settled, 196, true), settled);
+  assert.equal(read(settled, 196, false), settled);
+  assert.equal(read(settled, 0, true), settled);
+});
+
+test('the page moves up by exactly the field-to-keyboard overlap, and never the other way', () => {
+  // Field bottom at 800 with the keyboard's top at 700 and 12 dp of room → 112 up.
+  assert.equal(steps.keyboardShift(800, 700, 12), 112);
+  // Already clear of the keyboard: no shift, and never a negative one.
+  assert.equal(steps.keyboardShift(600, 700, 12), 0);
+  assert.equal(steps.keyboardShift(688, 700, 12), 0);
+  assert.equal(steps.keyboardShift(689, 700, 12), 1);
+});
+
 test('the action-area key carries the page\'s verified flag, so a done flip is never dropped', () => {
   // The reader's own case: lookup already on, PP-OCRv6 Medium absent, primary "Done" enabled. The
   // install lands and selects itself — the label, the disabled state and the skip labels are all

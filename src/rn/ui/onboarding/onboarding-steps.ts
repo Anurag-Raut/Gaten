@@ -64,6 +64,72 @@ export function acceptStepContentHeight(height: number): number | null {
   return Number.isFinite(height) && height > 0 ? height : null;
 }
 
+/** What a step's content knows: the natural height of what it holds, once it has been measured. */
+export interface StepContentState {
+  measured: number | null;
+}
+
+/** What a step's content hears: a height it laid itself out at, and whether the step was open. */
+export interface StepContentEvent {
+  height: number;
+  /** True while the content is open, so the clip is not holding it shut. */
+  open: boolean;
+}
+
+/**
+ * A step's content, as a state machine.
+ *
+ * The content's height is a property of the content, not of the clip in front of it, and a reading
+ * taken while the clip is shut belongs to the clip. The first version of this code took every
+ * reading, so the shrink of a close — its intermediate frames included — overwrote the real height
+ * with a sliver, and from then on the step could only ever open to that sliver: open, close, and
+ * nothing again. So a reading while the step is shut is ignored outright, a non-positive reading is
+ * ignored, and a real reading only ever raises the height — which is kept across open and close, so
+ * the reader can open the step as many times as they like.
+ */
+export function stepContentReducer(
+  state: StepContentState,
+  event: StepContentEvent,
+): StepContentState {
+  if (!event.open && state.measured != null) {
+    // The clip is shut: this reading is the clip's height, never the content's.
+    return state;
+  }
+  const next = acceptStepContentHeight(event.height);
+  // The same state object for the same height, so a re-laid-out content that has not changed its
+  // height never re-renders (a reading per render is how this loops).
+  if (next == null || next === state.measured) return state;
+  return {measured: next};
+}
+
+/** The value a stepper's clocked property lands on, and whether it lands at once. */
+export interface StepTarget {
+  /** 1 when the property is on (the content open, the rail filled, the disc done), else 0. */
+  value: number;
+  /** True when the value must be written straight in, never ridden over the row's clock. */
+  instant: boolean;
+}
+
+/**
+ * What a stepper's clocked property does, from whether it is on and whether motion is reduced.
+ *
+ * Reduced motion is not a zero-length animation: a `withTiming` of duration 0 never lands on the
+ * device, which is how a step could read as expanded — chevron up, container sized — while its
+ * opacity and height never arrived, and the how-to stayed invisible. With motion reduced the value
+ * is written straight in instead, so the end state is always exactly reached.
+ */
+export function stepTarget(on: boolean, reducedMotion: boolean): StepTarget {
+  return {value: on ? 1 : 0, instant: reducedMotion};
+}
+
+/**
+ * How far a page must move up so a field's bottom clears the keyboard: zero when the field already
+ * sits above the keyboard's top edge, the overlap plus a breathing [gap] otherwise.
+ */
+export function keyboardShift(fieldBottom: number, visibleBottom: number, gap: number): number {
+  return Math.max(0, fieldBottom + gap - visibleBottom);
+}
+
 /** A page's two rows and its verified-completion gate. */
 export interface StepSet {
   step1: StepStatus;

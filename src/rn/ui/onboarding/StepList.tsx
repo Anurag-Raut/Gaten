@@ -47,10 +47,12 @@ import {PAGE_EASING_REANIMATED, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {stepRowDuration} from "./onboarding-motion";
 import {
-  acceptStepContentHeight,
   connectorStateAfter,
   shouldMeasureStepContent,
+  stepContentReducer,
   stepStatusWord,
+  stepTarget,
+  type StepContentState,
   type StepStatus,
 } from "./onboarding-steps";
 
@@ -74,12 +76,13 @@ function StepConnector({filled, style}: {filled: boolean; style?: StyleProp<View
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const duration = stepRowDuration(reducedMotion);
-  const fill = useSharedValue(filled ? 1 : 0);
+  const target = stepTarget(filled, reducedMotion);
+  const fill = useSharedValue(target.value);
   useEffect(() => {
-    const next = filled ? 1 : 0;
-    fill.value =
-      duration === 0 ? next : withTiming(next, {duration, easing: PAGE_EASING_REANIMATED});
-  }, [filled, duration, fill]);
+    fill.value = target.instant
+      ? target.value
+      : withTiming(target.value, {duration, easing: PAGE_EASING_REANIMATED});
+  }, [target.value, target.instant, duration, fill]);
   const fillStyle = useAnimatedStyle(() => ({
     transformOrigin: "top" as const,
     transform: [{scaleY: fill.value}],
@@ -158,11 +161,13 @@ function StepMark({index, status}: {index: number; status: StepStatus}) {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const duration = stepRowDuration(reducedMotion);
-  const done = useSharedValue(status === "done" ? 1 : 0);
+  const target = stepTarget(status === "done", reducedMotion);
+  const done = useSharedValue(target.value);
   useEffect(() => {
-    const next = status === "done" ? 1 : 0;
-    done.value = duration === 0 ? next : withTiming(next, {duration, easing: PAGE_EASING_REANIMATED});
-  }, [status, duration, done]);
+    done.value = target.instant
+      ? target.value
+      : withTiming(target.value, {duration, easing: PAGE_EASING_REANIMATED});
+  }, [target.value, target.instant, duration, done]);
   const doneStyle = useAnimatedStyle(() => ({opacity: done.value}));
   const openStyle = useAnimatedStyle(() => ({opacity: 1 - done.value}));
   return (
@@ -206,39 +211,54 @@ function StepMark({index, status}: {index: number; status: StepStatus}) {
 /**
  * A step's content, clipped and grown to the height it measured.
  *
- * A measurement taken inside the clip is worthless: on device a child of a zero-height clipped
- * container lays out at zero, so the first (and only) layout event reported 0, and a row that opens
- * could never learn its height — it stayed shut. So an open content that nothing has measured yet is
- * laid out at its natural height for its first frame (visible, at once, no entrance), and only once
- * that real height is in hand does the clip take over. A zero or missing measurement is never
- * accepted as a height.
+ * The content's height is a property of the content, not of the clip in front of it. Two things
+ * follow, and both were learned on device:
  *
- * After that, [shown] drives both the height and the opacity over one clock, so the content is never
- * readable before its container has made room; a change inside an open row animates its own growth
- * the same way. Reduced motion lands at the same end state at once.
+ * - While a height is being measured the content is laid out in flow with the clip off, so the row
+ *   grows to the content's own height and the reader sees it at once. An open step that measured
+ *   itself inside a zero-height clip read zero, and stayed shut.
+ * - Once a height is known the content is out of the clip's flow, so the clip can never shrink what
+ *   the content measures. Left in flow, the shrink of a close fed back into the measurement — every
+ *   intermediate frame of the animation overwrote the real height with a sliver — and the step could
+ *   never open again after being closed once. That is what [stepContentReducer] now rules out.
+ *
+ * [shown] drives the open fraction (one clock for the height and the opacity, so the content is never
+ * readable before its container has made room) and the height follows the measured value; with motion
+ * reduced both are written straight in, never left to a zero-length animation that never lands.
  */
 function StepContent({shown, children}: {shown: boolean; children: React.ReactNode}) {
   const reducedMotion = useReducedMotion();
   const duration = stepRowDuration(reducedMotion);
-  // The content's real height, or null until it has been measured at its natural height.
-  const [measured, setMeasured] = useState<number | null>(null);
-  const lastMeasured = useRef(0);
+  const target = stepTarget(shown, reducedMotion);
+  const [state, setState] = useState<StepContentState>({measured: null});
+  const measured = state.measured;
   const height = useSharedValue(0);
-  const progress = useSharedValue(shown ? 1 : 0);
-  const initialised = useRef(false);
+  const progress = useSharedValue(target.value);
+  const placed = useRef(false);
 
-  // While nothing is measured the clip is not the thing on screen, so the open state is applied at
-  // once; once a height exists, opening and closing animate between it and zero.
+  // The open fraction, from the step's own open state alone — never from the value it happened to be
+  // holding, so an opening that follows a closing always has a real target to travel to.
   useEffect(() => {
     if (shown && measured == null) {
       progress.value = 1;
       return;
     }
-    progress.value = withTiming(shown ? 1 : 0, {
-      duration: stepRowDuration(reducedMotion),
-      easing: PAGE_EASING_REANIMATED,
-    });
-  }, [shown, measured, reducedMotion, progress]);
+    progress.value = target.instant
+      ? target.value
+      : withTiming(target.value, {duration, easing: PAGE_EASING_REANIMATED});
+  }, [shown, measured, target.value, target.instant, duration, progress]);
+
+  // The height the clip opens to: placed at once the first time the content's height is known, and
+  // animated from there on a change inside an open row.
+  useEffect(() => {
+    if (measured == null) return;
+    height.value = placed.current
+      ? target.instant
+        ? measured
+        : withTiming(measured, {duration, easing: PAGE_EASING_REANIMATED})
+      : measured;
+    placed.current = true;
+  }, [measured, target.instant, duration, height]);
 
   const measuring = shouldMeasureStepContent(shown, measured);
   const style = useAnimatedStyle(() => ({
@@ -248,22 +268,20 @@ function StepContent({shown, children}: {shown: boolean; children: React.ReactNo
   return (
     <Animated.View style={[{overflow: "hidden"}, measuring ? {opacity: 1} : style]}>
       <View
-        // Never shrink below its content: the clip is the row's height, not the content's.
-        style={{flexShrink: 0}}
+        style={
+          measuring
+            ? // In flow while nothing is measured: the row takes the content's own height and shows
+              // it straight away.
+              {flexShrink: 0}
+            : // Out of the clip's flow once measured: a child in flow inside a shut clip is laid out
+              // at the clip's height, and that reading must never become the row's height.
+              {position: "absolute", left: 0, right: 0, top: 0}
+        }
         onLayout={(event) => {
-          const next = acceptStepContentHeight(event.nativeEvent.layout.height);
-          if (next == null || next === lastMeasured.current) return;
-          lastMeasured.current = next;
-          setMeasured(next);
-          if (!initialised.current) {
-            initialised.current = true;
-            height.value = next;
-            return;
-          }
-          height.value =
-            duration === 0
-              ? next
-              : withTiming(next, {duration, easing: PAGE_EASING_REANIMATED});
+          // Read before the updater runs: the event is released once this handler returns, and an
+          // updater that read it later saw a null nativeEvent and crashed the app on device.
+          const height = event.nativeEvent.layout.height;
+          setState((current) => stepContentReducer(current, {height, open: shown}));
         }}
       >
         {children}

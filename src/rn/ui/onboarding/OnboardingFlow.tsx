@@ -29,7 +29,7 @@
  * page once that write lands. A write that cannot be saved keeps the page and offers a retry rather
  * than silently skipping the reader forward.
  */
-import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
+import React, {memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {
   AccessibilityInfo,
   Alert,
@@ -43,7 +43,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import {KeyboardAvoidingView} from "react-native-keyboard-controller";
+import {KeyboardAvoidingView, useReanimatedKeyboardAnimation} from "react-native-keyboard-controller";
 import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
 import Animated, {
   cancelAnimation,
@@ -510,7 +510,13 @@ function NarrativeCopy({
  * The primary keeps its fill while a page is checking, and the buttons sit at the end of the page's
  * own scroller, so large text and short screens still reach them.
  */
-function StepActions({visual, busy}: {visual: StepVisual | null; busy: boolean}) {
+const StepActions = memo(function StepActions({
+  visual,
+  busy,
+}: {
+  visual: StepVisual | null;
+  busy: boolean;
+}) {
   const {colors} = useTheme();
   if (visual == null) {
     return null;
@@ -558,13 +564,13 @@ function StepActions({visual, busy}: {visual: StepVisual | null; busy: boolean})
       />
     </View>
   );
-}
+});
 
 /**
  * The three-step progress track: three fixed quiet segments with one accent bar that sweeps to the
  * live step on the scene clock — the same travelling indicator, at a header's size.
  */
-function ProgressTrack({scene}: {scene: SharedValue<number>}) {
+const ProgressTrack = memo(function ProgressTrack({scene}: {scene: SharedValue<number>}) {
   const {colors} = useTheme();
   const barStyle = useAnimatedStyle(() => ({
     transform: [
@@ -609,7 +615,7 @@ function ProgressTrack({scene}: {scene: SharedValue<number>}) {
       />
     </View>
   );
-}
+});
 
 /**
  * The first-run setup flow. [step] is the page to show (0, 1 or 2); the shell reads it before the
@@ -1560,6 +1566,17 @@ function OnboardingShell({
   // A new page starts at its own top: the scroller is one instance for the whole flow, so a reader
   // who scrolled to reach the actions does not arrive on the next page already scrolled.
   const scrollRef = useRef<ScrollView>(null);
+  // The keyboard takes the bottom of the page, and the artwork above the scroller would take most of
+  // what is left. So the artwork recedes on the keyboard's own animation (the same recede the form
+  // anchor uses) and the scroller's keyboard-avoiding view hands the room to the copy and the steps.
+  // Reduced motion lands on the end state at once instead of following the keyboard's travel.
+  const {progress: keyboardProgress} = useReanimatedKeyboardAnimation();
+  useAnimatedReaction(
+    () => (reducedMotion ? Math.round(keyboardProgress.value) : keyboardProgress.value),
+    (value) => {
+      formProgress.value = value;
+    },
+  );
   useEffect(() => {
     scrollRef.current?.scrollTo({y: 0, animated: false});
   }, [step]);
@@ -2623,16 +2640,16 @@ function WaniKaniPage({
 
   return (
     <StepList style={{marginTop: spacing.l}}>
-      <StepRow
-        index={1}
-        total={2}
-        status={steps.step1}
-        title="Create a token"
-        hint="Need a token? Show me how"
-        onPress={() => setShowHowTo((current) => !current)}
-        expanded={showHowTo}
-        accessibilityHint="Shows how to create a WaniKani token"
-      >
+        <StepRow
+          index={1}
+          total={2}
+          status={steps.step1}
+          title="Create a token"
+          hint="Need a token? Show me how"
+          onPress={() => setShowHowTo((current) => !current)}
+          expanded={showHowTo}
+          accessibilityHint="Shows how to create a WaniKani token"
+        >
         <View style={{gap: spacing.s}}>
           <HowToLine number={1}>
             Open wanikani.com <Text style={strong}>settings</Text>, then{" "}
@@ -2716,6 +2733,6 @@ function WaniKaniPage({
           </Text>
         )}
       </StepRow>
-    </StepList>
+      </StepList>
   );
 }
