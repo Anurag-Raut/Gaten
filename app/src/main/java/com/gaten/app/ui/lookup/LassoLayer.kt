@@ -75,8 +75,9 @@ private const val LoopFillAlpha = 0.18f
 /** Opacity of the accent tint over the characters the lasso selected, once it is released. */
 private const val TextHighlightAlpha = 0.28f
 
-/** How far the selected-text highlight is rounded, in dp. */
-private val HighlightCorner = 4.dp
+/** How far the selected-text highlight is rounded, and how far it stands off the glyphs, in dp. */
+private val HighlightCorner = 6.dp
+private val HighlightPadding = 4.dp
 
 /**
  * Even-odd point-in-polygon test: true when ([x], [y]) is inside the closed loop through [polygon].
@@ -266,12 +267,15 @@ fun LassoLayer(
         if (textHighlights.isNotEmpty()) {
             // Released: the loop and the dim are gone, and only the characters the lasso read are
             // marked, each line as one rounded block in the reader's accent.
-            val corner = CornerRadius(cornerPx)
+            val corner = CornerRadius(HighlightCorner.toPx())
+            val pad = HighlightPadding.toPx()
             for (rect in textHighlights) {
+                // A little air around the glyphs, so the block never sits tight against the text.
+                val padded = rect.inflate(pad)
                 drawRoundRect(
                     color = primary.copy(alpha = TextHighlightAlpha),
-                    topLeft = rect.topLeft,
-                    size = rect.size,
+                    topLeft = padded.topLeft,
+                    size = padded.size,
                     cornerRadius = corner
                 )
             }
