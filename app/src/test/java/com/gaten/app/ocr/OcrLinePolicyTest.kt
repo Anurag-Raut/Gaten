@@ -53,11 +53,11 @@ class OcrLinePolicyTest {
 
     @Test
     fun anEmptyMlKitReadingAcceptsARoomyReading() {
-        // With no ML Kit reading, the floor (4 characters) sets the room for a replacement:
-        // a short reading is accepted, and 4 x 3 + 4 = 16 is the limit.
+        // With no ML Kit reading (a line the PP detector found) there is nothing to size the box
+        // by, so any readable reading is accepted; only the unreadable checks apply.
         assertTrue(OcrLinePolicy.acceptsEngineText("", "猫が水を飲む"))
         assertTrue(OcrLinePolicy.acceptsEngineText("", "猫".repeat(16)))
-        assertFalse(OcrLinePolicy.acceptsEngineText("", "猫".repeat(17)))
+        assertTrue(OcrLinePolicy.acceptsEngineText("", "猫".repeat(40)))
     }
 
     @Test
@@ -68,5 +68,23 @@ class OcrLinePolicyTest {
         assertTrue(OcrLinePolicy.isUnreadable("□"))
         assertFalse(OcrLinePolicy.isUnreadable("猫"))
         assertFalse(OcrLinePolicy.isUnreadable("…"))
+    }
+
+    @Test
+    fun aDetectorOnlyLineAcceptsALongReading() {
+        assertTrue(OcrLinePolicy.acceptsEngineText("", "あいうえおかきくけこさしすせそたちつてとなにぬねの"))
+        assertTrue(OcrLinePolicy.acceptsEngineText("  ", "猫が水を飲む"))
+    }
+
+    @Test
+    fun aDetectorOnlyLineStillRejectsPlaceholders() {
+        assertFalse(OcrLinePolicy.acceptsEngineText("", "[UNK]"))
+        assertFalse(OcrLinePolicy.acceptsEngineText("", "  "))
+        assertFalse(OcrLinePolicy.acceptsEngineText("", "□□"))
+    }
+
+    @Test
+    fun mlKitTextStillCapsTheReadingLength() {
+        assertFalse(OcrLinePolicy.acceptsEngineText("猫", "あ".repeat(25)))
     }
 }

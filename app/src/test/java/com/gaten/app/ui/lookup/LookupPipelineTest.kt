@@ -232,10 +232,10 @@ class LookupPipelineTest {
 
     @Test
     fun aLongCropReadingIsAccepted() {
-        // 18 characters: OcrLinePolicy's length heuristic would refuse a reading that long against
-        // an empty ML Kit line, and the whole selection is one line, so its length says nothing.
+        // 18 characters: the whole selection is one line, so its length says nothing, and
+        // OcrLinePolicy applies no length cap against an empty ML Kit line.
         val reading = "猫が水を飲む猫が水を飲む猫が水を飲む"
-        assertFalse(OcrLinePolicy.acceptsEngineText("", reading))
+        assertTrue(OcrLinePolicy.acceptsEngineText("", reading))
 
         val result = mergeLookup(reading, null, dictionaryOf("猫", "水", "飲む"))
 

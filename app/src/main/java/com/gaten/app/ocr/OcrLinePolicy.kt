@@ -43,6 +43,9 @@ object OcrLinePolicy {
      */
     fun acceptsEngineText(mlKitText: String, engineText: String): Boolean {
         if (isUnreadable(engineText)) return false
+        // A line the PP detector found has no ML Kit reading to size the box by: the reading is the
+        // only text it will ever have, so only the unreadable / placeholder check applies.
+        if (mlKitText.isBlank()) return true
         val estimated = maxOf(mlKitText.length, MIN_ESTIMATED_CHARS)
         return engineText.length <= estimated * LENGTH_FACTOR + LENGTH_SLACK
     }
