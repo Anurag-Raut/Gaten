@@ -31,16 +31,20 @@
  *
  * The whole artwork is decorative: hidden from screen readers and never a touch target.
  */
-import React from "react";
+import React, {memo} from "react";
 import Animated, {
   Extrapolation,
   interpolate,
   type SharedValue,
   useAnimatedProps,
   useAnimatedStyle,
+  useDerivedValue,
+  useReducedMotion,
+  withSpring,
 } from "react-native-reanimated";
-import Svg, {Circle, Ellipse, G, Path, type PathProps, Rect} from "react-native-svg";
+import Svg, {Circle, G, Path, type PathProps, Rect} from "react-native-svg";
 import {useTheme} from "../theme";
+import {BLOB_BODY_SPRING, BLOB_SLOSH_SPRING, blobPath} from "./onboarding-blob";
 
 /** The shared stage. Every scene is drawn in this box and scales with the flow's width. */
 export const SCENE_WIDTH = 340;
@@ -54,10 +58,6 @@ const HERO_HEIGHT = SCENE_HEIGHT + HERO_PAD * 2;
 /** The core's recede as the WaniKani form takes over; its complement is the anchor height. */
 const CORE_RECEDE = 0.55;
 const HERO_ANCHOR_HEIGHT = SCENE_HEIGHT * (1 - CORE_RECEDE);
-
-const DISC_CX = SCENE_WIDTH / 2;
-const DISC_CY = SCENE_HEIGHT / 2;
-const DISC_R = SCENE_HEIGHT / 2;
 
 /** The scene clock's three stops, one per setup page. */
 const STOPS: number[] = [0, 1, 2];
@@ -161,24 +161,35 @@ function Layer({style, children}: {style?: object; children: React.ReactNode}) {
  * a muted neutral picked to clear 3:1 non-text contrast against that disc — the light disc composites
  * to ~#EAE9F6, the dark to ~#22242E — while staying quieter than the cards' near-full-strength ink.
  */
-const INDIGO_LIGHT = {accent: "#4338CA", onAccent: "#FFFFFF", toriiInk: "#5B5B66"};
-const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111", toriiInk: "#9A9AA4"};
+// Candidate gate colours (light / dark, all >= 3:1 on the disc): soft Indigo #7871D8 / #717AAA,
+// neutral #3A3A44 / #C9C9D2, vermilion #C4523F / #E0806E.
+const INDIGO_LIGHT = {accent: "#4338CA", onAccent: "#FFFFFF", toriiInk: "#7871D8"};
+const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111", toriiInk: "#717AAA"};
 
 function useIndigo() {
   const {dark} = useTheme();
   return dark ? INDIGO_DARK : INDIGO_LIGHT;
 }
 
-/** The soft disc, faintly tinted with the accent over the surface variant. */
-function Disc() {
-  const {colors} = useTheme();
+/** The liquid blob, faintly tinted with the accent over the surface variant. */
+const REST_BLOB = blobPath(0, 0, 0);
+const AnimatedBlobPath = Animated.createAnimatedComponent(Path);
+
+function Disc({scene}: {scene: SharedValue<number>}) {
   const {accent} = useIndigo();
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  // Two springs trail the page clock; the gaps they leave deform the blob like liquid. Reduced motion
+  // follows the clock exactly, so the shape just snaps. At rest the spring stops and nothing runs.
+  const body = useDerivedValue(() => (reducedMotion ? scene.value : withSpring(scene.value, BLOB_BODY_SPRING)));
+  const slosh = useDerivedValue(() => (reducedMotion ? scene.value : withSpring(scene.value, BLOB_SLOSH_SPRING)));
+  const outline = useDerivedValue(() => blobPath(scene.value, body.value, slosh.value));
+  const baseProps = useAnimatedProps<PathProps>(() => ({d: outline.value}) as PathProps);
+  const tintProps = useAnimatedProps<PathProps>(() => ({d: outline.value}) as PathProps);
   return (
     <>
-      {/* A flat ground shadow resting just inside the disc's lower edge. */}
-      <Ellipse cx={DISC_CX} cy={DISC_CY + DISC_R - 10} rx={38} ry={3} fill={colors.onSurface} fillOpacity={0.07} />
-      <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={colors.surfaceVariant} fillOpacity={0.6} />
-      <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={accent} fillOpacity={0.08} />
+      <AnimatedBlobPath d={REST_BLOB} fill={colors.surfaceVariant} fillOpacity={0.6} animatedProps={baseProps as never} />
+      <AnimatedBlobPath d={REST_BLOB} fill={accent} fillOpacity={0.08} animatedProps={tintProps as never} />
     </>
   );
 }
@@ -358,10 +369,10 @@ function WaniKaniScene({success}: {success: SharedValue<number>}) {
   const ink = toriiInk;
   return (
     <>
-      {/* The torii, in the fixed neutral ink that reads against the disc. */}
-      <Path d="M80 62 Q112 69 144 62" stroke={ink} strokeWidth={2.6} />
-      <Path d="M88 75 H136" stroke={ink} strokeWidth={2} />
-      <Path d="M96 76 V130 M128 76 V130" stroke={ink} strokeWidth={2.4} />
+      {/* The torii: one flat colour, an upturned top beam, a second beam and two pillars. */}
+      <Path d="M88 60 Q119 69 150 60 L147 67.5 Q119 74 91 67.5 Z" fill={ink} />
+      <Rect x={91} y={77} width={56} height={4} rx={2} fill={ink} />
+      <Path d="M97.2 70 H101.8 L102.4 129 H96.6 Z M137.2 70 H141.8 L142.4 129 H136.6 Z" fill={ink} />
       {/* A 合点 card, and the Level 1 card with its short accent bar. */}
       <Card x={158} y={38} w={54} h={34} r={7} rotate={6}>
         <Glyphs text="合点" x={185} y={61} size={17} fill={colors.onSurface} anchor="middle" />
@@ -393,7 +404,12 @@ function WaniKaniScene({success}: {success: SharedValue<number>}) {
  * Every layer's motion is a pure function of those values, so a step change and its reverse travel
  * the same path.
  */
-export function OnboardingScene({
+/**
+ * Memoised: the scene's props are the flow's long-lived shared values and one width, so a step
+ * change re-renders the flow but not the ~60 SVG nodes inside this scene. Its poses already read
+ * the scene clock on the UI thread; nothing here needs a React render per page change.
+ */
+export const OnboardingScene = memo(function OnboardingScene({
   width,
   scene,
   entrance,
@@ -437,7 +453,7 @@ export function OnboardingScene({
     <Animated.View style={[{width, alignItems: "center", justifyContent: "center"}, boxStyle]}>
       <Animated.View style={[{width: SCENE_WIDTH, height: SCENE_HEIGHT}, innerStyle]}>
         <Layer>
-          <Disc />
+          <Disc scene={scene} />
         </Layer>
         <Layer style={lookupStyle}>
           <LookupScene />
@@ -451,4 +467,4 @@ export function OnboardingScene({
       </Animated.View>
     </Animated.View>
   );
-}
+});
