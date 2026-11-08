@@ -16,6 +16,7 @@ import {SafeAreaProvider} from "react-native-safe-area-context";
 import {KeyboardProvider} from "react-native-keyboard-controller";
 import {AppShell} from "./src/rn/ui/AppShell";
 import {primeOnboardingStep} from "./src/rn/ui/boot";
+import {SystemInsetsProvider} from "./src/rn/ui/SystemInsetsProvider";
 import {ThemeProvider} from "./src/rn/ui/theme";
 
 function App() {
@@ -28,11 +29,13 @@ function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-          <ThemeProvider>
-            <AppShell />
-          </ThemeProvider>
-        </KeyboardProvider>
+        <SystemInsetsProvider>
+          <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+            <ThemeProvider>
+              <AppShell />
+            </ThemeProvider>
+          </KeyboardProvider>
+        </SystemInsetsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
