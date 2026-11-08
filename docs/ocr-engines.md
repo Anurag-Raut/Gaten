@@ -1,10 +1,10 @@
 # Gaten OCR engines
 
-Status: current, documentation only. Describes the engines that turn a text line into text, how the
-optional one is delivered, their pinned sources, limits and licence. ML Kit is bundled and is the
-default; PP-OCRv6 Medium is the one optional engine and ships in neither the APK nor the base
-module. It records what was verified from the upstream files and the build, and claims no Android or
-device verification.
+Status: current, documentation only. Describes the engines that find text lines and turn them into
+text, how the optional one is delivered, their pinned sources, limits and licence. ML Kit is bundled
+and is the default; PP-OCRv6 Medium — a recogniser plus an optional detector — is the one optional
+engine and ships in neither the APK nor the base module. It records what was verified from the
+upstream files and the build, and claims no Android or device verification.
 
 ## Summary
 
@@ -13,10 +13,17 @@ also the recognizer that ships with Gaten: on a fresh install, with nothing down
 with ML Kit's own Japanese text recognition. PP-OCRv6 Medium can be chosen instead in
 **Settings → Text recognition**; there is no automatic image classifier.
 
+In that mode (the *Recommended* / `PP_MEDIUM` engine), when the pack carries the detector, the
+PP-OCRv6 medium detector finds the text lines and each box is read by the PP-OCRv6 medium
+recogniser. Standard mode (`ml_kit`) is ML Kit for both detection and recognition and never runs the
+PP detector. When the detector is missing, fails, or finds nothing, ML Kit finds the lines instead,
+so a pack that carries only `rec.onnx` and `dict.txt` still recognises text.
+
 | Engine | Role | Delivered how |
 | --- | --- | --- |
-| ML Kit (Japanese text recognition, `com.google.mlkit:text-recognition-japanese`) | Default recognizer out of the box, and the fallback for the optional engine | Bundled in the app |
-| PP-OCRv6 Medium (`PP-OCRv6_medium_rec`, 76.6 MB) | *Recommended* optional engine: ordinary screen and novel text | Google Play fast-follow asset pack (`ppocr`); no other install can get it |
+| ML Kit (Japanese text recognition, `com.google.mlkit:text-recognition-japanese`) | Default detector and recognizer out of the box, and the fallback for the optional engine | Bundled in the app |
+| PP-OCRv6 Medium detector (`PP-OCRv6_medium_det`, 62.0 MB) | *Recommended* optional engine's line finder, used when the pack carries it | Google Play fast-follow asset pack (`ppocr`); no other install can get it |
+| PP-OCRv6 Medium recogniser (`PP-OCRv6_medium_rec`, 76.6 MB) | *Recommended* optional engine: ordinary screen and novel text | Google Play fast-follow asset pack (`ppocr`); no other install can get it |
 
 Gaten itself downloads neither engine's weights: the pack is Google Play's own delivery, and the
 reader's **Download** only asks Play for it. An install Google Play did not make — a sideloaded APK,
@@ -32,9 +39,9 @@ to reconcile.
 
 **Google Play (fast-follow asset pack).** The `:ppocr` module is a `com.android.asset-pack` module
 with `packName = "ppocr"` and `deliveryType = "fast-follow"`, which carries
-`pp-ocr/medium/rec.onnx` and `pp-ocr/medium/dict.txt`. Play downloads it in the background after
-install — without the reader opening Settings and without Gaten asking — and verifies the transfer
-itself, so `ocr/PpOcrPack.kt` reads the files straight out of
+`pp-ocr/medium/rec.onnx`, `pp-ocr/medium/dict.txt` and the optional `pp-ocr/medium/det.onnx`. Play
+downloads it in the background after install — without the reader opening Settings and without Gaten
+asking — and verifies the transfer itself, so `ocr/PpOcrPack.kt` reads the files straight out of
 `AssetPackManager.getPackLocation("ppocr").assetsPath()`.
 
 - A fetch resolving is not completion: Play answers as soon as it has *accepted* the request.
@@ -54,9 +61,12 @@ itself, so `ocr/PpOcrPack.kt` reads the files straight out of
   non-terminal state first, so a conflated terminal state left by an earlier attempt cannot answer a
   new one. The settings read that answers the JS is itself bounded at 2 s, so a Play service that
   stops answering leaves the last reported state standing rather than an unpopulated screen.
-- Both files are resolved from **one** directory — the pack's — and only when both pinned sizes are
-  present; a `getPackLocation` result on its own is not "installed", so a half-extracted pack is never
-  handed to ONNX Runtime, and a pack that is missing or incomplete reads as "not installed".
+- The recogniser's two files are resolved from **one** directory — the pack's — and only when both
+  pinned sizes are present; a `getPackLocation` result on its own is not "installed", so a
+  half-extracted pack is never handed to ONNX Runtime, and a pack that is missing or incomplete reads
+  as "not installed". The detector is checked the same way but apart from that list
+  (`PpOcrModel.detectorFile`), so a pack whose detector is absent or short is still "installed" for
+  recognition.
 
 **No other delivery path.** A build Google Play did not install, or a Play install whose pack cannot
 be served because Play Core is unavailable on the device, cannot install the engine:
@@ -75,7 +85,8 @@ build never sees the pack at all.
 Play's published sizing guidance (from Play's documentation, not verified here): the base module's
 compressed download may be at most ~500 MB, each asset pack at most 1.5 GB, and fast-follow plus
 on-demand packs ~30 GB cumulatively; above ~200 MB a cellular install shows a non-blocking size
-dialog. The `ppocr` pack is 76.6 MB of one model plus its dictionary, far inside every limit.
+dialog. The `ppocr` pack is about 138.6 MB — the 76.6 MB recogniser, its 0.07 MB dictionary and the
+62.0 MB detector — far inside every limit.
 
 ### What the build verifies, and what it does not
 
@@ -91,16 +102,19 @@ build time, the app trusts the pack's files by size alone.
 | --- | --- | --- | --- |
 | PP-OCRv6 Medium ONNX | [PaddlePaddle/PP-OCRv6_medium_rec_onnx](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx) @ `50c7eacafc52fa7bcf4194e8cd08e46f8558504b`, `inference.onnx` | 76,554,979 | `9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba` |
 | Dictionary | [PaddlePaddle/PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) @ `b03f46425e8ff4442b268ce449e3eef758146cd4`, `ppocr/utils/dict/ppocrv6_dict.txt` | 74,947 | `b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d` |
+| PP-OCRv6 Medium detector ONNX | [PaddlePaddle/PP-OCRv6_medium_det_onnx](https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx) @ `61323801669c338b7891481ec7bac61ce31b576a`, `inference.onnx` | 62,032,837 | `eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1` |
 
-Total 76,629,926 B (76.6 MB, model + dictionary), the same catalogue the settings screen reports as
-the download size. `ppocr/build.gradle.kts` carries these source pins and verifies them when it stages
-the pack; `ocr/PpOcrModel.kt` carries only the file names and their exact sizes, which is what it
-checks on the pack Play delivered. The two lists must agree — a stale size there would read a
-half-delivered pack as installed.
+Total 138,662,763 B (about 138.6 MB, recogniser + dictionary + detector). The detector is staged as
+`det.onnx`. `ppocr/build.gradle.kts` carries these source pins and verifies them when it stages the
+pack; `ocr/PpOcrModel.kt` carries only the file names and their exact sizes, which is what it checks
+on the pack Play delivered. The two lists must agree — a stale size there would read a half-delivered
+pack as installed.
 
-## Graph contract
+## Graph contracts
 
-| | PP-OCRv6 Medium |
+### Recogniser
+
+| | PP-OCRv6 Medium recogniser |
 | --- | --- |
 | Input | `x` float32 `[N, 3, 48, W]` (N and W symbolic; the app runs N = 1) |
 | Output | `fetch_name_0` float32 `[N, T, 18710]` |
@@ -114,25 +128,41 @@ The graph was read off the ONNX file itself: ONNX IR 6, opset 11, about 19.1M pa
 `PpOcrEngine` refuses a session whose input, output or class count does not match this contract,
 rather than decoding a mismatched model/dictionary pair into garbage.
 
+### Detector
+
+| | PP-OCRv6 Medium detector (`det.onnx`) |
+| --- | --- |
+| Input | `x` float32 `[1, 3, H, W]` (H and W dynamic, both multiples of 32) |
+| Output | probability map `[1, 1, H, W]` float32 in `[0, 1]` |
+| Preprocess | longest side capped at 960, both sides rounded to multiples of 32, planar BGR, `(px/255 - mean) / std` with mean 0.485/0.456/0.406 and std 0.229/0.224/0.225 |
+| Post-process | DB: binarise at 0.2, 8-connected components, drop a short side under 3 map px, mean box score ≥ 0.45, unclip 1.4, axis-aligned boxes |
+| Used by | `PpOcrDetector`, in Enhanced mode only |
+
+`DbPostProcess` turns the detector's probability map into boxes in pure Kotlin, with no OpenCV on the
+device, and runs on the same ONNX Runtime CPU FP32 as the recogniser.
+
 ## How Gaten uses it
 
 `RecognitionMode` is one of `ml_kit` (default) or `medium`. The choice is the reader's; there is no
 classifier. ML Kit is bundled and always installed, so it is what a fresh install reads with, and it
-is the fallback: at read time an engine that is not installed, fails, or returns blank / placeholder
+is the fallback for both steps. In `medium`, `DetectionRouting` runs the PP detector only when the
+detector and the recogniser are both on disk, and uses its boxes only when it returned at least one;
+a detector that is missing, fails, or finds nothing leaves ML Kit to find the lines. Recognition
+then falls back the same way: an engine that is not installed, fails, or returns blank / placeholder
 / no-Japanese text leaves ML Kit's reading in place — the screen index's own reading of the line for
 the overlay, or a fresh ML Kit read of the crop for a circle or a tap, whose rectangle the index may
-not cover. Because the engine is a recognizer, a fallback only happens when it produces nothing
-usable, not when it produces confident-but-wrong text. With `ml_kit` selected there is nothing to
-fall back from: the ML Kit reading is the answer.
+not cover. Because the engine is a recognizer, a recognition fallback only happens when it produces
+nothing usable, not when it produces confident-but-wrong text. With `ml_kit` selected the PP detector
+is never run and the ML Kit reading is the answer.
 
 A stored `manga_ocr` or `manga` value from an older build migrates to `medium` rather than to the
 default, so a reader who had chosen a downloadable engine keeps one; a missing or unknown value
 becomes `ml_kit`.
 
-At most one ONNX session is resident. `OcrModels` releases it after 90 seconds idle, and the session
-is rebuilt when the pack's files change — their path, size and modification time are the key — so a
-pack update, whose extraction path differs, is picked up instead of being served from a stale
-session.
+Each ONNX engine keeps at most one session resident. `OcrModels` releases them after 90 seconds
+idle, and a session is rebuilt when the file behind it changes — path, size and modification time are
+the key — so a pack update, whose extraction path differs, is picked up instead of being served from
+a stale session.
 
 ## Limits
 
@@ -149,8 +179,9 @@ roughly 12 MB at `T` = 160.
 
 The recognizer is not natively vertical. A crop taller than wide is rotated a quarter turn
 counter-clockwise before it is fed (`PpOcrGeometry` / `PpOcrPreprocess`), matching the upstream
-reference pipeline (`cv2.ROTATE_90_COUNTERCLOCKWISE`). Detection always comes from ML Kit, and with
-`ml_kit` selected so does recognition.
+reference pipeline (`cv2.ROTATE_90_COUNTERCLOCKWISE`). In `ml_kit` mode detection and recognition
+both come from ML Kit and the PP detector never runs; in `medium` the PP detector finds the lines (or
+ML Kit does, when it is absent, fails, or finds nothing) and each box is read by the PP recogniser.
 
 ### Multiline regions
 
@@ -168,8 +199,8 @@ Kit's own runtime, which the app already includes for detection. Play Core's ass
 exist.
 
 - ABI: the 1.31.0 AAR ships `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`; Gaten packages
-  `arm64-v8a`, `armeabi-v7a` and `x86_64` (`app/build.gradle.kts` split). One FP32 ONNX runs on
-  every ABI.
+  `arm64-v8a`, `armeabi-v7a` and `x86_64` (`app/build.gradle.kts` split). Both ONNX models are FP32
+  and run on every ABI.
 - minSdk 29 (Android 10). CPU execution provider. R8-minified builds need
   `-keep class ai.onnxruntime.** { *; }` (present in `app/proguard-rules.pro`).
 - Memory: peak resident RAM was not measured. It exceeds the model file size — ORT holds the weights
@@ -178,13 +209,15 @@ exist.
 
 ## Attribution and licence
 
-The optional engine and its dictionary are Apache License 2.0; ML Kit is Google's, under the ML Kit
-terms of service; Play Core's asset-delivery client is Google's, under the Play Core SDK terms.
+The optional engine, its dictionary and its detector are Apache License 2.0; ML Kit is Google's,
+under the ML Kit terms of service; Play Core's asset-delivery client is Google's, under the Play Core
+SDK terms.
 
 - ML Kit Japanese text recognition: Google LLC, bundled and used on-device
   ([ML Kit terms](https://developers.google.com/ml-kit/terms)).
-- PP-OCRv6 Medium: PaddlePaddle `PP-OCRv6_medium_rec_onnx` (Apache-2.0). Dictionary:
-  PaddlePaddle/PaddleOCR (Apache-2.0).
+- PP-OCRv6 Medium recogniser: PaddlePaddle `PP-OCRv6_medium_rec_onnx` (Apache-2.0). Dictionary:
+  PaddlePaddle/PaddleOCR (Apache-2.0). Detector: PaddlePaddle `PP-OCRv6_medium_det_onnx`
+  (Apache-2.0).
 - Play Asset Delivery client: Google LLC, `com.google.android.play:asset-delivery`.
 
 The Apache-2.0 text is bundled at `app/src/main/assets/licenses/PP-OCRv6-Apache-2.0.txt`; the
@@ -196,9 +229,10 @@ attributed.
 
 ## Verification
 
-Done, on this revision: both pinned files were fetched over HTTPS and hash-verified — `rec.onnx`
-76,554,979 B `9c09abf0…`, `dict.txt` 74,947 B `b5f2bfe2…`, the dictionary holding 18,708 lines and so
-18,710 output classes once the blank and the trailing space are counted — and the ONNX graph was read
+Done, on this revision: the pinned files were fetched over HTTPS and hash-verified — `rec.onnx`
+76,554,979 B `9c09abf0…`, `dict.txt` 74,947 B `b5f2bfe2…`, `det.onnx` 62,032,837 B `eb13b44b…`, the
+dictionary holding 18,708 lines and so 18,710 output classes once the blank and the trailing space
+are counted — and the recogniser's ONNX graph was read
 with `onnx` 1.23.2: IR 6, opset `ai.onnx` 11, input `x` `[N, 3, 48, W]` with both dynamic dimensions
 symbolic, output `fetch_name_0` `[N, …, 18,710]`, 254 initializers totalling 19,115,263 parameters.
 
@@ -208,9 +242,9 @@ with `--offline`, so neither needed the pack, its staged assets or the network, 
 carry no recognizer weights — the largest entries of the arm64 release APK are
 `assets/db/jmdict.sqlite` (109,486,080 B), `assets/db/examples.sqlite` (59,252,736 B),
 `lib/arm64-v8a/libonnxruntime.so` (34,208,672 B) and `assets/db/rtk.sqlite` (5,988,352 B). The bundle
-build ran `stagePpOcrAssets`, which fetched and hash-verified both files into the pack, and the
-resulting AAB carries `ppocr/assets/pp-ocr/medium/rec.onnx` (76,554,979 B) and
-`ppocr/assets/pp-ocr/medium/dict.txt` (74,947 B). No Manga OCR symbol (`MangaOcr*`, `MANGA_OCR`,
+build ran `stagePpOcrAssets`, which fetched and hash-verified the pinned files into the pack, so the
+pack carries `pp-ocr/medium/rec.onnx` (76,554,979 B), `pp-ocr/medium/dict.txt` (74,947 B) and the
+optional `pp-ocr/medium/det.onnx` (62,032,837 B). No Manga OCR symbol (`MangaOcr*`, `MANGA_OCR`,
 `manga_ocr`, `PP_MANGA`) or `fetch_manga` tool remains in the tree; the two survivals are intentional
 and named in the PR: the gitignore entry and the `ignoreAssetsPattern` that keep a stale
 `assets/manga-ocr` directory out of the build, and the retired `manga_ocr`/`manga` ids that
