@@ -30,7 +30,7 @@
  * source that cannot be read is named once — in its own section, with the one action that fixes it —
  * while the sections that read it draw a motif and a line of their own instead of repeating the action.
  */
-import React, {useCallback, useEffect, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useIsFocused} from "@react-navigation/native";
@@ -537,7 +537,8 @@ export function AnalyticsScreen({
   const matureShare = share(collectionCounts?.mature ?? null, totalCards);
   // One array of parts for the bar and its key: both read the same counts and the same tones, so a
   // swatch can never name a colour the bar above it did not draw.
-  const ankiParts: DistributionPart[] =
+  const ankiParts = useMemo<DistributionPart[]>(
+    () =>
     collectionCounts == null
       ? []
       : [
@@ -545,14 +546,17 @@ export function AnalyticsScreen({
           {key: "learning", label: "Learn.", spoken: "Learning", count: collectionCounts.learning, color: colors.accent, opacity: ANKI_INTENSITY[1]},
           {key: "young", label: "Young", count: collectionCounts.young, color: colors.accent, opacity: ANKI_INTENSITY[2]},
           {key: "mature", label: "Mature", count: collectionCounts.mature, color: colors.accent, opacity: ANKI_INTENSITY[3]},
-        ].map((part) => ({...part, value: formatCount(part.count)}));
+        ].map((part) => ({...part, value: formatCount(part.count)})),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [collection?.new, collection?.learning, collection?.young, collection?.mature, colors.accent]
+  );
 
   // --- WaniKani -------------------------------------------------------------
   const stages = wkData?.stages ?? [];
   const active = activeStages(stages);
   const activeSubjects = active.length > 0 ? active.reduce((sum, stage) => sum + stage.count, 0) : null;
   const levelShare = share(wkData?.level ?? null, wkData?.maxLevelGranted ?? null);
-  const srsParts: DistributionPart[] = active.map((stage, index) => ({
+  const srsParts = useMemo<DistributionPart[]>(() => active.map((stage, index) => ({
     key: stage.key,
     // WaniKani's own bucket names carry the stage numbers ("Guru 5-6"); the key needs the word alone
     // to fit five of them on a line, and the bar's spoken summary keeps the full name.
@@ -562,7 +566,7 @@ export function AnalyticsScreen({
     value: formatCount(stage.count),
     color: colors.accent,
     opacity: SRS_INTENSITY[index % SRS_INTENSITY.length],
-  }));
+  })), [stages, colors.accent]);
 
   // A refresh can stop drawing a category the reader had chosen — a WaniKani stage the payload no
   // longer names. Drop that choice so no chart highlights a key that is not on screen. The joined key
