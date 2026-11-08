@@ -10,10 +10,13 @@
 <!--
    Backup rules for API 30 and below (data_extraction_rules.xml covers API 31+).
 
-   The manga-ocr weights are ~117 MB under filesDir/manga-ocr and are downloaded on demand, so they
-   are excluded here and from device transfer: restoring or transferring them would only waste quota
-   on files the app can fetch again (and would leave a half-written set if the transfer is partial).
+   The optional PP-OCRv6 Medium model is a ~77 MB download under the in-app model directory, so it is
+   excluded here and from device transfer: restoring or transferring it would only waste quota on
+   files the app can fetch again (and would leave a half-written set if the transfer were partial).
+   The file already lives under no_backup, which Android never backs up — the exclusion keeps that
+   guarantee explicit. A copy delivered by Google Play's asset pack lives in Play's own storage and
+   is not part of the app's backup either.
 -->
 <full-backup-content>
-    <exclude domain="file" path="manga-ocr" />
+    <exclude domain="file" path="pp-ocr" />
 </full-backup-content>

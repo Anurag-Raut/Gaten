@@ -6,9 +6,9 @@
   authority: present-tense rules for Home, the study hubs, review and lessons, Analytics, Settings,
   the screen lookup and the shared tokens. The filename keeps `v1` for stable links.
 - [Text recognition engines](ocr-engines.md) — the recognition engines Gaten reads a line with: the
-  bundled ML Kit default and the downloadable manga-ocr and PP-OCRv6 recognizers, with their pinned
-  upstream sources and SHA-256, graph shapes, preprocessing, limits, the on-demand download
-  confirmation and the fallback behaviour.
+  bundled ML Kit default and the optional PP-OCRv6 Medium recognizer, with their pinned upstream
+  sources and SHA-256, graph shapes, preprocessing, limits, the Play fast-follow asset pack, the
+  in-app download confirmation and the fallback behaviour.
 - [Analytics plan and decisions](analytics/PLAN.md) — the single-page sections, the data contract
   behind every figure, the accent-only colour roles for all seven accents in both modes, the state
   model, the limits and the verification captures.

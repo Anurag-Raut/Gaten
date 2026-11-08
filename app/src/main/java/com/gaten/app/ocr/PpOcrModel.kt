@@ -6,6 +6,7 @@
 
 package com.gaten.app.ocr
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CancellationException
@@ -23,37 +24,36 @@ import java.security.MessageDigest
 import kotlin.coroutines.coroutineContext
 
 /**
- * The optional PP-OCRv6 recognition models, fetched on demand.
+ * The optional PP-OCRv6 recognition model, installed one of two ways.
  *
- * Both are line recognisers only: the boxes come from the detector that is already there (ML Kit /
- * [ScreenLineReader]), so nothing here detects or captures. Two engines are offered —
+ * A line recogniser only: the boxes come from the detector that is already there (ML Kit /
+ * [ScreenLineReader]), so nothing here detects or captures. On a Google Play install the files come
+ * from the fast-follow asset pack [PpOcrPack] carries — Play delivers it after install, without the
+ * reader opening Settings, and verifies the transfer itself. On any other install, and when Play
+ * cannot serve the pack, the reader's explicit Download fetches the pinned files in-app through
+ * [ModelInstall], over whatever connection the device has (the settings screen warns about mobile
+ * data before starting one), following a bounded number of same-protocol redirects over HTTPS and
+ * checking each file against its exact size and SHA-256 before it is renamed into place, so a
+ * partial or tampered download can never be mistaken for an installed model.
  *
- *  - [Engine.MEDIUM]: PaddlePaddle's official `PP-OCRv6_medium_rec` ONNX (76.6 MB), for ordinary
- *    screen and novel text. 50 languages, one model.
- *  - [Engine.MANGA]: Kellenok's `manga_rec_v0.2` ONNX (21.2 MB), a PP-OCRv6-small fine-tune for
- *    manga lettering, stylised fonts and outlined thumbnail text.
+ * The graph was read off the ONNX file itself: input `x` float32 `[N,3,48,W]` (W dynamic), output
+ * `fetch_name_0` float32 `[N,T,18710]` with `T` about `W/8`.
  *
- * Both take the same `ppocrv6_dict.txt` (18,708 symbols); the two upstream copies are byte-identical
- * and each source is pinned and hash-verified separately below. Both graphs were read from the ONNX
- * files themselves: input `x` float32 `[N,3,48,W]` (W dynamic), output `fetch_name_0` float32
- * `[N,T,18710]` with `T` about `W/8`.
- *
- * Nothing is downloaded unless [download] is called: [PpOcrEngine] only ever reads files that are
- * already installed. A transfer uses whatever connection the device has (the settings screen warns
- * about mobile data before starting one), follows a bounded number of same-protocol redirects over
- * HTTPS, and is checked against the file's exact size and SHA-256 before it is renamed into place, so
- * a partial or tampered download can never be mistaken for an installed model. Files live under
- * [Context.getNoBackupFilesDir], so Android's backup never carries them.
+ * [PpOcrEngine] only ever reads files that are already installed; nothing is downloaded until the
+ * reader asks. In-app files live under [Context.getNoBackupFilesDir], so Android's backup never
+ * carries them, and are kept strictly apart from the pack's own copy.
  */
 object PpOcrModel {
     private const val TAG = "GatenOcr"
 
     /**
-     * The upstream recognition models this app can install.
+     * The upstream recognition model this app can install.
      *
-     * [revision] is this catalog's identity for the engine: it is written next to the files once an
-     * install succeeds, and [isInstalled] requires it to still match, so changing an upstream file
-     * forces a re-download. [approximateDownloadBytes] is the sum of the pinned file sizes.
+     * [revision] is this catalog's identity for the engine: the in-app downloader writes it next to
+     * the files once an install succeeds, and [isInstalled] requires it to still match, so changing
+     * an upstream file forces a re-download. A pack install has no such marker — Play owns those
+     * files — so it is identified by its sizes and its location instead.
+     * [approximateDownloadBytes] is the sum of the pinned file sizes.
      */
     enum class Engine(
         val id: String,
@@ -61,8 +61,7 @@ object PpOcrModel {
         val revision: String,
         val approximateDownloadBytes: Long
     ) {
-        MEDIUM("medium", "PP-OCRv6 Medium", "ppocrv6-medium-onnx-50c7eaca", 76_629_926L),
-        MANGA("manga", "PP-OCRv6 Manga v0.2", "ppocrv6-manga-02af751f", 21_242_487L)
+        MEDIUM("medium", "PP-OCRv6 Medium", "ppocrv6-medium-onnx-50c7eaca", 76_629_926L)
     }
 
     /** One file to install: where it comes from, and what it must be. */
@@ -73,13 +72,13 @@ object PpOcrModel {
         val size: Long
     )
 
-    private const val MODEL_FILE = "rec.onnx"
-    private const val DICT_FILE = "dict.txt"
+    internal const val MODEL_FILE = "rec.onnx"
+    internal const val DICT_FILE = "dict.txt"
     private const val REVISION_FILE = "revision"
 
     // PaddlePaddle/PP-OCRv6_medium_rec_onnx @ 50c7eacafc52fa7bcf4194e8cd08e46f8558504b
     // (ONNX IR 6, opset 11; dict: PaddlePaddle/PaddleOCR @ b03f46425e8ff4442b268ce449e3eef758146cd4).
-    private val MEDIUM_FILES = listOf(
+    internal val files = listOf(
         ModelFile(
             MODEL_FILE,
             "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/" +
@@ -96,47 +95,36 @@ object PpOcrModel {
         )
     )
 
-    // Kellenok/PP-OCRv6_manga @ 02af751fcea728fba69ee421a95838f3e549daa2 (ONNX IR 7, opset 14).
-    private val MANGA_FILES = listOf(
-        ModelFile(
-            MODEL_FILE,
-            "https://huggingface.co/Kellenok/PP-OCRv6_manga/resolve/" +
-                "02af751fcea728fba69ee421a95838f3e549daa2/rec/manga_rec_v0.2.onnx",
-            "de12c84c63e62c80339e882e675983d886670dcb6f0147e1ed041afd6fa81888",
-            21_167_540L
-        ),
-        ModelFile(
-            DICT_FILE,
-            "https://huggingface.co/Kellenok/PP-OCRv6_manga/resolve/" +
-                "02af751fcea728fba69ee421a95838f3e549daa2/ppocrv6_dict.txt",
-            "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
-            74_947L
-        )
-    )
-
-    internal fun files(engine: Engine): List<ModelFile> = when (engine) {
-        Engine.MEDIUM -> MEDIUM_FILES
-        Engine.MANGA -> MANGA_FILES
-    }
-
-    /** The directory an engine's files live in, never included in Android's backup. */
-    internal fun dir(context: Context, engine: Engine): File =
+    /** The in-app install directory, never included in Android's backup. */
+    internal fun localDir(context: Context, engine: Engine): File =
         File(context.noBackupFilesDir, "pp-ocr/${engine.id}")
 
+    /**
+     * The directory [modelFile] and [dictFile] resolve to: the fast-follow pack's copy when Play has
+     * delivered a complete one, the in-app directory otherwise. Both files always come from the same
+     * directory, so a half-delivered pack can never be paired with a local file.
+     */
+    internal fun dir(context: Context, engine: Engine): File =
+        PpOcrPack.completeDir(context, files) ?: localDir(context, engine)
+
     /** The ONNX recogniser for [engine]. */
-    internal fun modelFile(context: Context, engine: Engine): File = File(dir(context, engine), MODEL_FILE)
+    internal fun modelFile(context: Context, engine: Engine): File =
+        File(dir(context, engine), MODEL_FILE)
 
     /** The character dictionary for [engine]. */
-    internal fun dictFile(context: Context, engine: Engine): File = File(dir(context, engine), DICT_FILE)
+    internal fun dictFile(context: Context, engine: Engine): File =
+        File(dir(context, engine), DICT_FILE)
 
     /**
-     * True when [engine]'s files are present at their pinned sizes and the revision marker matches
-     * the catalog, i.e. [PpOcrEngine] can load them. Cheap: no hashing, so it is safe on every call.
-     * A missing or unreadable marker reads as "not installed" rather than throwing.
+     * True when [PpOcrEngine] can load [engine]'s files. The pack's copy counts when both files are
+     * at their pinned sizes — Play verified the transfer, and the build verified the staged copy by
+     * SHA-256 — while the in-app copy must additionally carry the matching revision marker. Cheap:
+     * the marker read is the only I/O, so it is safe on every call.
      */
     fun isInstalled(context: Context, engine: Engine): Boolean {
-        val directory = dir(context, engine)
-        if (files(engine).any { !it.isPresentIn(directory) }) return false
+        if (PpOcrPack.completeDir(context, files) != null) return true
+        val directory = localDir(context, engine)
+        if (files.any { !it.isPresentIn(directory) }) return false
         return try {
             File(directory, REVISION_FILE).readText().trim() == engine.revision
         } catch (e: Exception) {
@@ -146,40 +134,45 @@ object PpOcrModel {
     }
 
     /**
-     * Downloads and installs [engine]'s files, explicitly requested by the user. The transfer uses
-     * the device's current connection — the settings screen asks before starting one and warns about
-     * mobile data — through the platform's normal routing; a retry opens a fresh connection, which may
-     * pick up a different network but can also fail normally.
+     * Installs [engine]'s files, explicitly requested by the user.
      *
-     * Each file is fetched to a `.part` beside its destination, checked against its pinned size and
-     * SHA-256, and only then renamed into place; a failure removes that partial file and throws. A
-     * file already at its pinned size is re-hashed before it is trusted, so a leftover from an
-     * interrupted run is never blessed unverified. Retryable transport errors are retried with
-     * backoff; an integrity failure stops immediately.
+     * On a Play install this drives Play's own asset-pack fetch and resolves once the pack is
+     * installed; a Play install the pack cannot serve returns false and falls through to the in-app
+     * downloader, which is also the only path on any other install. Either way the caller does not
+     * need to know which one ran — the files end up somewhere [isInstalled] reads.
      *
-     * Safe to call from several coroutines: installs are serialised on one lock.
+     * [activity] is only needed when Play asks the user to confirm a download over mobile data; a
+     * null activity simply leaves that prompt to Play's own notification.
+     *
+     * Safe to call from several coroutines: the in-app path serialises installs on one lock.
      */
-    suspend fun download(context: Context, engine: Engine) {
+    suspend fun download(context: Context, engine: Engine, activity: Activity? = null) {
+        if (PpOcrPack.ensureInstalled(context, files, activity)) return
         ModelInstall.install(
             displayName = engine.displayName,
-            directory = dir(context, engine),
+            directory = localDir(context, engine),
             markerName = REVISION_FILE,
             revision = engine.revision,
-            files = files(engine),
+            files = files,
             installed = { isInstalled(context, engine) }
         )
     }
 
     /**
-     * The revisions of the engines currently installed, `id@revision` joined by `;` in enum order, or
-     * an empty string when none is. A caller can show it or cache against it; a change means the
-     * installed files differ from what this catalog describes.
+     * The installed identity, `id@source` joined by `;` in enum order, or an empty string when the
+     * model is not installed. An in-app install reports the catalog revision it wrote; a pack
+     * install reports the pack's own name — Play versions the pack with the app bundle, so the
+     * pack's revision is not this catalog's to record, but a change of delivery still changes the
+     * answer for a caller caching against it.
      */
-    fun revision(context: Context): String = Engine.entries
-        .filter { isInstalled(context, it) }
-        .joinToString(";") { "${it.id}@${it.revision}" }
+    fun revision(context: Context): String {
+        val fromPack = PpOcrPack.completeDir(context, files) != null
+        return Engine.entries
+            .filter { isInstalled(context, it) }
+            .joinToString(";") { "${it.id}@${if (fromPack) PpOcrPack.PACK_NAME else it.revision}" }
+    }
 
-    /** A download that cannot be completed: wrong size or hash, or transport gave up. */
+    /** A download that cannot be completed: wrong size or hash, or a transport/Play failure. */
     class DownloadException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
     private fun ModelFile.isPresentIn(directory: File): Boolean {
@@ -189,8 +182,8 @@ object PpOcrModel {
 }
 
 /**
- * Installs a catalogue of pinned files, shared by every on-demand OCR model ([PpOcrModel]'s two
- * engines and [MangaOcrModel]'s manga-ocr pair).
+ * Installs a catalogue of pinned files, for the optional OCR model's in-app delivery path — the
+ * fallback whenever Google Play's asset pack is not the source of the files.
  *
  * The transfer uses the device's current connection with the platform's normal routing; a retry opens
  * a fresh connection, which may take a different network if the current one changed. Each file is
@@ -200,10 +193,9 @@ object PpOcrModel {
  * blessed unverified. Retryable transport errors are retried with backoff; an integrity failure stops
  * immediately. The revision marker is published only after every file is in place.
  *
- * [installed] is the caller's own "already complete" test — the marker plus sizes for PP-OCRv6, the
- * pinned sizes for manga-ocr (which also accepts files installed before this downloader existed).
+ * [installed] is the caller's own "already complete" test: the marker plus sizes for the in-app copy.
  *
- * Installs are serialised on one lock, so two engines cannot download at once.
+ * Installs are serialised on one lock, so two callers cannot download at once.
  */
 internal object ModelInstall {
     private const val TAG = "GatenOcr"

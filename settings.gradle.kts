@@ -41,6 +41,13 @@ dependencyResolutionManagement {
 rootProject.name = "Gaten"
 include(":app")
 
+// The PP-OCRv6 Medium fast-follow asset pack is part of a Play *bundle* only: install-time and
+// fast-follow packing has no APK equivalent, and :app:assembleDebug/assembleRelease must build with
+// no knowledge of the pack (and no network). Including the module — and :app's `assetPacks` entry,
+// which is conditional in the same way — only under -PplayBundle=true keeps that true.
+val playBundle = providers.gradleProperty("playBundle").map(String::toBoolean).getOrElse(false)
+if (playBundle) include(":ppocr")
+
 // React Native autolinking: any npm module that ships an android/ Gradle project is included
 // automatically. The command is the bundled CLI, and it must run from the repo root where
 // package.json lives — that is this settings directory, not the conventional android/ subfolder

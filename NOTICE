@@ -38,38 +38,32 @@ ML Kit Text Recognition (Japanese)
 Licence: Google ML Kit terms of service
 https://developers.google.com/ml-kit/terms
 Bundled and used on-device: it finds the lines and their boxes and is the default recognizer; its
-reading of a line is also what a downloadable engine falls back to.
+reading of a line is also what the optional engine falls back to.
 
-manga-ocr (optional text recognition)
--------------------------------------
-By kha-white, through the int8 ONNX export by onnx-community; vocabulary from kha-white/manga-ocr-base.
-Licence: Apache License 2.0
-https://github.com/kha-white/manga-ocr
-https://huggingface.co/onnx-community/manga-ocr-base-ONNX
-https://huggingface.co/kha-white/manga-ocr-base
-Not bundled: the reader downloads the encoder, decoder and vocabulary on demand and verifies them by
-size and SHA-256. The Apache License 2.0 text is bundled at
-assets/licenses/manga-ocr-Apache-2.0.txt.
-
-PP-OCRv6 recognition models (downloaded on demand; medium is the recommended engine)
--------------------------------------------------------------------------------------
+PP-OCRv6 Medium (optional text recognition)
+------------------------------------------
 PP-OCRv6_medium_rec_onnx, by PaddlePaddle.
 Licence: Apache License 2.0
 https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx
 (revision 50c7eacafc52fa7bcf4194e8cd08e46f8558504b)
 
-PP-OCRv6_manga (manga_rec_v0.2), by Kellenok, a fine-tune of PaddlePaddle/PP-OCRv6_small_rec.
-Licence: Apache License 2.0
-https://huggingface.co/Kellenok/PP-OCRv6_manga
-(revision 02af751fcea728fba69ee421a95838f3e549daa2)
-
-ppocrv6_dict.txt, from PaddlePaddle/PaddleOCR (the shared dictionary of both recognizers).
+ppocrv6_dict.txt, from PaddlePaddle/PaddleOCR (the recognizer's character dictionary).
 Licence: Apache License 2.0
 https://github.com/PaddlePaddle/PaddleOCR
 (revision b03f46425e8ff4442b268ce449e3eef758146cd4)
 
-Not bundled: the reader downloads these files on demand and verifies them by size and SHA-256. The
-Apache License 2.0 text is bundled at assets/licenses/PP-OCRv6-Apache-2.0.txt.
+Not bundled: on a Google Play install the files arrive through Gaten's `ppocr` fast-follow asset
+pack, which Play fetches and verifies; anywhere else the reader downloads them on demand from the
+pinned sources above and verifies them by size and SHA-256. The Apache License 2.0 text is bundled at
+assets/licenses/PP-OCRv6-Apache-2.0.txt.
+
+Play Asset Delivery (asset-pack client)
+---------------------------------------
+© Google LLC, `com.google.android.play:asset-delivery`
+Licence: Play Core software development kit terms of service
+https://developer.android.com/guide/playcore
+Ships with the app and is used to read the `ppocr` asset pack when Google Play delivered it; inert
+where no pack exists.
 
 ONNX Runtime (inference engine)
 -------------------------------

@@ -107,7 +107,7 @@ class ScreenLineReaderTest {
 
     @Test
     fun aNonJapaneseLineIsStillOfferedToTheModel() {
-        // ML Kit reading a stylized line as Latin is exactly the case manga-ocr is here for.
+        // ML Kit reading a stylized line as Latin is exactly the case the engine is here for.
         val screen = screenOf("Hello world")
 
         val text = runBlocking { readerAnswering(screen, "猫が水を飲む").read(0) }

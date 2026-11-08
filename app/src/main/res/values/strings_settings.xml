@@ -110,7 +110,7 @@
     <string name="settings_about_network_body">WaniKani if you connect a personal access token. Nothing else is ever sent.</string>
     <string name="settings_about_attribution_title">Attributions</string>
     <string name="settings_about_attr_dict">EDRDG dictionary</string>
-    <string name="settings_about_attr_ocr">manga-ocr</string>
+    <string name="settings_about_attr_ocr">PP-OCRv6 Medium</string>
     <string name="settings_about_attr_mlkit">ML Kit</string>
     <string name="settings_about_attr_wanikani">WaniKani</string>
     <string name="settings_about_attr_plex">IBM Plex typefaces</string>
@@ -118,8 +118,8 @@
     <string name="settings_about_plex">SIL Open Font License 1.1 &#8212; IBM Corp. and the Plex Project Authors. Bundled to draw Gaten&#8217;s Latin and Japanese text.</string>
     <string name="settings_about_wanakana">MIT licence &#8212; the Kotlin port of WanaKana. Turns typed romaji into kana for dictionary search.</string>
     <string name="settings_about_dict">JMdict and JMnedict, the dictionary Gaten reads: © EDRDG, CC BY-SA 4.0</string>
-    <string name="settings_about_ocr">Bundled recommended stylized-text reader (kha-white, Apache-2.0) run on ONNX Runtime</string>
-    <string name="settings_about_mlkit">Google&#8217;s on-device text recognition, available as an alternative reader</string>
+    <string name="settings_about_ocr">Optional recommended reader for ordinary screen and novel text (PaddlePaddle, Apache-2.0) run on ONNX Runtime; delivered by Google Play or downloaded in the app</string>
+    <string name="settings_about_mlkit">Google&#8217;s on-device text recognition, bundled with Gaten and the default reader</string>
     <string name="settings_about_wanikani">Reference content © Tofugu LLC. Gaten is not affiliated with WaniKani, and nothing from it is bundled with the app.</string>
     <string name="settings_about_licence_title">Licence</string>
     <string name="settings_about_licence_body">Gaten is free software under GPL-3.0-or-later, derived from CircleToSearch by AKS-Labs.</string>

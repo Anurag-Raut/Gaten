@@ -46,10 +46,11 @@ android {
     }
 
     androidResources {
-        // The manga-ocr weights are downloaded on demand now (ocr/MangaOcrModel.kt), never bundled.
-        // A stale copy can still sit in `src/main/assets/manga-ocr` (the old fetch task wrote it, and
-        // it is gitignored), so exclude the directory from packaging: "<dir>name" matches a directory
-        // name in aapt's ignore pattern. The existing pattern (AGP's own defaults, if any) is kept.
+        // A stale Manga OCR weight directory (`src/main/assets/manga-ocr`, ~117 MB, gitignored) can
+        // still sit in a working copy from when the reader carried that engine. Nothing reads it —
+        // the engine is gone — but it must never be packaged if someone builds with it present:
+        // "<dir>name" matches a directory name in aapt's ignore pattern. The existing pattern
+        // (AGP's own defaults, if any) is kept.
         ignoreAssetsPattern = listOfNotNull(ignoreAssetsPattern, "<dir>manga-ocr").joinToString(":")
     }
 
@@ -102,6 +103,12 @@ android {
         }
     }
 
+    // The PP-OCRv6 Medium fast-follow asset pack (`:ppocr`), which carries the optional recogniser
+    // on a Play install. Only a bundle can carry an asset pack, so it is declared only for the
+    // bundle build — the same condition that puts `:ppocr` in the build graph at all
+    // (settings.gradle.kts). An APK build therefore produces no pack and never touches the model.
+    if (playBundle) assetPacks += ":ppocr"
+
     compileOptions {
         // 17 to match what the React Native Gradle plugin pins for Java; Kotlin must agree.
         sourceCompatibility = JavaVersion.VERSION_17
@@ -118,6 +125,17 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+}
+
+// React Native's JS bundling task takes the whole repo root as an input (`react { root = file("..") }`
+// below), so Gradle's implicit-dependency check flags any task that writes anywhere inside it. The
+// pack's staging task is the only such writer, and it is put in order before the bundle rather than
+// declared a dependency of it: the JS bundling does not read the pack's files, so an edge would only
+// force a 76 MB fetch on a JS-only invocation.
+if (playBundle) {
+    tasks.matching { it.name.startsWith("createBundle") }.configureEach {
+        mustRunAfter(":ppocr:stagePpOcrAssets")
     }
 }
 
@@ -253,10 +271,10 @@ tasks.named("preBuild") {
     dependsOn(verifyRtkAsset)
 }
 
-// The manga-ocr weights are no longer bundled: the app downloads them on demand from the settings
-// screen (ocr/MangaOcrModel.kt). Any stale copy left in `src/main/assets/manga-ocr` by the old
-// `fetchMangaOcrModel` task is excluded from packaging by the `androidResources.ignoreAssetsPattern`
-// entry in the `android {}` block above, so an ignored local copy can never ship.
+// The optional PP-OCRv6 Medium model is not bundled: a Play install gets it from the `:ppocr`
+// fast-follow asset pack (ocr/PpOcrPack.kt), and every other install downloads it from the pinned
+// upstream sources (ocr/PpOcrModel.kt). A stale `src/main/assets/manga-ocr` copy is excluded from
+// packaging by the `androidResources.ignoreAssetsPattern` entry in the `android {}` block above.
 
 dependencies {
     // ReactActivity (via ReactActivityDelegate) requires an AppCompat theme; the RN bridge
@@ -310,9 +328,15 @@ dependencies {
     // pages, nothing here.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
-    // ONNX Runtime Mobile, for the manga-ocr second pass (ocr/MangaOcrEngine.kt) and the optional
-    // PP-OCRv6 crop engines (ocr/PpOcrEngine.kt). The library asks for INTERNET in its manifest; no
-    // weights are bundled — every model is downloaded on demand over Wi-Fi and verified
-    // (ocr/PpOcrModel.kt, ocr/MangaOcrModel.kt).
+    // ONNX Runtime Mobile, for the optional PP-OCRv6 crop engine (ocr/PpOcrEngine.kt). The library
+    // asks for INTERNET in its manifest; no weights are bundled — the model arrives from Play's
+    // fast-follow asset pack or the in-app downloader, and is verified either way (ocr/PpOcrPack.kt,
+    // ocr/PpOcrModel.kt).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
+
+    // Play Asset Delivery, for the `:ppocr` fast-follow pack that carries the optional PP-OCRv6
+    // Medium model on a Play install (ocr/PpOcrPack.kt). Its API is a no-op where the pack does not
+    // exist — a sideloaded APK, a device without Play — and the in-app downloader is used instead,
+    // so the library ships in every build rather than only the bundle.
+    implementation(libs.play.asset.delivery)
 }

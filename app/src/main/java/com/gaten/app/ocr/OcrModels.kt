@@ -23,8 +23,8 @@ import kotlinx.coroutines.launch
  * are rebuilt from their downloaded files on the next call.
  *
  * A release never lands inside a use: each engine refuses to close a model a pass is still inside
- * (manga-ocr holds its inference lock, ML Kit skips while a pass is pinned, and PP-OCR counts its
- * pass against the idle clock).
+ * (the PP-OCR engine holds its inference lock, ML Kit skips while a pass is pinned, and the idle
+ * clock counts a pass against itself).
  */
 object OcrModels {
     private const val TAG = "GatenOcr"
@@ -64,7 +64,6 @@ object OcrModels {
                 Log.w(TAG, "Releasing an OCR model failed", e)
             }
         }
-        release { MangaOcrEngine.release() }
         release { PpOcrEngine.release() }
         release { JapaneseOcr.release() }
         if (released) Log.i(TAG, "Released the idle OCR models")

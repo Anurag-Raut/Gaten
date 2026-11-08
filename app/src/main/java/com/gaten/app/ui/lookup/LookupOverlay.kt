@@ -74,7 +74,7 @@ import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
-import com.gaten.app.ocr.MangaOcrEngine
+import com.gaten.app.ocr.OcrJobPriority
 import com.gaten.app.ocr.ScanState
 import com.gaten.app.ocr.ScreenHits
 import com.gaten.app.ocr.ScreenLineReader
@@ -164,9 +164,9 @@ private data class RailNotice(val text: Int, val glyph: RailGlyph? = null, val t
  * Full-screen lasso selector plus the result sheet, shown over a frozen screenshot.
  *
  * On open the whole capture is detected and read once by ML Kit, in the background; the overlay is
- * usable the moment that index exists, and manga-ocr then reads its lines behind it
+ * usable the moment that index exists, and the selected engine then reads its lines behind it
  * ([ScreenLineReader]), replacing each one's text as it lands. Both gestures read
- * their crop with Manga OCR: the whole tapped line or the circle's selection. Only that
+ * their crop with the selected engine: the whole tapped line or the circle's selection. Only that
  * reading supplies lookup text and words; the index supplies selection geometry. Words are
  * tokenised against the offline JMdict and shown in a bottom sheet. The dictionary is opened once
  * and kept warm for the whole overlay lifetime.
@@ -421,7 +421,7 @@ fun LookupOverlay(
                 },
                 readLineBackground = { line ->
                     JapaneseOcr.readLine(
-                        context, screenshot, line.bounds, MangaOcrEngine.Priority.BACKGROUND
+                        context, screenshot, line.bounds, OcrJobPriority.BACKGROUND
                     )
                 },
                 onLog = { message -> Log.d(TAG, message) }
@@ -597,7 +597,7 @@ fun LookupOverlay(
             val session = Any()
             val outcome = try {
                 val repo = awaitRepo()
-                // Freeze geometry for ranking while Manga OCR reads the whole selected line.
+                // Freeze geometry for ranking while the engine reads the whole selected line.
                 val lookup = runTapLookup(context, bmp, line, x, y, repo, cropCache)
                 val failure = (repoState as? RepoState.Failed)?.message
                 if (failure != null) lookup.copy(error = failure) else lookup

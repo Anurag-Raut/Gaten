@@ -29,9 +29,9 @@ data class OcrLine(val text: String, val bounds: Box)
  *
  * ML Kit finds lines and their boxes, and is also the bundled recognizer: [RecognitionMode.ML_KIT]
  * reads with the ML Kit pass the screen index already holds, so a fresh install reads with nothing
- * to download. [RecognitionMode.MANGA_OCR] and the two PP-OCRv6 engines are downloaded on demand in
- * Settings and never ship in the app, so a read can only use an installed one; a selected engine
- * that is missing, fails, or returns blank / placeholder / no-Japanese text falls back to ML Kit.
+ * to download. [RecognitionMode.PP_MEDIUM] is installed on demand in Settings and never ships in
+ * the APK, so a read can only use it once it is installed; a selected engine that is missing, fails,
+ * or returns blank / placeholder / no-Japanese text falls back to ML Kit.
  * Every path that reads a box — the overlay's index line by line, and a circle's whole selection —
  * reads it through [readLine] (or [readWithMlKit] where the index holds no ML Kit reading of the
  * box), so they crop and route the same way.
@@ -80,15 +80,15 @@ object JapaneseOcr {
     }
 
     /**
-     * Reads one box with the selected mode's downloadable engine: [RecognitionMode.MANGA_OCR] uses
-     * Manga OCR, [RecognitionMode.PP_MEDIUM] and [RecognitionMode.PP_MANGA] the PP-OCRv6 engines.
+     * Reads one box with the selected mode's downloadable engine: [RecognitionMode.PP_MEDIUM] uses
+     * the PP-OCRv6 recogniser, [RecognitionMode.ML_KIT] has no engine of its own.
      *
      * Returns the reading when the engine produced one worth keeping, and null when it must fall
-     * back to ML Kit: for [RecognitionMode.ML_KIT] there is no engine of its own — the screen index
-     * already holds ML Kit's reading of the box — and for a downloadable engine that is missing,
-     * fails, or returns blank / placeholder / no-Japanese text there is nothing to keep. The index
-     * path keeps ML Kit's own text on null ([ScreenLineReader]); the region path reads the crop with
-     * [readWithMlKit], because the rectangle a circle cut may not be in the index at all.
+     * back to ML Kit: for [RecognitionMode.ML_KIT] the screen index already holds ML Kit's reading
+     * of the box, and for a downloadable engine that is missing, fails, or returns blank /
+     * placeholder / no-Japanese text there is nothing to keep. The index path keeps ML Kit's own
+     * text on null ([ScreenLineReader]); the region path reads the crop with [readWithMlKit], because
+     * the rectangle a circle cut may not be in the index at all.
      *
      * A non-empty Japanese misread is kept as it is — an engine can be confidently wrong, and a
      * wrong-but-Japanese reading is not detectable from its shape.
@@ -101,15 +101,10 @@ object JapaneseOcr {
         context: Context,
         bitmap: Bitmap,
         bounds: Box,
-        priority: MangaOcrEngine.Priority = MangaOcrEngine.Priority.FOREGROUND
+        priority: OcrJobPriority = OcrJobPriority.FOREGROUND
     ): String? {
-        val mode = RecognitionPreference.mode(context)
-        val engine = mode.ppEngine()
-        val reading = when {
-            engine != null -> readWithPpOcr(context, bitmap, bounds, engine, priority)
-            mode == RecognitionMode.MANGA_OCR -> readWithMangaOcr(context, bitmap, bounds, priority)
-            else -> null
-        }
+        val engine = RecognitionPreference.mode(context).ppEngine()
+        val reading = engine?.let { readWithPpOcr(context, bitmap, bounds, it, priority) }
         return reading?.takeIf {
             !OcrLinePolicy.isUnreadable(it) && JapaneseText.isJapaneseLine(it)
         }
@@ -138,36 +133,16 @@ object JapaneseOcr {
     }
 
     /**
-     * The Manga OCR read: the grayscale crop [OcrPreprocess] builds. Null when the model is not
-     * installed — lookups never download, so a missing model is reported, not fetched.
-     */
-    private suspend fun readWithMangaOcr(
-        context: Context,
-        bitmap: Bitmap,
-        bounds: Box,
-        priority: MangaOcrEngine.Priority
-    ): String? {
-        if (!MangaOcrModel.isInstalled(context)) return null
-        val crop = OcrPreprocess.cropForModel(bitmap, bounds) ?: return null
-        try {
-            return MangaOcrEngine.recognize(context, crop, priority)
-        } finally {
-            // Recognition's synchronous native calls have finished before it returns or cancels.
-            if (crop !== bitmap) crop.recycle()
-        }
-    }
-
-    /**
      * The optional PP-OCR read: the padded line box in its original RGB pixels, because PP-OCR's
-     * recognizers take color and resize internally — unlike manga-ocr's grayscale 224-square.
-     * Null when the engine is not installed, the crop cannot be cut, or inference fails.
+     * recogniser takes color and resizes internally. Null when the engine is not installed, the crop
+     * cannot be cut, or inference fails.
      */
     private suspend fun readWithPpOcr(
         context: Context,
         bitmap: Bitmap,
         bounds: Box,
         engine: PpOcrModel.Engine,
-        priority: MangaOcrEngine.Priority
+        priority: OcrJobPriority
     ): String? {
         // Cheap check first: an uninstalled engine never allocates a crop it cannot use.
         if (!PpOcrModel.isInstalled(context, engine)) return null
@@ -189,12 +164,12 @@ object JapaneseOcr {
     }
 
     /**
-     * The padded, clamped line box in its original colors and resolution. [OcrPreprocess.cropFor]
-     * supplies the same geometry the manga crop uses; its scale is deliberately not applied — PP-OCR
-     * resizes the line itself and a pre-upscaled crop only adds work.
+     * The padded, clamped line box in its original colors and resolution. [LineCrop.cropFor]
+     * supplies the geometry; its scale is deliberately not applied — PP-OCR resizes the line itself
+     * and a pre-upscaled crop only adds work.
      */
     private fun rgbCrop(bitmap: Bitmap, bounds: Box): Bitmap? = try {
-        val crop = OcrPreprocess.cropFor(bounds, bitmap.width, bitmap.height)
+        val crop = LineCrop.cropFor(bounds, bitmap.width, bitmap.height)
         if (crop.left == 0 && crop.top == 0 &&
             crop.width == bitmap.width && crop.height == bitmap.height
         ) {

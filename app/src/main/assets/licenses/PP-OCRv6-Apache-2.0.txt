@@ -1,15 +1,14 @@
-PP-OCRv6 recognition models and dictionary
-==========================================
+PP-OCRv6 recognition model and dictionary
+=========================================
 PaddlePaddle PP-OCRv6_medium_rec_onnx — https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx
   revision 50c7eacafc52fa7bcf4194e8cd08e46f8558504b (inference.onnx)
-Kellenok PP-OCRv6_manga — https://huggingface.co/Kellenok/PP-OCRv6_manga
-  revision 02af751fcea728fba69ee421a95838f3e549daa2 (rec/manga_rec_v0.2.onnx, ppocrv6_dict.txt)
 PaddlePaddle/PaddleOCR — https://github.com/PaddlePaddle/PaddleOCR
   revision b03f46425e8ff4442b268ce449e3eef758146cd4 (ppocr/utils/dict/ppocrv6_dict.txt)
 
-These model files are not bundled in the app: the reader downloads them on demand. They are
-licensed under the Apache License, Version 2.0, reproduced below. Copyright in each model belongs to
-its authors (PaddlePaddle and Kellenok respectively).
+These model files are not bundled in the app: a Google Play install receives them through Gaten's
+`ppocr` fast-follow asset pack, and every other install downloads them on demand. They are licensed
+under the Apache License, Version 2.0, reproduced below. Copyright in the model belongs to its
+authors (PaddlePaddle).
 
 
                                  Apache License

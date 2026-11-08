@@ -17,7 +17,6 @@ import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.WordScanner
 import com.gaten.app.ocr.Box
 import com.gaten.app.ocr.JapaneseOcr
-import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.JapaneseText
 import com.gaten.app.ocr.OcrLinePolicy
 import com.gaten.app.ocr.OcrRepair
@@ -137,7 +136,7 @@ internal suspend fun runLookup(
     val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
     val reading = readExactCrop(context, crop, box, cache)
     return withContext(Dispatchers.Default) {
-        mangaLookupResult(
+        readingLookupResult(
             reading,
             if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
         )
@@ -148,7 +147,7 @@ internal suspend fun runLookup(
  * Rejects a failed recognition instead of silently answering with an empty result: a reading that
  * holds no Japanese is no reading, and the reader gets [error] with no words.
  */
-internal fun mangaLookupResult(
+internal fun readingLookupResult(
     reading: String?,
     lookup: (String) -> List<DictEntry>,
     error: String = UNREADABLE_READING
@@ -221,7 +220,7 @@ internal fun tapLookupResult(
     maxWords: Int = 24,
     error: String = UNREADABLE_READING
 ): LookupResult {
-    val text = acceptedReading(reading) ?: return mangaLookupResult(reading, lookup, error)
+    val text = acceptedReading(reading) ?: return readingLookupResult(reading, lookup, error)
     val cachedLookup = memoizedLookup(lookup)
     val corrected = line.withText(OcrRepair.repair(text, cachedLookup))
     if (maxWords <= 0) return LookupResult(corrected.text, emptyList())
@@ -239,23 +238,18 @@ internal fun mergePrimary(primary: LookupResult, supplement: LookupResult, maxWo
 
 /**
  * The key that decides whether a cached crop reading is still current: the selected mode and the
- * installed files behind every engine. Switching engines, or re-downloading a PP model, therefore
- * invalidates the exact-crop cache instead of serving a reading from the previous engine.
+ * installed files behind the optional engine. Switching engines, or re-installing a PP model,
+ * therefore invalidates the exact-crop cache instead of serving a reading from the previous engine.
  *
  * Pure, so the composition is unit-tested.
  */
 internal fun recognitionRevision(
     mode: RecognitionMode,
-    mangaRevision: String,
     ppRevision: String
-): String = "${mode.id}|$mangaRevision|pp:$ppRevision"
+): String = "${mode.id}|pp:$ppRevision"
 
 private fun modelRevision(context: Context): String = recognitionRevision(
     RecognitionPreference.mode(context),
-    MangaOcrModel.Slot.entries.joinToString("|") { slot ->
-        val file = MangaOcrModel.file(context, slot)
-        "${file.path}:${file.length()}:${file.lastModified()}"
-    },
     PpOcrModel.revision(context)
 )
 
@@ -300,7 +294,7 @@ fun mergeLookup(
  * Japanese — the recognizer writes Japanese, so a reading without any is noise the sheet must not show
  * and the dictionary must not be handed.
  *
- * Deliberately not [OcrLinePolicy.acceptsMangaText]: the whole selection is one line, so there is
+ * Deliberately not [OcrLinePolicy.acceptsEngineText]: the whole selection is one line, so there is
  * no ML Kit reading of it to measure the length against, and a long crop reading is a legitimate
  * one — a circle can hold a whole sentence.
  */

@@ -10,6 +10,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 
+/**
+ * Whether a recognition call is one a gesture is waiting on ([FOREGROUND]) or a background prefetch
+ * ([BACKGROUND]) that yields to a foreground read between native units. Passed down to the engines
+ * so the same read can be repeated at the other priority later.
+ */
+enum class OcrJobPriority { FOREGROUND, BACKGROUND }
+
 /** Coordinates short user initiated OCR work with background work between native units. */
 internal object OcrPriority {
     private val foregroundWaiters = MutableStateFlow(0)

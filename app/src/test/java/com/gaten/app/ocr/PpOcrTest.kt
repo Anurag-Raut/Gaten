@@ -232,28 +232,11 @@ class PpOcrTest {
 
     @Test
     fun theCatalogPinsEveryFileToAnHttpsUrlHashAndSize() {
-        for (engine in PpOcrModel.Engine.entries) {
-            val files = PpOcrModel.files(engine)
-            assertEquals(2, files.size)
-            assertTrue(files.all { it.url.startsWith("https://") })
-            assertTrue(files.all { it.sha256.length == 64 })
-            assertTrue(files.all { it.size > 0 })
-            assertEquals(engine.approximateDownloadBytes, files.sumOf { it.size })
-        }
-    }
-
-    @Test
-    fun theMangaOcrCatalogPinsAllThreeFilesUnderTheNamesTheEngineReads() {
-        val files = MangaOcrModel.files
-        assertEquals(3, files.size)
-        assertEquals(116_619_775L, MangaOcrModel.approximateDownloadBytes)
-        assertEquals(MangaOcrModel.approximateDownloadBytes, files.sumOf { it.size })
-        assertEquals(
-            MangaOcrModel.Slot.entries.map { it.fileName }.toSet(),
-            files.map { it.name }.toSet()
-        )
+        val files = PpOcrModel.files
+        assertEquals(2, files.size)
         assertTrue(files.all { it.url.startsWith("https://") })
         assertTrue(files.all { it.sha256.length == 64 })
         assertTrue(files.all { it.size > 0 })
+        assertEquals(PpOcrModel.Engine.MEDIUM.approximateDownloadBytes, files.sumOf { it.size })
     }
 }

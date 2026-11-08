@@ -6,6 +6,7 @@
 
 package com.gaten.app.rn
 
+import android.app.Activity
 import android.content.Context
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -13,8 +14,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
-import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.PpOcrModel
+import com.gaten.app.ocr.PpOcrPack
 import com.gaten.app.ocr.RecognitionMode
 import com.gaten.app.ocr.RecognitionPreference
 import kotlinx.coroutines.CancellationException
@@ -27,16 +28,16 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The text recognition settings bridge: the selected mode, install state for every engine (the
- * bundled ML Kit and the three downloads — Manga OCR and the two PP-OCRv6 models), and the explicit
- * downloads that put one on the device. The bundled ML Kit has no download; the other three ship no
- * weights in the APK.
+ * bundled ML Kit and the optional PP-OCRv6 Medium download), and the explicit download that puts the
+ * optional engine on the device. The bundled ML Kit has no download; PP-OCRv6 Medium ships no
+ * weights in the APK — Play's fast-follow asset pack on a Play install, the in-app downloader
+ * otherwise.
  *
- * Every call that touches storage runs on [Dispatchers.IO]. The reader confirms each download in the
- * settings UI — which warns that mobile data may incur charges — and the model downloaders
- * ([PpOcrModel.download], [MangaOcrModel.download]) verify their files. An engine already
- * downloading rejects a second request here instead of racing two writes over the same files. The
- * scope is cancelled with the module, so an in-flight download is cancelled rather than finishing
- * into a dead React context.
+ * Every call that touches storage runs on [Dispatchers.IO]. The reader confirms the download in the
+ * settings UI — which warns that mobile data may incur charges — and the delivery path verifies
+ * what it installs ([PpOcrModel.download]). An engine already downloading rejects a second request
+ * here instead of racing two writes over the same files. The scope is cancelled with the module, so
+ * an in-flight download is cancelled rather than finishing into a dead React context.
  */
 class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -48,25 +49,12 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
 
     init {
         GatenBridgeEmitter.attach(reactContext)
+        // A fast-follow pack can have been downloaded by Play before this module (or this process)
+        // existed, so the live state is re-read here rather than assumed.
+        PpOcrPack.refresh(reactContext)
     }
 
     override fun getName(): String = NAME
-
-    /** Legacy query: text recognition is always required and enabled. */
-    @ReactMethod
-    fun isMangaOcrEnabled(promise: Promise) {
-        promise.resolve(RecognitionPreference.isMangaOcrEnabled(reactApplicationContext))
-    }
-
-    /** Legacy setter: the old "off" is still refused, the old "on" changes nothing. */
-    @ReactMethod
-    fun setMangaOcrEnabled(enabled: Boolean, promise: Promise) {
-        if (!enabled) {
-            promise.reject("MANGA_OCR_REQUIRED", "Text recognition is required for lookups.")
-            return
-        }
-        promise.resolve(null)
-    }
 
     /** The selected mode and whether each optional engine is installed. */
     @ReactMethod
@@ -102,7 +90,7 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /** Downloads one engine (Manga OCR or a PP-OCRv6 model), then answers with the refreshed state. */
+    /** Downloads the optional engine, then answers with the refreshed state. */
     @ReactMethod
     fun downloadRecognitionEngine(engineId: String, promise: Promise) {
         val engine = ENGINES.firstOrNull { it.id == engineId }
@@ -126,7 +114,8 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         }
         scope.launch {
             try {
-                download(context, engine)
+                // [currentActivity] only matters when Play asks the user to accept the pack download.
+                download(context, engine, reactApplicationContext.currentActivity)
                 // Publish the finished state: the id must be out of [downloading] before the
                 // refreshed settings are read, or they would still report the download running.
                 downloading.remove(engine.id)
@@ -162,45 +151,44 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
             engines.pushMap(item)
         }
         map.putArray("engines", engines)
-        // In-flight downloads are module state, not screen state: a settings screen reopened while
-        // a download runs still shows it running instead of an enabled Download button.
-        val inFlight = Arguments.createArray()
-        for (id in downloading) inFlight.pushString(id)
-        map.putArray("downloading", inFlight)
+        // In-flight work comes from two places: a request this module is running, and Play's own
+        // fast-follow transfer, which can have started before this module existed and outlives the
+        // process. Both are reported, so a settings screen opened mid-transfer still shows the
+        // engine downloading instead of offering a second Download.
+        val inFlight = LinkedHashSet<String>()
+        inFlight.addAll(downloading)
+        if (PpOcrPack.isTransferring) {
+            ENGINES.firstOrNull { it.ppEngine() != null }?.let { inFlight.add(it.id) }
+        }
+        val downloadingArray = Arguments.createArray()
+        for (id in inFlight) downloadingArray.pushString(id)
+        map.putArray("downloading", downloadingArray)
         return map
     }
 
-    /** Display name: the bundled recognizer's, the PP catalog's own, or the Manga OCR name. */
-    private fun engineName(engine: RecognitionMode): String = when (engine) {
-        RecognitionMode.ML_KIT -> ML_KIT_NAME
-        else -> engine.ppEngine()?.displayName ?: MANGA_OCR_NAME
-    }
+    /** Display name: the PP catalog's own for the optional engine, the bundled name otherwise. */
+    private fun engineName(engine: RecognitionMode): String =
+        engine.ppEngine()?.displayName ?: ML_KIT_NAME
 
-    /** Expected download size, from whichever model owns the engine; nothing for the bundled one. */
-    private fun engineBytes(engine: RecognitionMode): Long = when {
-        engine.bundled -> 0L
-        else -> engine.ppEngine()?.approximateDownloadBytes ?: MangaOcrModel.approximateDownloadBytes
-    }
+    /** Expected install size from the catalog; nothing for the bundled recognizer. */
+    private fun engineBytes(engine: RecognitionMode): Long =
+        engine.ppEngine()?.approximateDownloadBytes ?: 0L
 
     /** Installed means the engine's own files are complete; the bundled recognizer always is. */
     private fun isInstalled(context: Context, engine: RecognitionMode): Boolean {
         if (engine.bundled) return true
-        val pp = engine.ppEngine()
-        return if (pp == null) MangaOcrModel.isInstalled(context)
-        else PpOcrModel.isInstalled(context, pp)
+        val pp = engine.ppEngine() ?: return false
+        return PpOcrModel.isInstalled(context, pp)
     }
 
-    /** Runs the downloader that owns [engine]; each verifies its own files. */
-    private suspend fun download(context: Context, engine: RecognitionMode) {
-        val pp = engine.ppEngine()
-        if (pp == null) MangaOcrModel.download(context)
-        else PpOcrModel.download(context, pp)
+    /** Runs the delivery path that owns [engine]'s model; it verifies what it installs itself. */
+    private suspend fun download(context: Context, engine: RecognitionMode, activity: Activity?) {
+        val pp = engine.ppEngine() ?: return
+        PpOcrModel.download(context, pp, activity)
     }
 
     companion object {
         const val NAME = "GatenRecognition"
-
-        private const val MANGA_OCR_NAME = "Manga OCR"
 
         private const val ML_KIT_NAME = "ML Kit"
 
