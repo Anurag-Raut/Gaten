@@ -185,52 +185,40 @@ export function SettingsRow({
 }
 
 /**
- * The disclosure's facts, grouped and in the order the reader meets them: what the service sees,
- * what stays on the device, what is optional and off until asked, and what happens next. Every
- * consequence stays a visible line here — none of it is shortened into a summary and none of it
- * moves behind Help, which carries operational detail only.
+ * The lookup-mode dialog's summary: one lead line and three check rows, in plain words. `**…**`
+ * marks the bold lead phrase of a row; the screen-reader label is the same text without markers.
  */
-const DISCLOSURE_BLOCKS: {heading: string; lines: string[]}[] = [
-  {
-    heading: "Screen access",
-    lines: [
-      "Gaten captures the screen when you start a lookup.",
-      "Gaten closes lookup when it is interrupted.",
-    ],
-  },
-  {
-    heading: "On this device",
-    lines: [
-      "Screenshots and selected text stay on this device.",
-      "Japanese recognition and dictionary lookup work offline.",
-      "The screenshot is discarded after lookup.",
-      "Nothing is captured between lookups.",
-      "The service does not read notification messages.",
-      "The service does not type for you.",
-    ],
-  },
-  {
-    heading: "Optional connections",
-    lines: [
-      "No OCR model is included. Recognition models download only when you press Download and confirm, then work offline; mobile data may incur charges.",
-      "WaniKani connects only when you add a token.",
-      "The token is checked with wanikani.com.",
-      "A tapped kanji requests its reference page.",
-      "WaniKani study progress is saved on this device for Analytics.",
-      "Progress includes your level, due reviews and review stages.",
-      "Due reviews cover now and the next 24 hours.",
-      "Gaten never answers or changes WaniKani lessons or reviews.",
-      "Your screenshot, sentence and other words are not sent to WaniKani.",
-    ],
-  },
-  {
-    heading: "Next step",
-    lines: [
-      "Enable Gaten in Android accessibility settings.",
-      "Return here to check lookup mode.",
-    ],
-  },
+export const DISCLOSURE_SUMMARY_LEAD = "To look things up, Gaten needs Android's accessibility access.";
+export const DISCLOSURE_SUMMARY_ROWS: string[] = [
+  "**Only when you ask.** Gaten looks at the screen when you start a lookup.",
+  "**Stays on your phone.** Nothing from your screen is sent anywhere, and the screenshot is deleted right after.",
+  "**Private by design.** It never reads your notifications or types for you.",
 ];
+
+/** One run of a disclosure line: plain, or the emphasised words drawn in the primary ink. */
+export type DisclosureSegment = {text: string; emphasis: boolean};
+
+/**
+ * A disclosure line as runs: `**…**` marks the emphasised words. A plain-text run never keeps a
+ * marker, so joining the runs gives the reader's wording for a screen-reader label.
+ */
+export function disclosureLineSegments(line: string): DisclosureSegment[] {
+  return line
+    .split(/(\*\*[^*]+\*\*)/g)
+    .filter(Boolean)
+    .map((part) =>
+      part.startsWith("**") && part.endsWith("**")
+        ? {text: part.slice(2, -2), emphasis: true}
+        : {text: part, emphasis: false},
+    );
+}
+
+/** The plain wording of a line: its runs joined, with no emphasis markers left in it. */
+export function disclosureLineText(line: string): string {
+  return disclosureLineSegments(line)
+    .map((segment) => segment.text)
+    .join("");
+}
 
 /** An outlined action: a quiet alternative to the filled one on the same page. */
 export function OutlinedButton({
@@ -448,10 +436,9 @@ export function HelpAction({paragraphs}: {paragraphs: string[]}) {
 }
 
 /**
- * The disclosure behind every "Turn on": the app's own explanation of the accessibility service
- * lookup mode needs first, the checkbox before the confirm, and system Settings only once the
- * reader has agreed. The facts scroll in four headed groups while the acknowledgement and the two
- * actions stay pinned below them, so a consequence is never what the confirmation hides.
+ * The dialog behind every "Turn on": the short summary, the checkbox before the confirm, and system
+ * Settings only once the reader has agreed. The checkbox and the two actions are pinned below the
+ * body, so they stay in reach at any text size; the body scrolls only when it must.
  */
 export function LookupModeDisclosureDialog({
   onAccept,
@@ -471,7 +458,8 @@ export function LookupModeDisclosureDialog({
       title="Turn on lookup mode"
       onDismiss={onDismiss}
       scrollBody
-      bodyGap={spacing.s}
+      fitToViewport
+      bodyGap={spacing.m}
       actions={
         <View
           style={{
@@ -493,9 +481,8 @@ export function LookupModeDisclosureDialog({
         </View>
       }
       footer={
-        // Pinned rather than a child of the scrolling body: the four groups are longer than any
-        // phone, and an acknowledgement the reader cannot reach makes "Open settings" look broken
-        // instead of gated.
+        // Pinned rather than a child of the scrolling body, so an acknowledgement the reader cannot
+        // reach never makes "Open settings" look broken instead of gated.
         <PressableScale
           accessibilityRole="checkbox"
           accessibilityState={{checked: agreed}}
@@ -519,7 +506,8 @@ export function LookupModeDisclosureDialog({
           <Text
             style={[
               typeScale.description,
-              {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s},
+              // A plain margin: the harness and older engines do not read marginStart.
+              {color: colors.onSurfaceVariant, flex: 1, marginLeft: spacing.s},
             ]}
           >
             I understand how this permission is used
@@ -527,19 +515,32 @@ export function LookupModeDisclosureDialog({
         </PressableScale>
       }
     >
-      {DISCLOSURE_BLOCKS.map((block, index) => (
-        <View key={block.heading} style={index > 0 ? {marginTop: spacing.l} : undefined}>
-          <Text style={[typeScale.labelMedium, {color: colors.onSurface}]}>{block.heading}</Text>
-          {block.lines.map((line) => (
+      <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+        {DISCLOSURE_SUMMARY_LEAD}
+      </Text>
+      <View style={{marginTop: spacing.m, gap: spacing.s}}>
+        {DISCLOSURE_SUMMARY_ROWS.map((line) => (
+          <View key={line} style={{flexDirection: "row", alignItems: "flex-start", gap: spacing.s}}>
+            <View style={{marginTop: 2}}>
+              <Icon name="check" size={20} color={colors.accent} />
+            </View>
             <Text
-              key={line}
-              style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}
+              // The marker-free wording: TalkBack must never read a `**` out loud.
+              accessibilityLabel={disclosureLineText(line)}
+              style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, flex: 1, minWidth: 0}]}
             >
-              {line}
+              {disclosureLineSegments(line).map((segment, index) => (
+                <Text
+                  key={index}
+                  style={segment.emphasis ? {color: colors.onSurface, fontWeight: "600"} : undefined}
+                >
+                  {segment.text}
+                </Text>
+              ))}
             </Text>
-          ))}
-        </View>
-      ))}
+          </View>
+        ))}
+      </View>
     </DialogShell>
   );
 }
