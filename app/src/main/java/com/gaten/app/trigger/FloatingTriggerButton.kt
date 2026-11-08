@@ -34,20 +34,34 @@ import androidx.compose.ui.graphics.toArgb
 import com.gaten.app.R
 import com.gaten.app.ui.Feedback
 import com.gaten.app.ui.FeedbackHaptic
-import com.gaten.app.ui.theme.AccentRoles
 import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.NeutralRoles
 import com.gaten.app.ui.theme.ThemePreferences
-import com.gaten.app.ui.theme.accentRoles
 import com.gaten.app.ui.theme.gatenNeutrals
 import kotlin.math.ceil
 import kotlin.math.hypot
 
 private const val TAG = "Gaten"
 
-/** Bubble diameter; the icon sits centred inside with equal padding. */
+/** Bubble diameter; the mark sits centred inside on its own ink box. */
 private const val BUBBLE_DP = 48
-private const val ICON_DP = 24
+
+/**
+ * The Gaten mark's ink box inside the disk, in dp: wider than tall, because its two dakuten sit to
+ * the right of the letter. The disk's padding centres this box on the 48 dp circle, not the disk's
+ * canvas.
+ */
+private const val ICON_WIDTH_DP = 27
+private const val ICON_HEIGHT_DP = 24
+
+/** The disk's fill in every theme: white, the flat ground of the app's own Light icon. */
+private const val DISC_FILL = -0x1
+
+/**
+ * The keyline drawn inside the disk's edge: black at 14%. A white disk on a white page would
+ * otherwise have no edge at all, and on a dark page it is the disk itself that carries the contrast.
+ */
+private const val DISC_KEYLINE = 0x24000000
 
 /** How much the bubble grows under a tap; it comes straight back down and never changes colour. */
 private const val BUBBLE_PRESS_SCALE = 1.15f
@@ -270,8 +284,7 @@ class FloatingTriggerButton(
         // common case) if this runs too early, or if the display is being torn down. Swallowing
         // that keeps the whole service process alive.
         try {
-            val tone = accentRoles(ThemePreferences.accent(context), isDark())
-            val bubble = buildBubble(tone)
+            val bubble = buildBubble()
             val layoutParams = overlayParams(restoredOrDefaultPosition())
             // Invisible until the entrance's first frame lands, so a bubble returning from a
             // capture cannot flash back at full strength.
@@ -497,42 +510,42 @@ class FloatingTriggerButton(
     }
 
     /**
-     * The bubble: a round [ImageView] — an opaque accent disk, a hard keyline inside its edge, and
-     * the tiled lookup glyph tinted `onPrimary` so it reads on that fill in both light and dark
-     * modes. The theme is the app's own choice ([ThemePreferences]), not the device's: this window
-     * has no composition to read it from, so the preferences are read here and resolved against the
-     * system setting the same way.
+     * The bubble: a round [ImageView] — a flat white disk carrying the app's own mark, the black
+     * Gaten G, untinted, with a hairline keyline inside its edge. The disk is the same white in
+     * every theme: the G with its two dakuten is Gaten's Light icon, and the button names the app
+     * rather than the accent the reader chose.
      *
-     * The fill is opaque and the keyline is the paired ink rather than a paler accent. This disk
-     * floats over whatever the other app happens to be drawing, so it has to name its action by
-     * itself on a dark page and on a bright one — a translucent disk, or one held together by a
-     * hairline alone, would not.
+     * The fill is opaque, so the black mark reads on it unchanged, and the keyline is black at 14%.
+     * This disk floats over whatever the other app happens to be drawing, so a white disk on a white
+     * page needs that edge and, on a dark page, the white disk itself is the contrast. A translucent
+     * disk would not carry the black mark on both.
      *
      * The disk sits in a window one [BUBBLE_PRESS_SCALE] larger than itself, so a tap's growth has
-     * somewhere to go; only the disk is scaled, and its colours, keyline, glyph and round silhouette
-     * are the same before, during and after.
+     * somewhere to go; only the disk is scaled, and its fill, keyline, mark and round silhouette are
+     * the same before, during and after.
      */
-    private fun buildBubble(tone: AccentRoles): FrameLayout {
-        val primary = tone.primary.toArgb()
-        val onPrimary = tone.onPrimary.toArgb()
-
+    private fun buildBubble(): FrameLayout {
         val disk = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             // One solid colour and one stroke, never a gradient. A drawable's stroke is inset
             // inside its bounds, which is where this keyline belongs: inside the 48 dp circle.
-            setColor(primary)
-            setStroke(strokePx, onPrimary)
+            setColor(DISC_FILL)
+            setStroke(strokePx, DISC_KEYLINE)
         }
-        val inset = ((BUBBLE_DP - ICON_DP) / 2f * density).toInt()
+        // Asymmetric by design: the mark is wider than it is tall, so equal padding would not centre
+        // its ink — the horizontal gap is that much smaller.
+        val insetX = ((BUBBLE_DP - ICON_WIDTH_DP) / 2f * density).toInt()
+        val insetY = ((BUBBLE_DP - ICON_HEIGHT_DP) / 2f * density).toInt()
         val hint = context.getString(R.string.bubble_lookup_hint)
 
         bubbleScale = 1f
         val circle = ImageView(context).apply {
-            setImageResource(R.drawable.ic_qs_lookup)
-            imageTintList = ColorStateList.valueOf(onPrimary)
+            // The app's own mark, black on the white disk. Never tinted: its colour is its own, and
+            // the ImageView's scaleType keeps its 27x23.66 dp ink box centred in the padded disk.
+            setImageResource(R.drawable.ic_trigger_g)
             scaleType = ImageView.ScaleType.CENTER
             setBackground(disk)
-            setPadding(inset, inset, inset, inset)
+            setPadding(insetX, insetY, insetX, insetY)
             // The disk is the thing that grows; it is centred in the window and only ever scaled.
             layoutParams = FrameLayout.LayoutParams(bubblePx, bubblePx, Gravity.CENTER)
             contentDescription = context.getString(R.string.bubble_lookup_label)
@@ -573,8 +586,9 @@ class FloatingTriggerButton(
      * The disk lives in a window one [DISMISS_HOT_SCALE] larger than itself. A dragged bubble over it
      * grows the disk to fill that window, so the drop the release is about to perform is visible
      * before the finger lifts. Only the scale moves: the fill, keyline, glyph and round silhouette are
-     * the same before, during and after. An accent of its own would read as a change of state and,
-     * because the bubble is the same accent, the two overlapping disks would merge into one blob.
+     * the same before, during and after. It carries no accent of its own — an accent would read as a
+     * change of state — and its outline hairline is what separates the two overlapping flat disks
+     * when a dragged bubble is drawn onto it.
      */
     private fun buildDismiss(neutral: NeutralRoles): FrameLayout {
         val fill = neutral.surface.toArgb()
