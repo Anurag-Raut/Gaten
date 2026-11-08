@@ -426,7 +426,11 @@ function buildStores(wkOverrides = {}, ankiOverrides = {}) {
     if (name === 'react-native') return {AppState: {addEventListener: () => ({remove() {}})}};
     throw new Error(`Unexpected import: ${name}`);
   });
+  const romaji = loadTypeScript('src/rn/ui/review/wanikani-romaji.ts');
+  const meaningMatch = loadTypeScript('src/rn/ui/review/meaning-match.ts');
   const {reviewStore} = loadTypeScript('src/rn/ui/review/review-store.ts', (name) => {
+    if (name === './wanikani-romaji') return romaji;
+    if (name === './meaning-match') return meaningMatch;
     if (name === '../../native/GatenAnki') return anki;
     if (name === '../../native/GatenWaniKani') return wk;
     if (name === '../anki/useAnkiDecks') return ankiDecks;
@@ -459,6 +463,16 @@ async function until(predicate, description) {
     if (predicate()) return;
   }
   assert.fail(`Timed out waiting for ${description}`);
+}
+
+/** A right answer stops on its own card; Continue moves on (and submits a finished subject). */
+async function checkRight(store) {
+  store.wkCheck();
+  await until(
+    () => store.getState().step.session.phase === 'correct' && !store.getState().busy,
+    'right answer stop',
+  );
+  store.wkContinue();
 }
 
 test('store opens a connected hub with loaded counts', async () => {
@@ -690,7 +704,7 @@ test('a saved final review stays acknowledged through refresh failure and clears
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview' && !store.getState().busy, 'single review');
   store.wkEntry('mountain');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => savedReviews === 1 && store.getState().step.kind === 'wkHome' && store.getState().step.refreshing, 'saved review refresh');
   assert.equal(store.getState().step.sessionFinished, true);
   // The queue is re-read before the hub presents completion: the rows are updating, not celebrating.
@@ -724,7 +738,7 @@ test('a saved final review stays acknowledged through refresh failure and clears
   assert.equal(finishedReviews.extra, 'No reviews due');
   assert.equal(finishedReviews.complete, true);
   assert.equal(finishedReviews.tap, null);
-  assert.equal(finishedLessons.subline, '2 lessons available');
+  assert.equal(finishedLessons.subline, 'Next batch · 2 cards');
   assert.deepEqual(finishedLessons.trailing, {value: '2', label: 'ready'});
 });
 
@@ -830,7 +844,7 @@ test('a late review submission cannot advance a review session from a reset acco
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview' && !store.getState().busy, 'first review session');
   store.wkEntry('mouth');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => submissionCalls === 1 && !store.getState().busy, 'pending old review submission');
 
   store.resetWaniKaniAccount();
@@ -972,12 +986,14 @@ test('a wrong meaning answer holds the same card until the retry is right', asyn
 
   // The retry submits exactly once, with the original miss still recorded.
   store.wkEntry('mountain');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => submissions.length === 1, 'single retry submission');
   assert.deepEqual(submissions[0], {subjectId: 91, incorrectMeaning: 1, incorrectReading: 0});
 });
 
-test('a wrong reading answer retries on the same reading part before submitting', async () => {
+test('a wrong reading answer retries on the same reading part before submitting', async (t) => {
+  // The lead part is drawn per subject; pin the draw so the meaning is asked first.
+  t.mock.method(Math, 'random', () => 0.9);
   const submissions = [];
   const store = mockStore({
     isConfigured: async () => true,
@@ -1001,7 +1017,7 @@ test('a wrong reading answer retries on the same reading part before submitting'
 
   // A correct meaning moves straight to the reading without submitting.
   store.wkEntry('mountain');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => store.getState().step.session.part === 'reading', 'reading part');
   assert.equal(store.getState().step.session.phase, 'answering');
   assert.equal(store.getState().step.session.index, 0);
@@ -1027,7 +1043,7 @@ test('a wrong reading answer retries on the same reading part before submitting'
 
   // The right reading submits once, carrying the original reading miss.
   store.wkEntry('yama');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => submissions.length === 1, 'single reading retry submission');
   assert.deepEqual(submissions[0], {subjectId: 92, incorrectMeaning: 0, incorrectReading: 1});
 });
@@ -1527,7 +1543,7 @@ test('a hidden pending review settles into its retained session after re-enterin
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview', 'review queue');
   store.wkEntry('mountain');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => submits === 1 && !store.getState().busy, 'pending review write');
   const pending = store.getState().step.session;
   store.wkEntry('must not clone pending');
@@ -1558,7 +1574,7 @@ test('a final pending review clears its retained session without replacing an An
   store.startReviews();
   await until(() => store.getState().step.kind === 'wkReview', 'review queue');
   store.wkEntry('mountain');
-  store.wkCheck();
+  await checkRight(store);
   await until(() => store.getState().step.session.phase === 'submitting' && !store.getState().busy, 'pending review write');
   store.openAnki();
   await until(() => store.getState().step.kind === 'decks', 'Anki picker');
