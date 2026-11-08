@@ -1,6 +1,7 @@
 /**
  * The small facts about the app the settings pages put on screen: the version, the dictionary's
- * schema version, whether lookup mode is on, and the support popup's own state.
+ * schema version, whether lookup mode is on, the support popup's own state, and how far the
+ * first-run setup flow has got.
  */
 import { NativeModules } from "react-native";
 
@@ -11,6 +12,8 @@ interface GatenAppInfoNative {
   getSupportPromptState(): Promise<SupportPromptState>;
   recordSupportAppOpen(): Promise<number>;
   dismissSupportPrompt(permanent: boolean): Promise<void>;
+  getOnboardingStep(): Promise<number>;
+  setOnboardingStep(step: number): Promise<void>;
 }
 
 /** The support popup's own state, as the Kotlin `getSupportPromptState` map reports it. */
@@ -60,4 +63,21 @@ export function recordSupportAppOpen(): Promise<number> {
 /** Records a dismissal: `permanent` is "Don't show again", otherwise "Not now". */
 export function dismissSupportPrompt(permanent: boolean): Promise<void> {
   return GatenAppInfo.dismissSupportPrompt(permanent);
+}
+
+/**
+ * How far the first-run setup flow has got: 0, 1 or 2 is the page being shown and 3 means it is
+ * finished. A device that has never stored it answers 0, so the flow runs on the first launch.
+ */
+export function getOnboardingStep(): Promise<number> {
+  return GatenAppInfo.getOnboardingStep();
+}
+
+/**
+ * Stores the onboarding step — the page being shown, or 3 once the flow is finished. The shell
+ * writes the next step before it shows the next page, so a page on screen is never ahead of what
+ * is stored.
+ */
+export function setOnboardingStep(step: number): Promise<void> {
+  return GatenAppInfo.setOnboardingStep(step);
 }

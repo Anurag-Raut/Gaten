@@ -19,6 +19,9 @@ import {SupportSheet} from "./SupportSheet";
 /** How many app opens pass before the popup is offered: enough to have used the app, not one look. */
 const MIN_APP_OPENS = 4;
 
+/** The first-run step that means setup is finished; the popup is never offered before it. */
+const ONBOARDING_DONE_STEP = 3;
+
 /**
  * The count is raised once per launch, not once per mount: Home can remount inside one launch and
  * must not inflate it. It lives here rather than in the hook's state so the guard survives a
@@ -33,8 +36,10 @@ function isEligible(state: GatenAppInfo.SupportPromptState): boolean {
 
 /**
  * Owns the popup's eligibility: it raises the app-open count on first use in a launch, reads the
- * stored state, and answers whether to show. The read is sequence-guarded the way the lookup page's
- * reads are, so a read that started before a dismissal cannot put the popup back on screen.
+ * stored state and the first-run step, and answers whether to show. The read is sequence-guarded the
+ * way the lookup page's reads are, so a read that started before a dismissal cannot put the popup
+ * back on screen. A reader still in the setup flow is never offered it: the shell's tabs mount under
+ * that overlay, so a dialog here would rise above it.
  */
 export function useSupportPrompt(): {
   visible: boolean;
@@ -54,12 +59,17 @@ export function useSupportPrompt(): {
           countedThisLaunch = true;
         });
     void counted
-      .then(() => GatenAppInfo.getSupportPromptState())
-      .then((state) => {
+      .then(() =>
+        Promise.all([
+          GatenAppInfo.getSupportPromptState(),
+          GatenAppInfo.getOnboardingStep(),
+        ]),
+      )
+      .then(([state, onboardingStep]) => {
         if (seq !== readSeq.current) {
           return;
         }
-        setVisible(isEligible(state));
+        setVisible(onboardingStep >= ONBOARDING_DONE_STEP && isEligible(state));
       })
       .catch(() => {
         if (seq === readSeq.current) {

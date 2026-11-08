@@ -32,7 +32,14 @@ import {
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
+import {
+  APP_FONT,
+  CONTENT_COLUMN,
+  contentInsetFor,
+  KANJI_LETTERING,
+  spacing,
+  typeScale,
+} from "../tokens";
 import {useTheme} from "../theme";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
@@ -361,7 +368,7 @@ export function WaniKaniReview({
 }
 
 /** Lettering of the card's big hero character; the primary reading echoes it so they can't drift. */
-const HERO_LETTERING = {fontWeight: "500", fontFamily: APP_FONT} as const;
+const HERO_LETTERING = KANJI_LETTERING;
 
 const styles = StyleSheet.create({
   screen: {flex: 1},

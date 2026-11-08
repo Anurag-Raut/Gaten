@@ -27,14 +27,14 @@ import {PressableScale, heldTone} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme, type ThemeColors} from "../theme";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {APP_FONT, CONTENT_COLUMN, contentInsetFor, KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import {hitFor, useSearchState} from "./searchStore";
-import {SearchNotice} from "./SearchScreen";
+import {SEARCHING_NOTICE_TITLE, SearchNotice} from "./SearchScreen";
 import {useAnkiExport, type AnkiExport, type ExportState} from "./useAnkiExport";
 
 export interface SearchWordScreenProps {
@@ -96,16 +96,24 @@ export function SearchWordScreen({entryId, onBack, onOpenKanji}: SearchWordScree
     return (
       <View style={[styles.root, {backgroundColor: colors.background}]}>
         <WordAppBar onBack={onBack} />
-        <View style={styles.body}>
+        {/* The notice draws no inset of its own and does not scroll, so this scroller carries the
+            screen inset — the same one the entry's own content uses — and keeps a long failure
+            message reachable. */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          style={styles.body}
+          contentContainerStyle={[styles.scrollContent, {paddingHorizontal: inset}]}
+        >
           {state.status === "searching" ? (
-            <SearchNotice spin title="Searching the dictionary…" />
+            <SearchNotice spin title={SEARCHING_NOTICE_TITLE} />
           ) : (
             <SearchNotice
               title="This entry is no longer in the results"
               body="The search was run again and no longer has it. Go back for the results you have."
             />
           )}
-        </View>
+        </ScrollView>
       </View>
     );
   }
@@ -319,11 +327,14 @@ export function WordKanjiSection({
   characters,
   label = "WaniKani kanji",
   onOpenKanji,
+  flat = false,
 }: {
   characters: string[];
   /** The selected reference's name: WaniKani's kanji, or Remembering the Kanji. */
   label?: string;
   onOpenKanji: (character: string) => void;
+  /** The hosted tree already paints the surface: the tiles keep their size but drop their box. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   if (characters.length === 0) return null;
@@ -348,10 +359,12 @@ export function WordKanjiSection({
             onPress={() => onOpenKanji(character)}
             style={[
               styles.kanjiTile,
-              {
-                backgroundColor: colors.surfaceVariant,
-                borderColor: colors.outlineVariant,
-              },
+              flat
+                ? styles.kanjiTileFlat
+                : {
+                    backgroundColor: colors.surfaceVariant,
+                    borderColor: colors.outlineVariant,
+                  },
             ]}
           >
             <Text style={[styles.kanjiCharacter, {color: colors.onSurface}]}>{character}</Text>
@@ -504,7 +517,7 @@ export function AddToAnkiBar({
     try {
       const refused = await GatenAnki.savePreferences({...anki.ankiSettings, deckName});
       if (refused) {
-        setDeckError("AnkiDroid did not accept that deck.");
+        setDeckError("Anki didn't accept that deck.");
         return;
       }
       await anki.refreshAnkiStatus();
@@ -581,25 +594,25 @@ export function AddToAnkiBar({
               {deckLoadFailed ? (
                 <PressableScale
                   accessibilityRole="button"
-                  accessibilityLabel="Try reading AnkiDroid's decks again"
+                  accessibilityLabel="Retry loading Anki decks"
                   onPress={loadDecks}
                   style={styles.deckOption}
                 >
                   <Text style={[typeScale.bodyMedium, styles.deckOptionName, {color: colors.error}]}>
-                    Could not read AnkiDroid's decks. Try again.
+                    Could not read Anki decks. Try again.
                   </Text>
                 </PressableScale>
               ) : decks === null ? (
                 <Text
                   style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
                 >
-                  Reading AnkiDroid decks…
+                  Reading Anki decks…
                 </Text>
               ) : decks.length === 0 ? (
                 <Text
                   style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
                 >
-                  AnkiDroid has no decks to choose from.
+                  Anki has no decks to choose from.
                 </Text>
               ) : (
                 decks.map((deck) => (
@@ -667,7 +680,8 @@ const styles = StyleSheet.create({
   body: {flex: 1},
   scrollContent: {...CONTENT_COLUMN, paddingTop: spacing.xl, paddingBottom: spacing.xl},
   headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
-  wordTitle: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  // One lettering weight for the word's own characters — headword and kanji strip — as the kanji surfaces wear.
+  wordTitle: {fontSize: 36, fontWeight: "500", fontFamily: APP_FONT},
   reading: {...typeScale.bodyMedium, marginTop: spacing.s},
   metadata: {...typeScale.bodyMedium, marginTop: spacing.m},
   meaningSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
@@ -711,7 +725,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  kanjiCharacter: {fontSize: 36, fontWeight: "700", fontFamily: APP_FONT},
+  // Flat, the tile keeps its 58 dp target and the glyph on it; the fill, rounding and border go.
+  kanjiTileFlat: {borderRadius: 0, borderWidth: 0},
+  kanjiCharacter: {fontSize: 36, ...KANJI_LETTERING},
   examplesSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
   examplesState: {marginTop: spacing.m},
   examplesList: {marginTop: spacing.s},

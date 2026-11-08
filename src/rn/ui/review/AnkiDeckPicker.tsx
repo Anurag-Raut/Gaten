@@ -24,11 +24,10 @@ import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-nat
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
-import {IconButton} from "../components";
-import {DialogShell} from "../DialogShell";
+import {ScreenHeader} from "../ScreenHeader";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import {useAnkiDecks, type AnkiDecksFailure} from "../anki/useAnkiDecks";
-import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SubHeader, SuccessCheck} from "./review-ui";
+import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SuccessCheck} from "./review-ui";
 import {
   CountLegend,
   MetricPair,
@@ -46,13 +45,13 @@ function countsLine(deck: AnkiDeckResult): string {
 function todayFailureCopy(failure: AnkiDecksFailure): string {
   switch (failure) {
     case "NOT_INSTALLED":
-      return "AnkiDroid isn't installed.";
+      return "Anki isn't installed.";
     case "PERMISSION":
-      return "AnkiDroid access is needed.";
+      return "Anki access is needed.";
     case "NOT_SET_UP":
-      return "Open AnkiDroid once to set it up.";
+      return "Open Anki once to set it up.";
     default:
-      return "Couldn't read AnkiDroid.";
+      return "Couldn't read Anki.";
   }
 }
 
@@ -67,12 +66,15 @@ const READY_INTENSITY = [0.2, 0.42, 0.67] as const;
 export function AnkiDeckPicker({
   decks,
   busy,
+  help,
   filteredEmpty = false,
   onBack,
   onStart,
 }: {
   decks: AnkiDeckResult[];
   busy: boolean;
+  /** The setup help's trigger, owned by the review page so its dialog outlives this screen. */
+  help: React.ReactNode;
   filteredEmpty?: boolean;
   onBack: () => void;
   onStart: (deck: AnkiDeckResult) => void;
@@ -112,7 +114,6 @@ export function AnkiDeckPicker({
           opacity: READY_INTENSITY[index],
         }));
   const [selectedReady, setSelectedReady] = useState<string | null>(null);
-  const [todayHelpOpen, setTodayHelpOpen] = useState(false);
   // The analytics page's one-shot entrance: figures sweep in once, when the deck list first answers.
   const entrance = useAnalyticsEntrance(!busy && decks.length > 0);
   // The today figure is its own read, so it can fail or still be running while the deck list is
@@ -131,7 +132,7 @@ export function AnkiDeckPicker({
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <SubHeader title="Anki" onBack={onBack} />
+      <ScreenHeader title="Anki" onBack={onBack} trailing={help} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -149,15 +150,7 @@ export function AnkiDeckPicker({
             count, and an unread figure (a dash) keeps it up so its reason stays visible. */}
         {!(anki.studiedToday === 0 && ready === 0) && (
           <>
-            <View style={[styles.todayHeading, {borderBottomColor: colors.outlineVariant}]}>
-              <SectionCaption style={styles.todayCaption}>Today</SectionCaption>
-              <IconButton
-                name="help"
-                size={18}
-                accessibilityLabel="About today’s figures"
-                onPress={() => setTodayHelpOpen(true)}
-              />
-            </View>
+            <SectionCaption style={styles.caption}>Today</SectionCaption>
             <View style={styles.todayMetrics}>
               <MetricPair
                 left={{
@@ -171,7 +164,7 @@ export function AnkiDeckPicker({
                   count: busy || decks.length === 0 ? null : {value: ready},
                   caption: "Ready now",
                   // Only a state that needs saying is said: a failure, a read still on its way, or a
-                  // selection with nothing in it. What each figure counts lives behind the help control.
+                  // selection with nothing in it.
                   note:
                     busy && decks.length === 0
                       ? "Checking…"
@@ -226,7 +219,7 @@ export function AnkiDeckPicker({
           <Text style={[typeScale.bodyMedium, styles.empty, {color: colors.onSurfaceVariant}]}>
             {filteredEmpty
               ? "No study decks selected. Choose decks in Settings → Anki cards."
-              : "No decks found. Create a deck in AnkiDroid to get started."}
+              : "No decks found. Create a deck in Anki to get started."}
           </Text>
         ) : (
           decks.map((deck) => (
@@ -242,34 +235,10 @@ export function AnkiDeckPicker({
         )}
         {busy && decks.length > 0 && (
           <View style={styles.busy}>
-            <BusyRow message="Reading AnkiDroid…" />
+            <BusyRow message="Reading Anki…" />
           </View>
         )}
       </ScrollView>
-      {todayHelpOpen && (
-        <DialogShell
-          title="About today’s figures"
-          onDismiss={() => setTodayHelpOpen(false)}
-          actions={
-            <Text
-              accessibilityRole="button"
-              onPress={() => setTodayHelpOpen(false)}
-              style={[styles.dialogAction, {color: colors.accent}]}
-            >
-              Close
-            </Text>
-          }
-        >
-          <Text style={[styles.dialogParagraph, {color: colors.onSurfaceVariant}]}>
-            Cards studied counts the distinct cards you answered in AnkiDroid today, across every
-            deck. Answering the same card again the same day counts once.
-          </Text>
-          <Text style={[styles.dialogParagraph, {color: colors.onSurfaceVariant}]}>
-            Ready now adds up the cards due right now in the study decks you selected. “Today” is
-            AnkiDroid’s own study day, which rolls over when your Anki day does — not at midnight.
-          </Text>
-        </DialogShell>
-      )}
     </View>
   );
 }
@@ -279,19 +248,7 @@ const styles = StyleSheet.create({
   body: CONTENT_COLUMN,
   title: {marginTop: 18},
   caption: {marginTop: 22},
-  // The Today heading row: the caption's own text stretches, the help target stands beside it, and
-  // the row carries the one hairline the SectionCaption used to draw alone.
-  todayHeading: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    marginTop: 22,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-  },
-  todayCaption: {flex: 1, marginTop: 0, marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0},
   todayMetrics: {marginTop: 12},
-  dialogAction: {fontSize: 15, fontWeight: "600", lineHeight: 20, paddingHorizontal: spacing.m, paddingVertical: 14, fontFamily: APP_FONT},
-  dialogParagraph: {fontFamily: APP_FONT, fontSize: 14, lineHeight: 20, marginBottom: spacing.m},
   empty: {marginTop: spacing.s},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
   caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.m, marginBottom: 24},

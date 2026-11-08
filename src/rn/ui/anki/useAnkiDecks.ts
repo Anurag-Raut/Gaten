@@ -191,12 +191,21 @@ export function loadAnkiDecks(): Promise<void> {
 }
 
 /**
+ * The deck list as it stands, for a surface that reports it but must not start a read of its own —
+ * the setup help shows what the screen behind it already read, and the screen's own resume is what
+ * keeps it current.
+ */
+export function useAnkiDecksState(): AnkiDecksState {
+  return useSyncExternalStore(subscribe, getAnkiDecks);
+}
+
+/**
  * The deck list both surfaces read. The read happens when the screen mounts — Home is mounted up
  * front, so the card has its numbers before the reader arrives — and a foreground return is left to
  * the caller that already listens for one, so no render and no tab switch asks AnkiDroid anything.
  */
 export function useAnkiDecks(): AnkiDecksState & {refresh: () => void} {
-  const current = useSyncExternalStore(subscribe, getAnkiDecks);
+  const current = useAnkiDecksState();
   const refresh = useCallback(() => {
     void loadAnkiDecks();
   }, []);

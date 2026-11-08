@@ -1901,8 +1901,14 @@ class ReviewStore {
    * it may have been answered in AnkiDroid meanwhile — so the queue is read again instead of
    * grading a stale card. Nothing is ever re-sent on its own, and the time spent away is
    * shifted out of the answered-in time.
+   *
+   * `requeue` is false when the reader is only coming back from a detour this app opened —
+   * WaniKani's settings page, whose Get a token hands them to the browser. Nothing outside Gaten
+   * could have answered the card, and the reader must land back on the answer they left, with the
+   * reference they had open, so the queue is not read again and nothing on screen is collapsed;
+   * the time away is still not answer time, so only the session's clock is settled.
    */
-  onResumed() {
+  onResumed(requeue = true) {
     const away = this.pausedAt != null
       ? Math.max(0, Date.now() - this.pausedAt)
       : null;
@@ -1929,6 +1935,13 @@ class ReviewStore {
       return;
     }
     if (step.kind !== "session") return;
+    if (!requeue) {
+      // The detour: the same card, the side it was on and the reference under it all stay put.
+      if (away != null && away > 0) {
+        this.set({ step: { ...step, startedAt: step.startedAt + away } });
+      }
+      return;
+    }
     this.nextCard(
       { ...step, startedAt: step.startedAt + (away ?? 0) },
       step.answered,

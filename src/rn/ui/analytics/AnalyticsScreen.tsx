@@ -30,7 +30,7 @@
  * source that cannot be read is named once — in its own section, with the one action that fixes it —
  * while the sections that read it draw a motif and a line of their own instead of repeating the action.
  */
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useIsFocused} from "@react-navigation/native";
@@ -72,7 +72,6 @@ import {
   daysOnLevel,
   daysOnLevelLabel,
   formatCount,
-  freshnessLabel,
   heatmap,
   levelDurations,
   overallAccuracy,
@@ -95,13 +94,6 @@ import type {SettingsPageName} from "../navigation";
 /** The ring both summary sections lead with, at the size the design fixes. */
 const RING_SIZE = 84;
 const RING_STROKE = 9;
-
-/**
- * How often the freshness line is recomputed. It reads "Updated 4m ago", which is only true while
- * something keeps counting: no data is read here, this only re-renders the sentence, and a page left
- * open for an hour stops claiming to be a minute old.
- */
-const FRESHNESS_TICK_MS = 30_000;
 
 /** The accent strengths a distribution bar is drawn from — one hue, four (or five) weights. */
 const ANKI_INTENSITY = [0.2, 0.42, 0.67, 1] as const;
@@ -138,22 +130,22 @@ const ANKI_FAILURES: Record<
 > = {
   NOT_INSTALLED: {
     tone: "neutral",
-    title: "AnkiDroid is not installed.",
-    detail: "Open the AnkiDroid installation flow.",
+    title: "Anki is not installed.",
+    detail: "Open the Anki installation flow.",
     downstream: "empty",
     fix: "install",
   },
   PERMISSION: {
     tone: "neutral",
-    title: "AnkiDroid access needed.",
+    title: "Anki access needed.",
     detail: "Allow Gaten to read collection statistics.",
     downstream: "permission",
     fix: "grant",
   },
   NOT_SET_UP: {
     tone: "neutral",
-    title: "AnkiDroid has no collection yet.",
-    detail: "Open AnkiDroid once to create it.",
+    title: "Anki has no collection yet.",
+    detail: "Open Anki once to create it.",
     downstream: "empty",
     fix: "open",
   },
@@ -204,10 +196,10 @@ function grantAnkiAccess(refresh: () => void) {
         refresh();
         return;
       }
-      void GatenPlatform.toast("AnkiDroid access was not granted");
+      void GatenPlatform.toast("Anki access was not granted");
     })
     .catch(() => {
-      void GatenPlatform.toast("Could not ask for AnkiDroid access");
+      void GatenPlatform.toast("Could not ask for Anki access");
     });
 }
 
@@ -227,8 +219,8 @@ function ankiAction(
       return {label: "Grant access", onPress: () => grantAnkiAccess(anki.refresh)};
     case "open":
       return {
-        label: "Open AnkiDroid",
-        onPress: () => openOrSay(Anki.openAnkiDroid(), "Could not open AnkiDroid"),
+        label: "Open Anki",
+        onPress: () => openOrSay(Anki.openAnkiDroid(), "Could not open Anki"),
       };
     case "settings":
       return {label: "Anki settings", onPress: () => onOpenSettings("anki")};
@@ -348,18 +340,10 @@ function waniKaniRead(
 }
 
 /**
- * The heading, and the one control on the page. The line under it is the age of the numbers on screen;
- * with nothing read yet it says the read is in flight, or that there is no data at all.
+ * The heading, and the one control on the page: the refresh button, which carries the read's
+ * in-flight state in its own colour.
  */
-function Header({
-  updated,
-  busy,
-  onRefresh,
-}: {
-  updated: string | null;
-  busy: boolean;
-  onRefresh: () => void;
-}) {
+function Header({busy, onRefresh}: {busy: boolean; onRefresh: () => void}) {
   const {colors} = useTheme();
   return (
     <View style={styles.header}>
@@ -375,12 +359,6 @@ function Header({
           <Icon name="refresh" size={22} color={busy ? colors.onSurfaceVariant : colors.accent} />
         </PressableScale>
       </View>
-      <Text
-        numberOfLines={1}
-        style={[typeScale.description, styles.headerUpdated, {color: colors.onSurfaceVariant}]}
-      >
-        {updated ?? (busy ? "Updating…" : "No data yet")}
-      </Text>
     </View>
   );
 }
@@ -462,11 +440,9 @@ export function AnalyticsScreen({
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const focused = useIsFocused();
-  const anki = useAnkiStats();
+  const anki = useAnkiStats(focused);
   const wanikani = useWaniKaniStats();
   const scroll = useRef<ScrollView | null>(null);
-  // Only the freshness line depends on this: it is a clock, not a read.
-  const [, tick] = useState(0);
   // The highlighted category of each distribution chart, by its stable key. The two are separate
   // pieces of state, so the Anki and WaniKani bars can never highlight each other.
   const [selectedAnki, setSelectedAnki] = useState<string | null>(null);
@@ -474,11 +450,6 @@ export function AnalyticsScreen({
   // The heatmap's open day, by the day's own offset, so a refresh that redraws the same day keeps
   // the detail open on the fresh count and a day that disappears closes it on its own.
   const [selectedDayAgo, setSelectedDayAgo] = useState<number | null>(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => tick((count) => count + 1), FRESHNESS_TICK_MS);
-    return () => clearInterval(timer);
-  }, []);
 
   const openSettings = useCallback(
     (page: SettingsPageName) => {
@@ -528,20 +499,11 @@ export function AnalyticsScreen({
   const wkEntrance = useAnalyticsEntrance(focused && wkData != null);
   const now = Date.now();
 
-  // The freshest of the two reads, as an age. No timer sits behind the numbers themselves: this says
-  // how old what is on screen is, and a resumed app re-reads them through the hooks.
-  const updatedAt = useMemo(() => {
-    const times = [anki.data?.updatedAt ?? null, wanikani.snapshot?.fetchedAt ?? null].filter(
-      (at): at is number => at != null
-    );
-    return times.length === 0 ? null : Math.max(...times);
-  }, [anki.data?.updatedAt, wanikani.snapshot?.fetchedAt]);
-
   // A read that could not be brought up to date still has numbers on screen. Those are marked once, at
   // the foot of the page — a cached figure never pretends to be fresh.
   const stale: string[] = [];
   if (anki.data != null && anki.failure != null) {
-    stale.push("The last AnkiDroid read did not finish.");
+    stale.push("The last Anki read did not finish.");
   }
   if (wanikani.snapshot != null && wanikani.stale) {
     stale.push(
@@ -667,7 +629,7 @@ export function AnalyticsScreen({
           onPress={dismiss}
           style={styles.contentDismiss}
         >
-        <Header updated={freshnessLabel(updatedAt, now)} busy={busy} onRefresh={refresh} />
+        <Header busy={busy} onRefresh={refresh} />
 
         {/* Anki — collection maturity. The ring and the bar are one hue at several strengths; the
             mature share is the only place the page draws a proportion of a whole. */}
@@ -678,7 +640,7 @@ export function AnalyticsScreen({
             <SourceState
               read={ankiState}
               art={AnkiConnectionArt}
-              loadingTitle="Checking AnkiDroid…"
+              loadingTitle="Checking Anki…"
               loadingDetail="Checking collection access."
             />
           ) : (
@@ -721,7 +683,7 @@ export function AnalyticsScreen({
                     />
                   </>
                 ) : (
-                  <InlineUnavailable>AnkiDroid would not answer the card-state searches.</InlineUnavailable>
+                  <InlineUnavailable>Anki would not answer the card-state searches.</InlineUnavailable>
                 )}
               </View>
             </View>
@@ -1011,7 +973,6 @@ const styles = StyleSheet.create({
     gap: spacing.l,
   },
   headerHeading: {flex: 1},
-  headerUpdated: {marginTop: 10},
   /** The one control on the page: a quiet square, the accent on the glyph rather than a filled block. */
   refresh: {
     width: 43,

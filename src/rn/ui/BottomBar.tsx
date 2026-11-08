@@ -451,7 +451,8 @@ export function BottomBar({
   position,
   layout,
   searchActive = false,
-}: MaterialTopTabBarProps & {searchActive?: boolean}) {
+  onReady,
+}: MaterialTopTabBarProps & {searchActive?: boolean; onReady?: () => void}) {
   const {colors, dark} = useTheme();
   // The selected pill wears the reader's accent, not the neutral action fill: the bar's active
   // state is the one place the accent is always visible, and `onPrimary` is already the ink that
@@ -686,6 +687,7 @@ export function BottomBar({
       ]}
     >
       <View
+        onLayout={onReady}
         style={[
           styles.surface,
           {

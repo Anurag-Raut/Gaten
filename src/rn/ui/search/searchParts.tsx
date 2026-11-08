@@ -111,9 +111,12 @@ export function searchRows(state: store.SearchState): SearchRow[] {
 export function SearchRowItem({
   row,
   onOpen,
+  flat = false,
 }: {
   row: SearchRow;
   onOpen: (entryId: number) => void;
+  /** The hosted list already paints the surface; the card carries it down to the row. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   if (row.kind === "count") {
@@ -130,11 +133,25 @@ export function SearchRowItem({
       </Text>
     );
   }
-  return <ResultCard hit={row.hit} onOpen={onOpen} />;
+  return <ResultCard hit={row.hit} onOpen={onOpen} flat={flat} />;
 }
 
-/** The gap between two rows of the results. */
-export function SearchRowSeparator() {
+/**
+ * The gap between two rows of the results. A flat list has no card fill to part its rows, so the gap
+ * becomes the hairline the sheet's own separators use.
+ */
+export function SearchRowSeparator({flat = false}: {flat?: boolean}) {
+  const {colors} = useTheme();
+  if (flat) {
+    return (
+      <View
+        style={{
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.outlineVariant,
+        }}
+      />
+    );
+  }
   return <View style={{height: spacing.m}} />;
 }
 
@@ -145,7 +162,7 @@ export function SearchRowSeparator() {
  * lesson on what the field takes. A chip is a choice rather than typing, so it is asked for at once
  * — anything half-typed is cancelled so it cannot land over it.
  */
-export function SearchIdlePrompt() {
+export function SearchIdlePrompt({flat = false}: {flat?: boolean}) {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
   const searchStore = useSearchStore();
@@ -175,7 +192,7 @@ export function SearchIdlePrompt() {
               searchStore.onQueryChange(word);
               searchStore.searchNow();
             }}
-            style={[styles.exampleChip, {backgroundColor: colors.surfaceVariant}]}
+            style={[styles.exampleChip, flat ? styles.exampleChipFlat : {backgroundColor: colors.surfaceVariant}]}
           >
             <Text numberOfLines={1} style={[typeScale.titleMedium, {color: colors.onSurface}]}>
               {word}
@@ -186,7 +203,7 @@ export function SearchIdlePrompt() {
       <View style={styles.art}>
         <SearchArtwork width={artWidth} />
         <Text style={[typeScale.bodyMedium, styles.artCaption, {color: colors.onSurfaceVariant}]}>
-          Find your next Japanese word
+          Search by kanji, kana, or a reading in romaji.
         </Text>
       </View>
     </View>
@@ -207,6 +224,7 @@ export function SearchField({
   onBlur,
   style,
   compact = false,
+  flat = false,
 }: {
   inputRef: React.RefObject<TextInput | null>;
   query: string;
@@ -217,15 +235,19 @@ export function SearchField({
   onBlur?: () => void;
   style?: React.ComponentProps<typeof View>["style"];
   compact?: boolean;
+  /** The hosted tree already paints the surface: a hairline rule stands in for the filled shell. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const focus = useSharedValue(0);
+  // Flat, the resting rule is the surface's own hairline; the accent still arrives on focus.
+  const restBorder = flat ? colors.outlineVariant : "transparent";
   const focusRing = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focus.value,
       [0, 1],
-      ["transparent", colors.accent],
+      [restBorder, colors.accent],
     ),
   }));
   const settle = (target: number) => {
@@ -240,7 +262,8 @@ export function SearchField({
         style={[
           styles.fieldShell,
           compact && styles.compactFieldShell,
-          {backgroundColor: colors.surfaceVariant},
+          flat && styles.flatFieldShell,
+          !flat && {backgroundColor: colors.surfaceVariant},
           focusRing,
         ]}
       >
@@ -280,16 +303,19 @@ export function SearchField({
 export function ResultCard({
   hit,
   onOpen,
+  flat = false,
 }: {
   hit: SearchResult;
   onOpen: (entryId: number) => void;
+  /** The hosted list already paints the surface: the card drops its fill and rounding. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   return (
     <PressableCard
       accessibilityLabel={`Open ${hit.primary}`}
       onPress={() => onOpen(hit.id)}
-      style={[styles.resultCard, {backgroundColor: colors.surfaceVariant}]}
+      style={[styles.resultCard, flat ? styles.resultCardFlat : {backgroundColor: colors.surfaceVariant}]}
     >
       <View style={styles.resultRow}>
         <View style={styles.resultMain}>
@@ -316,7 +342,7 @@ export function ResultCard({
             </Text>
           )}
           {hit.pos.length > 0 && (
-            <View style={[styles.metaPill, {backgroundColor: colors.surface}]}>
+            <View style={styles.metaPill}>
               <Text numberOfLines={1} style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>
                 {hit.pos[0]}
               </Text>
@@ -365,6 +391,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.m,
   },
+  // Flat, the chip is the bare word: the fill and its rounding go, but the 48 dp target stays —
+  // `minWidth` is what keeps a one-character example from shrinking below it.
+  exampleChipFlat: {borderRadius: 0, paddingHorizontal: 0, minWidth: 48},
   fieldShell: {
     flexDirection: "row",
     alignItems: "center",
@@ -385,11 +414,20 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     gap: 13,
   },
+  // Flat, the field keeps its size and drops to a hairline rule on the surface's own ink.
+  flatFieldShell: {
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: 0,
+  },
   field: {flex: 1, minWidth: 0, paddingHorizontal: 0, paddingVertical: spacing.m, ...typeScale.bodyMedium},
   limitNote: {marginHorizontal: spacing.xl, marginTop: spacing.xs},
   header: {marginTop: spacing.s},
   resultCount: {marginBottom: spacing.xs},
   resultCard: {borderRadius: shape.small},
+  // Flat, the card is a row on the surface: no fill, no rounding, parted from the next by the list's
+  // own hairline.
+  resultCardFlat: {backgroundColor: "transparent", borderRadius: 0},
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -398,13 +436,8 @@ const styles = StyleSheet.create({
   },
   resultMain: {flex: 1},
   headwordRow: {flexDirection: "row", alignItems: "center", gap: spacing.s},
-  metaPill: {
-    alignSelf: "flex-start",
-    borderRadius: shape.brandTile,
-    paddingHorizontal: spacing.s,
-    paddingVertical: spacing.xs,
-    marginTop: spacing.xs,
-  },
+  // The part of speech is the line of text itself: the card it sits in is the only box.
+  metaPill: {alignSelf: "flex-start", marginTop: spacing.xs},
   line: {marginTop: spacing.xs},
   glosses: {marginTop: spacing.s},
 });

@@ -54,6 +54,11 @@ import {CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "./t
 import {useTheme, type Theme} from "./theme";
 import {OutlinedButton} from "./settings/settings-components";
 import {DialogShell} from "./DialogShell";
+import {ScreenHeader} from "./ScreenHeader";
+import {
+  ProviderSetupDialog,
+  ProviderSetupHelpTrigger,
+} from "./review/provider-setup-help";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
 import {RtkKanjiPanel} from "./rtk/RtkKanjiPanel";
 import {kanjiReferenceLabel, useKanjiReferenceSource} from "./kanjiReference";
@@ -95,21 +100,21 @@ const FLASH_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 /** The line for an AnkiDroid failure, without any of the provider's internals. */
 function failureMessage(failure: ReviewFailure, detail?: string): string {
   if (failure === "PROVIDER" && detail != null) {
-    return `AnkiDroid could not do that: ${detail}`;
+    return `Anki could not do that: ${detail}`;
   }
   switch (failure) {
     case "NOT_INSTALLED":
-      return "Download AnkiDroid and open it once to set up your collection, then return here to review.";
+      return "Install Anki and finish setup, then return to review.";
     case "PERMISSION":
-      return "Gaten needs AnkiDroid's database access to read and answer cards.";
+      return "Allow Gaten to read and answer Anki cards.";
     case "NOT_SET_UP":
-      return "AnkiDroid has not set up its collection yet. Open AnkiDroid once and come back.";
+      return "Finish setup in Anki, then return to review.";
     case "NOT_FOUND":
-      return "That card is no longer in AnkiDroid.";
+      return "That card is no longer in Anki.";
     case "MALFORMED":
-      return "AnkiDroid sent something Gaten could not read.";
+      return "Gaten couldn't read Anki's response.";
     default:
-      return "AnkiDroid could not complete that request.";
+      return "Anki couldn't complete the request.";
   }
 }
 
@@ -175,14 +180,69 @@ function leaveQuestion(step: ConfirmableStep): {title: string; body: string} {
   }
 }
 
-/** The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it. */
-export function ReviewScreen({onExit}: {onExit: () => void}) {
+/**
+ * The review flow's page, as the shell mounts it. `onExit` is the pop that leaves it.
+ *
+ * The setup help's dialog is held here rather than inside the screen it stands over: the reader
+ * leaves Gaten to install or set up AnkiDroid, and the screen behind the help is re-read and
+ * replaced on the way back. Held here, the dialog and the block the reader was reading stay put.
+ */
+export function ReviewScreen({
+  onExit,
+  onOpenSettingsPage,
+}: {
+  onExit: () => void;
+  /**
+   * The shell's own way to a settings page on this stack: an open reference page hands the reader
+   * to WaniKani's settings to connect a token, and Back returns to the card they were on.
+   */
+  onOpenSettingsPage?: (page: "wanikani") => void;
+}) {
   const theme = useTheme();
   const {colors} = theme;
-  const review = useReview();
+  // A settings page this page opened: WaniKani's, whose Get a token hands the reader to the browser.
+  // While it is over this page the card must not move (see `useReview`); it is cleared the moment
+  // the reader is back here.
+  const [settingsDetour, setSettingsDetour] = useState(false);
+  const review = useReview(settingsDetour);
   const isFocused = useIsFocused();
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [ankiHelpOpen, setAnkiHelpOpen] = useState(false);
   const step = review.step;
+  const ankiHelp = (
+    <ProviderSetupHelpTrigger provider="anki" onPress={() => setAnkiHelpOpen(true)} />
+  );
+
+  /**
+   * The reader can connect WaniKani from the settings page this screen opens over itself. Coming
+   * back re-reads any open reference page once, so the token it now has shows; the review store is
+   * never touched, so the card being answered stays exactly as it was left — unanswered and
+   * ungraded. A changed key is the panel's own cue to look again; the overlay caller, which has no
+   * navigator, never sets one.
+   */
+  const [referenceReload, setReferenceReload] = useState(0);
+  const wasFocused = useRef(isFocused);
+  useEffect(() => {
+    if (isFocused && !wasFocused.current) {
+      // Back here: the detour is over, and both the detour and the open reference look again.
+      setSettingsDetour(false);
+      setReferenceReload((count) => count + 1);
+    }
+    wasFocused.current = isFocused;
+  }, [isFocused]);
+
+  /**
+   * The page's own route into WaniKani's settings, marking the detour on the way: the settings
+   * page's Get a token leaves Gaten for the browser, and the card must not move while the reader is
+   * away — nor may the reference they tapped Connect from close under them.
+   */
+  const openWaniKaniSettings =
+    onOpenSettingsPage == null
+      ? undefined
+      : () => {
+          setSettingsDetour(true);
+          onOpenSettingsPage("wanikani");
+        };
 
   /**
    * Back from this screen. Work in progress asks first — the Anki card, the WaniKani review and the
@@ -273,18 +333,20 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
       <StepEnter pageKey={step.kind} forward={forward}>
         {step.kind === "opening" ? (
           step.source === "anki" ? (
-            <AnkiDeckPicker decks={[]} busy onBack={onExit} onStart={() => {}} />
+            <AnkiDeckPicker help={ankiHelp} decks={[]} busy onBack={onExit} onStart={() => {}} />
           ) : <OpeningView source={step.source} onBack={onExit} />
         ) : step.kind === "blocked" ? (
           <BlockedView
             theme={theme}
             failure={step.failure}
             busy={review.busy}
+            help={ankiHelp}
             onBack={leave}
             onGrant={requestAnkiPermission}
           />
         ) : step.kind === "decks" ? (
           <AnkiDeckPicker
+            help={ankiHelp}
             decks={step.decks}
             filteredEmpty={step.filteredEmpty}
             busy={review.busy}
@@ -304,6 +366,8 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
             onKanji={(character) => reviewActions.toggleKanji(character)}
             onRadical={(id) => reviewActions.toggleRadical(id)}
             onCloseDetails={() => reviewActions.closeDetails()}
+            onOpenSettings={openWaniKaniSettings}
+            referenceReload={referenceReload}
           />
         ) : step.kind === "wkConnect" ? (
           <WaniKaniConnect
@@ -363,6 +427,14 @@ export function ReviewScreen({onExit}: {onExit: () => void}) {
           />
         )}
       </StepEnter>
+
+      {/* Above the step the page is drawing: the reader goes to AnkiDroid's own screens from here,
+          and what comes back may be a different step of the flow. */}
+      <ProviderSetupDialog
+        provider="anki"
+        open={ankiHelpOpen}
+        onDismiss={() => setAnkiHelpOpen(false)}
+      />
 
       {/* Work in progress is on screen, so leaving is worth one question — never a grade, never a
           discard, and never a question about a step that has already finished. */}
@@ -435,7 +507,7 @@ function OpeningView({
         ]}
       >
         <BusyRow
-          message={source === "anki" ? "Opening AnkiDroid…" : "Reading WaniKani…"}
+          message={source === "anki" ? "Opening Anki…" : "Reading WaniKani…"}
         />
       </View>
     </View>
@@ -447,12 +519,15 @@ function BlockedView({
   theme,
   failure,
   busy,
+  help,
   onBack,
   onGrant,
 }: {
   theme: Theme;
   failure: ReviewFailure;
   busy: boolean;
+  /** The setup help's trigger, owned by the page so its dialog outlives this screen. */
+  help: React.ReactNode;
   onBack: () => void;
   onGrant: () => void;
 }) {
@@ -462,15 +537,17 @@ function BlockedView({
   const contentInset = contentInsetFor(width);
   const title =
     failure === "NOT_INSTALLED"
-      ? "AnkiDroid is not installed"
+      ? "Anki is not installed"
       : failure === "NOT_SET_UP"
-        ? "AnkiDroid is not set up"
+        ? "Anki setup needed"
         : failure === "PERMISSION"
-          ? "AnkiDroid access is needed"
+          ? "Anki access needed"
           : "Review unavailable";
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <SubHeader title="Anki" onBack={onBack} />
+      {/* The setup help stands on the blocked screen too: the reader who has not set AnkiDroid up is
+          the one who needs the steps, and it is reachable whatever the failure is. */}
+      <ScreenHeader title="Anki" onBack={onBack} trailing={help} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -483,13 +560,13 @@ function BlockedView({
           body={failureMessage(failure)}
         >
           {failure === "NOT_INSTALLED" && (
-            <FilledAction label="Download AnkiDroid" onPress={downloadAnkiDroid} />
+            <FilledAction label="Download Anki" onPress={downloadAnkiDroid} />
           )}
           {failure === "PERMISSION" && (
-            <FilledAction label="Allow AnkiDroid access" disabled={busy} onPress={onGrant} />
+            <FilledAction label="Allow access" disabled={busy} onPress={onGrant} />
           )}
           {failure === "NOT_SET_UP" && (
-            <OutlinedButton label="Open AnkiDroid" onPress={openAnkiDroid} />
+            <OutlinedButton label="Open Anki" onPress={openAnkiDroid} />
           )}
         </StateBlock>
       </ScrollView>
@@ -512,6 +589,8 @@ function AnkiSession({
   onKanji,
   onRadical,
   onCloseDetails,
+  onOpenSettings,
+  referenceReload,
 }: {
   theme: Theme;
   session: Extract<ReviewStep, {kind: "session"}>;
@@ -524,6 +603,10 @@ function AnkiSession({
   onKanji: (character: string) => void;
   onRadical: (id: number) => void;
   onCloseDetails: () => void;
+  /** The panels' connect action: this page's own route to WaniKani's settings, detour marked. */
+  onOpenSettings?: () => void;
+  /** Bumped when the reader returns to this page, so an open reference page looks again. */
+  referenceReload: number;
 }) {
   const {colors} = theme;
   const insets = useSafeAreaInsets();
@@ -742,6 +825,8 @@ function AnkiSession({
                           compact={false}
                           embedded
                           onRadical={onRadical}
+                          onSettings={onOpenSettings}
+                          reloadKey={referenceReload}
                         />
                         {/* One level deeper: the radical is a page opened inside the kanji's
                             page, so the kanji panel above stands still while it slides in. */}
@@ -760,6 +845,8 @@ function AnkiSession({
                                   compact={false}
                                   embedded
                                   onRadical={onRadical}
+                                  onSettings={onOpenSettings}
+                                  reloadKey={referenceReload}
                                 />
                               </View>
                             )}
@@ -782,7 +869,7 @@ function AnkiSession({
         {session.revealed && card.typedAnswer && (
           <>
             <Text style={[typeScale.bodySmall, styles.note, {color: colors.onSurfaceVariant}]}>
-              This card expects typed input. Gaten shows the answer as AnkiDroid renders it, but the
+              This card expects typed input. Gaten shows the answer as Anki renders it, but the
               interactive comparison is not supported here, so rate it yourself.
             </Text>
             <View style={styles.gapS} />
@@ -793,12 +880,12 @@ function AnkiSession({
         {session.mediaFiles.length > 0 && (
           <PressableScale
             accessibilityRole="button"
-            accessibilityLabel="Open in AnkiDroid"
+            accessibilityLabel="Open in Anki"
             onPress={openAnkiDroid}
             style={styles.mediaAction}
           >
             <Text style={[typeScale.labelMedium, {color: colors.accent}]}>
-              This card has media. Open in AnkiDroid
+              This card has media. Open in Anki
             </Text>
           </PressableScale>
         )}
@@ -820,7 +907,7 @@ function AnkiSession({
         )}
         {busy && (
           <View style={styles.gapS}>
-            <BusyRow message="Saving to AnkiDroid" />
+            <BusyRow message="Saving to Anki" />
           </View>
         )}
       </ActionFooter>
@@ -850,7 +937,8 @@ function CardHtml({
         card.ord,
         colors.onSurface,
         colors.background,
-        cardRule(!revealed, colors.outlineVariant)
+        cardRule(!revealed, colors.outlineVariant),
+        !revealed
       ),
     [
       card.css,
@@ -893,7 +981,7 @@ const CARD_FONT_FILES: Array<[weight: number, file: string]> = [
  * WebView cannot see the family React Native registered, so each weight is declared here over
  * [CARD_FONT_HOST] and served from the bundled resources; the family is then stated on the card's
  * elements with `!important`, beside the ink, so a note type's own `font-family` cannot win. Sizes,
- * weights, line heights, layout, ruby and the note's own markup are still untouched.
+ * line heights, layout, ruby and the note's own markup are still untouched.
  */
 function cardFontCss(): string {
   const faces = CARD_FONT_FILES.map(
@@ -920,9 +1008,18 @@ function cardFontCss(): string {
  * note type's CSS and with `!important`.
  *
  * Replacing a note type's own foreground colours is deliberate: readable text on the app's
- * background is worth more than a template's arbitrary palette. The ink and the face are what is
- * stated (see [cardFontCss]); sizes, weights, line heights, layout, ruby and the note's own markup
- * are untouched, so a card's *structure* is preserved exactly. Backgrounds keep the narrower boundary
+ * background is worth more than a template's arbitrary palette. The ink, the face (see
+ * [cardFontCss]) — and, on the question side only, the weight — are what is stated; sizes, line
+ * heights, layout, ruby and the note's own markup are untouched, so a card's *structure* is
+ * preserved exactly.
+ *
+ * The question's weight is stated for the same reason the answer's is drawn at
+ * `typeScale.displayMedium`: the question and the revealed answer must read as the same word, and a
+ * template is free to set its own weight (this deck's is lighter than the answer's headword). A
+ * weight stated on the root alone would lose to a template's own rule on a descendant, so it is
+ * stated on `#content` and every element inside it, after the note type's CSS and with `!important`.
+ * The answer side states none: there the note type's own lettering stays its own, as it always has.
+ * Backgrounds keep the narrower boundary
  * they had: the content root and its first wrapper are forced transparent, because that is where a
  * note type paints the page-like background meant to cover the card, while anything deeper keeps its
  * colour — a box drawn inside a card is the note type's own formatting, and the app cannot tell a
@@ -938,7 +1035,8 @@ function cardDocument(
   ord: number,
   onSurface: string,
   canvas: string,
-  frontRule: string
+  frontRule: string,
+  frontWord: boolean
 ): string {
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
@@ -955,9 +1053,13 @@ function cardDocument(
     // card, not just its root. A template written for a light page colours its fields itself — this
     // deck paints its expression nearly black and its sentence grey — and a colour stated on a
     // descendant beats anything inherited, which is why stating the ink on the roots alone left the
-    // card unreadable once the canvas followed the theme. The ink and the family are stated; sizes,
-    // weights, line heights, layout, ruby, backgrounds and the note's own markup are left alone.
+    // card unreadable once the canvas followed the theme. The ink, the family, and — on the
+    // question side only — the weight are stated; sizes, line heights, layout, ruby, backgrounds
+    // and the note's own markup are left alone.
     `<style>#content,#content *{color:${onSurface} !important}` +
+    (frontWord
+      ? `#content,#content *{font-weight:${typeScale.displayMedium.fontWeight} !important}`
+      : "") +
     `${cardFontCss()}</style></head>` +
     `<body class="card card${ord + 1}"><div id="content" dir="auto">${stripMediaTags(html)}</div></body></html>`
   );
@@ -1087,6 +1189,9 @@ function displayAnkiField(value: string): string {
  * The question keeps its existing display treatment. The answer uses the app's body size and
  * natural document height so imported templates that set a page-sized card do not push the
  * WaniKani supplement away from the answer. Descendant sizing and media layout remain template-owned.
+ *
+ * The question's *weight* is not stated here: a rule this early loses to the note type's own CSS, so
+ * it is stated later with `!important` (see [cardDocument]), where the ink and the face already win.
  */
 function cardRule(frontWord: boolean, divider: string): string {
   if (!frontWord) {
@@ -1215,7 +1320,7 @@ function FailedView({
           body={failureMessage(step.failure, step.detail)}
           note={
             step.afterGrade
-              ? "AnkiDroid may or may not have saved that answer, so Gaten will not send it again."
+              ? "Anki may or may not have saved that answer, so Gaten will not send it again."
               : undefined
           }
         >
@@ -1225,7 +1330,7 @@ function FailedView({
             onPress={onRetry}
           />
           {step.failure === "PROVIDER" && (
-            <OutlinedButton label="Open AnkiDroid" onPress={openAnkiDroid} />
+            <OutlinedButton label="Open Anki" onPress={openAnkiDroid} />
           )}
           <OutlinedButton label="Change deck" disabled={busy} onPress={onChangeDeck} />
         </StateBlock>

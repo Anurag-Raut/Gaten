@@ -25,14 +25,19 @@ import java.io.IOException
 
 /**
  * The small facts about the app the RN screens put on their settings pages: the version, the
- * dictionary's schema version, whether lookup mode is on, and the support popup's own state.
+ * dictionary's schema version, whether lookup mode is on, the support popup's own state, and how
+ * far the first-run setup flow has got.
  *
- * Everything is a read of something that already exists: the platform's own
+ * Everything but the onboarding step is a read of something that already exists: the platform's own
  * enabled-accessibility-services list, which is what lookup mode's "On" and "Off"
  * report on, and the support popup's counters in the app's settings file. The dictionary's schema
  * version is read from the SQLite header the way `app/build.gradle.kts` verifies the packaged
  * asset — `PRAGMA user_version` at bytes 60-63 — read from the extracted copy when there is one
  * and from the asset otherwise, so the number the build checked is the number JS sees.
+ *
+ * The onboarding step is the one thing this module writes: a single integer in the shared
+ * `gaten_settings` file (0, 1 or 2 for the page being shown, 3 once the flow is finished), so the
+ * setup flow runs on the first launch and never again.
  */
 class GatenAppInfoModule(
     reactContext: com.facebook.react.bridge.ReactApplicationContext,
@@ -119,9 +124,37 @@ class GatenAppInfoModule(
         promise.resolve(null)
     }
 
+    /**
+     * How far the first-run setup flow has got: 0, 1 or 2 is the page being shown and 3 means it is
+     * finished. A device that has never stored it answers 0, so the flow runs on the first launch.
+     */
+    @ReactMethod
+    fun getOnboardingStep(promise: Promise) {
+        promise.resolve(onboardingStep(reactApplicationContext))
+    }
+
+    /**
+     * Stores the onboarding step — the page being shown, or 3 once the flow is finished. The write
+     * is applied before the promise resolves, so a caller that advances only after this resolves
+     * never leaves the stored step behind the page on screen.
+     */
+    @ReactMethod
+    fun setOnboardingStep(step: Int, promise: Promise) {
+        prefs(reactApplicationContext).edit().putInt(KEY_ONBOARDING_STEP, step).apply()
+        promise.resolve(null)
+    }
+
     override fun invalidate() {
         scope.cancel()
     }
+
+    /** The stored onboarding step; 0 when the flow has never stored one. */
+    private fun onboardingStep(context: Context): Int =
+        prefs(context).getInt(KEY_ONBOARDING_STEP, 0)
+
+    /** The app's shared settings file, the one every other pref is kept in. */
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /**
      * True when [GatenAccessibilityService] is one of the platform's enabled accessibility services
@@ -172,6 +205,10 @@ class GatenAppInfoModule(
         private const val TAG = "GatenBridge"
         private const val ASSET_PATH = "db/jmdict.sqlite"
         private const val DB_FILE_NAME = "jmdict.sqlite"
+
+        /** The app's shared settings file, and the one key this module stores. */
+        private const val PREFS_NAME = "gaten_settings"
+        private const val KEY_ONBOARDING_STEP = "onboarding_step"
 
         /** The bytes of the SQLite header the schema version sits behind. */
         private const val HEADER_SIZE = 64

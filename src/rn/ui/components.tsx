@@ -214,16 +214,13 @@ export function SectionLabel({
   );
 }
 
-/** The "common" marker beside a headword. */
+/**
+ * The "common" marker beside a headword: the bare word, because the result card behind it is the
+ * only box — a marker in its own fill would be a box inside that box.
+ */
 export function CommonChip({label = "common"}: {label?: string}) {
   const {colors} = useTheme();
-  return (
-    <ChipBase
-      label={label}
-      background={colors.primaryContainer}
-      color={colors.onPrimaryContainer}
-    />
-  );
+  return <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{label}</Text>;
 }
 
 /** A count or short figure the screens float beside a heading. */
@@ -281,6 +278,7 @@ export function Button({
   leading = null,
   accessibilityLabel,
   pressScale,
+  surfaceWhileDisabled = false,
   style,
 }: {
   label?: string;
@@ -292,10 +290,18 @@ export function Button({
   accessibilityLabel?: string;
   /** Scale down on press, back up on release, with a held fill; see [PressScale]. */
   pressScale?: PressScale;
+  /**
+   * Keep the variant's own fill, border and ink while [disabled]. For a control whose label and
+   * action change with state — the onboarding flow's primary, which reads "Checking…" between pages
+   * — so the surface never flashes away and back. The press is still refused and still announced as
+   * disabled; only the colours stay.
+   */
+  surfaceWhileDisabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const {colors} = useTheme();
   const bare = variant === "text";
+  const dimmed = disabled && !surfaceWhileDisabled;
   const container: ViewStyle = {
     minHeight: bare ? 48 : 52,
     borderRadius: shape.button,
@@ -307,21 +313,21 @@ export function Button({
     gap: spacing.s,
     alignSelf: fullWidth ? ("stretch" as const) : ("auto" as const),
     ...(variant === "filled"
-      ? {backgroundColor: disabled ? colors.disabled : colors.actionPrimary}
+      ? {backgroundColor: dimmed ? colors.disabled : colors.actionPrimary}
       : variant === "tonal"
         ? {
-            backgroundColor: disabled ? colors.disabled : colors.actionSecondary,
+            backgroundColor: dimmed ? colors.disabled : colors.actionSecondary,
           }
       : variant === "outlined"
         ? {
             borderWidth: 1,
-            borderColor: disabled ? colors.disabled : colors.accent,
+            borderColor: dimmed ? colors.disabled : colors.accent,
           }
         : null),
   };
   // Every variant carries the accent: the filled one as its fill, and the quieter ones as their ink —
-  // disabled is the one state that leaves the accent behind.
-  const textColor = disabled
+  // disabled is the one state that leaves the accent behind, unless the surface is asked to stay.
+  const textColor = dimmed
     ? colors.onDisabled
     : variant === "filled"
       ? colors.onActionPrimary

@@ -55,7 +55,7 @@ const HELP_PARAGRAPHS = [
   "Notification access lets Gaten control media sessions. Without it, some players may ignore media keys. Gaten resumes playback after a normal lookup dismissal; media stays paused after an interruption.",
   "Japanese recognition and dictionary lookup run on this device. No OCR model is included: choose and download one in Text recognition first, then lookups work offline. Google ML Kit locates text for selection; its readings are not used as lookup answers. A selection a PP-OCR engine cannot read falls back to Manga OCR when it is installed.",
   "WaniKani is an optional online reference. Its content is not included in Anki exports.",
-  "With AnkiDroid access, Add to Anki writes a card. Grant access in Anki cards, where card layout and deck settings live.",
+  "With Anki access, Add to Anki writes a card. Grant access in Anki cards, where card layout and deck settings live.",
 ];
 
 export function LookupSettingsScreen({onClose}: {onClose: () => void}) {
