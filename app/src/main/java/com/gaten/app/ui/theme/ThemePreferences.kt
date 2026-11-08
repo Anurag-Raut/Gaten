@@ -43,10 +43,12 @@ object ThemePreferences {
 
     fun themeMode(context: Context): ThemeMode =
         when (prefs(context).getString(KEY_THEME_MODE, null)) {
-            ThemeMode.Light.name -> ThemeMode.Light
+            ThemeMode.System.name -> ThemeMode.System
             ThemeMode.Dark.name -> ThemeMode.Dark
-            // Anything else, including a value written by a future version, is the default.
-            else -> ThemeMode.System
+            // Unset — a fresh install — and anything written by a future version: the app's own
+            // light default, the face it ships with. System and Dark are the reader's own choices,
+            // never the starting point.
+            else -> ThemeMode.Light
         }
 
     /** Stores the mode immediately and queues the matching launcher icon without blocking the UI. */
