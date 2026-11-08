@@ -39,6 +39,7 @@ import {
   I18nManager,
   ScrollView,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -81,7 +82,10 @@ import {
 import {OnboardingScene, SCENE_WIDTH} from "./OnboardingArtwork";
 import {STEP_SCENE_MS, travelDirection} from "./onboarding-motion";
 import {StepList, StepRow} from "./StepList";
+import {WelcomeScreen} from "./WelcomeScreen";
+import {shouldShowWelcome} from "./welcome-timeline";
 import {
+  actionAreaKey,
   ankiSteps,
   connectReadout,
   downloadPercent,
@@ -90,6 +94,8 @@ import {
   lookupSteps,
   nextStep,
   shouldAutoAdvance,
+  tokenToCheck,
+  wanikaniPrimary,
   wanikaniSteps,
   type AdvanceGate,
 } from "./onboarding-steps";
@@ -351,22 +357,6 @@ interface StepVisual {
   onSkip: () => void;
   saveError: boolean;
   onRetry: () => void;
-}
-
-/**
- * A key for the action area alone — the committed step plus everything the shell's buttons draw. The
- * shell re-renders on this and never on a page's whole view, so the buttons are not remounted, and do
- * not lose their surface, just because a page re-reported. The step is in the key so two pages that
- * happen to share a label and a disabled state still hand over a fresh handler.
- */
-function actionAreaKey(step: number, visual: StepVisual): string {
-  return [
-    `step:${step}`,
-    `${visual.primary.label}:${visual.primary.disabled ? 1 : 0}`,
-    visual.saveError ? "error" : "",
-    visual.skipLabel,
-    visual.skipAccessibilityLabel,
-  ].join("|");
 }
 
 /** What every page is handed by the flow: where it is, and how to fill the frame. */
@@ -730,6 +720,35 @@ export function OnboardingFlow({
   const retry = useCallback(() => write(pending.current), [write]);
 
   const reducedMotion = useReducedMotion();
+  const {width} = useWindowDimensions();
+  // The Welcome screen: the state before page 1, never a step of its own and never persisted. It is
+  // shown while the stored step is still 0, and once "Set up Gaten" is pressed it hands the frame to
+  // the flow's own first page on the flow's page-transition clock — the same duration and curve a
+  // step change uses, so the reader arrives on page 1 exactly as they would from a page change.
+  const [welcome, setWelcome] = useState(() => shouldShowWelcome(step));
+  const welcomeOut = useSharedValue(welcome ? 0 : 1);
+  const finishWelcome = useCallback(() => setWelcome(false), []);
+  const startWelcome = useCallback(() => {
+    if (reducedMotion) {
+      welcomeOut.value = 1;
+      finishWelcome();
+      return;
+    }
+    welcomeOut.value = withTiming(
+      1,
+      {duration: STEP_SCENE_MS, easing: PAGE_EASING_REANIMATED},
+      (finished) => {
+        "worklet";
+        if (finished) runOnJS(finishWelcome)();
+      },
+    );
+  }, [reducedMotion, welcomeOut, finishWelcome]);
+  // The page beneath the Welcome screen waits behind it: it neither takes touches nor enters the
+  // accessibility tree, and it drifts in as the Welcome screen drifts out.
+  const shellStyle = useAnimatedStyle(() => ({
+    opacity: welcomeOut.value,
+    transform: [{translateX: (1 - welcomeOut.value) * width * 0.25}],
+  }));
   // One clock for the whole scene. It holds the page the artwork is currently drawn at, in page
   // units, and is the only thing the artwork reads.
   const scene = useSharedValue(step);
@@ -936,10 +955,18 @@ export function OnboardingFlow({
     (visual: StepVisual) => {
       reported.current = visual;
       // The action area is the shell's own, drawn once for the whole flow: it takes the freshest view
-      // whose buttons actually differ, so a step change swaps a label and nothing else. The committed
-      // step is part of the key, so two pages that share a label and a disabled state still hand over
-      // a fresh handler.
-      const key = actionAreaKey(step, visual);
+      // whose buttons actually differ, so a step change swaps a label and nothing else. Everything
+      // the shell reads is in the key — including the page's own verified [done], which can flip
+      // while the buttons look identical — so nothing a page changes is ever dropped.
+      const key = actionAreaKey({
+        step,
+        label: visual.primary.label,
+        disabled: visual.primary.disabled === true,
+        done: visual.done,
+        saveError: visual.saveError,
+        skipLabel: visual.skipLabel,
+        skipAccessibilityLabel: visual.skipAccessibilityLabel,
+      });
       if (reportedActionKey.current === key) {
         return;
       }
@@ -1009,9 +1036,12 @@ export function OnboardingFlow({
   // the step in its own label, so one focus announcement says where the reader is and what the page
   // is — a separate step announcement would read it twice.
   useEffect(() => {
+    // The page beneath the Welcome screen is out of the accessibility tree, so it must not take the
+    // reader's focus either; the first page's heading is announced when the Welcome screen is gone.
+    if (welcome) return;
     const node = findNodeHandle(headingRef.current);
     if (node != null) AccessibilityInfo.setAccessibilityFocus(node);
-  }, [step]);
+  }, [step, welcome]);
 
   // Android Back: while a step is being saved it does nothing at all — a second write must not race
   // the one in flight. Otherwise it goes back a page on pages 2 and 3, and on the first page is left
@@ -1058,6 +1088,7 @@ export function OnboardingFlow({
     !screenReader &&
     !beatSuspended &&
     !arrivedBackwards &&
+    !welcome &&
     autoFiredVisit.current !== nav.run;
 
   const fireAutoAdvance = useCallback(() => {
@@ -1142,39 +1173,49 @@ export function OnboardingFlow({
   };
 
   return (
-    <OnboardingShell
-      step={step}
-      scene={scene}
-      entrance={entrance}
-      formProgress={formProgress}
-      contentProgress={contentProgress}
-      success={success}
-      direction={direction}
-      outgoing={nav.outgoing}
-      outgoingStep={nav.from}
-      outgoingProgress={nav.outgoingProgress}
-      outgoingDirection={nav.outgoingDirection}
-      entering={entering}
-      writePending={writePending}
-      swipePose={swipePose}
-      headingRef={headingRef}
-      actions={actions?.visual ?? null}
-      onSwipeStep={swipeToStep}
-      onSwipeStart={swipeStarted}
-      onSwipeSettled={swipeSettled}
-      onBack={
-        step > 0
-          ? () => {
-              if (persisting.current) return;
-              write(step - 1);
-            }
-          : null
-      }
-    >
-      {step === 0 && <LookupPage {...shared} />}
-      {step === 1 && <AnkiPage {...shared} />}
-      {step === 2 && <WaniKaniPage {...shared} onConnectedChange={setWanikaniConnected} />}
-    </OnboardingShell>
+    <View style={{flex: 1}}>
+      <Animated.View
+        style={[{flex: 1}, shellStyle]}
+        pointerEvents={welcome ? "none" : "auto"}
+        accessibilityElementsHidden={welcome}
+        importantForAccessibility={welcome ? "no-hide-descendants" : "auto"}
+      >
+        <OnboardingShell
+          step={step}
+          scene={scene}
+          entrance={entrance}
+          formProgress={formProgress}
+          contentProgress={contentProgress}
+          success={success}
+          direction={direction}
+          outgoing={nav.outgoing}
+          outgoingStep={nav.from}
+          outgoingProgress={nav.outgoingProgress}
+          outgoingDirection={nav.outgoingDirection}
+          entering={entering}
+          writePending={writePending}
+          swipePose={swipePose}
+          headingRef={headingRef}
+          actions={actions?.visual ?? null}
+          onSwipeStep={swipeToStep}
+          onSwipeStart={swipeStarted}
+          onSwipeSettled={swipeSettled}
+          onBack={
+            step > 0
+              ? () => {
+                  if (persisting.current) return;
+                  write(step - 1);
+                }
+              : null
+          }
+        >
+          {step === 0 && <LookupPage {...shared} />}
+          {step === 1 && <AnkiPage {...shared} />}
+          {step === 2 && <WaniKaniPage {...shared} onConnectedChange={setWanikaniConnected} />}
+        </OnboardingShell>
+      </Animated.View>
+      {welcome && <WelcomeScreen out={welcomeOut} onStart={startWelcome} />}
+    </View>
   );
 }
 
@@ -1281,10 +1322,18 @@ function OnboardingShell({
     mode === "capped" ? ARTWORK_CAPPED_WIDTH : ARTWORK_WIDTH,
   );
 
-  // The page's own steps arrive on the content clock, exactly like the narrative copy above them, so
-  // the heading and the list it heads hand over as one movement. Only the live page's steps exist,
-  // so this arrival is the whole of the step list's own motion.
+  // The page's own steps ride the same pose as the copy above them: during a swipe they travel on the
+  // artwork's page coordinate at full opacity, so the list under the finger is whole and slides with
+  // the heading; on the button path they arrive on the content clock. Only the live page's steps
+  // exist, so before the commit this is the leaving page's list sliding out, and after it the
+  // arriving page's list lands exactly where the settle left it — one continuous movement.
   const stepsStyle = useAnimatedStyle(() => {
+    if (swipePose.role.value !== SWIPE_IDLE) {
+      return {
+        opacity: 1,
+        transform: [{translateX: (step - swipePose.scene.value) * swipeDistance}],
+      };
+    }
     const pose = entering ? textArrival(0, direction) : textArrival(contentProgress.value, direction);
     return {opacity: pose.opacity, transform: [{translateX: pose.x}]};
   });
@@ -2063,6 +2112,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
           index={2}
           total={2}
           status={steps.step2}
+          previousStatus={steps.step1}
           title="Choose text recognition"
           summary="ML Kit or PP-OCRv6 Medium"
         >
@@ -2348,8 +2398,10 @@ function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
         index={2}
         total={2}
         status={steps.step2}
+        previousStatus={steps.step1}
         title="Allow access"
         detail="Read decks, record answers, add words."
+        summary="Read decks, record answers, add words."
       >
         {step2Note}
       </StepRow>
@@ -2387,6 +2439,20 @@ async function connectWaniKani(token: string): Promise<WaniKaniConnectOutcome> {
   }
 }
 
+/** The one line a press on the empty primary leaves under the field. */
+const PENDING_TOKEN_HINT = "Paste your token to connect.";
+
+/** One numbered line of the WaniKani how-to; a key term takes the ink colour and the weight. */
+function HowToLine({number, children}: {number: number; children: React.ReactNode}) {
+  const {colors} = useTheme();
+  return (
+    <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+      <Text style={{fontWeight: "600", color: colors.onSurface}}>{`${number}. `}</Text>
+      {children}
+    </Text>
+  );
+}
+
 /**
  * Page 3: connect a WaniKani account with a personal access token.
  *
@@ -2394,6 +2460,10 @@ async function connectWaniKani(token: string): Promise<WaniKaniConnectOutcome> {
  * the account is really connected — there is no partial state, and a rejected token or a network
  * failure leaves the page exactly where it was. The typed token lives here, so the browser trip to
  * create it and back does not throw it away.
+ *
+ * The reader pastes first: "Paste it here" is the current step, and "Create a token" is an available
+ * row they open for the how-to. The primary is enabled even with an empty field, where it points the
+ * reader at the field instead of doing nothing.
  */
 function WaniKaniPage({
   onAdvance,
@@ -2405,16 +2475,28 @@ function WaniKaniPage({
   onConnectedChange: (connected: boolean) => void;
 }) {
   const {colors} = useTheme();
+  // The emphasis the how-to's key words wear, shared by its numbered lines.
+  const strong = {fontWeight: "600" as const, color: colors.onSurface};
   // Null while the stored token is being read; true or false once it is known.
   const [connected, setConnected] = useState<boolean | null>(null);
   const [revalidating, setRevalidating] = useState(false);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  // The line under the field, and whether it is a failure or the "paste your token" prompt.
+  const [message, setMessage] = useState<{text: string; tone: "error" | "hint"} | null>(null);
   const [retry, setRetry] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [showHowTo, setShowHowTo] = useState(false);
   const [foregroundRev, setForegroundRev] = useState(0);
+  const tokenInputRef = useRef<TextInput>(null);
   const readSeq = useRef(0);
+  // The token and the in-flight guard the connect handler reads. The shell stores this page's primary
+  // once and keeps it, so a handler that closed over a keystroke's snapshot would keep checking the
+  // first character the reader typed; the handler reads the live values through these refs instead.
+  const tokenRef = useRef("");
+  tokenRef.current = token;
+  const connectingRef = useRef(false);
+  connectingRef.current = connecting;
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -2462,16 +2544,18 @@ function WaniKaniPage({
     onConnectedChange(connected === true);
   }, [connected, onConnectedChange]);
 
-  const connect = () => {
-    const value = token.trim();
-    if (value === "" || connecting) return;
+  // Stable on purpose: the shell keeps this handler as the page's primary, so it must read the live
+  // token and the live in-flight guard rather than the values captured when it was made.
+  const connect = useCallback(() => {
+    const value = tokenToCheck(() => ({token: tokenRef.current, busy: connectingRef.current}));
+    if (value == null) return;
     setConnecting(true);
     setMessage(null);
     void connectWaniKani(value)
       .then((outcome) => {
         const readout = connectReadout(outcome, FAILURE_LABELS);
         if (!mounted.current) return;
-        setMessage(readout.message);
+        setMessage(readout.message == null ? null : {text: readout.message, tone: "error"});
         setRetry(readout.retry);
         if (outcome.status === "connected") {
           setToken("");
@@ -2481,21 +2565,45 @@ function WaniKaniPage({
       .finally(() => {
         if (mounted.current) setConnecting(false);
       });
-  };
+  }, []);
+
+  // Typing anything into the field satisfies the "paste your token" prompt, so it goes away.
+  const onTokenChange = useCallback((next: string) => {
+    setToken(next);
+    setMessage((current) => (current?.tone === "hint" ? null : current));
+  }, []);
 
   const steps = wanikaniSteps({connected});
-  const ready = token.trim() !== "";
 
-  const primary: Action =
-    connected == null
-      ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
-      : connecting
-        ? {label: "Checking token\u2026", onPress: () => {}, disabled: true}
-        : connected
-          ? {label: "Done", onPress: () => onAdvance(3)}
-          : message != null && retry
-            ? {label: "Try again", onPress: connect, disabled: !ready}
-            : {label: "Connect WaniKani", onPress: connect, disabled: !ready};
+  // The shell keeps this page's primary once (its report key does not change as the reader types), so
+  // the press reads the live facts through a ref: what the field holds now decides connect-or-prompt.
+  const intent = wanikaniPrimary({connected, connecting, retry, token});
+  const intentRef = useRef(intent);
+  intentRef.current = intent;
+  const onAdvanceRef = useRef(onAdvance);
+  onAdvanceRef.current = onAdvance;
+  const onPrimary = useCallback(() => {
+    switch (intentRef.current.intent) {
+      case "connect":
+        connect();
+        return;
+      case "advance":
+        onAdvanceRef.current(3);
+        return;
+      case "prompt":
+        setMessage({text: PENDING_TOKEN_HINT, tone: "hint"});
+        tokenInputRef.current?.focus();
+        return;
+      default:
+        return;
+    }
+  }, [connect]);
+
+  const primary: Action = {
+    label: intent.label,
+    disabled: intent.disabled,
+    onPress: onPrimary,
+  };
 
   const visual: StepVisual = {
     primary,
@@ -2515,31 +2623,62 @@ function WaniKaniPage({
 
   return (
     <StepList style={{marginTop: spacing.l}}>
-      <StepRow index={1} total={2} status={steps.step1} title="Create a token" detail="Select every permission.">
-        <PressableScale
-          accessibilityRole="link"
-          accessibilityLabel="Open wanikani.com"
-          accessibilityHint="Opens your WaniKani personal access tokens in the browser"
-          onPress={() => {
-            void GatenPlatform.openUrl(WANIKANI_TOKEN_URL).catch(() => {});
-          }}
-          style={{minHeight: 48, justifyContent: "center"}}
-        >
-          <Text style={[typeScale.bodyMedium, {color: colors.accent}]}>Open wanikani.com</Text>
-          <Icon name="open_in_new" size={16} color={colors.accent} />
-        </PressableScale>
+      <StepRow
+        index={1}
+        total={2}
+        status={steps.step1}
+        title="Create a token"
+        hint="Need a token? Show me how"
+        onPress={() => setShowHowTo((current) => !current)}
+        expanded={showHowTo}
+        accessibilityHint="Shows how to create a WaniKani token"
+      >
+        <View style={{gap: spacing.s}}>
+          <HowToLine number={1}>
+            Open wanikani.com <Text style={strong}>settings</Text>, then{" "}
+            <Text style={strong}>Personal Access Tokens</Text>.
+          </HowToLine>
+          <HowToLine number={2}>
+            Tap <Text style={strong}>Generate a new token</Text>.
+          </HowToLine>
+          <HowToLine number={3}>
+            Select <Text style={strong}>every permission</Text>.
+          </HowToLine>
+          <HowToLine number={4}>
+            Copy the token, come back here and <Text style={strong}>paste it</Text>.
+          </HowToLine>
+          <PressableScale
+            accessibilityRole="link"
+            accessibilityLabel="Open wanikani.com"
+            accessibilityHint="Opens your WaniKani personal access tokens in the browser"
+            onPress={() => {
+              void GatenPlatform.openUrl(WANIKANI_TOKEN_URL).catch(() => {});
+            }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing.s,
+              minHeight: 48,
+              justifyContent: "flex-start",
+            }}
+          >
+            <Text style={[typeScale.bodyMedium, {color: colors.accent}]}>Open wanikani.com</Text>
+            <Icon name="open_in_new" size={16} color={colors.accent} />
+          </PressableScale>
+        </View>
       </StepRow>
       <StepRow
         index={2}
         total={2}
         status={steps.step2}
+        previousStatus={steps.step1}
         title="Paste it here"
-        showContent
       >
         <View style={{position: "relative", justifyContent: "center"}}>
           <TextField
+            inputRef={tokenInputRef}
             value={token}
-            onChangeText={setToken}
+            onChangeText={onTokenChange}
             placeholder="Paste your token"
             secureTextEntry={!showToken}
             autoCapitalize="none"
@@ -2566,10 +2705,14 @@ function WaniKaniPage({
             accessibilityLiveRegion="polite"
             style={[
               typeScale.bodySmall,
-              {color: colors.error, marginTop: spacing.m, flexShrink: 1},
+              {
+                color: message.tone === "error" ? colors.error : colors.onSurfaceVariant,
+                marginTop: spacing.m,
+                flexShrink: 1,
+              },
             ]}
           >
-            {message}
+            {message.text}
           </Text>
         )}
       </StepRow>
