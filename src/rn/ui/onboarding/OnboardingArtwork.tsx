@@ -17,8 +17,9 @@
  *
  * The three compositions cross-fade and drift on the scene clock, and the disc behind them (faintly
  * tinted with the accent) stays put, so a step change and its reverse travel the same path. Every
- * colour is a theme role (`surface`, `outline`, `onSurface`, `accent`), so light, dark and every
- * accent repaint the same geometry.
+ * colour is a theme role (`surface`, `outline`, `onSurface`) except the accent, which is the app's
+ * default Indigo fixed per scheme (see `INDIGO_LIGHT` / `INDIGO_DARK`): light and dark repaint the
+ * same geometry, the reader's accent choice does not apply here.
  *
  * The lettering is the bundled IBM Plex Sans JP's own outlines (Medium for the kanji and kana,
  * SemiBold for "Level 1"), extracted from `app/src/main/res/font/ibm_plex_sans_jp_*.ttf` (unitsPerEm
@@ -35,7 +36,7 @@ import Animated, {
   useAnimatedProps,
   useAnimatedStyle,
 } from "react-native-reanimated";
-import Svg, {Circle, G, Path, type PathProps, Rect} from "react-native-svg";
+import Svg, {Circle, Ellipse, G, Path, type PathProps, Rect} from "react-native-svg";
 import {useTheme} from "../theme";
 
 /** The shared stage. Every scene is drawn in this box and scales with the flow's width. */
@@ -146,13 +147,29 @@ function Layer({style, children}: {style?: object; children: React.ReactNode}) {
   );
 }
 
+/**
+ * The artwork follows light/dark but not the reader's accent: onboarding is shown with the app's
+ * default Indigo, so its tones are fixed. Hex values are IndigoLight / IndigoDark in
+ * app/src/main/java/com/gaten/app/ui/theme/Color.kt (primary, and the onPrimary ink that reads on it).
+ */
+const INDIGO_LIGHT = {accent: "#4338CA", onAccent: "#FFFFFF"};
+const INDIGO_DARK = {accent: "#A5B4FC", onAccent: "#111111"};
+
+function useIndigo() {
+  const {dark} = useTheme();
+  return dark ? INDIGO_DARK : INDIGO_LIGHT;
+}
+
 /** The soft disc, faintly tinted with the accent over the surface variant. */
 function Disc() {
   const {colors} = useTheme();
+  const {accent} = useIndigo();
   return (
     <>
+      {/* A flat ground shadow resting just inside the disc's lower edge. */}
+      <Ellipse cx={DISC_CX} cy={DISC_CY + DISC_R - 10} rx={38} ry={3} fill={colors.onSurface} fillOpacity={0.07} />
       <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={colors.surfaceVariant} fillOpacity={0.6} />
-      <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={colors.accent} fillOpacity={0.08} />
+      <Circle cx={DISC_CX} cy={DISC_CY} r={DISC_R} fill={accent} fillOpacity={0.08} />
     </>
   );
 }
@@ -178,6 +195,7 @@ function Card({
   children?: React.ReactNode;
 }) {
   const {colors} = useTheme();
+  const {accent} = useIndigo();
   return (
     <G transform={rotate ? `rotate(${rotate} ${x + w / 2} ${y + h / 2})` : undefined}>
       <Rect
@@ -187,7 +205,7 @@ function Card({
         height={h}
         rx={r}
         fill={colors.surface}
-        stroke={accentEdge ? colors.accent : colors.outline}
+        stroke={accentEdge ? accent : colors.outline}
         strokeOpacity={accentEdge ? 0.9 : 0.6}
         strokeWidth={1.2}
       />
@@ -205,6 +223,7 @@ function Lines({x, y, widths, gap = 6}: {x: number; y: number; widths: number[];
 
 function LookupScene() {
   const {colors} = useTheme();
+  const {accent, onAccent} = useIndigo();
   return (
     <>
       {/* The screen being read, with 合点 highlighted. */}
@@ -216,19 +235,21 @@ function LookupScene() {
           width={50}
           height={20}
           rx={4}
-          fill={colors.accent}
+          fill={accent}
           fillOpacity={0.12}
-          stroke={colors.accent}
+          stroke={accent}
           strokeWidth={1.4}
         />
         <Glyphs text="合点" x={137} y={69} size={14} fill={colors.onSurface} anchor="middle" />
-        <Lines x={112} y={84} widths={[84, 70]} />
-        <Lines x={112} y={96} widths={[56]} />
+        {/* The reading cursor under the highlight. */}
+        <Path d="M134 77.5H140M137 77.5V82.5M134 82.5H140" stroke={accent} strokeWidth={1.1} />
+        <Lines x={112} y={88} widths={[84, 70]} />
+        <Lines x={112} y={100} widths={[56]} />
       </Card>
       {/* The result card below it: 合点 · がてん with two meaning lines. */}
       <Card x={134} y={92} w={96} h={50} r={8} accentEdge>
         <Glyphs text="合点" x={143} y={110} size={12} fill={colors.onSurface} />
-        <Glyphs text="がてん" x={170} y={110} size={8} fill={colors.accent} />
+        <Glyphs text="がてん" x={170} y={110} size={8} fill={accent} />
         <Lines x={143} y={121} widths={[70, 52]} gap={7} />
       </Card>
     </>
@@ -237,6 +258,7 @@ function LookupScene() {
 
 function AnkiScene() {
   const {colors} = useTheme();
+  const {accent, onAccent} = useIndigo();
   const pills = [0, 1, 2, 3];
   return (
     <>
@@ -245,22 +267,29 @@ function AnkiScene() {
       <Card x={122} y={32} w={100} h={72} r={8} rotate={4} />
       <Card x={122} y={34} w={100} h={74} r={8}>
         <Glyphs text="合点" x={172} y={78} size={28} fill={colors.onSurface} anchor="middle" />
-        <Glyphs text="がてん" x={172} y={96} size={9} fill={colors.accent} anchor="middle" />
+        <Glyphs text="がてん" x={172} y={96} size={9} fill={accent} anchor="middle" />
       </Card>
       {/* Four answer pills; the third, "Good", is filled with the accent. */}
       {pills.map((i) => (
-        <Rect
-          key={i}
-          x={121 + i * 26}
-          y={124}
-          width={22}
-          height={11}
-          rx={5.5}
-          fill={i === 2 ? colors.accent : colors.surface}
-          stroke={i === 2 ? colors.accent : colors.outline}
-          strokeOpacity={i === 2 ? 1 : 0.6}
-          strokeWidth={1.2}
-        />
+        <G key={i}>
+          <Rect
+            x={121 + i * 26}
+            y={124}
+            width={22}
+            height={11}
+            rx={5.5}
+            fill={i === 2 ? accent : colors.surface}
+            stroke={i === 2 ? accent : colors.outline}
+            strokeOpacity={i === 2 ? 1 : 0.6}
+            strokeWidth={1.2}
+          />
+          <Path
+            d={`M${128 + i * 26} 129.5H${136 + i * 26}`}
+            stroke={i === 2 ? onAccent : colors.outline}
+            strokeOpacity={i === 2 ? 1 : 0.7}
+            strokeWidth={1.5}
+          />
+        </G>
       ))}
     </>
   );
@@ -271,15 +300,15 @@ const AnimatedBar = Animated.createAnimatedComponent(Rect);
 
 function WaniKaniScene({success}: {success: SharedValue<number>}) {
   const {colors} = useTheme();
+  const {accent} = useIndigo();
   const barProps = useAnimatedProps<PathProps>(() => ({fillOpacity: 0.85 + 0.15 * success.value}) as PathProps);
-  const ink = colors.onSurfaceVariant;
+  const ink = colors.outline;
   return (
     <>
       {/* The torii, in neutral ink. */}
-      <Path d="M80 62 Q112 70 144 62" stroke={ink} strokeOpacity={0.6} strokeWidth={5} />
-      <Path d="M88 76 H136" stroke={ink} strokeOpacity={0.55} strokeWidth={3.5} />
-      <Path d="M96 78 V132 M128 78 V132" stroke={ink} strokeOpacity={0.6} strokeWidth={4.5} />
-      <Path d="M91 132 H133" stroke={ink} strokeOpacity={0.4} strokeWidth={2.5} />
+      <Path d="M80 62 Q112 69 144 62" stroke={ink} strokeOpacity={0.7} strokeWidth={2.6} />
+      <Path d="M88 75 H136" stroke={ink} strokeOpacity={0.6} strokeWidth={2} />
+      <Path d="M96 76 V130 M128 76 V130" stroke={ink} strokeOpacity={0.7} strokeWidth={2.4} />
       {/* A 合点 card, and the Level 1 card with its short accent bar. */}
       <Card x={158} y={38} w={54} h={34} r={7} rotate={6}>
         <Glyphs text="合点" x={185} y={61} size={17} fill={colors.onSurface} anchor="middle" />
@@ -293,7 +322,7 @@ function WaniKaniScene({success}: {success: SharedValue<number>}) {
           width={20}
           height={5}
           rx={2.5}
-          fill={colors.accent}
+          fill={accent}
           animatedProps={barProps as never}
         />
       </Card>
