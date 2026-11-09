@@ -20,9 +20,9 @@ interface GatenAppInfoNative {
 export interface SupportPromptState {
   /** How many times the app has been opened, across launches. */
   openCount: number;
-  /** True once the reader chose "Don't show again". */
+  /** True once the reader chose "Don't ask again". */
   never: boolean;
-  /** Epoch millis before which "Not now" holds the popup back; 0 until it is chosen. */
+  /** Epoch millis before which "Maybe later" holds the popup back (3, 7, 14, then 30 days); 0 until chosen. */
   nextEligibleAt: number;
 }
 
@@ -60,7 +60,7 @@ export function recordSupportAppOpen(): Promise<number> {
   return GatenAppInfo.recordSupportAppOpen();
 }
 
-/** Records a dismissal: `permanent` is "Don't show again", otherwise "Not now". */
+/** Records a dismissal: `permanent` is "Don't ask again", otherwise "Maybe later". */
 export function dismissSupportPrompt(permanent: boolean): Promise<void> {
   return GatenAppInfo.dismissSupportPrompt(permanent);
 }

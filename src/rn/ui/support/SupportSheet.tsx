@@ -11,7 +11,7 @@
  */
 import React from "react";
 import {Text, View} from "react-native";
-import {Button, Icon} from "../components";
+import {Button, Icon, IconBadge} from "../components";
 import {DialogShell} from "../DialogShell";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -43,6 +43,14 @@ export function SupportSheet({
       title={title}
       onDismiss={onDismiss}
       scrollBody
+      titleLeading={
+        <IconBadge
+          name="favorite"
+          size={40}
+          background={colors.accentSubtle}
+          color={colors.accent}
+        />
+      }
       actions={dismissalActions ?? <Button label="Close" variant="text" onPress={onDismiss} />}
     >
       <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{body}</Text>
@@ -51,6 +59,7 @@ export function SupportSheet({
           label="Rate on Play Store"
           variant="tonal"
           fullWidth
+          leading={<Icon name="star" size={20} color={colors.onActionSecondary} />}
           onPress={() => onOpenLink(REVIEW_URL)}
         />
         {SUPPORT_LINKS.map((link) => (

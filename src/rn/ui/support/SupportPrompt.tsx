@@ -6,18 +6,19 @@
 
 /**
  * The proactive support popup. It draws the same sheet Settings opens, with softer, thanks-first
- * wording, and adds exactly two dismissals: "Maybe later" hides it until the next launch, "Don't ask
- * again" is the one thing that silences it for good. The backdrop and Android Back are the app's
- * standard dismissal and behave as "Maybe later", never as the permanent answer.
+ * wording, and adds exactly two dismissals: "Maybe later" postpones it, "Don't ask again" is the one
+ * thing that silences it for good. The backdrop and Android Back behave as "Maybe later".
  *
- * It is offered at most once per launch, and never as the first thing a reader sees: on a cold
- * launch it waits until they have settled on Home, and when they come back to Home from elsewhere
- * (typically after a review or lesson session, a good moment) it appears after a short beat.
+ * It is offered only at a good moment, never on arrival: right after the reader finishes a study
+ * session (see support-moments), or, for someone who mostly uses lookups, after a long, settled stay
+ * on Home once they are a regular. At most once per launch, and each "Maybe later" pushes the next
+ * offer further out (3, 7, 14, then 30 days; the native side keeps the schedule).
  */
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import {Button} from "../components";
 import {openSupportLink} from "./support-links";
+import {consumeSupportMoment, hasSupportMoment} from "./support-moments";
 import {SupportSheet} from "./SupportSheet";
 
 /** How many app opens pass before the popup is offered: enough to have used the app, not one look. */
@@ -26,17 +27,15 @@ const MIN_APP_OPENS = 4;
 /** The first-run step that means setup is finished; the popup is never offered before it. */
 const ONBOARDING_DONE_STEP = 3;
 
-/** How long a reader must stay on Home, on the first visit of a launch, before the offer appears. */
-const FIRST_VISIT_DELAY_MS = 15_000;
+/** The beat after a finished session before the offer, so it follows the result rather than covers it. */
+const MOMENT_DELAY_MS = 1_500;
 
-/** The beat before the offer on a return to Home, so it never lands on top of the navigation itself. */
-const RETURN_VISIT_DELAY_MS = 1_200;
+/** Without a study session, a regular (this many opens) is offered it after this long on Home. */
+const REGULAR_OPENS = 8;
+const SETTLED_DELAY_MS = 45_000;
 
 /** Whether the offer was already made this launch; "Maybe later" counts, so it asks once per launch. */
 let offeredThisLaunch = false;
-
-/** How many times Home has come into focus this launch; the first visit is the cold-launch one. */
-let homeVisitsThisLaunch = 0;
 
 /**
  * The count is raised once per launch, not once per mount: Home can remount inside one launch and
@@ -47,15 +46,15 @@ let countedThisLaunch = false;
 
 /** Whether the stored state says the popup may be offered now. */
 function isEligible(state: GatenAppInfo.SupportPromptState): boolean {
-  return !state.never && state.openCount >= MIN_APP_OPENS;
+  return !state.never && state.openCount >= MIN_APP_OPENS && Date.now() >= state.nextEligibleAt;
 }
 
 /**
  * Owns the popup's eligibility: it raises the app-open count on first use in a launch, reads the
- * stored state and the first-run step, and answers whether to show. The read is sequence-guarded the
- * way the lookup page's reads are, so a read that started before a dismissal cannot put the popup
- * back on screen. A reader still in the setup flow is never offered it: the shell's tabs mount under
- * that overlay, so a dialog here would rise above it.
+ * stored state and the first-run step, and decides when to show. The read is sequence-guarded so a
+ * read that started before a dismissal cannot put the popup back, and the timer is cleared when Home
+ * loses focus, so the offer only ever lands while Home is in front. A reader still in the setup flow
+ * is never offered it: the shell's tabs mount under that overlay.
  */
 export function useSupportPrompt(): {
   visible: boolean;
@@ -70,11 +69,9 @@ export function useSupportPrompt(): {
     if (offeredThisLaunch) {
       return undefined;
     }
-    homeVisitsThisLaunch += 1;
-    const delay = homeVisitsThisLaunch === 1 ? FIRST_VISIT_DELAY_MS : RETURN_VISIT_DELAY_MS;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     readSeq.current += 1;
     const seq = readSeq.current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const counted = countedThisLaunch
       ? Promise.resolve()
       : GatenAppInfo.recordSupportAppOpen().then(() => {
@@ -94,14 +91,21 @@ export function useSupportPrompt(): {
         if (onboardingStep < ONBOARDING_DONE_STEP || !isEligible(state)) {
           return;
         }
-        // Leaving Home before the delay ends clears this timer, so the offer only ever lands while
-        // the reader is actually looking at Home.
-        timer = setTimeout(() => {
-          if (seq === readSeq.current && !offeredThisLaunch) {
+        const afterSession = hasSupportMoment();
+        if (!afterSession && state.openCount < REGULAR_OPENS) {
+          return;
+        }
+        timer = setTimeout(
+          () => {
+            if (seq !== readSeq.current || offeredThisLaunch) {
+              return;
+            }
             offeredThisLaunch = true;
+            consumeSupportMoment();
             setVisible(true);
-          }
-        }, delay);
+          },
+          afterSession ? MOMENT_DELAY_MS : SETTLED_DELAY_MS,
+        );
       })
       .catch(() => {
         if (seq === readSeq.current) {
@@ -116,10 +120,11 @@ export function useSupportPrompt(): {
     };
   }, []);
 
-  /** Hides it for the rest of this launch; the once-per-launch flag is already set, nothing is stored. */
+  /** "Maybe later": hides it and starts the next, longer wait on the native side. */
   const dismissTemporarily = useCallback(() => {
     readSeq.current += 1;
     setVisible(false);
+    void GatenAppInfo.dismissSupportPrompt(false);
   }, []);
 
   const dismissPermanently = useCallback(() => {

@@ -18,7 +18,7 @@ export const REVIEW_URL = "https://play.google.com/store/apps/details?id=com.gat
 const OPEN_FAILED = "Couldn't open the page. Try again.";
 
 export const SUPPORT_LINKS: ReadonlyArray<{label: string; url: string; icon: IconName}> = [
-  {label: "Buy Me a Coffee", url: "https://buymeacoffee.com/anuragraut", icon: "open_in_new"},
+  {label: "Buy Me a Coffee", url: "https://buymeacoffee.com/anuragraut", icon: "local_cafe"},
 ];
 
 /**
