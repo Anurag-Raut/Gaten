@@ -5,15 +5,20 @@
  */
 
 /**
- * The proactive support popup. It draws the same sheet Settings opens, and adds exactly two
- * dismissals: "Not now" postpones it, "Don't show again" is the one thing that silences it for good.
- * The backdrop and Android Back are the app's standard dismissal and behave as "Not now", never as
- * the permanent answer — nothing but the explicit button may silence the popup.
+ * The proactive support popup. It draws the same sheet Settings opens, with softer, thanks-first
+ * wording, and adds exactly two dismissals: "Maybe later" postpones it, "Don't ask again" is the one
+ * thing that silences it for good. The backdrop and Android Back behave as "Maybe later".
+ *
+ * It is offered only at a good moment, never on arrival: right after the reader finishes a study
+ * session (see support-moments), or, for someone who mostly uses lookups, after a long, settled stay
+ * on Home once they are a regular. At most once per launch, and each "Maybe later" pushes the next
+ * offer further out (3, 7, 14, then 30 days; the native side keeps the schedule).
  */
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import {Button} from "../components";
 import {openSupportLink} from "./support-links";
+import {consumeSupportMoment, hasSupportMoment} from "./support-moments";
 import {SupportSheet} from "./SupportSheet";
 
 /** How many app opens pass before the popup is offered: enough to have used the app, not one look. */
@@ -21,6 +26,16 @@ const MIN_APP_OPENS = 4;
 
 /** The first-run step that means setup is finished; the popup is never offered before it. */
 const ONBOARDING_DONE_STEP = 3;
+
+/** The beat after a finished session before the offer, so it follows the result rather than covers it. */
+const MOMENT_DELAY_MS = 1_500;
+
+/** Without a study session, a regular (this many opens) is offered it after this long on Home. */
+const REGULAR_OPENS = 8;
+const SETTLED_DELAY_MS = 45_000;
+
+/** Whether the offer was already made this launch; "Maybe later" counts, so it asks once per launch. */
+let offeredThisLaunch = false;
 
 /**
  * The count is raised once per launch, not once per mount: Home can remount inside one launch and
@@ -36,10 +51,10 @@ function isEligible(state: GatenAppInfo.SupportPromptState): boolean {
 
 /**
  * Owns the popup's eligibility: it raises the app-open count on first use in a launch, reads the
- * stored state and the first-run step, and answers whether to show. The read is sequence-guarded the
- * way the lookup page's reads are, so a read that started before a dismissal cannot put the popup
- * back on screen. A reader still in the setup flow is never offered it: the shell's tabs mount under
- * that overlay, so a dialog here would rise above it.
+ * stored state and the first-run step, and decides when to show. The read is sequence-guarded so a
+ * read that started before a dismissal cannot put the popup back, and the timer is cleared when Home
+ * loses focus, so the offer only ever lands while Home is in front. A reader still in the setup flow
+ * is never offered it: the shell's tabs mount under that overlay.
  */
 export function useSupportPrompt(): {
   visible: boolean;
@@ -51,8 +66,12 @@ export function useSupportPrompt(): {
   const readSeq = useRef(0);
 
   useEffect(() => {
+    if (offeredThisLaunch) {
+      return undefined;
+    }
     readSeq.current += 1;
     const seq = readSeq.current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const counted = countedThisLaunch
       ? Promise.resolve()
       : GatenAppInfo.recordSupportAppOpen().then(() => {
@@ -69,7 +88,24 @@ export function useSupportPrompt(): {
         if (seq !== readSeq.current) {
           return;
         }
-        setVisible(onboardingStep >= ONBOARDING_DONE_STEP && isEligible(state));
+        if (onboardingStep < ONBOARDING_DONE_STEP || !isEligible(state)) {
+          return;
+        }
+        const afterSession = hasSupportMoment();
+        if (!afterSession && state.openCount < REGULAR_OPENS) {
+          return;
+        }
+        timer = setTimeout(
+          () => {
+            if (seq !== readSeq.current || offeredThisLaunch) {
+              return;
+            }
+            offeredThisLaunch = true;
+            consumeSupportMoment();
+            setVisible(true);
+          },
+          afterSession ? MOMENT_DELAY_MS : SETTLED_DELAY_MS,
+        );
       })
       .catch(() => {
         if (seq === readSeq.current) {
@@ -78,9 +114,13 @@ export function useSupportPrompt(): {
       });
     return () => {
       readSeq.current += 1;
+      if (timer != null) {
+        clearTimeout(timer);
+      }
     };
   }, []);
 
+  /** "Maybe later": hides it and starts the next, longer wait on the native side. */
   const dismissTemporarily = useCallback(() => {
     readSeq.current += 1;
     setVisible(false);
@@ -96,6 +136,10 @@ export function useSupportPrompt(): {
   return {visible, dismissTemporarily, dismissPermanently, openLink: openSupportLink};
 }
 
+/** Thanks first, the ask second, and nothing that reads as an obligation. */
+const POPUP_BODY =
+  "Thanks for studying with Gaten. It’s built by one person, so a quick rating or a coffee goes a long way. No pressure at all.";
+
 export function SupportPrompt() {
   const {visible, dismissTemporarily, dismissPermanently, openLink} = useSupportPrompt();
   if (!visible) {
@@ -103,12 +147,14 @@ export function SupportPrompt() {
   }
   return (
     <SupportSheet
+      title="Enjoying Gaten?"
+      body={POPUP_BODY}
       onDismiss={dismissTemporarily}
       onOpenLink={openLink}
       dismissalActions={
         <>
-          <Button label="Not now" variant="text" onPress={dismissTemporarily} />
-          <Button label="Don’t show again" variant="text" onPress={dismissPermanently} />
+          <Button label="Maybe later" variant="text" onPress={dismissTemporarily} />
+          <Button label="Don’t ask again" variant="text" onPress={dismissPermanently} />
         </>
       }
     />

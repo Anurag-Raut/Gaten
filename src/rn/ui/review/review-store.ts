@@ -25,6 +25,7 @@
 import {isKanaOnly, romajiToHiragana} from "./wanikani-romaji";
 import {meaningMatches} from "./meaning-match";
 import * as Anki from "../../native/GatenAnki";
+import {noteSupportMoment} from "../support/support-moments";
 import * as WaniKani from "../../native/GatenWaniKani";
 import {getAnkiDecks, loadAnkiDecks} from "../anki/useAnkiDecks";
 import {
@@ -943,6 +944,9 @@ class ReviewStore {
   private async enterWaniKaniHome(
     options: {force?: boolean; sessionFinished?: boolean} = {},
   ): Promise<void> {
+    if (options.sessionFinished) {
+      noteSupportMoment();
+    }
     const request = ++this.hubRequest;
     this.set({step: this.hubStep({refreshing: true, failed: false, failure: null,
       ...(options.sessionFinished ? {sessionFinished: true} : {})})});

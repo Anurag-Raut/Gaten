@@ -11,7 +11,7 @@
  */
 import React from "react";
 import {Text, View} from "react-native";
-import {Button, Icon} from "../components";
+import {Button, Icon, IconBadge} from "../components";
 import {DialogShell} from "../DialogShell";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -22,10 +22,15 @@ const SUPPORT_BODY =
   "Gaten is a one-person project. If it has been useful, a review or a coffee helps it keep going.";
 
 export function SupportSheet({
+  title = "Support Gaten",
+  body = SUPPORT_BODY,
   onDismiss,
   dismissalActions,
   onOpenLink = openSupportLink,
 }: {
+  /** Settings keeps the default; the proactive popup passes its softer wording. */
+  title?: string;
+  body?: string;
   onDismiss: () => void;
   /** Replaces the pinned Close action; the popup passes its own two dismissal actions instead. */
   dismissalActions?: React.ReactNode;
@@ -35,17 +40,26 @@ export function SupportSheet({
   const {colors} = useTheme();
   return (
     <DialogShell
-      title="Support Gaten"
+      title={title}
       onDismiss={onDismiss}
       scrollBody
+      titleLeading={
+        <IconBadge
+          name="favorite"
+          size={40}
+          background={colors.accentSubtle}
+          color={colors.accent}
+        />
+      }
       actions={dismissalActions ?? <Button label="Close" variant="text" onPress={onDismiss} />}
     >
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{SUPPORT_BODY}</Text>
+      <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{body}</Text>
       <View style={{gap: spacing.s, marginTop: spacing.l}}>
         <Button
           label="Rate on Play Store"
           variant="tonal"
           fullWidth
+          leading={<Icon name="star" size={20} color={colors.onActionSecondary} />}
           onPress={() => onOpenLink(REVIEW_URL)}
         />
         {SUPPORT_LINKS.map((link) => (
