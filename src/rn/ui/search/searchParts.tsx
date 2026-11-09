@@ -12,7 +12,7 @@
  * screen that shows them reads the store in scope: Home's default, or the lookup sheet's own
  * scoped instance while the overlay is up.
  */
-import React from "react";
+import React, {useRef} from "react";
 import {
   StyleSheet,
   Text,
@@ -258,9 +258,16 @@ export function SearchField({
       ? target
       : withTiming(target, {duration: FOCUS_MS, easing: PRESS_EASING_REANIMATED});
   };
+  // Android moves focus to the first text input when the screen above it goes away (the onboarding
+  // overlay, for one), which opened the search and keyboard on its own. Focus is honoured only when
+  // the reader's own touch on the field came first; any other focus is dropped at once.
+  const touched = useRef(false);
   return (
     <View style={style}>
       <Animated.View
+        onTouchStartCapture={() => {
+          touched.current = true;
+        }}
         onTouchEnd={() => inputRef.current?.focus()}
         style={[
           styles.fieldShell,
@@ -276,10 +283,15 @@ export function SearchField({
           value={query}
           onChangeText={onChangeQuery}
           onFocus={() => {
+            if (!touched.current) {
+              inputRef.current?.blur();
+              return;
+            }
             settle(1);
             onFocus?.();
           }}
           onBlur={() => {
+            touched.current = false;
             settle(0);
             onBlur?.();
           }}
