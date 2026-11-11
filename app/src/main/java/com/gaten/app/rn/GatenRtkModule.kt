@@ -13,10 +13,12 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.gaten.app.rtk.KanjiReferencePreference
 import com.gaten.app.rtk.KanjiReferenceSource
 import com.gaten.app.rtk.RtkEntry
 import com.gaten.app.rtk.RtkRepository
 import com.gaten.app.rtk.kanjiReferencePreference
+import com.gaten.app.wanikani.WaniKaniRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -32,6 +34,8 @@ import kotlinx.coroutines.sync.withLock
  * dataset, so 2,991 stories never cross the bridge together. The choice is stored by
  * [kanjiReferencePreference] in the app's own settings file; it decides what a reference page
  * displays and deliberately leaves the WaniKani connection and every WaniKani surface untouched.
+ * A device that never chose follows the connection: WaniKani while an account is stored, and
+ * Remembering the Kanji - which needs no account at all - when none is.
  */
 class GatenRtkModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -72,11 +76,11 @@ class GatenRtkModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /** `"wanikani"` or `"rtk"`, read from the device on every call. */
+    /** `"wanikani"` or `"rtk"`, read from the device - and the connection - on every call. */
     @ReactMethod
     fun getReferenceSource(promise: Promise) {
         try {
-            promise.resolve(kanjiReferencePreference(reactApplicationContext).source().wire)
+            promise.resolve(preference().source().wire)
         } catch (e: Exception) {
             promise.reject(CODE_PREFERENCE, e.message ?: "Could not read the kanji reference", e)
         }
@@ -91,11 +95,20 @@ class GatenRtkModule(reactContext: ReactApplicationContext) :
             return
         }
         try {
-            promise.resolve(kanjiReferencePreference(reactApplicationContext).setSource(requested).wire)
+            promise.resolve(preference().setSource(requested).wire)
         } catch (e: Exception) {
             promise.reject(CODE_PREFERENCE, e.message ?: "Could not save the kanji reference", e)
         }
     }
+
+    /**
+     * The store for this call, told whether an account is connected: that answer is what a device
+     * that never chose reads back, so the default moves with connecting and disconnecting.
+     */
+    private fun preference(): KanjiReferencePreference = kanjiReferencePreference(
+        reactApplicationContext,
+        WaniKaniRepository.isConfigured(reactApplicationContext)
+    )
 
     private fun RtkEntry.toJsMap(): WritableMap = Arguments.createMap().apply {
         putString("character", character)

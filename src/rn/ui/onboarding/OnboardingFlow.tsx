@@ -66,6 +66,7 @@ import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {downloadAnkiDroid} from "../anki/anki-actions";
 import {Button, Icon, IconButton} from "../components";
+import {reloadKanjiReferenceSource} from "../kanjiReference";
 import {PressableScale} from "../PressableScale";
 import type {WaniKaniConnectOutcome} from "../review/review-store";
 import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
@@ -2580,6 +2581,8 @@ function WaniKaniPage({
         if (outcome.status === "connected") {
           setToken("");
           setConnected(true);
+          // The reference default follows the connection, including the one made here.
+          void reloadKanjiReferenceSource();
         }
       })
       .finally(() => {

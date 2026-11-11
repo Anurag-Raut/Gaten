@@ -382,11 +382,14 @@ through the public API when the reader asks, and cached on that device.
 ## Remembering the Kanji reference (offline)
 
 Kanjis do not have to go through WaniKani. **Settings → Study → Kanji reference** chooses between
-**WaniKani** (the default, exactly as before) and **Remembering the Kanji**, which answers every kanji
-page from a dataset bundled with the app. The choice is stored on the device, applies immediately to
-every surface that opens kanji details — the word page, the accessibility lookup overlay and the
-Anki review answer side — and only changes what a reference page shows. The WaniKani connection has
-its own settings page; reviews, lessons, analytics and the stored token are not touched.
+**WaniKani** and **Remembering the Kanji**, which answers every kanji page from a dataset bundled
+with the app. A device that has never chosen follows the WaniKani connection: **WaniKani** while an
+account is connected, and **Remembering the Kanji** — which needs no account, token or network — when
+none is. An explicit choice is stored on the device and kept whatever the connection does. Either
+way it applies immediately to every surface that opens kanji details — the word page, the
+accessibility lookup overlay and the Anki review answer side — and only changes what a reference
+page shows. The WaniKani connection has its own settings page; reviews, lessons, analytics and the
+stored token are not touched.
 
 Remembering the Kanji needs no account, token, network connection or additional download, and it
 works the first time the app is opened. A kanji page shows the RTK keyword, Heisig's story, the

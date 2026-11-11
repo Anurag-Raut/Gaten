@@ -55,7 +55,10 @@ export function lookupKanji(character: string): Promise<RtkLookupResult> {
   return GatenRtk.lookupKanji(character);
 }
 
-/** The device's stored choice; `"wanikani"` when it never chose. */
+/**
+ * The device's stored choice; a device that never chose follows its WaniKani connection —
+ * `"wanikani"` while an account is connected, `"rtk"` when none is.
+ */
 export function getReferenceSource(): Promise<KanjiReferenceSource> {
   return GatenRtk.getReferenceSource();
 }

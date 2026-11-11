@@ -9,14 +9,16 @@
  * bundled offline dataset.
  *
  * The choice is remembered on the device through the RTK bridge, and it applies the moment the page
- * is left — every kanji page reads the same shared value. It is deliberately only about the
- * reference content: the WaniKani connection, its settings, reviews, lessons and analytics are
- * untouched by it, which is why the WaniKani row lives on its own page.
+ * is left — every kanji page reads the same shared value. A device that has never chosen follows the
+ * WaniKani connection: WaniKani while an account is connected, and Remembering the Kanji — which
+ * needs no account — when none is. It is deliberately only about the reference content: the
+ * WaniKani connection, its settings, reviews, lessons and analytics are untouched by it, which is
+ * why the WaniKani row lives on its own page.
  */
 import React, {useEffect, useState} from "react";
 import {Text, View} from "react-native";
 import {
-  loadKanjiReferenceSource,
+  reloadKanjiReferenceSource,
   setKanjiReferenceSource,
   useKanjiReferenceSource,
 } from "../kanjiReference";
@@ -46,10 +48,11 @@ export function KanjiReferenceSettingsScreen({onClose}: {onClose: () => void}) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  // The stored choice is read on arrival; until it is, nothing is shown as selected.
+  // The choice is read on arrival, connection included: a device that never chose may have
+  // connected or disconnected WaniKani since the last read. Until it answers, nothing is selected.
   useEffect(() => {
     let cancelled = false;
-    void loadKanjiReferenceSource().then(() => {
+    void reloadKanjiReferenceSource().then(() => {
       if (!cancelled) setReady(true);
     });
     return () => {
@@ -72,6 +75,7 @@ export function KanjiReferenceSettingsScreen({onClose}: {onClose: () => void}) {
       onClose={onClose}
       help={[
         "This chooses which reference a kanji page shows: WaniKani's online kanji pages, or Remembering the Kanji's bundled keywords, stories and community mnemonics.",
+        "Until you choose, the reference follows your WaniKani connection: WaniKani while an account is connected, and Remembering the Kanji when none is.",
         "Remembering the Kanji is stored on this device. It needs no account, token, network connection or extra download, and its pages work offline.",
         "Changing this does not connect or disconnect WaniKani, and it does not affect WaniKani reviews, lessons or analytics. The WaniKani connection has its own settings page.",
       ]}

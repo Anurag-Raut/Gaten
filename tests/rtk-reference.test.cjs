@@ -95,9 +95,11 @@ const reference = loadTypeScript('src/rn/ui/kanjiReference.ts', (name) => {
   return {};
 });
 
-test('a device that has not been read yet defaults to WaniKani', () => {
+test('a device that has not been read yet shows WaniKani until it answers', () => {
+  // The device decides the default from the WaniKani connection; this is only the value the
+  // screens hold for the frame before that answer arrives.
   assert.equal(reference.getKanjiReferenceSource(), 'wanikani');
-  assert.equal(reference.DEFAULT_KANJI_REFERENCE_SOURCE, 'wanikani');
+  assert.equal(reference.INITIAL_KANJI_REFERENCE_SOURCE, 'wanikani');
 });
 
 test('the strip shows for RTK with no WaniKani token, and for WaniKani only with one', () => {
@@ -122,9 +124,24 @@ test('the stored choice is read once, then kept', async () => {
   assert.equal(reference.getKanjiReferenceSource(), 'rtk');
 });
 
+test('a connection change moves the default for a device that never chose', async () => {
+  // Connecting WaniKani: the device now answers WaniKani, and the screens adopt it at once.
+  bridge.source = 'wanikani';
+  assert.equal(await reference.reloadKanjiReferenceSource(), 'wanikani');
+  assert.equal(reference.getKanjiReferenceSource(), 'wanikani');
+  // Disconnecting it: no account, no explicit choice, so Remembering the Kanji answers instead.
+  bridge.source = 'rtk';
+  assert.equal(await reference.reloadKanjiReferenceSource(), 'rtk');
+  assert.equal(reference.getKanjiReferenceSource(), 'rtk');
+});
+
 test('setting a source adopts what the device stored', async () => {
   assert.equal(await reference.setKanjiReferenceSource('wanikani'), 'wanikani');
   assert.equal(reference.getKanjiReferenceSource(), 'wanikani');
   assert.equal(await reference.setKanjiReferenceSource('rtk'), 'rtk');
   assert.equal(reference.getKanjiReferenceSource(), 'rtk');
+  // The write answered what the device stored, so a later load keeps it rather than asking a
+  // bridge that would now say something else (a connection change, say).
+  bridge.source = 'wanikani';
+  assert.equal(await reference.loadKanjiReferenceSource(), 'rtk');
 });

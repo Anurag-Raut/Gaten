@@ -26,6 +26,7 @@ import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {Button, Icon} from "../components";
+import {reloadKanjiReferenceSource} from "../kanjiReference";
 import {reviewStore} from "../review/review-store";
 import {ScreenHeader} from "../ScreenHeader";
 import {resetWaniKaniStats} from "../analytics/useWaniKaniStats";
@@ -216,6 +217,8 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         return GatenWaniKani.isConfigured().then((configured) => {
           setConnected(configured);
           setAnswer(result);
+          // A device that never chose follows the connection, so the reference moves with it.
+          void reloadKanjiReferenceSource();
           if (!configured) reviewStore.resetWaniKaniAccount();
         });
       })
@@ -235,6 +238,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         return GatenWaniKani.isConfigured().then((configured) => {
           setConnected(configured);
           setAnswer(result);
+          void reloadKanjiReferenceSource();
           if (!configured) reviewStore.resetWaniKaniAccount();
         });
       })
@@ -256,6 +260,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
         return GatenWaniKani.isConfigured().then((configured) => {
           setConnected(configured);
           setToken("");
+          void reloadKanjiReferenceSource();
           // No token, no account: the dashboard must not keep showing the numbers of the account
           // that was just disconnected, nor wait out a rate limit it left behind. Checked against
           // the read-back rather than the disconnect's own answer, so a partial clear that did take

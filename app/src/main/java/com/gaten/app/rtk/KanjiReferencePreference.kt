@@ -21,12 +21,23 @@ enum class KanjiReferenceSource(val wire: String) {
     RTK("rtk");
 
     companion object {
-        /** The default for a device that never chose — every existing user had WaniKani. */
-        val DEFAULT: KanjiReferenceSource = WANIKANI
+        /**
+         * What a device that never chose shows. WaniKani's pages need an account, so a device
+         * without one gets Remembering the Kanji, which is bundled and works offline; a connected
+         * account keeps the WaniKani pages every device had before the choice existed.
+         */
+        fun defaultFor(wanikaniConfigured: Boolean): KanjiReferenceSource =
+            if (wanikaniConfigured) WANIKANI else RTK
 
-        /** The stored value, with anything unrecognised (or absent) reading as [DEFAULT]. */
-        fun fromStored(value: String?): KanjiReferenceSource =
-            entries.firstOrNull { it.name == value } ?: DEFAULT
+        /**
+         * The stored value, with anything unrecognised (or absent) reading as [defaultFor]. A
+         * stored value is the reader's own choice and is kept whatever the connection is doing.
+         */
+        fun fromStored(
+            value: String?,
+            wanikaniConfigured: Boolean
+        ): KanjiReferenceSource =
+            entries.firstOrNull { it.name == value } ?: defaultFor(wanikaniConfigured)
 
         /** The bridge's spelling, or null when it names no source. */
         fun fromWire(value: String?): KanjiReferenceSource? =
@@ -46,10 +57,18 @@ internal interface KanjiReferenceStorage {
     fun saveSource(value: String): Boolean
 }
 
-/** Reads and writes the selected reference source. */
-internal class KanjiReferencePreference(private val storage: KanjiReferenceStorage) {
+/**
+ * Reads and writes the selected reference source. [wanikaniConfigured] is only what a device that
+ * never chose falls back to; the caller reads the connection, so the store itself knows nothing
+ * about WaniKani beyond that answer.
+ */
+internal class KanjiReferencePreference(
+    private val storage: KanjiReferenceStorage,
+    private val wanikaniConfigured: Boolean
+) {
 
-    fun source(): KanjiReferenceSource = KanjiReferenceSource.fromStored(storage.source())
+    fun source(): KanjiReferenceSource =
+        KanjiReferenceSource.fromStored(storage.source(), wanikaniConfigured)
 
     /**
      * Stores [source] and answers what is on disk afterwards — never the request — so a write that
@@ -72,12 +91,16 @@ private class SharedPreferencesStorage(
         preferences.edit().putString(KEY_SOURCE, value).commit()
 }
 
-/** The preference file the choice lives in. */
-internal fun kanjiReferencePreference(context: Context): KanjiReferencePreference =
+/** The preference file the choice lives in, with the connection a never-chosen device follows. */
+internal fun kanjiReferencePreference(
+    context: Context,
+    wanikaniConfigured: Boolean
+): KanjiReferencePreference =
     KanjiReferencePreference(
         SharedPreferencesStorage(
             context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-        )
+        ),
+        wanikaniConfigured
     )
 
 private const val PREFERENCES = "gaten_settings"
