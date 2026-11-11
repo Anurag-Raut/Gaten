@@ -741,6 +741,23 @@ class GatenWaniKaniModule(
                 }
             }
         )
+        // The words a kanji is shown as being used in. `reading` is left out when it is null, as a
+        // component's `name` is, because JS reads it as optional; `amalgamationIds` never crosses:
+        // it is how these words were resolved, not something the screen draws.
+        putArray(
+            "relatedWords",
+            Arguments.createArray().apply {
+                relatedWords.forEach { word ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putString("characters", word.characters)
+                            word.reading?.let { putString("reading", it) }
+                            putString("meaning", word.meaning)
+                        }
+                    )
+                }
+            }
+        )
         documentUrl?.let { putString("documentUrl", it) }
     }
 

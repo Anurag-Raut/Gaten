@@ -51,7 +51,7 @@ import {InkIcon} from "../InkIcon";
 import {Button, Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
-import {APP_FONT, spacing, typeScale} from "../tokens";
+import {spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
 import DeckThumbnail from "./DeckThumbnail";
@@ -954,15 +954,15 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   sourceMain: {flex: 1, minWidth: 0, marginStart: 14},
-  sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4, fontFamily: APP_FONT},
+  sourceName: {...typeScale.titleLarge},
   sourceStatus: {marginTop: 5},
   sourceSide: {alignItems: "flex-end", marginStart: spacing.m},
-  sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45, fontFamily: APP_FONT},
-  sourceValueLabel: {fontSize: 10, lineHeight: 13, fontFamily: APP_FONT},
-  sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right", fontFamily: APP_FONT},
+  sourceValue: {...typeScale.titleLarge},
+  sourceValueLabel: {...typeScale.micro},
+  sourceAction: {...typeScale.micro, textAlign: "right"},
   // The review's own count/state on the shared app bar's trailing edge, in the flow's quiet tone. It
   // shrinks and ellipsizes rather than pushing the title off at a large font or a long count.
-  subHeaderRight: {fontSize: 11, flexShrink: 1, fontFamily: APP_FONT},
+  subHeaderRight: {...typeScale.micro, flexShrink: 1},
   progressArea: {marginTop: 2},
   progressTrack: {height: 2, width: "100%", overflow: "hidden"},
   progressFill: {height: 2},
@@ -984,20 +984,22 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   studyMain: {flex: 1, minWidth: 0},
-  studyTitle: {fontWeight: "700", letterSpacing: -0.25, fontFamily: APP_FONT},
-  studySubline: {fontSize: 12, lineHeight: 16, marginTop: 3, fontFamily: APP_FONT},
-  studyExtra: {fontSize: 11, lineHeight: 15, marginTop: 3, fontFamily: APP_FONT},
+  // The row title's size is the caller's — WaniKani's 17 dp, Anki's 15 dp, both drawn at the row's
+  // own line height — so the role supplies the weight and the face only; the tracking is the row's.
+  studyTitle: {...typeScale.titleMedium, letterSpacing: -0.25},
+  studySubline: {...typeScale.bodySmall, marginTop: 3},
+  studyExtra: {...typeScale.micro, marginTop: 3},
   studyTrailing: {alignItems: "flex-end", marginStart: spacing.s},
-  studyCount: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8, fontFamily: APP_FONT},
-  studyCountLabel: {fontSize: 10, lineHeight: 13, marginTop: 1, fontFamily: APP_FONT},
+  studyCount: {...typeScale.metric},
+  studyCountLabel: {...typeScale.micro, marginTop: 1},
   metricRow: {flexDirection: "row", alignItems: "flex-start", marginTop: spacing.s},
   metricRowStacked: {flexDirection: "column", gap: spacing.l},
   metric: {flex: 1, minWidth: 0},
   // One vertical hairline between the two figures, as the paired figures elsewhere in the app use.
   metricSpaced: {borderStartWidth: 1, paddingStart: spacing.l, marginStart: spacing.l},
-  metricValue: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8, fontFamily: APP_FONT},
-  metricLabel: {fontSize: 12, lineHeight: 16, fontWeight: "600", marginTop: 3, fontFamily: APP_FONT},
-  metricHint: {fontSize: 11, lineHeight: 15, marginTop: 3, fontFamily: APP_FONT},
+  metricValue: {...typeScale.metric},
+  metricLabel: {...typeScale.labelMedium, marginTop: 3},
+  metricHint: {...typeScale.micro, marginTop: 3},
   footer: {
     position: "absolute",
     bottom: 0,
@@ -1019,13 +1021,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.s,
     paddingHorizontal: spacing.xs,
   },
-  ratingName: {fontSize: 12, fontWeight: "600", fontFamily: APP_FONT},
-  ratingInterval: {fontSize: 10, lineHeight: 13, marginTop: 2, fontFamily: APP_FONT},
+  ratingName: {...typeScale.labelMedium},
+  ratingInterval: {...typeScale.micro, marginTop: 2},
   input: {
-    fontSize: 21,
-    lineHeight: 28,
-    fontWeight: "700",
-    fontFamily: APP_FONT,
+    ...typeScale.headline,
+    // The typed answer carries no tracking of its own, so the state title's tightening is cancelled
+    // here rather than letting the field's characters crowd as the reader types.
+    letterSpacing: 0,
     textAlign: "left",
     width: "100%",
     minHeight: 62,
@@ -1038,13 +1040,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     borderRadius: 0,
   },
-  feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17, fontFamily: APP_FONT},
+  feedback: {...typeScale.bodySmall, minHeight: 21, marginTop: 17},
   answerStroke: {width: "100%"},
   answerStrokeLine: {position: "absolute", left: 0, right: 0, bottom: 0, height: 2},
   answerShake: {width: "100%"},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
   stateMark: {marginBottom: 21},
-  stateTitle: {fontSize: 23, fontWeight: "700", letterSpacing: -0.7, textAlign: "center", fontFamily: APP_FONT},
+  stateTitle: {...typeScale.headline, textAlign: "center"},
   stateBody: {marginTop: 14, textAlign: "center"},
   stateNote: {marginTop: spacing.m, textAlign: "center"},
   stateActions: {marginTop: 21, width: "100%", gap: spacing.m},

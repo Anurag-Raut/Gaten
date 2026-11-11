@@ -15,7 +15,7 @@
  */
 import React from "react";
 import {StyleSheet, Text, View} from "react-native";
-import {APP_FONT, spacing} from "../tokens";
+import {spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {WANIKANI_TYPE_LABELS} from "./wanikani-labels";
 import type {WaniKaniLessonItem} from "../../native/GatenWaniKani";
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.m,
   },
   dot: {width: 7, height: 7, borderRadius: 4, marginEnd: spacing.s},
-  badgeLabel: {fontSize: 12, lineHeight: 16, fontWeight: "700", fontFamily: APP_FONT},
-  level: {fontSize: 12, lineHeight: 16, fontFamily: APP_FONT},
-  taskLabel: {fontSize: 14, lineHeight: 20, fontFamily: APP_FONT},
+  badgeLabel: {...typeScale.labelMedium},
+  level: {...typeScale.bodySmall},
+  taskLabel: {...typeScale.bodyMedium},
 });

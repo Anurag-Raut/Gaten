@@ -22,10 +22,10 @@ import * as GatenRtk from "../../native/GatenRtk";
 import type {RtkLookupResult, RtkMnemonic} from "../../native/GatenRtk";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {IconButton} from "../components";
+import {ReferenceSection, ReferenceValue} from "../reference/ReferenceText";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {
-  APP_FONT,
   CONTENT_COLUMN,
   contentInsetFor,
   KANJI_LETTERING,
@@ -114,35 +114,41 @@ export function RtkKanjiPanel({
       )}
       {current?.result?.status === "available" && (
         // Keyed by character so a kanji opened over another starts with its stories collapsed.
-        <EntryContent key={current.result.entry.character} entry={current.result.entry} />
+        <EntryContent
+          key={current.result.entry.character}
+          entry={current.result.entry}
+          embedded={embedded}
+        />
       )}
     </View>
   );
 
   return (
     <View style={styles.root}>
-      <View
-        style={[
-          styles.headerRow,
-          !showBack && !embedded && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
-        ]}
-      >
-        {showBack && onBack && (
-          <IconButton
-            name="arrow_back"
-            accessibilityLabel="Close these details"
-            onPress={onBack}
-            compact={compact}
-            size={compact ? 18 : 20}
-          />
-        )}
-        <Text
-          numberOfLines={1}
-          style={[styles.heroGlyph, {color: colors.onSurface, flexShrink: 1}]}
+      {!embedded && (
+        <View
+          style={[
+            styles.headerRow,
+            !showBack && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
+          ]}
         >
-          {character}
-        </Text>
-      </View>
+          {showBack && onBack && (
+            <IconButton
+              name="arrow_back"
+              accessibilityLabel="Close these details"
+              onPress={onBack}
+              compact={compact}
+              size={compact ? 18 : 20}
+            />
+          )}
+          <Text
+            numberOfLines={1}
+            style={[styles.heroGlyph, {color: colors.onSurface, flexShrink: 1}]}
+          >
+            {character}
+          </Text>
+        </View>
+      )}
       {scrollable ? (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -158,7 +164,7 @@ export function RtkKanjiPanel({
   );
 }
 
-function EntryContent({entry}: {entry: GatenRtk.RtkEntry}) {
+function EntryContent({entry, embedded}: {entry: GatenRtk.RtkEntry; embedded: boolean}) {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [first, ...others] = entry.mnemonics;
@@ -166,76 +172,46 @@ function EntryContent({entry}: {entry: GatenRtk.RtkEntry}) {
 
   return (
     <View style={CONTENT_COLUMN}>
-      {/* The source is part of the heading's own block: it says where this page came from. */}
-      <Text
-        style={[
-          typeScale.labelLarge,
-          styles.sourceLabel,
-          {color: colors.onSurfaceVariant},
-        ]}
-      >
-        Remembering the Kanji
-      </Text>
-      <View
-        style={[
-          styles.sectionBlock,
-          styles.sectionRule,
-          {borderBottomColor: colors.outlineVariant},
-        ]}
-      >
-        <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-          Keyword
-        </Text>
-        <Text style={[styles.keyword, {color: colors.onSurface}]}>{entry.keyword}</Text>
-      </View>
-      {entry.story !== "" && (
-        <View
+      {/* The source is part of the heading's own block: it says where this page came from. In the
+          Anki answer the surrounding strip already says it, so the line is not said twice. */}
+      {!embedded && (
+        <Text
           style={[
-            styles.sectionBlock,
-            styles.sectionGap,
-            styles.sectionRule,
-            {borderBottomColor: colors.outlineVariant},
+            typeScale.labelLarge,
+            styles.sourceLabel,
+            {color: colors.onSurfaceVariant},
           ]}
         >
-          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-            Heisig’s story
-          </Text>
+          Remembering the Kanji
+        </Text>
+      )}
+      <ReferenceSection title="Keyword">
+        <ReferenceValue>{entry.keyword}</ReferenceValue>
+      </ReferenceSection>
+      {entry.story !== "" && (
+        <ReferenceSection title="Heisig’s story">
           <EmphasizedText
             text={entry.story}
-            style={[typeScale.bodyMedium, {color: colors.onSurface}]}
+            style={[
+              typeScale.bodyMedium,
+              {color: colors.onSurfaceVariant, marginTop: spacing.m},
+            ]}
           />
-        </View>
+        </ReferenceSection>
       )}
       {primitive !== "" && (
-        <View
-          style={[
-            styles.sectionBlock,
-            styles.sectionGap,
-            styles.sectionRule,
-            {borderBottomColor: colors.outlineVariant},
-          ]}
-        >
-          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-            Primitive
-          </Text>
+        <ReferenceSection title="Primitive">
           <EmphasizedText
             text={primitive}
-            style={[typeScale.bodyMedium, {color: colors.onSurface}]}
+            style={[
+              typeScale.bodyMedium,
+              {color: colors.onSurfaceVariant, marginTop: spacing.m},
+            ]}
           />
-        </View>
+        </ReferenceSection>
       )}
       {first != null && (
-        <View
-          style={[
-            styles.sectionBlock,
-            styles.sectionGap,
-            styles.sectionRule,
-            {borderBottomColor: colors.outlineVariant},
-          ]}
-        >
-          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-            Community mnemonics
-          </Text>
+        <ReferenceSection title="Community mnemonics">
           <MnemonicStory mnemonic={first} />
           {others.length > 0 && (
             <>
@@ -267,7 +243,7 @@ function EntryContent({entry}: {entry: GatenRtk.RtkEntry}) {
               </Collapsible>
             </>
           )}
-        </View>
+        </ReferenceSection>
       )}
     </View>
   );
@@ -282,7 +258,7 @@ function MnemonicStory({mnemonic}: {mnemonic: RtkMnemonic}) {
     <View style={styles.story}>
       <EmphasizedText
         text={mnemonic.body}
-        style={[typeScale.bodyMedium, {color: colors.onSurface}]}
+        style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}
       />
       <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}>
         {profile != null && isKoohiiPage(profile) ? (
@@ -389,16 +365,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   scrollContent: CONTENT_COLUMN,
-  // The card in the same slot the WaniKani kanji card takes, so the character wears the same
-  // weight here; the keyword below it is a meaning, not a character, and keeps its own.
-  heroGlyph: {fontSize: 36, ...KANJI_LETTERING},
-  keyword: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
+  // The character wears the shared glyph role and the one kanji lettering weight; the keyword below
+  // it is a meaning, not a character, and is drawn as the shared violet value.
+  heroGlyph: {...typeScale.displaySmall, ...KANJI_LETTERING},
   sourceLabel: {marginTop: spacing.xs},
-  sectionBlock: {paddingVertical: spacing.s, gap: spacing.xs},
-  sectionRule: {borderBottomWidth: 1},
-  sectionGap: {marginTop: spacing.l},
-  caption: {marginBottom: spacing.xs},
   story: {gap: spacing.xs},
+  // The skeleton keeps the block rhythm the loaded sections replace.
+  sectionBlock: {paddingVertical: spacing.s, gap: spacing.xs},
+  sectionGap: {marginTop: spacing.l},
   disclosureRow: {
     minHeight: 48,
     flexDirection: "row",

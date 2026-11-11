@@ -24,6 +24,7 @@
  */
 import {isKanaOnly, romajiToHiragana} from "./wanikani-romaji";
 import {meaningMatches} from "./meaning-match";
+import {teachBack, teachDone, teachForward, teachPartsOf} from "./wanikani-lesson-steps";
 import * as Anki from "../../native/GatenAnki";
 import {noteSupportMoment} from "../support/support-moments";
 import * as WaniKani from "../../native/GatenWaniKani";
@@ -147,9 +148,11 @@ export interface WaniKaniLessonSession {
   batch: WaniKaniLessonItem[];
   /** How many lessons are still queued after this batch, for the closing line. */
   remaining: number;
-  /** `teaching` one card at a time, then `quizzing` them; `starting` sends a finished one. */
+  /** `teaching` one step at a time, then `quizzing` them; `starting` sends a finished one. */
   phase: "teaching" | "quizzing" | "starting" | "startFailed";
+  /** The subject being taught, and which of its steps is on screen — see `lessonStepsOf`. */
   teachIndex: number;
+  teachStep: number;
   quizIndex: number;
   part: "meaning" | "reading";
   entry: string;
@@ -161,9 +164,9 @@ export interface WaniKaniLessonSession {
   failure: WaniKaniFailure | null;
   /** True when the start was refused for the token rather than for the network. */
   authRejected: boolean;
-  /** Parts finished across the whole batch: the teach cards, then the quiz answers. */
+  /** Parts finished across the whole batch: the teaching steps, then the quiz answers. */
   doneParts: number;
-  /** Teach cards plus quiz parts, the denominator the progress line moves against. */
+  /** Teaching steps plus quiz parts, the denominator the progress line moves against. */
   totalParts: number;
 }
 
@@ -630,6 +633,7 @@ function startWaniKaniLessonSession(
     remaining,
     phase: "teaching",
     teachIndex: 0,
+    teachStep: 0,
     quizIndex: 0,
     part: "meaning",
     entry: "",
@@ -640,7 +644,7 @@ function startWaniKaniLessonSession(
     failure: null,
     authRejected: false,
     doneParts: 0,
-    totalParts: batch.length + batch.reduce((total, item) => total + partsOf(item), 0),
+    totalParts: teachPartsOf(batch) + batch.reduce((total, item) => total + partsOf(item), 0),
   };
 }
 
@@ -1555,14 +1559,18 @@ class ReviewStore {
     this.replacePausedReview(session, atPrompt(session, next, doneParts));
   }
 
-  /** Moves from one teaching card to the next; the last card starts the quiz over the batch. */
+  /**
+   * Moves one teaching step forward: the next step of this subject, the first step of the next one,
+   * or — past the last step of the last one — the quiz, which starts at its own first part. The
+   * progress line counts steps, so it moves with each of them rather than with the subject.
+   */
   lessonNext() {
     const step = this.state.step;
     if (step.kind !== "wkLesson") return;
     const session = step.session;
     if (session.phase !== "teaching") return;
-    const next = session.teachIndex + 1;
-    if (next >= session.batch.length) {
+    const next = teachForward(session.batch, session.teachIndex, session.teachStep);
+    if (next === "quiz") {
       this.set({
         step: {
           kind: "wkLesson",
@@ -1576,7 +1584,8 @@ class ReviewStore {
             incorrectReading: 0,
             feedback: null,
             retrying: false,
-            doneParts: session.batch.length,
+            // Every teaching step is behind the reader, so the quiz starts at the top of the bar.
+            doneParts: teachPartsOf(session.batch),
           },
         },
       });
@@ -1585,7 +1594,38 @@ class ReviewStore {
     this.set({
       step: {
         kind: "wkLesson",
-        session: { ...session, teachIndex: next, doneParts: next },
+        session: {
+          ...session,
+          teachIndex: next.teachIndex,
+          teachStep: next.teachStep,
+          doneParts: teachDone(session.batch, next.teachIndex, next.teachStep),
+        },
+      },
+    });
+  }
+
+  /**
+   * One teaching step back, from the header arrow, the footer's Back or the hardware key alike: the
+   * step before a subject's first is the last step of the subject before it. At the very first step
+   * there is nothing to step back to and the caller leaves instead, and a quiz is never stepped
+   * into — asking to leave it is the question it always was.
+   */
+  lessonBack() {
+    const step = this.state.step;
+    if (step.kind !== "wkLesson") return;
+    const session = step.session;
+    if (session.phase !== "teaching") return;
+    const previous = teachBack(session.batch, session.teachIndex, session.teachStep);
+    if (previous == null) return;
+    this.set({
+      step: {
+        kind: "wkLesson",
+        session: {
+          ...session,
+          teachIndex: previous.teachIndex,
+          teachStep: previous.teachStep,
+          doneParts: teachDone(session.batch, previous.teachIndex, previous.teachStep),
+        },
       },
     });
   }

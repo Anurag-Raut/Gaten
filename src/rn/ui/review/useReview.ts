@@ -35,6 +35,7 @@ export const reviewActions = {
   startLessons: () => reviewStore.startLessons(),
   retryWaniKaniSync: () => reviewStore.retryWaniKaniSync(),
   lessonNext: () => reviewStore.lessonNext(),
+  lessonBack: () => reviewStore.lessonBack(),
   lessonEntry: (text: string) => reviewStore.lessonEntry(text),
   lessonCheck: () => reviewStore.lessonCheck(),
   lessonRetrySubmit: () => reviewStore.lessonRetrySubmit(),

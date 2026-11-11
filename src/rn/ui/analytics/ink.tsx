@@ -1688,17 +1688,10 @@ const styles = StyleSheet.create({
   sectionBody: {gap: spacing.m},
   thinRule: {width: "100%", height: 1, marginVertical: 17},
   metric: {minWidth: 0},
-  // An 11 sp label tracked 1.2 px and set uppercase: small enough to stay quiet beside a 34 sp figure,
-  // open enough to read as a label rather than as squeezed body text.
-  metricEyebrow: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    fontFamily: APP_FONT,
-  },
-  metricHero: {fontSize: 34, lineHeight: 38, fontWeight: "700", letterSpacing: -1.5, fontFamily: APP_FONT},
+  // `typeScale.eyebrow` (11 sp, tracked 1.2 px) plus the uppercase the role leaves to its caller: small
+  // enough to stay quiet beside a 34 sp figure, open enough to read as a label rather than squeezed body text.
+  metricEyebrow: {...typeScale.eyebrow, textTransform: "uppercase"},
+  metricHero: {...typeScale.metricHero},
   // The caption keeps its original 5 dp step. Only a caption that leads with a segment swatch takes
   // the row: the 8 dp swatch never shrinks, so the caption text wraps beside it.
   metricCaption: {marginTop: 5},

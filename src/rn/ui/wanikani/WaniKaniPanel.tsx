@@ -32,10 +32,9 @@ import type {
   WaniKaniSubject,
 } from "../../native/GatenWaniKani";
 import {Button, Icon, IconButton} from "../components";
-import {PressableScale} from "../PressableScale";
+import {ReferenceBody, ReferenceSection, ReferenceTile, ReferenceValue} from "../reference/ReferenceText";
 import {useTheme} from "../theme";
 import {
-  APP_FONT,
   CONTENT_COLUMN,
   contentInsetFor,
   KANJI_LETTERING,
@@ -218,10 +217,9 @@ export function WaniKaniPanel({
           radical={lookup.subject.kind === "radical" ? lookup.subject : null}
           stale={lookup.stale}
           cacheFailure={lookup.cacheFailure}
-          compact={compact}
           onRadical={onRadical}
           onRefresh={() => setRetry({key: targetKey, count: retryCount + 1})}
-          flat={flat}
+          embedded={embedded}
         />
       )}
       {lookup?.status === "noEntry" && (
@@ -265,10 +263,10 @@ export function WaniKaniPanel({
 
   return (
     <View style={styles.root}>
-      {isKanjiPage ? (
+      {isKanjiPage && !embedded ? (
         <View style={[
           styles.headerRow,
-          !showBack && !embedded && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
+          !showBack && {...CONTENT_COLUMN, paddingHorizontal: contentInsetFor(width)},
         ]}>
           {showBack && onBack && (
             <IconButton
@@ -314,7 +312,7 @@ export function WaniKaniPanel({
             )}
           </View>
         </View>
-      ) : (
+      ) : !isKanjiPage ? (
         showBack && onBack && (
           <View style={styles.headerRow}>
             <IconButton
@@ -326,7 +324,7 @@ export function WaniKaniPanel({
             />
           </View>
         )
-      )}
+      ) : null}
       {scrollable ? (
         <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>{body}</ScrollView>
       ) : (
@@ -341,181 +339,105 @@ function AvailableContent({
   radical,
   stale,
   cacheFailure,
-  compact,
   onRadical,
   onRefresh,
-  flat = false,
+  embedded,
 }: {
   kanji: KanjiSubject | null;
   radical: RadicalSubject | null;
   stale: boolean;
   cacheFailure: WaniKaniFailure | undefined;
-  compact: boolean;
   onRadical?: (id: number) => void;
-  /** Asks WaniKani again; the radical page's foot action, where the kanji page's is in its row. */
+  /** Asks WaniKani again; the foot actions are where the heading row's icons are not drawn. */
   onRefresh: () => void;
-  /** @see WaniKaniPanelProps.flat */
-  flat?: boolean;
+  /** The Anki answer's inline page: no heading row, so its page actions sit at the foot. */
+  embedded: boolean;
 }) {
   const {colors, dark} = useTheme();
-  const meanings = radical ? radical.meanings : kanji?.meanings ?? [];
-  const primaryMeaning = radical ? radical.primaryMeaning : kanji?.primaryMeaning;
+  const subject: KanjiSubject | RadicalSubject | null = kanji ?? radical;
+  const meanings = subject?.meanings ?? [];
+  const primaryMeaning = subject?.primaryMeaning ?? "";
   const alternates = meanings.filter((meaning) => meaning !== primaryMeaning);
-  const meaningMnemonic = (radical ?? kanji)?.meaningMnemonic;
+  const meaningMnemonic = subject?.meaningMnemonic ?? "";
 
   return (
     <View style={CONTENT_COLUMN}>
-      {/* A radical's drawing is the page's anchor and its name is the page's one piece of primary
-          content, so they are drawn together straight on the page: no panel behind the drawing, and
-          the name said once here instead of once in a heading and again under a section label. */}
-      {radical && (
-        <View style={[styles.heroRow, {borderBottomColor: colors.outlineVariant}]}>
-          {/* The drawing when WaniKani has one, its character when the radical has one, and
-              nothing when it has neither: the name below is then the page's only content, and it is
-              already said once — drawing it again as art would say it twice. */}
+      {/* A radical's drawing is the page's anchor, so it leads the page on its own — no panel behind
+          it and no rule under it; the meaning is the first section, the way every other page states
+          one. */}
+      {radical != null && (
+        <View style={styles.radicalMark}>
           {radical.svg ? (
-            <RadicalImage
-              svg={radical.svg}
-              dark={dark}
-              background="transparent"
-              size={compact ? 56 : 72}
-            />
+            <RadicalImage svg={radical.svg} dark={dark} background="transparent" size={56} />
           ) : radical.character != null ? (
             <Text style={[styles.heroGlyph, {color: colors.onSurface}]}>{radical.character}</Text>
           ) : null}
-          <View style={styles.heroText}>
-            <Text style={[styles.meaningGloss, {color: colors.onSurface}]}>
-              {primaryMeaning}
-            </Text>
-            {alternates.length > 0 && (
-              <Text style={[typeScale.bodySmall, styles.heroAlternates, {color: colors.onSurfaceVariant}]}>
-                {alternates.join(" · ")}
-              </Text>
-            )}
-          </View>
         </View>
       )}
-      {/* A kanji's character is already the heading, so its meaning is the one thing the page has
-          to state; a radical states it in the hero above. */}
-      {kanji && (
-        <View style={[styles.sectionBlock, styles.sectionRule, {borderBottomColor: colors.outlineVariant}]}>
-          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-            Meaning
-          </Text>
-          <Text style={[styles.meaningGloss, {color: colors.onSurface}]}>
-            {primaryMeaning}
-          </Text>
-          {alternates.length > 0 && (
-            <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-              {alternates.join(" · ")}
-            </Text>
+      {subject != null && (
+        <ReferenceSection title="Meaning">
+          <ReferenceValue>{[primaryMeaning, ...alternates].join(", ")}</ReferenceValue>
+          {meaningMnemonic.trim() !== "" && (
+            <ReferenceBody selectable>{meaningMnemonic}</ReferenceBody>
           )}
-        </View>
+        </ReferenceSection>
       )}
-      {kanji && (kanji.onyomi.length > 0 || kanji.kunyomi.length > 0) && (
-        <View
-          style={[
-            styles.sectionBlock,
-            styles.sectionGap,
-            styles.sectionRule,
-            {borderBottomColor: colors.outlineVariant},
-          ]}
-        >
+      {kanji != null && (kanji.onyomi.length > 0 || kanji.kunyomi.length > 0) && (
+        <ReferenceSection title="Reading">
           {kanji.onyomi.length > 0 && (
-            <>
-              <Text
-                style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}
-              >
-                On’yomi
-              </Text>
-              <Text style={[styles.readingValue, {color: colors.onSurface}]}>
-                {kanji.onyomi.join("・")}
-              </Text>
-            </>
-          )}
-          {kanji.kunyomi.length > 0 && (
-            <View style={kanji.onyomi.length > 0 ? styles.readingRow : undefined}>
-              <Text
-                style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}
-              >
-                Kun’yomi
-              </Text>
-              <Text style={[styles.readingValue, {color: colors.onSurface}]}>
-                {kanji.kunyomi.join("・")}
-              </Text>
+            <View>
+              {kanji.kunyomi.length > 0 && (
+                <Text
+                  style={[
+                    typeScale.labelSmall,
+                    styles.readingCaption,
+                    {color: colors.onSurfaceVariant},
+                  ]}
+                >
+                  On’yomi
+                </Text>
+              )}
+              <ReferenceValue>{kanji.onyomi.join("・")}</ReferenceValue>
             </View>
           )}
-        </View>
+          {kanji.kunyomi.length > 0 && (
+            <View style={kanji.onyomi.length > 0 ? styles.readingGroup : undefined}>
+              {kanji.onyomi.length > 0 && (
+                <Text
+                  style={[
+                    typeScale.labelSmall,
+                    styles.readingCaption,
+                    {color: colors.onSurfaceVariant},
+                  ]}
+                >
+                  Kun’yomi
+                </Text>
+              )}
+              <ReferenceValue>{kanji.kunyomi.join("・")}</ReferenceValue>
+            </View>
+          )}
+          {kanji.readingMnemonic.trim() !== "" && (
+            <ReferenceBody selectable>{kanji.readingMnemonic}</ReferenceBody>
+          )}
+        </ReferenceSection>
       )}
-      {kanji && kanji.components.length > 0 && onRadical && (
-        <View
-          style={[
-            styles.sectionBlock,
-            styles.sectionGap,
-            styles.sectionRule,
-            {borderBottomColor: colors.outlineVariant},
-          ]}
-        >
-          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-            Radicals
-          </Text>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.componentRow}
-          >
+      {kanji != null && kanji.components.length > 0 && onRadical != null && (
+        <ReferenceSection title="Radical composition">
+          <View style={styles.componentList}>
             {kanji.components.map((component) => {
               const label = component.character ?? component.name ?? "…";
               return (
-                <PressableScale
+                <ReferenceTile
                   key={component.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`WaniKani details for the radical ${label}`}
+                  glyph={component.character}
+                  name={component.name ?? (component.character == null ? "…" : null)}
                   onPress={() => onRadical(component.id)}
-                  style={[
-                    styles.componentChip,
-                    flat ? styles.componentChipFlat : {backgroundColor: colors.surfaceVariant},
-                  ]}
-                >
-                  <Text style={[styles.componentGlyph, {color: colors.onSurface}]}>{label}</Text>
-                </PressableScale>
+                  accessibilityLabel={`WaniKani details for the radical ${label}`}
+                />
               );
             })}
-          </ScrollView>
-        </View>
-      )}
-      <View
-        style={[
-          styles.sectionBlock,
-          radical ? styles.sectionRadical : styles.sectionGap,
-          styles.sectionRule,
-          {borderBottomColor: colors.outlineVariant},
-        ]}
-      >
-        <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-          WaniKani’s meaning mnemonic
-        </Text>
-        <Text selectable style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
-          {meaningMnemonic}
-        </Text>
-      </View>
-      {kanji && (
-        <View
-          style={[
-            styles.sectionBlock,
-            styles.sectionGap,
-            styles.sectionRule,
-            {borderBottomColor: colors.outlineVariant},
-          ]}
-        >
-          <Text style={[typeScale.labelLarge, styles.caption, {color: colors.onSurfaceVariant}]}>
-            WaniKani’s reading mnemonic
-          </Text>
-          <Text selectable style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
-            {kanji.readingMnemonic}
-          </Text>
-        </View>
+          </View>
+        </ReferenceSection>
       )}
       {(cacheFailure !== undefined || stale) && (
         <View style={styles.notes}>
@@ -531,9 +453,10 @@ function AvailableContent({
           )}
         </View>
       )}
-      {/* A radical page's two page actions sit at the foot, out of the reading path: the kanji page
-          keeps the same pair in its heading row, beside the character it already draws. */}
-      {radical && (
+      {/* A radical page's actions always sit at the foot, out of the reading path; a kanji page
+          keeps the same pair there only when its heading row — which holds them otherwise — is not
+          drawn. */}
+      {(radical != null || embedded) && (
         <View style={styles.pageActions}>
           <Button
             variant="text"
@@ -542,13 +465,13 @@ function AvailableContent({
             leading={<Icon name="refresh" size={18} color={colors.accent} />}
             onPress={onRefresh}
           />
-          {isWaniKaniPage(radical.documentUrl) && (
+          {isWaniKaniPage(subject?.documentUrl) && (
             <Button
               variant="text"
               label="View on WaniKani"
               accessibilityLabel="Open this page on WaniKani"
               leading={<Icon name="open_in_new" size={18} color={colors.accent} />}
-              onPress={() => openExternal(radical.documentUrl ?? "")}
+              onPress={() => openExternal(subject?.documentUrl ?? "")}
             />
           )}
         </View>
@@ -720,51 +643,24 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   scrollContent: CONTENT_COLUMN,
-  // Match the landing lookup modal's hierarchy: the hero glyph and the gloss use the same roles
-  // the shared entry sections do, so a WaniKani page reads as the same sheet. The character itself
-  // wears the one kanji lettering weight (`KANJI_LETTERING`) — the same the review's hero and the
-  // chips under an answer wear — while the gloss, a meaning rather than a character, keeps its own.
-  heroGlyph: {fontSize: 36, ...KANJI_LETTERING},
-  meaningGloss: {fontSize: 29, fontWeight: "700", fontFamily: APP_FONT},
-  readingValue: {fontSize: 18, fontFamily: APP_FONT},
-  componentGlyph: {fontSize: 24, ...KANJI_LETTERING},
-  // The radical's drawing and its name, drawn together straight on the page — the drawing unboxed
-  // and the name as the page's primary text — and closed by the section rule like every section.
-  heroRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.l,
-    paddingVertical: spacing.l,
-    borderBottomWidth: 1,
-  },
-  // `minWidth: 0` lets the name wrap inside the row instead of pushing the drawing off the edge.
-  heroText: {flexShrink: 1, minWidth: 0, gap: spacing.xs},
-  heroAlternates: {marginTop: spacing.xs},
-  // A flat section with a readable caption and enough room for a long mnemonic to wrap.
+  // The page's anchor wears the shared kanji role and the one kanji lettering weight, the same the
+  // review's hero and the chips under an answer wear.
+  heroGlyph: {...typeScale.displaySmall, ...KANJI_LETTERING},
+  // A radical's drawing leads the page on its own, left-aligned, with no rule or caption over it.
+  radicalMark: {alignItems: "flex-start"},
+  // The radical page's actions, at the foot and out of the reading path.
+  pageActions: {flexDirection: "row", flexWrap: "wrap", gap: spacing.m, paddingTop: spacing.m},
+  // A reading keeps its two kinds apart when both exist: a small caption, its value, then the next.
+  readingCaption: {marginBottom: spacing.xs},
+  readingGroup: {marginTop: spacing.m},
+  // The radical breakdown is a vertical list of tiles, the way the lesson draws a composition.
+  componentList: {gap: spacing.s},
+  // The skeleton keeps the block rhythm the loaded sections replace.
   sectionBlock: {
     paddingVertical: spacing.s,
     gap: spacing.xs,
   },
-  sectionRule: {borderBottomWidth: 1},
   sectionGap: {marginTop: spacing.l},
-  // The radical page's last section sits directly under the hero's rule, so it spaces itself
-  // rather than carrying the gap a mid-page section uses.
-  sectionRadical: {paddingVertical: spacing.l},
-  // The radical page's page actions, at the foot and out of the reading path.
-  pageActions: {flexDirection: "row", flexWrap: "wrap", gap: spacing.m, paddingTop: spacing.m},
-  readingRow: {marginTop: spacing.s},
-  caption: {marginBottom: spacing.xs},
-  componentRow: {gap: spacing.s},
-  componentChip: {
-    borderRadius: shape.small,
-    minHeight: 48,
-    justifyContent: "center",
-    paddingHorizontal: spacing.l,
-    paddingVertical: spacing.s,
-  },
-  // Flat, a chip is the glyph and its target: the fill and the rounding go, the padding that keeps
-  // the 48 dp target stays.
-  componentChipFlat: {borderRadius: 0},
   notes: {gap: spacing.s, marginTop: spacing.s},
   // A state with no page: one flat line of prose and, when there is one, the action under it.
   notice: {...CONTENT_COLUMN, marginTop: spacing.s, marginBottom: spacing.l},

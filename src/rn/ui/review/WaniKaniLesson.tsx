@@ -9,12 +9,18 @@
  * review is. The two phases share one screen because they are one sitting - the reader is introduced
  * to a handful of subjects, then asked about each of them.
  *
+ * A card is not one screen either: a subject is taught as its meaning, its reading, what it is built
+ * from, then how it is used - one step at a time, each only when its data exists (see
+ * `lessonStepsOf`). The subject's badge and glyph stay on screen while only the step beneath them
+ * changes, so the step is the unit its Next and its Back move in: the reader can re-read the meaning
+ * of the word before them without losing their place in the batch.
+ *
  * The quiz is judged exactly like a review - the reading through the same converter, the meaning
  * case- and spacing-insensitively - but a finished subject is sent with `PUT /assignments/<id>/start`
  * rather than a review, which is what moves it into the review queue. Each subject is started the
  * moment its quiz is passed, so leaving mid-batch keeps what was already finished.
  */
-import React, {useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -23,8 +29,10 @@ import {
   useWindowDimensions,
 } from "react-native";
 import {KeyboardAvoidingView} from "react-native-keyboard-controller";
+import Animated, {useReducedMotion} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
+import {Button} from "../components";
 import {useTheme} from "../theme";
 import {
   ActionFooter,
@@ -42,100 +50,91 @@ import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
 import {romajiToHiragana} from "./wanikani-romaji";
 import {lessonJudgement} from "./wanikani-cue";
 import {useJudgedAnswer} from "./useJudgedAnswer";
+import {atTeachStart, lessonStepsOf, teachForward, type LessonStep} from "./wanikani-lesson-steps";
+import {revealEntering} from "../reference/reveal";
+import {
+  ReferenceBody,
+  ReferenceExample,
+  ReferenceSection,
+  ReferenceTile,
+  ReferenceValue,
+  ReferenceWord,
+} from "../reference/ReferenceText";
 import type {WaniKaniLessonSession} from "./review-store";
 import type {WaniKaniLessonItem} from "../../native/GatenWaniKani";
 
-/** One titled block of the teach card: a caption and whatever it introduces. */
-function LessonSection({title, children}: {title: string; children: React.ReactNode}) {
-  const {colors} = useTheme();
-  return (
-    <View style={styles.section}>
-      <Text
-        accessibilityRole="header"
-        style={[typeScale.labelMedium, styles.sectionTitle, {color: colors.onSurfaceVariant}]}
-      >
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
 /**
- * The teaching card: the character (or its image), its meanings and readings with their mnemonics, and
- * a couple of example sentences when WaniKani gives them. Nothing here is a question; the reader is
- * only being introduced.
+ * One teaching step's content. Every step is a titled block in the shared reference language, so a
+ * meaning, a reading and a word's components all read the same way on this screen as they do in the
+ * lookup sheet and the Anki answer.
  */
-function TeachingCard({item}: {item: WaniKaniLessonItem}) {
-  const {colors} = useTheme();
-  const characters = item.characters;
-  const single = characters != null && [...characters].length === 1;
-  return (
-    <>
-      <SubjectBadge type={item.type} level={item.level} />
-      <View style={styles.hero}>
-        {characters == null ? (
-          <RadicalDrawing subjectId={item.subjectId} />
-        ) : (
-          <Text
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            style={[
-              styles.prompt,
-              single ? styles.promptSingle : styles.promptWord,
-              {color: colors.onSurface},
-            ]}
-          >
-            {characters}
-          </Text>
-        )}
-      </View>
-      <LessonSection title="Meaning">
-        <Text style={[styles.answerLine, {color: colors.reviewReading}]}>
-          {item.meanings.join(", ")}
-        </Text>
-        {item.meaningMnemonic !== "" && (
-          <Text style={[typeScale.bodyMedium, styles.mnemonic, {color: colors.onSurfaceVariant}]}>
-            {item.meaningMnemonic}
-          </Text>
-        )}
-      </LessonSection>
-      {item.readings.length > 0 && (
-        <LessonSection title="Reading">
-          <Text style={[styles.answerLine, {color: colors.reviewReading}]}>
-            {item.readings.join(", ")}
-          </Text>
-          {item.readingMnemonic !== "" && (
-            <Text style={[typeScale.bodyMedium, styles.mnemonic, {color: colors.onSurfaceVariant}]}>
-              {item.readingMnemonic}
-            </Text>
-          )}
-        </LessonSection>
-      )}
-      {item.contextSentences.length > 0 && (
-        <LessonSection title="Examples">
-          {item.contextSentences.slice(0, 2).map((sentence, index) => (
-            <View key={index} style={styles.example}>
-              <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
-                {sentence.japanese}
-              </Text>
-              <Text
-                style={[typeScale.bodySmall, styles.exampleEnglish, {color: colors.onSurfaceVariant}]}
-              >
-                {sentence.english}
-              </Text>
-            </View>
+function TeachingStep({item, step}: {item: WaniKaniLessonItem; step: LessonStep}) {
+  switch (step) {
+    case "reading":
+      return (
+        <ReferenceSection title="Reading">
+          <ReferenceValue>{item.readings.join(", ")}</ReferenceValue>
+          {item.readingMnemonic !== "" && <ReferenceBody>{item.readingMnemonic}</ReferenceBody>}
+        </ReferenceSection>
+      );
+    case "composition":
+      return (
+        <ReferenceSection
+          title={item.type === "kanji" ? "Radical composition" : "Kanji composition"}
+        >
+          <View style={styles.composition}>
+            {item.components
+              .filter((component) => component.character != null || component.name != null)
+              .map((component) => (
+                <ReferenceTile
+                  key={component.id}
+                  glyph={component.character}
+                  name={component.name ?? ""}
+                />
+              ))}
+          </View>
+        </ReferenceSection>
+      );
+    case "examples":
+      // WaniKani gives a kanji no sentences, only the words it appears in, so a kanji's examples are
+      // those words and a vocabulary subject's are its sentences.
+      return item.contextSentences.length > 0 ? (
+        <ReferenceSection title="Example sentences">
+          {item.contextSentences.slice(0, 3).map((sentence, index) => (
+            <ReferenceExample
+              key={index}
+              japanese={sentence.japanese}
+              english={sentence.english}
+            />
           ))}
-        </LessonSection>
-      )}
-    </>
-  );
+        </ReferenceSection>
+      ) : (
+        <ReferenceSection title="Used in">
+          {item.relatedWords.map((word, index) => (
+            <ReferenceWord
+              key={index}
+              characters={word.characters}
+              reading={word.reading}
+              meaning={word.meaning}
+            />
+          ))}
+        </ReferenceSection>
+      );
+    case "meaning":
+      return (
+        <ReferenceSection title="Meaning">
+          <ReferenceValue>{item.meanings.join(", ")}</ReferenceValue>
+          {item.meaningMnemonic !== "" && <ReferenceBody>{item.meaningMnemonic}</ReferenceBody>}
+        </ReferenceSection>
+      );
+  }
 }
 
 export function WaniKaniLesson({
   session,
   busy,
   onBack,
+  onStepBack,
   onNext,
   onEntry,
   onCheck,
@@ -144,6 +143,7 @@ export function WaniKaniLesson({
   session: WaniKaniLessonSession;
   busy: boolean;
   onBack: () => void;
+  onStepBack: () => void;
   onNext: () => void;
   onEntry: (text: string) => void;
   onCheck: () => void;
@@ -151,14 +151,23 @@ export function WaniKaniLesson({
 }) {
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
   const [footerHeight, setFooterHeight] = useState(0);
   const {width} = useWindowDimensions();
   const contentInset = contentInsetFor(width);
+  const scrollRef = useRef<ScrollView>(null);
   // The answer's own cue, fired on the judgement and not on the renders that follow it; the key it
   // returns is what the answer field's shake is pinned to.
   const shakeKey = useJudgedAnswer(lessonJudgement, session);
   const teaching = session.phase === "teaching";
   const item = teaching ? session.batch[session.teachIndex] : session.batch[session.quizIndex];
+
+  // The step before this one may have been long, so every step swap starts reading at the top of
+  // the card rather than wherever the last one was left scrolled to.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({y: 0, animated: false});
+  }, [session.teachIndex, session.teachStep]);
+
   if (item == null) return null;
 
   const reading = session.part === "reading";
@@ -170,7 +179,10 @@ export function WaniKaniLesson({
   const single = characters != null && [...characters].length === 1;
   const progress = session.doneParts / Math.max(1, session.totalParts);
   const position = teaching ? session.teachIndex : session.quizIndex;
-  const lastCard = teaching && session.teachIndex + 1 >= session.batch.length;
+  const atStart = atTeachStart(session);
+  const step = teaching ? lessonStepsOf(item)[session.teachStep] : null;
+  const lastStep =
+    teaching && teachForward(session.batch, session.teachIndex, session.teachStep) === "quiz";
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
@@ -178,12 +190,13 @@ export function WaniKaniLesson({
         <SubHeader
           title="WaniKani"
           right={`${position + 1} of ${session.batch.length}`}
-          onBack={onBack}
+          onBack={atStart || !teaching ? onBack : onStepBack}
         />
         <View style={{paddingHorizontal: contentInset}}>
           <ProgressLine value={progress} height={3} />
         </View>
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           style={styles.screen}
@@ -191,31 +204,39 @@ export function WaniKaniLesson({
           keyboardShouldPersistTaps="handled"
         >
           <View style={[styles.content, {paddingHorizontal: contentInset}]}>
+            <SubjectBadge type={item.type} level={item.level} />
+            <View style={styles.hero}>
+              {characters == null ? (
+                <RadicalDrawing subjectId={item.subjectId} />
+              ) : (
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  style={[
+                    styles.prompt,
+                    single ? typeScale.glyphHero : typeScale.displayMedium,
+                    {color: colors.onSurface},
+                  ]}
+                >
+                  {characters}
+                </Text>
+              )}
+              {!teaching && (
+                <View style={styles.taskPillWrap}>
+                  <TaskLabel task={reading ? "reading" : "meaning"} />
+                </View>
+              )}
+            </View>
             {teaching ? (
-              <TeachingCard item={item} />
+              // Only the step changes; the badge and glyph above it stay put and must not fade.
+              <Animated.View
+                key={`${session.teachIndex}:${session.teachStep}`}
+                entering={revealEntering(reducedMotion)}
+              >
+                {step != null && <TeachingStep item={item} step={step} />}
+              </Animated.View>
             ) : (
               <>
-                <SubjectBadge type={item.type} level={item.level} />
-                <View style={styles.hero}>
-                  {characters == null ? (
-                    <RadicalDrawing subjectId={item.subjectId} />
-                  ) : (
-                    <Text
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      style={[
-                        styles.prompt,
-                        single ? styles.promptSingle : styles.promptWord,
-                        {color: colors.onSurface},
-                      ]}
-                    >
-                      {characters}
-                    </Text>
-                  )}
-                  <View style={styles.taskPillWrap}>
-                    <TaskLabel task={reading ? "reading" : "meaning"} />
-                  </View>
-                </View>
                 <View style={styles.answerField}>
                   <AnswerShake shakeKey={shakeKey}>
                     <AnswerInput
@@ -245,7 +266,7 @@ export function WaniKaniLesson({
                 {failed && (
                   <Text
                     accessibilityLiveRegion="polite"
-                    style={[styles.failure, {color: colors.error}]}
+                    style={[typeScale.bodySmall, {color: colors.error, marginTop: spacing.m}]}
                   >
                     {session.authRejected
                       ? "WaniKani refused the saved token, so this lesson was not saved. Reconnect and start the batch again."
@@ -263,12 +284,24 @@ export function WaniKaniLesson({
       </KeyboardAvoidingView>
       {/* Keep the action beneath the keyboard; its Done key submits the answer. */}
       <ActionFooter bottomInset={insets.bottom} onHeightChange={setFooterHeight}>
-        {teaching ? (
-          <FilledAction
-            label={lastCard ? "Start quiz" : "Next"}
-            disabled={busy}
-            onPress={onNext}
-          />
+        {teaching && atStart ? (
+          <FilledAction label={lastStep ? "Start quiz" : "Next"} disabled={busy} onPress={onNext} />
+        ) : teaching ? (
+          <View style={styles.stepActions}>
+            <Button
+              label="Back"
+              variant="outlined"
+              accessibilityLabel="Previous step"
+              onPress={onStepBack}
+              style={styles.stepBack}
+            />
+            <FilledAction
+              label={lastStep ? "Start quiz" : "Next"}
+              disabled={busy}
+              onPress={onNext}
+              style={styles.stepNext}
+            />
+          </View>
         ) : failed ? (
           <FilledAction
             label={session.authRejected ? "Reconnect" : "Send again"}
@@ -302,16 +335,11 @@ const styles = StyleSheet.create({
   content: CONTENT_COLUMN,
   hero: {alignItems: "center", marginTop: spacing.l, marginBottom: spacing.xl},
   prompt: {textAlign: "center", marginTop: spacing.m, width: "100%"},
-  promptSingle: {fontSize: 64, lineHeight: 80, fontWeight: "500", fontFamily: APP_FONT},
-  promptWord: {fontSize: 40, lineHeight: 56, fontWeight: "500", fontFamily: APP_FONT},
   taskPillWrap: {marginTop: spacing.m},
-  section: {marginTop: spacing.xl},
-  sectionTitle: {marginBottom: spacing.s},
-  answerLine: {fontSize: 20, lineHeight: 28, fontWeight: "600", fontFamily: APP_FONT},
-  mnemonic: {marginTop: spacing.m},
-  example: {marginTop: spacing.m},
-  exampleEnglish: {marginTop: 2},
+  composition: {gap: spacing.s},
+  stepActions: {flexDirection: "row", alignItems: "center", gap: spacing.m},
+  stepBack: {flex: 1},
+  stepNext: {flex: 2},
   answerField: {position: "relative", width: "100%"},
-  failure: {fontSize: 12, lineHeight: 18, marginTop: spacing.m, fontFamily: APP_FONT},
   busy: {marginTop: spacing.s},
 });

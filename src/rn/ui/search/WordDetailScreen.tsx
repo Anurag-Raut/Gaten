@@ -23,11 +23,12 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useFocusEffect} from "@react-navigation/native";
 import {Button, Icon, distinctIdeographs} from "../components";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
+import {ReferenceSection, ReferenceValue} from "../reference/ReferenceText";
 import {PressableScale, heldTone} from "../PressableScale";
 import {ScreenHeader} from "../ScreenHeader";
 import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme, type ThemeColors} from "../theme";
-import {APP_FONT, CONTENT_COLUMN, contentInsetFor, KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN, contentInsetFor, KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
@@ -170,9 +171,13 @@ export function HeadwordSection({hit}: {hit: SearchResult}) {
 
   return (
     <View style={[styles.headwordSection, {borderBottomColor: sectionRule(colors)}]}>
-      <Text style={[styles.wordTitle, {color: colors.onSurface}]}>{hit.primary}</Text>
+      {/* The headword is the page's anchor: the same role the Anki answer and the lookup sheet's
+          entry wear, so a word does not change size as the reader moves between them. */}
+      <Text style={[typeScale.displayMedium, {color: colors.onSurface}]}>{hit.primary}</Text>
       {readings.length > 0 && (
-        <Text style={[styles.reading, {color: colors.onSurfaceVariant}]}>
+        <Text
+          style={[typeScale.readingLine, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}
+        >
           {readings.join("・")}
         </Text>
       )}
@@ -194,49 +199,38 @@ export function MeaningSection({glosses, partsOfSpeech}: {
 }) {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const visibleCount = expanded ? glosses.length : Math.min(5, glosses.length);
-  const meaningRows = glosses.map((gloss, index) => (
-    <View
-      key={`${index}-${gloss}`}
-      style={[
-        styles.meaningRow,
-        index > 0 && {borderTopWidth: 1, borderTopColor: colors.outlineVariant},
-      ]}
-    >
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>
-        {gloss.length > 0 ? `${gloss[0].toUpperCase()}${gloss.slice(1)}` : gloss}
+  const meaningRows = glosses.map((gloss, index) =>
+    // The leading sense is the entry's value, drawn violet like every other meaning on the app; the
+    // senses after it are plain dictionary lines, set apart by space rather than hairline rules.
+    index === 0 ? (
+      <ReferenceValue key={`${index}-${gloss}`}>{capitaliseGloss(gloss)}</ReferenceValue>
+    ) : (
+      <Text
+        key={`${index}-${gloss}`}
+        style={[typeScale.bodyMedium, {color: colors.onSurface, marginTop: spacing.m}]}
+      >
+        {capitaliseGloss(gloss)}
       </Text>
-    </View>
-  ));
+    ),
+  );
   return (
     <View style={[styles.meaningSection, {borderBottomColor: sectionRule(colors)}]}>
-      <View style={styles.meaningHeading}>
-        <Text
-          accessibilityRole="header"
-          style={[typeScale.labelLarge, styles.meaningTitle, {color: colors.onSurface}]}
-        >
-          Meanings
-        </Text>
-        {glosses.length > 0 && (
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-            {visibleCount} of {glosses.length}
+      <ReferenceSection title="Meanings" topGap={0}>
+        {glosses.length === 0 ? (
+          <Text
+            style={[typeScale.bodyMedium, styles.meaningFallback, {color: colors.onSurfaceVariant}]}
+          >
+            The dictionary has no gloss for this entry.
           </Text>
+        ) : (
+          <>
+            {meaningRows.slice(0, 5)}
+            {glosses.length > 5 && (
+              <Collapsible expanded={expanded}>{meaningRows.slice(5)}</Collapsible>
+            )}
+          </>
         )}
-      </View>
-      {glosses.length === 0 ? (
-        <Text style={[typeScale.bodyMedium, styles.meaningFallback, {color: colors.onSurfaceVariant}]}>
-          The dictionary has no gloss for this entry.
-        </Text>
-      ) : (
-        <View style={styles.glosses}>
-          {meaningRows.slice(0, 5)}
-          {glosses.length > 5 && (
-            <Collapsible expanded={expanded}>
-              {meaningRows.slice(5)}
-            </Collapsible>
-          )}
-        </View>
-      )}
+      </ReferenceSection>
       {glosses.length > 5 && (
         <PressableScale
           accessibilityRole="button"
@@ -251,10 +245,7 @@ export function MeaningSection({glosses, partsOfSpeech}: {
         </PressableScale>
       )}
       {partsOfSpeech.length > 0 && (
-        <View style={styles.partsOfSpeech}>
-          <Text accessibilityRole="header" style={[typeScale.labelLarge, {color: colors.onSurface}]}>
-            Part of speech
-          </Text>
+        <ReferenceSection title="Part of speech" topGap={spacing.xl}>
           <Text
             style={[
               typeScale.bodyMedium,
@@ -264,10 +255,15 @@ export function MeaningSection({glosses, partsOfSpeech}: {
           >
             {partsOfSpeech.join(" / ")}
           </Text>
-        </View>
+        </ReferenceSection>
       )}
     </View>
   );
+}
+
+/** The dictionary states senses in lower case; each is presented as its own line, as before. */
+function capitaliseGloss(gloss: string): string {
+  return gloss.length > 0 ? `${gloss[0].toUpperCase()}${gloss.slice(1)}` : gloss;
 }
 
 function compactPartOfSpeech(label: string): string {
@@ -342,7 +338,7 @@ export function WordKanjiSection({
   return (
     <View style={[styles.kanjiSection, {borderBottomColor: sectionRule(colors)}]}>
       <View style={styles.kanjiHeading}>
-        <Text accessibilityRole="header" style={[typeScale.labelLarge, {color: colors.onSurface}]}>
+        <Text accessibilityRole="header" style={[typeScale.titleSmall, {color: colors.onSurface}]}>
           {label}
         </Text>
         <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
@@ -367,7 +363,9 @@ export function WordKanjiSection({
                   },
             ]}
           >
-            <Text style={[styles.kanjiCharacter, {color: colors.onSurface}]}>{character}</Text>
+            <Text style={[typeScale.displaySmall, KANJI_LETTERING, {color: colors.onSurface}]}>
+              {character}
+            </Text>
           </PressableScale>
         ))}
       </View>
@@ -411,7 +409,7 @@ export function ExampleSentencesSection({term}: {term: string}) {
 
   return (
     <View style={[styles.examplesSection, {borderBottomColor: sectionRule(colors)}]}>
-      <Text accessibilityRole="header" style={[typeScale.labelLarge, {color: colors.onSurface}]}>
+      <Text accessibilityRole="header" style={[typeScale.titleSmall, {color: colors.onSurface}]}>
         Example sentences
       </Text>
       {failed ? (
@@ -680,15 +678,8 @@ const styles = StyleSheet.create({
   body: {flex: 1},
   scrollContent: {...CONTENT_COLUMN, paddingTop: spacing.xl, paddingBottom: spacing.xl},
   headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
-  // One lettering weight for the word's own characters — headword and kanji strip — as the kanji surfaces wear.
-  wordTitle: {fontSize: 36, fontWeight: "500", fontFamily: APP_FONT},
-  reading: {...typeScale.bodyMedium, marginTop: spacing.s},
   metadata: {...typeScale.bodyMedium, marginTop: spacing.m},
   meaningSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
-  meaningHeading: {flexDirection: "row", alignItems: "center", gap: spacing.m},
-  meaningTitle: {flex: 1},
-  glosses: {marginTop: spacing.s},
-  meaningRow: {paddingVertical: spacing.l},
   meaningAction: {
     minHeight: 48,
     flexDirection: "row",
@@ -697,7 +688,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.m,
   },
   meaningActionLabel: {flexShrink: 1},
-  partsOfSpeech: {marginTop: spacing.m},
   partsOfSpeechValue: {marginTop: spacing.xs},
   meaningFallback: {marginTop: spacing.m},
   detailLabel: {flex: 1},
@@ -727,7 +717,6 @@ const styles = StyleSheet.create({
   },
   // Flat, the tile keeps its 58 dp target and the glyph on it; the fill, rounding and border go.
   kanjiTileFlat: {borderRadius: 0, borderWidth: 0},
-  kanjiCharacter: {fontSize: 36, ...KANJI_LETTERING},
   examplesSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
   examplesState: {marginTop: spacing.m},
   examplesList: {marginTop: spacing.s},

@@ -61,6 +61,7 @@ import {
 } from "./review/provider-setup-help";
 import {WaniKaniPanel} from "./wanikani/WaniKaniPanel";
 import {RtkKanjiPanel} from "./rtk/RtkKanjiPanel";
+import {ReferenceSection, ReferenceValue} from "./reference/ReferenceText";
 import {kanjiReferenceLabel, useKanjiReferenceSource} from "./kanjiReference";
 import {
   shouldConfirmLeaving,
@@ -70,7 +71,8 @@ import {
   type ReviewStep,
 } from "./review/review-store";
 import {reviewActions, useReview} from "./review/useReview";
-import {StepTransition} from "./review/StepTransition";
+import {atTeachStart} from "./review/wanikani-lesson-steps";
+import {DetailsReveal} from "./review/DetailsReveal";
 import {AnkiDeckPicker} from "./review/AnkiDeckPicker";
 import {WaniKaniConnect} from "./review/WaniKaniConnect";
 import {WaniKaniHome} from "./review/WaniKaniHome";
@@ -275,6 +277,24 @@ export function ReviewScreen({
     }
   }, [review.busy, review.step.kind, review.deck, onExit]);
 
+  /**
+   * The hardware key's route out, shared with the teaching phase: a lesson steps back one step at a
+   * time until the very first one, where there is nothing left to step into and Back leaves instead.
+   * Every other step is `leave`'s own business — the question for work in progress included.
+   */
+  const hardwareBack = useCallback(() => {
+    const current = review.step;
+    if (
+      current.kind === "wkLesson" &&
+      current.session.phase === "teaching" &&
+      !atTeachStart(current.session)
+    ) {
+      reviewActions.lessonBack();
+      return;
+    }
+    leave();
+  }, [review.step, leave]);
+
   // Back is guarded only where leaving is a decision: work in progress that asks first, or a failure
   // that belongs to a deck the reader is still in. Every other step is the page's own pop, which the
   // stack already performs — a handler there would only take the platform's Back away and hand it
@@ -287,11 +307,11 @@ export function ReviewScreen({
       (review.step.kind === "failed" && review.deck != null);
     if (!takesItsOwnBack) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      leave();
+      hardwareBack();
       return true;
     });
     return () => subscription.remove();
-  }, [isFocused, review.step.kind, review.deck, leave]);
+  }, [isFocused, review.step.kind, review.deck, hardwareBack]);
 
   // The question belongs to the step that raised it: a session that is sent, or a batch that finishes,
   // while the question is up takes it down with it rather than leaving a modal over the screen that
@@ -401,6 +421,7 @@ export function ReviewScreen({
             session={step.session}
             busy={review.busy}
             onBack={leave}
+            onStepBack={() => reviewActions.lessonBack()}
             onNext={() => reviewActions.lessonNext()}
             onEntry={(text) => reviewActions.lessonEntry(text)}
             onCheck={() => reviewActions.lessonCheck()}
@@ -713,9 +734,14 @@ function AnkiSession({
     // The strip lands 8dp below the deck space's top, so the panel below it gets the room.
     // Already at or above that line scrolls nothing.
     const delta = stripY.current - scrollY.current - spacing.s;
-    if (delta > 0) {
+    if (delta <= 0) return;
+    // After the reveal (Collapsible's 220 ms), never during it: the page is still growing, and a
+    // scroll clamped to the height it has right now would stop short of the details it was asked
+    // to bring into view.
+    const timer = setTimeout(() => {
       scrollRef.current?.scrollTo({y: scrollY.current + delta, animated: true});
-    }
+    }, 240);
+    return () => clearTimeout(timer);
   }, [detailsOpen]);
 
   const total = Math.max(1, session.total);
@@ -798,14 +824,11 @@ function AnkiSession({
               onKanji={onKanji}
               label={null}
             />
-            {/* The details move as pages, with the slide every other page change uses; the one
-                thing animated besides the slide is the size, so the strip above never jumps. */}
+            {/* The details open by growing to their own height and closing by collapsing it, with
+                the page inside fading in: the strip above is what was tapped, so nothing here
+                moves sideways under it. */}
             <View style={styles.detailsTop}>
-              <StepTransition
-                pageKey={expandedKanji ?? "none"}
-                forward={expandedKanji != null}
-                sizing="wrap"
-              >
+              <DetailsReveal open={expandedKanji != null} pageKey={expandedKanji ?? "none"}>
                 {expandedKanji == null ? null : (
                   <View style={styles.detailsWidth}>
                     {kanjiReference === "rtk" ? (
@@ -829,12 +852,11 @@ function AnkiSession({
                           reloadKey={referenceReload}
                         />
                         {/* One level deeper: the radical is a page opened inside the kanji's
-                            page, so the kanji panel above stands still while it slides in. */}
+                            page, so the kanji panel above stands still while it reveals. */}
                         <View style={styles.radicalSlot}>
-                          <StepTransition
-                            pageKey={String(expandedRadical ?? "none")}
-                            forward={expandedRadical != null}
-                            sizing="wrap"
+                          <DetailsReveal
+                            open={expandedRadical != null}
+                            pageKey={String(expandedRadical)}
                           >
                             {expandedRadical == null ? null : (
                               <View style={styles.radicalIndent}>
@@ -850,13 +872,13 @@ function AnkiSession({
                                 />
                               </View>
                             )}
-                          </StepTransition>
+                          </DetailsReveal>
                         </View>
                       </>
                     )}
                   </View>
                 )}
-              </StepTransition>
+              </DetailsReveal>
             </View>
           </View>
         )}
@@ -1161,17 +1183,22 @@ function StructuredAnkiAnswer({
       <Text style={[typeScale.displayMedium, styles.answerHeadword, {color: colors.onSurface}]}>
         {displayAnkiField(fields.expression)}
       </Text>
-      <Text style={[styles.answerReading, styles.answerHeadword, {color: colors.onSurfaceVariant}]}>
+      <Text style={[typeScale.readingLine, styles.answerHeadword, {color: colors.onSurfaceVariant}]}>
         {displayAnkiField(fields.reading)}
       </Text>
-      <Text style={[styles.answerMeaning, {color: colors.onSurface}]}>
-        {displayAnkiField(glossHtml ?? "")}
-      </Text>
-      {partOfSpeech.trim() !== "" && (
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
-          {displayAnkiField(partOfSpeech)}
-        </Text>
-      )}
+      <ReferenceSection title="Meaning" topGap={spacing.l}>
+        <ReferenceValue>{displayAnkiField(glossHtml ?? "")}</ReferenceValue>
+        {partOfSpeech.trim() !== "" && (
+          <Text
+            style={[
+              typeScale.bodySmall,
+              {color: colors.onSurfaceVariant, marginTop: spacing.xs},
+            ]}
+          >
+            {displayAnkiField(partOfSpeech)}
+          </Text>
+        )}
+      </ReferenceSection>
     </View>
   );
 }
@@ -1389,7 +1416,5 @@ const styles = StyleSheet.create({
   // The answer's headword block mirrors the question side, which centres the front word: the
   // expression and its reading are centred together, and the meaning below stays left-aligned.
   answerHeadword: {textAlign: "center"},
-  answerReading: {marginTop: spacing.xs, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
-  answerMeaning: {marginTop: spacing.m, fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
   gapS: {height: spacing.s},
 });

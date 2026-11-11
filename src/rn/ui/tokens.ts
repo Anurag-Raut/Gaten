@@ -136,4 +136,26 @@ export const typeScale = {
   labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: APP_FONT},
   navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: APP_FONT},
   metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: APP_FONT},
+  /** A learner-facing value — the meaning or the reading — drawn violet wherever it is shown. */
+  valueLarge: {fontSize: 20, lineHeight: 28, fontWeight: "600", fontFamily: APP_FONT},
+  /** The kana line under a headword. */
+  readingLine: {fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
+  /** Small print: notes, provenance, the foot of a panel. */
+  micro: {fontSize: 11, lineHeight: 15, fontWeight: "400", fontFamily: APP_FONT},
+  /** Uppercase tracked labels, as analytics draws them; the caller adds `textTransform`. */
+  eyebrow: {fontSize: 11, lineHeight: 14, letterSpacing: 1.2, fontWeight: "700", fontFamily: APP_FONT},
+  /** State and narrative titles — the screens' 21/22/23 sp headings. */
+  headline: {fontSize: 22, lineHeight: 28, letterSpacing: -0.7, fontWeight: "700", fontFamily: APP_FONT},
+  /** The single-kanji hero of a lesson or review. */
+  glyphHero: {fontSize: 64, lineHeight: 80, fontWeight: "500", fontFamily: APP_FONT},
+  /** Sentence-size Japanese. */
+  glyphMedium: {fontSize: 28, lineHeight: 36, fontWeight: "500", fontFamily: APP_FONT},
+  /** The analytics figure that anchors a screen. */
+  metricHero: {fontSize: 34, lineHeight: 38, letterSpacing: -1.5, fontWeight: "700", fontFamily: APP_FONT},
+  /** Home's due count — the documented Home override. */
+  homeCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700", fontFamily: APP_FONT},
+  /** Home's streak count — the documented Home override. */
+  homeStreak: {fontSize: 20, lineHeight: 22, fontWeight: "500", fontFamily: APP_FONT},
+  /** Home's empty-history caption — the documented Home override. */
+  homeCaption: {fontSize: 13, lineHeight: 18, fontWeight: "700", fontFamily: APP_FONT},
 } satisfies Record<string, TextStyle>;

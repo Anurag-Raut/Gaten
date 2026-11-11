@@ -22,7 +22,7 @@
 import React, {useState} from "react";
 import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {ScreenHeader} from "../ScreenHeader";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   empty: {marginTop: spacing.s},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
   caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.m, marginBottom: 24},
-  caughtUpText: {fontFamily: APP_FONT, fontSize: 12, lineHeight: 17, flex: 1, minWidth: 0},
+  caughtUpText: {...typeScale.bodySmall, flex: 1, minWidth: 0},
   skeletonList: {marginTop: spacing.s},
   // The skeleton is the shared row's own geometry: a hairline divider, no card, no fill.
   skeletonRow: {minHeight: 90, flexDirection: "row", alignItems: "center", gap: spacing.m, paddingVertical: spacing.m, borderBottomWidth: 1},

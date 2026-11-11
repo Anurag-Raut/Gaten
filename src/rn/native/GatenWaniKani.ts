@@ -240,6 +240,13 @@ export interface WaniKaniContextSentence {
   english: string;
 }
 
+/** One vocabulary word a kanji lesson is taught with: the word, its reading and its meaning. */
+export interface WaniKaniRelatedWord {
+  characters: string;
+  reading?: string;
+  meaning: string;
+}
+
 /**
  * One subject waiting to be learned, as the teach screen draws it and the quiz judges it. The answers
  * are built exactly as [WaniKaniReviewItem]'s are — accepted meanings (whitelist included), readings
@@ -269,6 +276,8 @@ export interface WaniKaniLessonItem {
   components: WaniKaniComponent[];
   /** Example sentences for a vocabulary subject; empty for the kinds WaniKani gives none. */
   contextSentences: WaniKaniContextSentence[];
+  /** For a kanji lesson: up to five vocabulary words it appears in, lowest level first; empty otherwise. */
+  relatedWords: WaniKaniRelatedWord[];
   documentUrl?: string;
 }
 

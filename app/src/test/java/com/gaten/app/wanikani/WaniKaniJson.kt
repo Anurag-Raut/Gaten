@@ -31,6 +31,8 @@ internal object WaniKaniJson {
         character: String = "一",
         level: Int = 1,
         componentIds: List<Int> = listOf(1),
+        amalgamationIds: List<Int> = listOf(56, 88, 91),
+        lessonPosition: Int = 2,
         primaryMeaning: String = "One",
         reading: String = "いち",
         auxiliary: List<Pair<String, String>> = listOf("one" to "blacklist"),
@@ -42,14 +44,14 @@ internal object WaniKaniJson {
           "url": "https://api.wanikani.com/v2/subjects/$id",
           "data_updated_at": "2018-03-29T23:14:30.805034Z",
           "data": {
-            "amalgamation_subject_ids": [56, 88, 91],
+            "amalgamation_subject_ids": [${amalgamationIds.joinToString(", ")}],
             "auxiliary_meanings": [${auxiliary.joinToString(", ") { """{"meaning": "${it.first}", "type": "${it.second}"}""" }}],
             "characters": "$character",
             "component_subject_ids": [${componentIds.joinToString(", ")}],
             "created_at": "2012-02-27T19:55:19.000000Z",
             "document_url": "$documentUrl",
             "hidden_at": null,
-            "lesson_position": 2,
+            "lesson_position": $lessonPosition,
             "level": $level,
             "meanings": [
               {"meaning": "$primaryMeaning", "primary": true, "accepted_answer": true},
@@ -79,6 +81,7 @@ internal object WaniKaniJson {
         id: Int = 1,
         character: String? = "一",
         level: Int = 1,
+        lessonPosition: Int = 1,
         name: String = "Ground",
         slug: String = "ground",
         documentUrl: String = "https://www.wanikani.com/radicals/ground",
@@ -102,7 +105,7 @@ internal object WaniKaniJson {
                 "created_at": "2012-02-27T18:08:16.000000Z",
                 "document_url": "$documentUrl",
                 "hidden_at": null,
-                "lesson_position": 1,
+                "lesson_position": $lessonPosition,
                 "level": $level,
                 "meanings": [{"meaning": "$name", "primary": true, "accepted_answer": true}],
                 "meaning_mnemonic": "A stroke drawn along the <radical>ground</radical> marks this radical.",
@@ -119,6 +122,9 @@ internal object WaniKaniJson {
         character: String = "一",
         level: Int = 1,
         lessonPosition: Int = 3,
+        meaning: String = "One",
+        reading: String = "いち",
+        componentIds: List<Int> = listOf(440),
         contextSentences: List<Pair<String, String>> = listOf("一" to "one"),
         meaningMnemonic: String = "A single <radical>ground</radical> stroke.",
         readingMnemonic: String = "It is read <reading>いち</reading>."
@@ -132,14 +138,14 @@ internal object WaniKaniJson {
             "characters": "$character",
             "level": $level,
             "lesson_position": $lessonPosition,
-            "meanings": [{"meaning": "One", "primary": true, "accepted_answer": true}],
-            "readings": [{"type": "onyomi", "primary": true, "accepted_answer": true, "reading": "いち"}],
+            "meanings": [{"meaning": "$meaning", "primary": true, "accepted_answer": true}],
+            "readings": [{"type": "onyomi", "primary": true, "accepted_answer": true, "reading": "$reading"}],
             "meaning_mnemonic": "$meaningMnemonic",
             "reading_mnemonic": "$readingMnemonic",
             "context_sentences": [${contextSentences.joinToString(", ") { """{"ja": "${it.first}", "en": "${it.second}"}""" }}],
             "slug": "$character",
             "document_url": "https://www.wanikani.com/vocabulary/%E4%B8%80",
-            "component_subject_ids": [440]
+            "component_subject_ids": [${componentIds.joinToString(", ")}]
           }
         }
     """.trimIndent()

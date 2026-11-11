@@ -23,7 +23,6 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import {PressableScale, type PressScale} from "./PressableScale";
@@ -536,16 +535,11 @@ export function KanjiStrip({
 /** How long the open chip's container colour takes to change: Kotlin's `Motion.SHORT`. */
 const CHIP_MS = 150;
 
-/** The check's own size, and the spring it lands on: Kotlin's `Motion.overshoot` (ζ 0.8, k 380). */
-const CHECK_SIZE = 18;
-const CHECK_SPRING = {mass: 1, stiffness: 380, damping: 31.19};
-
 /**
  * One kanji chip: the character at the sheet's headword size in a pill that is exactly as wide as its
- * content, and the check that marks the open one. The check is drawn *only* while the chip is open
- * and takes no room of its own — it sits in front of the character, so a closed chip is narrower than
- * an open one — while the container eases between its two colours and the check lands on the
- * overshoot spring, both as the Kotlin's chip does.
+ * content. The open one is told apart by its fill and its hairline border alone — no mark takes room
+ * inside it, so the chip never changes width as it opens — and the container eases between its two
+ * colours as the Kotlin's chip does.
  */
 function KanjiChip({
   character,
@@ -558,15 +552,13 @@ function KanjiChip({
 }) {
   const {colors} = useTheme();
   const open = useSharedValue(selected ? 1 : 0);
-  const check = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
     open.value = withTiming(selected ? 1 : 0, {
       duration: CHIP_MS,
       easing: PRESS_EASING_REANIMATED,
     });
-    check.value = withSpring(selected ? 1 : 0, CHECK_SPRING);
-  }, [selected, open, check]);
+  }, [selected, open]);
 
   const containerStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
@@ -574,10 +566,6 @@ function KanjiChip({
       [0, 1],
       [colors.surfaceVariant, colors.primaryContainer],
     ),
-  }));
-
-  const checkStyle = useAnimatedStyle(() => ({
-    transform: [{scale: check.value}],
   }));
 
   return (
@@ -601,11 +589,6 @@ function KanjiChip({
           containerStyle,
         ]}
       >
-        {selected && (
-          <Animated.View style={checkStyle}>
-            <Icon name="check" size={CHECK_SIZE} color={colors.onPrimaryContainer} />
-          </Animated.View>
-        )}
         <Text
           style={[
             typeScale.displaySmall,

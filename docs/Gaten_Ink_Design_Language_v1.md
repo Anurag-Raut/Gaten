@@ -140,10 +140,62 @@ preview or an attribution-row title.
 | Shared metric | 25 / 28 | 700 | -1.20 |
 | Japanese display medium | 40 / 48 | 500 | 0 |
 | Display small | 34 / 44 | 500 | 0 |
+| Primary value (meaning, reading, keyword) | 20 / 28 | 600 | 0 |
+| Kana reading line under a headword | 17 / 24 | 400 | 0 |
+| Small print | 11 / 15 | 400 | 0 |
+| Uppercase tracked label | 11 / 14 | 700 | 1.20 |
+| State / narrative title | 22 / 28 | 700 | -0.70 |
+| Single-kanji hero (lesson, review) | 64 / 80 | 500 | 0 |
+| Sentence-size Japanese | 28 / 36 | 500 | 0 |
+| Analytics hero figure | 34 / 38 | 700 | -1.50 |
+| Home due count (override) | 24 / 24 | 700 | -0.90 |
+| Home streak count (override) | 20 / 22 | 500 | 0 |
+| Home empty-history caption (override) | 13 / 18 | 700 | 0 |
 
 Home-specific overrides are intentional: the due count is 24 / 24, weight 700, tracking -0.9;
 the streak count is 20 / 22, weight 500; the empty-history caption is 13 / 18, weight 700.
 Weekday labels use the 12 / 18 field/value role, not the original 10 px mockup labels.
+
+### Content text roles
+
+Which role carries which kind of text, on every surface — the answer, the panels, the lesson, Word
+details and the lookup sheet alike. The colours are the theme's own roles, not new ones.
+
+| Kind of text | Role | Colour |
+| --- | --- | --- |
+| Headword (word being studied: Anki answer, Word details, lookup sheet) | `displayMedium` 40 / 48 | onSurface |
+| Kanji glyph in chip / tile / panel heading | `displaySmall` 34 / 44 (+ `KANJI_LETTERING`) | onSurface |
+| Lesson/review hero (single kanji) / (word) | `glyphHero` 64 / 80 / `displayMedium` 40 / 48 | onSurface |
+| Kana reading line under a headword | `readingLine` 17 / 24 | onSurfaceVariant |
+| Metadata line (Common, part of speech summary) | `bodyMedium` | onSurfaceVariant, POS word in `colors.primary` |
+| Field caption (Meaning, Reading, Meanings, Part of speech, Keyword, Heisig’s story, Radical composition…) | `labelMedium` 12 / 18 600 | onSurfaceVariant |
+| Primary value (the meaning / the reading / the keyword) | `valueLarge` 20 / 28 600 | `colors.reviewReading` (violet) |
+| Secondary senses, mnemonics, story text | `bodyMedium` | onSurfaceVariant for mnemonics/story; onSurface for 2nd+ dictionary senses |
+| Example sentence JA / EN | `bodyMedium` / `bodySmall` | onSurface / onSurfaceVariant |
+| Section heading (Remembering the Kanji, WaniKani kanji, Example sentences) | `titleSmall` 15 / 700 | onSurface |
+| Row label / row value (Other spellings, deck row) | `labelLarge` unchanged / `bodyMedium` | unchanged |
+| Notes, counts, helper text | `bodySmall` | onSurfaceVariant |
+| Small print | `micro` | onSurfaceVariant |
+
+The Meaning of anything is always a caption plus the violet `valueLarge`.
+
+The roles are the only place a size or a weight is written as a number, and
+`tests/typography-guard.test.cjs` enforces it: the test walks `src/rn/ui/**/*.ts(x)` and fails on any
+numeric `fontSize:` literal or `fontWeight: "<n>"` literal, naming `file:line` for each offender. A
+screen spreads a role instead. Comment lines are skipped, so a doc comment may still name a size.
+Each exemption is recorded beside its entry in the test's `ALLOW` table, scoped to the kind of literal
+it covers. Both kinds are exempt in `tokens.ts` itself, where the roles are defined, and in the
+onboarding screens `onboarding/WelcomeScreen.tsx` and `onboarding/OnboardingFlow.tsx`, whose marketing
+and narrative text is scaled by `fontScale` and timed with the artwork. `fontWeight` alone is exempt
+in four places, and a numeric `fontSize:` written in any of them still fails: `AppShell.tsx` (the
+navigation theme's `fonts` map, which the library takes as numeric weights), `analytics/ink.tsx`
+(weight-only emphasis laid over a role, and the 13/19/600 status line no single role carries),
+`rtk/richText.tsx` (an inline bold span inside story text) and `settings/settings-components.tsx`
+(an inline emphasis span inside a body paragraph). Sizes are never exempt on a screen: every
+screen's type comes from a role.
+
+Kotlin `Type.kt` is deliberately not extended with these roles: the lookup sheet's body is React Native
+(`LookupSheetApp`), so `tokens.ts` is the single source of truth and `SheetType.kt` stays as it is.
 
 The Home wordmark (`GatenWordmark.tsx`) and the `Analytics` and `Settings` headings
 (`TabHeading.tsx`) are the approved SVG letterforms, not text. All three share one scale —

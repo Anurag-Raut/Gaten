@@ -205,6 +205,60 @@ private fun decodeReviewReadings(array: JSONArray?): List<String> {
 }
 
 /**
+ * One subject as a `GET /subjects` collection describes it when only its identity is needed: which
+ * word, of which kind, at which level, and what it is called.
+ *
+ * The lesson queue reads this instead of [WaniKaniLessonItem] or [DecodedSubject] because it wants
+ * to fill in a kanji's composition and the words it is used in - many subjects, of kinds the
+ * reference lookup does not decode, and of which only a handful of fields are ever drawn.
+ */
+internal data class WaniKaniSubjectBrief(
+    val id: Int,
+    val type: String,
+    /** Null for an image-only radical, which has no character to be drawn as. */
+    val characters: String?,
+    val level: Int,
+    /** The subject's primary accepted meaning, or its slug when every meaning was rejected. Never empty. */
+    val primaryMeaning: String,
+    /** The primary accepted reading, folded to hiragana, or null when the subject has none. */
+    val primaryReading: String?
+)
+
+/**
+ * Every subject in a `GET /subjects?ids=…` collection as a [WaniKaniSubjectBrief]; null when the
+ * body is not a collection at all, which is a failed answer rather than an empty one.
+ *
+ * An entry without an id, a kind, or anything to call it is skipped: there would be nothing to draw
+ * for it, and the caller keeps the bare id it already had instead.
+ */
+internal fun decodeSubjectBriefs(text: String): List<WaniKaniSubjectBrief>? {
+    val items = jsonObject(text)?.optJSONArray("data") ?: return null
+    val briefs = ArrayList<WaniKaniSubjectBrief>(items.length())
+    for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index) ?: continue
+        val id = item.optInt("id", 0)
+        if (id <= 0) continue
+        val type = item.optionalText("object") ?: continue
+        val data = item.optJSONObject("data") ?: continue
+        // The same fall back the reference decode makes: a subject whose every meaning is rejected
+        // still has its slug, which is WaniKani's own short name for it.
+        val meaning = decodeReviewMeanings(data).firstOrNull()
+            ?: data.optionalText("slug") ?: continue
+        briefs.add(
+            WaniKaniSubjectBrief(
+                id = id,
+                type = type,
+                characters = data.optionalText("characters"),
+                level = data.optInt("level", 0),
+                primaryMeaning = meaning,
+                primaryReading = decodeReviewReadings(data.optJSONArray("readings")).firstOrNull()
+            )
+        )
+    }
+    return briefs
+}
+
+/**
  * Every subject in a `GET /subjects?ids=…` collection as a lesson item, for all four kinds WaniKani
  * teaches, paired with its assignment id through [assignmentIds] (subject id to assignment id).
  * Subjects with nothing to quiz on, and subjects the map does not name, are dropped; null is returned
@@ -258,7 +312,15 @@ internal fun decodeLessonSubject(resource: JSONObject, assignmentId: Int): WaniK
         components = decodeIds(data.optJSONArray("component_subject_ids"))
             .map { WaniKaniComponent(it, null, null) },
         contextSentences = decodeContextSentences(data.optJSONArray("context_sentences")),
-        documentUrl = decodeDocumentUrl(data.optionalText("document_url"))
+        documentUrl = decodeDocumentUrl(data.optionalText("document_url")),
+        // Only a kanji names the words it is used in - a vocabulary is itself one of those words, and
+        // a radical has none - and only the first thirty are kept: the queue asks for them one
+        // request per batch, so an unusually long list is not worth a longer url.
+        amalgamationIds = if (type == "kanji") {
+            decodeIds(data.optJSONArray("amalgamation_subject_ids")).take(30)
+        } else {
+            emptyList()
+        }
     )
 }
 
