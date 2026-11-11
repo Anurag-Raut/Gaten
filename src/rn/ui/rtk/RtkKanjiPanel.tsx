@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: CONTENT_COLUMN,
   // The character wears the shared glyph role and the one kanji lettering weight; the keyword below
-  // it is a meaning, not a character, and is drawn as the shared violet value.
+  // it is a meaning, not a character, and is drawn as the shared accent value.
   heroGlyph: {...typeScale.displaySmall, ...KANJI_LETTERING},
   sourceLabel: {marginTop: spacing.xs},
   story: {gap: spacing.xs},

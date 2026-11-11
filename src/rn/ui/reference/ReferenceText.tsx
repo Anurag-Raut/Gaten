@@ -5,7 +5,7 @@
  */
 
 /**
- * The shared text language of a reference page: a titled section, the violet value it states, the
+ * The shared text language of a reference page: a titled section, the accent-coloured value it states, the
  * prose that explains it, an example sentence, and the two shapes a related item takes — a tile for
  * a component and a word for the vocabulary an ideograph appears in.
  *
@@ -14,10 +14,10 @@
  * `typeScale`, never from numbers here.
  */
 import React from "react";
-import {Text, View, type StyleProp, type TextStyle} from "react-native";
-import {PressableScale} from "../PressableScale";
-import {useTheme} from "../theme";
-import {KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
+import { Text, View, type StyleProp, type TextStyle } from "react-native";
+import { PressableScale } from "../PressableScale";
+import { useTheme } from "../theme";
+import { KANJI_LETTERING, shape, spacing, typeScale } from "../tokens";
 
 /** A titled block: the caption and whatever it introduces, spaced from what is above it. */
 export function ReferenceSection({
@@ -29,14 +29,14 @@ export function ReferenceSection({
   children: React.ReactNode;
   topGap?: number;
 }) {
-  const {colors} = useTheme();
+  const { colors } = useTheme();
   return (
-    <View style={{marginTop: topGap}}>
+    <View style={{ marginTop: topGap }}>
       <Text
         accessibilityRole="header"
         style={[
           typeScale.labelMedium,
-          {color: colors.onSurfaceVariant, marginBottom: spacing.s},
+          { color: colors.onSurfaceVariant, marginBottom: spacing.s },
         ]}
       >
         {title}
@@ -46,7 +46,7 @@ export function ReferenceSection({
   );
 }
 
-/** The value a section states — a meaning or a reading — in the one violet every surface uses. */
+/** The value a section states — a meaning or a reading — in the reader's accent colour, as every surface does. */
 export function ReferenceValue({
   children,
   style,
@@ -54,9 +54,11 @@ export function ReferenceValue({
   children: React.ReactNode;
   style?: StyleProp<TextStyle>;
 }) {
-  const {colors} = useTheme();
+  const { colors } = useTheme();
   return (
-    <Text style={[typeScale.valueLarge, {color: colors.reviewReading}, style]}>{children}</Text>
+    <Text style={[typeScale.valueLarge, { color: colors.accent }, style]}>
+      {children}
+    </Text>
   );
 }
 
@@ -68,13 +70,13 @@ export function ReferenceBody({
   children: React.ReactNode;
   selectable?: boolean;
 }) {
-  const {colors} = useTheme();
+  const { colors } = useTheme();
   return (
     <Text
       selectable={selectable}
       style={[
         typeScale.bodyMedium,
-        {color: colors.onSurfaceVariant, marginTop: spacing.m},
+        { color: colors.onSurfaceVariant, marginTop: spacing.m },
       ]}
     >
       {children}
@@ -83,13 +85,24 @@ export function ReferenceBody({
 }
 
 /** One example sentence: the Japanese, then its English under it. */
-export function ReferenceExample({japanese, english}: {japanese: string; english: string}) {
-  const {colors} = useTheme();
+export function ReferenceExample({
+  japanese,
+  english,
+}: {
+  japanese: string;
+  english: string;
+}) {
+  const { colors } = useTheme();
   return (
-    <View style={{marginTop: spacing.m}}>
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurface}]}>{japanese}</Text>
+    <View style={{ marginTop: spacing.m }}>
+      <Text style={[typeScale.bodyMedium, { color: colors.onSurface }]}>
+        {japanese}
+      </Text>
       <Text
-        style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: 2}]}
+        style={[
+          typeScale.bodySmall,
+          { color: colors.onSurfaceVariant, marginTop: 2 },
+        ]}
       >
         {english}
       </Text>
@@ -112,16 +125,29 @@ export function ReferenceTile({
   onPress?: () => void;
   accessibilityLabel?: string;
 }) {
-  const {colors} = useTheme();
+  const { colors } = useTheme();
   const content = (
     <>
       {glyph != null && (
-        <Text style={[typeScale.displaySmall, KANJI_LETTERING, {color: colors.onSurface}]}>
+        <Text
+          style={[
+            typeScale.displaySmall,
+            KANJI_LETTERING,
+            { color: colors.onSurface },
+          ]}
+        >
           {glyph}
         </Text>
       )}
       {name != null && name !== "" && (
-        <Text style={[typeScale.bodyMedium, {color: colors.onSurface, flexShrink: 1}]}>{name}</Text>
+        <Text
+          style={[
+            typeScale.bodyMedium,
+            { color: colors.onSurface, flexShrink: 1 },
+          ]}
+        >
+          {name}
+        </Text>
       )}
     </>
   );
@@ -159,18 +185,28 @@ export function ReferenceWord({
   reading?: string | null;
   meaning: string;
 }) {
-  const {colors} = useTheme();
+  const { colors } = useTheme();
   return (
-    <View style={{marginTop: spacing.m}}>
-      <Text style={[typeScale.valueLarge, KANJI_LETTERING, {color: colors.onSurface}]}>
+    <View style={{ marginTop: spacing.m }}>
+      <Text
+        style={[
+          typeScale.valueLarge,
+          KANJI_LETTERING,
+          { color: colors.onSurface },
+        ]}
+      >
         {characters}
         {reading != null && reading !== "" && (
-          <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
+          <Text
+            style={[typeScale.bodyMedium, { color: colors.onSurfaceVariant }]}
+          >
             {"  " + reading}
           </Text>
         )}
       </Text>
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>{meaning}</Text>
+      <Text style={[typeScale.bodyMedium, { color: colors.onSurfaceVariant }]}>
+        {meaning}
+      </Text>
     </View>
   );
 }

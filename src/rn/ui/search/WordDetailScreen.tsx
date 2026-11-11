@@ -200,7 +200,7 @@ export function MeaningSection({glosses, partsOfSpeech}: {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   const meaningRows = glosses.map((gloss, index) =>
-    // The leading sense is the entry's value, drawn violet like every other meaning on the app; the
+    // The leading sense is the entry's value, drawn in the accent like every other meaning on the app; the
     // senses after it are plain dictionary lines, set apart by space rather than hairline rules.
     index === 0 ? (
       <ReferenceValue key={`${index}-${gloss}`}>{capitaliseGloss(gloss)}</ReferenceValue>

@@ -169,7 +169,7 @@ details and the lookup sheet alike. The colours are the theme's own roles, not n
 | Kana reading line under a headword | `readingLine` 17 / 24 | onSurfaceVariant |
 | Metadata line (Common, part of speech summary) | `bodyMedium` | onSurfaceVariant, POS word in `colors.primary` |
 | Field caption (Meaning, Reading, Meanings, Part of speech, Keyword, Heisig’s story, Radical composition…) | `labelMedium` 12 / 18 600 | onSurfaceVariant |
-| Primary value (the meaning / the reading / the keyword) | `valueLarge` 20 / 28 600 | `colors.reviewReading` (violet) |
+| Primary value (the meaning / the reading / the keyword) | `valueLarge` 20 / 28 600 | `colors.accent` (the reader's accent, never a fixed colour) |
 | Secondary senses, mnemonics, story text | `bodyMedium` | onSurfaceVariant for mnemonics/story; onSurface for 2nd+ dictionary senses |
 | Example sentence JA / EN | `bodyMedium` / `bodySmall` | onSurface / onSurfaceVariant |
 | Section heading (Remembering the Kanji, WaniKani kanji, Example sentences) | `titleSmall` 15 / 700 | onSurface |
@@ -177,7 +177,7 @@ details and the lookup sheet alike. The colours are the theme's own roles, not n
 | Notes, counts, helper text | `bodySmall` | onSurfaceVariant |
 | Small print | `micro` | onSurfaceVariant |
 
-The Meaning of anything is always a caption plus the violet `valueLarge`.
+The Meaning of anything is always a caption plus the accent-coloured `valueLarge`.
 
 The roles are the only place a size or a weight is written as a number, and
 `tests/typography-guard.test.cjs` enforces it: the test walks `src/rn/ui/**/*.ts(x)` and fails on any

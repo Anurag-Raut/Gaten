@@ -136,7 +136,7 @@ export const typeScale = {
   labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: APP_FONT},
   navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: APP_FONT},
   metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: APP_FONT},
-  /** A learner-facing value — the meaning or the reading — drawn violet wherever it is shown. */
+  /** A learner-facing value — the meaning or the reading — drawn in the reader's accent colour wherever it is shown. */
   valueLarge: {fontSize: 20, lineHeight: 28, fontWeight: "600", fontFamily: APP_FONT},
   /** The kana line under a headword. */
   readingLine: {fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
