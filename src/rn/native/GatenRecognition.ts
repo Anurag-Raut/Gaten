@@ -1,113 +1,141 @@
-/**
- * Gaten
- * Copyright (C) 2026 Anurag Raut
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
+import {NativeEventEmitter, NativeModules} from "react-native";
 
 /**
- * The optional manga-ocr model bridge: what is on the phone, the catalog it can be fetched
- * from, and the ways onto the phone — download, document picker, or removal.
- *
- * The download itself runs in Kotlin, carried by the module rather than by the screen, so
- * leaving the page neither cancels it nor throws away what it has done. Progress arrives on the
- * `gaten.recognitionProgress` event as `{fraction, fileName}`; `fraction` is null until the
- * first file's total size is known.
+ * Any of the selectable modes; also the persisted selected mode. `ml_kit` (Standard) is bundled with
+ * the app and always installed; `medium` (Enhanced) is downloaded on demand.
  */
-import { DeviceEventEmitter, EmitterSubscription, NativeModules } from "react-native";
-import type { MangaOcrState } from "./GatenAppInfo";
+export type RecognitionEngine = "ml_kit" | "medium";
 
-/** One entry of the static model catalog, as the rows render it. */
-export interface MangaOcrCatalogEntry {
-  id: string;
-  label: string;
-  description: string;
-  approxSizeMb: number;
+/** One engine as the settings screen shows it. */
+export interface EngineStatus {
+  id: RecognitionEngine;
+  name: string;
+  /** The download size in bytes; 0 for the bundled engine, which is never downloaded. */
+  downloadBytes: number;
+  installed: boolean;
+  /** Bundled with the app: nothing to download, and always installed. */
+  bundled: boolean;
+  /** The one the settings screen marks "Recommended". */
+  recommended: boolean;
 }
 
-/** Where the model sits right now, read fresh on every ask. */
-export type RecognitionInstalledState = {
-  installed: boolean;
-  catalogId: string | null;
-  sizeBytes: number;
+export interface RecognitionSettings {
+  mode: RecognitionEngine;
+  engines: EngineStatus[];
+  /** Engine ids with a download running, so a reopened screen shows it running. */
+  downloading: RecognitionEngine[];
+}
+
+/**
+ * One live report from a running download. `bytesTotal` is the engine's real expected size, so a
+ * `bytesDone`/`bytesTotal` ratio is the bar; the phase turns to "verifying" once every byte is in.
+ */
+export type DownloadProgress = {
+  engine: "medium";
+  phase: "downloading" | "verifying";
+  bytesDone: number;
+  bytesTotal: number;
 };
 
-/** What one long operation on the model directory ended as. */
-export type RecognitionOutcome =
-  | { kind: "installed" }
-  | { kind: "cancelled" }
-  | { kind: "failed"; reason: string }
-  | { kind: "busy" }
-  | { kind: "imported"; done: boolean }
-  | { kind: "removed"; removed: boolean };
-
+/** The failure kinds a download rejection is distilled into, one per actionable remedy. */
+export type DownloadFailure = "offline" | "storage" | "verify" | "cancelled" | "unknown";
 
 interface GatenRecognitionNative {
-  getInstalled(): Promise<RecognitionInstalledState>;
-  getCatalog(): Promise<MangaOcrCatalogEntry[]>;
-  download(catalogId: string): Promise<RecognitionOutcome>;
-  cancelDownload(): Promise<boolean>;
-  pickModelFiles(): Promise<string[]>;
-  importFiles(uris: string[]): Promise<RecognitionOutcome>;
-  removeModel(): Promise<RecognitionOutcome>;
-  isMetered(): Promise<boolean>;
+  getRecognitionSettings(): Promise<RecognitionSettings>;
+  setRecognitionMode(mode: RecognitionEngine): Promise<void>;
+  downloadRecognitionEngine(engine: RecognitionEngine): Promise<RecognitionSettings>;
+  /** Absent when the engine arrives through a Play asset pack, which this app cannot abort. */
+  cancelDownload?(): Promise<void>;
+  /**
+   * Kept for React Native's `NativeEventEmitter`: the bridge calls these as listeners come and go.
+   * Only present so the emitter does not warn; the events themselves arrive through the device
+   * emitter.
+   */
+  addListener?(eventName: string): void;
+  removeListeners?(count: number): void;
 }
 
 const GatenRecognition = NativeModules.GatenRecognition as GatenRecognitionNative;
 
-/** The model directory's state, re-read on every call. */
-export function getInstalled(): Promise<RecognitionInstalledState> {
-  return GatenRecognition.getInstalled();
-}
+/** The same module, seen as possibly absent, so a subscription can no-op off-device. */
+const nativeRecognition = NativeModules.GatenRecognition as GatenRecognitionNative | undefined;
 
-/** The entries the catalog offers, with the sizes the confirm dialog shows. */
-export function getCatalog(): Promise<MangaOcrCatalogEntry[]> {
-  return GatenRecognition.getCatalog();
+/** The native event name; the payload is a [DownloadProgress]. */
+const DOWNLOAD_PROGRESS_EVENT = "GatenRecognitionDownloadProgress";
+
+// Only built where the module carries the emitter hooks (`addListener`/`removeListeners`); the
+// Play-delivered engine reports no byte progress, so a build without them simply never emits.
+const progressEmitter =
+  nativeRecognition != null && typeof nativeRecognition.addListener === "function"
+    ? new NativeEventEmitter(nativeRecognition as ConstructorParameters<typeof NativeEventEmitter>[0])
+    : null;
+
+export const getRecognitionSettings = (): Promise<RecognitionSettings> =>
+  GatenRecognition.getRecognitionSettings();
+
+export const setRecognitionMode = (mode: RecognitionEngine): Promise<void> =>
+  GatenRecognition.setRecognitionMode(mode);
+
+/** Explicit download (the screen confirms each tap); answers with the refreshed install state. */
+export const downloadRecognitionEngine = (
+  engine: RecognitionEngine,
+): Promise<RecognitionSettings> =>
+  GatenRecognition.downloadRecognitionEngine(engine);
+
+/**
+ * Aborts the download running now, if any; the pending [downloadRecognitionEngine] promise rejects
+ * with a `DOWNLOAD_CANCELLED` code, which [classifyDownloadError] reads as "cancelled". With
+ * nothing in flight it resolves quietly.
+ */
+export const canCancelDownload = (): boolean =>
+  typeof nativeRecognition?.cancelDownload === "function";
+
+export function cancelDownload(): Promise<void> {
+  if (nativeRecognition == null) {
+    return Promise.reject(new Error("GatenRecognition is not available on this platform."));
+  }
+  // Play's pack transfer cannot be aborted from here: with no native cancel there is nothing to
+  // stop, and the pending download keeps running to its own end.
+  return nativeRecognition.cancelDownload?.() ?? Promise.resolve();
 }
 
 /**
- * Fetches one catalog entry. The size was already shown and confirmed by the caller; the
- * promise answers only when the whole download ends. One mutation runs at a time — a second
- * ask while the directory is owned resolves `{kind: "busy"}`.
+ * Listens for download progress and returns the unsubscribe. Safe where the native module is
+ * absent: the call then no-ops and the returned function is a no-op too, so a screen can subscribe
+ * unconditionally and only unsubscribe on unmount.
  */
-export function download(catalogId: string): Promise<RecognitionOutcome> {
-  return GatenRecognition.download(catalogId);
+export function subscribeDownloadProgress(
+  listener: (progress: DownloadProgress) => void,
+): () => void {
+  if (progressEmitter == null) return () => {};
+  const subscription = progressEmitter.addListener(DOWNLOAD_PROGRESS_EVENT, listener);
+  return () => subscription.remove();
 }
 
-/** Asks the download in flight to stop; nothing is installed and the staged files are deleted. */
-export function cancelDownload(): Promise<boolean> {
-  return GatenRecognition.cancelDownload();
-}
-
-/** Opens the document picker for the model files; resolves the chosen URIs. */
-export function pickModelFiles(): Promise<string[]> {
-  return GatenRecognition.pickModelFiles();
+/** The `code` React Native attaches to a rejected promise, when there is one. */
+function rejectionCode(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null) {
+    const code = (error as {code?: unknown}).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
 }
 
 /**
- * Copies the picked files in, each recognised by the role its name stands for; the answer
- * tells whether the model became complete.
+ * Maps a download rejection to the kind the UI branches on. Anything unrecognized — a non-error, an
+ * unexpected code, or the generic native fallback — is "unknown", never a guess.
  */
-export function importFiles(uris: string[]): Promise<RecognitionOutcome> {
-  return GatenRecognition.importFiles(uris);
-}
-
-/** Takes the model off the phone; `removed` tells whether the directory really went. */
-export function removeModel(): Promise<RecognitionOutcome> {
-  return GatenRecognition.removeModel();
-}
-
-/** True when a download would run on mobile data. */
-export function isMetered(): Promise<boolean> {
-  return GatenRecognition.isMetered();
-}
-
-/** Subscribes to the download progress events; `fraction` is null until sizes are known. */
-export function onRecognitionProgress(
-  listener: (progress: { fraction: number | null; fileName: string }) => void
-): { remove: () => void } {
-  const subscription: EmitterSubscription = DeviceEventEmitter.addListener(
-    "gaten.recognitionProgress",
-    listener
-  );
-  return { remove: () => subscription.remove() };
+export function classifyDownloadError(error: unknown): DownloadFailure {
+  switch (rejectionCode(error)) {
+    case "DOWNLOAD_OFFLINE":
+      return "offline";
+    case "DOWNLOAD_NO_SPACE":
+      return "storage";
+    case "DOWNLOAD_VERIFY_FAILED":
+      return "verify";
+    case "DOWNLOAD_CANCELLED":
+      return "cancelled";
+    default:
+      return "unknown";
+  }
 }

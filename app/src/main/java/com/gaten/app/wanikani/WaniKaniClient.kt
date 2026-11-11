@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -212,6 +214,10 @@ internal class WaniKaniClient(
      * rejects a lesson above it; when every waiting lesson is above it, the queue is
      * [WaniKaniLessonQueue.Locked] rather than empty. A malformed body is [WaniKaniFailure.MALFORMED],
      * never an empty queue: an empty queue is an answer about the account.
+     *
+     * The subjects a lesson is taught from - its components, and for a kanji the words it is used in -
+     * are resolved for the first batch only, in one extra request that may fail without failing the
+     * queue; see [enrichLessonItems].
      */
     suspend fun lessonsQueue(): WaniKaniLessonQueue = serialized {
         val token = credentials.read() ?: return@serialized WaniKaniLessonQueue.NeedsToken
@@ -254,10 +260,73 @@ internal class WaniKaniClient(
         val items = granted
             .sortedWith(compareBy({ it.level }, { it.lessonPosition }, { it.assignmentId }))
         when {
-            items.isNotEmpty() -> WaniKaniLessonQueue.Available(items)
+            items.isNotEmpty() -> WaniKaniLessonQueue.Available(enrichLessonItems(items, token, maxLevel))
             subjects.isNotEmpty() -> WaniKaniLessonQueue.Locked
             else -> WaniKaniLessonQueue.Empty
         }
+    }
+
+    /**
+     * Fills the teaching detail of the first [LESSON_DETAIL_LIMIT] items - their components' characters
+     * and names, and, for a kanji, the vocabulary words it is used in - from one `GET /subjects`
+     * request; the items after the batch are returned exactly as they came in.
+     *
+     * Only the batch is resolved because only the batch is taught: WaniKani starts a lesson for every
+     * subject up to the account's batch size, and Gaten finishes them together, so the rest of the
+     * queue would be detail nobody sees. The request is bounded by the ids the batch actually names.
+     *
+     * This request is an extra, and failing it never fails the queue: the reader can still learn the
+     * subject from its meanings and readings, with a composition chip reduced to its bare id and no
+     * "Used in" list, which is how a lesson looked before this detail existed. A component or word
+     * above the granted level is left out for the same reason the subject itself would be.
+     */
+    private suspend fun enrichLessonItems(
+        items: List<WaniKaniLessonItem>,
+        token: String,
+        maxLevel: Int
+    ): List<WaniKaniLessonItem> {
+        val batch = items.take(LESSON_DETAIL_LIMIT)
+        val ids = batch.flatMap { item -> item.components.map { it.id } + item.amalgamationIds }.distinct()
+        if (ids.isEmpty()) return items
+        val fetch = api.get("subjects", listOf("ids" to ids.joinToString(",")), token)
+        if (fetch !is WaniKaniFetch.Body) return items
+        val briefs = decodeSubjectBriefs(fetch.text)?.associateBy { it.id } ?: return items
+        val detailed = batch.map { item ->
+            item.copy(
+                components = item.components.map { component ->
+                    val brief = briefs[component.id]
+                    if (brief == null || brief.level > maxLevel) {
+                        component
+                    } else {
+                        WaniKaniComponent(component.id, brief.characters, brief.primaryMeaning)
+                    }
+                },
+                relatedWords = relatedWordsOf(item, briefs, maxLevel)
+            )
+        }
+        return detailed + items.drop(LESSON_DETAIL_LIMIT)
+    }
+
+    /**
+     * The words a kanji is taught as being used in: its amalgamations that are vocabulary words with
+     * characters to draw and within the subscription's grant, lowest level first, at most five.
+     *
+     * A word above the grant is dropped rather than shown, for the same reason the lesson itself
+     * would be. Only a kanji has any: a radical is used in kanji, which are not words, and a
+     * vocabulary word is itself what a kanji's list holds.
+     */
+    private fun relatedWordsOf(
+        item: WaniKaniLessonItem,
+        briefs: Map<Int, WaniKaniSubjectBrief>,
+        maxLevel: Int
+    ): List<WaniKaniRelatedWord> {
+        if (item.type != "kanji") return emptyList()
+        return item.amalgamationIds
+            .mapNotNull { briefs[it] }
+            .filter { it.type == "vocabulary" && it.level <= maxLevel && it.characters != null }
+            .sortedWith(compareBy({ it.level }, { it.id }))
+            .take(LESSON_DETAIL_LIMIT)
+            .map { WaniKaniRelatedWord(it.characters.orEmpty(), it.primaryReading, it.primaryMeaning) }
     }
 
     /**
@@ -604,6 +673,13 @@ internal class WaniKaniClient(
 
         /** Milliseconds in a day: the granularity the not-found answers are stamped with. */
         const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
+
+        /**
+         * How many lessons are taught as one batch: WaniKani's own default, and the number of subjects
+         * whose composition and "Used in" words are resolved - and, for the same reason, how many
+         * related words a kanji is given.
+         */
+        const val LESSON_DETAIL_LIMIT = 5
     }
 }
 

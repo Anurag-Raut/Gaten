@@ -91,9 +91,9 @@ const listeners = new Set<() => void>();
 let inFlight: Promise<void> | null = null;
 
 /**
- * Moves every time the state is reset (a disconnect, or a token that connected a different account).
- * A read captures it before it starts and refuses to write if it has moved since, so an answer for an
- * account that is no longer connected cannot put that account's numbers back on the screen.
+ * Moves when the account is reset or an accepted study write supersedes an older read. A read
+ * captures it before it starts and refuses to write if it has moved since, so obsolete numbers
+ * cannot replace the current account's post-study snapshot.
  */
 let generation = 0;
 
@@ -222,6 +222,16 @@ export function loadWaniKaniStats(force = false): Promise<void> {
   return tracked;
 }
 
+/** Retires reads started before an accepted study write, keeping saved numbers and rate-limit waits. */
+export function invalidateWaniKaniStats(): void {
+  generation += 1;
+  inFlight = null;
+  set({
+    stale: state.snapshot != null,
+    status: state.snapshot != null ? "ready" : state.status,
+  });
+}
+
 /**
  * Forgets everything read, and everything waiting: the reader disconnected WaniKani, or connected a
  * token that belongs to a different account. A read already in flight is dropped rather than joined —
@@ -275,8 +285,8 @@ export function useWaniKaniStats(): WaniKaniStatsState & {refresh: () => void} {
       if (status !== "active") {
         return;
       }
-      const {snapshot} = getWaniKaniStats();
-      if (snapshot == null || Date.now() - snapshot.fetchedAt >= WANIKANI_STATS_TTL_MS) {
+      const {snapshot, stale} = getWaniKaniStats();
+      if (stale || snapshot == null || Date.now() - snapshot.fetchedAt >= WANIKANI_STATS_TTL_MS) {
         void loadWaniKaniStats(false);
       }
     });

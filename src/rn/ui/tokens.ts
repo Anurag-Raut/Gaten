@@ -11,7 +11,7 @@
  * bridge (see `theme.tsx`).
  */
 import {Easing as ReanimatedEasing} from "react-native-reanimated";
-import type {TextStyle} from "react-native";
+import type {TextStyle, ViewStyle} from "react-native";
 
 /** The spacing scale, in dp. */
 export const spacing = {
@@ -25,8 +25,23 @@ export const spacing = {
   xxl: 32,
 } as const;
 
+/**
+ * The house horizontal content inset in dp, from the screen's own width: the usual
+ * [spacing.contentInset] (22), tightened to [spacing.l] (16) on phones narrower than 360 dp.
+ */
+export function contentInsetFor(width: number): number {
+  return width < 360 ? spacing.l : spacing.contentInset;
+}
+
 /** Nothing in the app is wider than this, however wide the screen is. */
 export const MAX_CONTENT_WIDTH = 560;
+
+/**
+ * The shared content column: as wide as its parent up to the [MAX_CONTENT_WIDTH] cap, centred. It
+ * carries no padding of its own, so a consumer adds the horizontal inset (see [contentInsetFor])
+ * and any surrounding rhythm it needs.
+ */
+export const CONTENT_COLUMN: ViewStyle = {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"};
 
 /** Two cards are put beside each other from here on; below it a phone has width for one. */
 export const TWO_COLUMN_WIDTH = 640;
@@ -84,25 +99,63 @@ export const PRESS_EASING_REANIMATED = ReanimatedEasing.bezier(...PRESS_EASING);
  */
 export const EXIT_EASING_REANIMATED = ReanimatedEasing.bezier(0.4, 0, 1, 1);
 
-/** Inter is bundled for Latin text; Japanese glyphs use the platform font fallback. */
-const INTER = "Inter";
+/**
+ * The bundled face the whole app is drawn in, Latin and Japanese alike. IBM Plex Sans JP carries
+ * IBM Plex's Latin design alongside the Japanese glyphs, so a mixed string stays in one face with no
+ * per-script split — the same arrangement the Compose type scale uses
+ * (`app/src/main/java/com/gaten/app/ui/theme/Type.kt`). A glyph the face does not carry still falls
+ * back to the platform's own, as any font does.
+ * The name is registered in `MainApplication`; it is not a system family.
+ */
+export const APP_FONT = "IBM Plex Sans JP";
+
+/**
+ * Lettering for a kanji the app draws as a page's own anchor — the WaniKani review's hero
+ * character, the reference page's hero character and its component chips. One weight for all of
+ * them, so a character never changes weight as the reader moves between the surfaces that show it;
+ * the size stays each surface's own. The kanji chips and the Anki answer's headword already wear
+ * the same weight through `typeScale.displaySmall`/`displayMedium`.
+ */
+export const KANJI_LETTERING = {fontWeight: "500", fontFamily: APP_FONT} as const;
 
 /** Shared text roles from docs/Gaten_Ink_Design_Language_v1.md. Display roles retain Japanese reading sizes. */
 export const typeScale = {
-  displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500"},
-  displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500"},
-  brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
-  headlineSmall: {fontSize: 35, lineHeight: 44, letterSpacing: -1.85, fontWeight: "700", fontFamily: INTER},
-  titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: INTER},
-  titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
-  titleSmall: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: INTER},
-  bodyLarge: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: INTER},
-  bodyMedium: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: INTER},
-  description: {fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: INTER},
-  bodySmall: {fontSize: 12, lineHeight: 17, fontWeight: "400", fontFamily: INTER},
-  labelLarge: {fontSize: 15, lineHeight: 20, letterSpacing: -0.2, fontWeight: "600", fontFamily: INTER},
-  labelMedium: {fontSize: 12, lineHeight: 18, fontWeight: "600", fontFamily: INTER},
-  labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: INTER},
-  navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: INTER},
-  metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: INTER},
+  displayMedium: {fontSize: 40, lineHeight: 48, fontWeight: "500", fontFamily: APP_FONT},
+  displaySmall: {fontSize: 34, lineHeight: 44, fontWeight: "500", fontFamily: APP_FONT},
+  brand: {fontSize: 35, lineHeight: 38, letterSpacing: -1.85, fontWeight: "700", fontFamily: APP_FONT},
+  headlineSmall: {fontSize: 35, lineHeight: 44, letterSpacing: -1.85, fontWeight: "700", fontFamily: APP_FONT},
+  titleLarge: {fontSize: 17, lineHeight: 22, letterSpacing: -0.57, fontWeight: "700", fontFamily: APP_FONT},
+  titleMedium: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: APP_FONT},
+  titleSmall: {fontSize: 15, lineHeight: 20, letterSpacing: -0.45, fontWeight: "700", fontFamily: APP_FONT},
+  bodyLarge: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: APP_FONT},
+  bodyMedium: {fontSize: 14, lineHeight: 20, fontWeight: "400", fontFamily: APP_FONT},
+  description: {fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: APP_FONT},
+  bodySmall: {fontSize: 12, lineHeight: 17, fontWeight: "400", fontFamily: APP_FONT},
+  labelLarge: {fontSize: 15, lineHeight: 20, letterSpacing: -0.2, fontWeight: "600", fontFamily: APP_FONT},
+  labelMedium: {fontSize: 12, lineHeight: 18, fontWeight: "600", fontFamily: APP_FONT},
+  labelSmall: {fontSize: 12, lineHeight: 16, fontWeight: "500", fontFamily: APP_FONT},
+  navigation: {fontSize: 11, lineHeight: 14, fontWeight: "600", fontFamily: APP_FONT},
+  metric: {fontSize: 25, lineHeight: 28, letterSpacing: -1.2, fontWeight: "700", fontFamily: APP_FONT},
+  /** A learner-facing value — the meaning or the reading — drawn in the reader's accent colour wherever it is shown. */
+  valueLarge: {fontSize: 20, lineHeight: 28, fontWeight: "600", fontFamily: APP_FONT},
+  /** The kana line under a headword. */
+  readingLine: {fontSize: 17, lineHeight: 24, fontWeight: "400", fontFamily: APP_FONT},
+  /** Small print: notes, provenance, the foot of a panel. */
+  micro: {fontSize: 11, lineHeight: 15, fontWeight: "400", fontFamily: APP_FONT},
+  /** Uppercase tracked labels, as analytics draws them; the caller adds `textTransform`. */
+  eyebrow: {fontSize: 11, lineHeight: 14, letterSpacing: 1.2, fontWeight: "700", fontFamily: APP_FONT},
+  /** State and narrative titles — the screens' 21/22/23 sp headings. */
+  headline: {fontSize: 22, lineHeight: 28, letterSpacing: -0.7, fontWeight: "700", fontFamily: APP_FONT},
+  /** The single-kanji hero of a lesson or review. */
+  glyphHero: {fontSize: 64, lineHeight: 80, fontWeight: "500", fontFamily: APP_FONT},
+  /** Sentence-size Japanese. */
+  glyphMedium: {fontSize: 28, lineHeight: 36, fontWeight: "500", fontFamily: APP_FONT},
+  /** The analytics figure that anchors a screen. */
+  metricHero: {fontSize: 34, lineHeight: 38, letterSpacing: -1.5, fontWeight: "700", fontFamily: APP_FONT},
+  /** Home's due count — the documented Home override. */
+  homeCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700", fontFamily: APP_FONT},
+  /** Home's streak count — the documented Home override. */
+  homeStreak: {fontSize: 20, lineHeight: 22, fontWeight: "500", fontFamily: APP_FONT},
+  /** Home's empty-history caption — the documented Home override. */
+  homeCaption: {fontSize: 13, lineHeight: 18, fontWeight: "700", fontFamily: APP_FONT},
 } satisfies Record<string, TextStyle>;

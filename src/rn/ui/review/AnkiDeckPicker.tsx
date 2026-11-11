@@ -12,20 +12,47 @@
  * are AnkiDroid's, read for the collection as it is now; a deck with nothing due still lists, because
  * the reader may be looking for it. Clear decks are informational and do not open empty sessions.
  *
+ * Above the rows sit the page's two figures — cards studied across all decks today, and the cards
+ * ready in the selected study decks now — drawn as the paired figures the rest of the app uses. Each
+ * is shown only when the read that produced it answered; anything else is a dash with the reason.
+ *
  * The floating bar stays on this screen: it is still the tab's own ground, and the reader is choosing
  * rather than studying. It goes away with the session the tap opens.
  */
-import React from "react";
-import {ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import React, {useState} from "react";
+import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {BOTTOM_BAR_HEIGHT, MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
+import {ScreenHeader} from "../ScreenHeader";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
-import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SubHeader, SuccessCheck} from "./review-ui";
+import {useAnkiDecks, type AnkiDecksFailure} from "../anki/useAnkiDecks";
+import {BusyRow, DeckRow, ScreenTitle, SectionCaption, SuccessCheck} from "./review-ui";
+import {
+  CountLegend,
+  MetricPair,
+  StackedBar,
+  useAnalyticsEntrance,
+  type DistributionPart,
+} from "../analytics/ink";
 
 /** AnkiDroid's own counts for one deck, in the design's one-line form. */
 function countsLine(deck: AnkiDeckResult): string {
   return `${deck.newCount} new · ${deck.learnCount} learning · ${deck.reviewCount} reviews`;
+}
+
+/** Why the today figure has no number: the words the reader can act on, per failure kind. */
+function todayFailureCopy(failure: AnkiDecksFailure): string {
+  switch (failure) {
+    case "NOT_INSTALLED":
+      return "Anki isn't installed.";
+    case "PERMISSION":
+      return "Anki access is needed.";
+    case "NOT_SET_UP":
+      return "Open Anki once to set it up.";
+    default:
+      return "Couldn't read Anki.";
+  }
 }
 
 /** What is due in one deck right now: the three counts AnkiDroid reports, added up. */
@@ -33,40 +60,79 @@ function dueOf(deck: AnkiDeckResult): number {
   return deck.newCount + deck.learnCount + deck.reviewCount;
 }
 
+/** The accent strengths the ready-now bar is drawn from — one hue, three weights. */
+const READY_INTENSITY = [0.2, 0.42, 0.67] as const;
+
 export function AnkiDeckPicker({
   decks,
   busy,
+  help,
   filteredEmpty = false,
-  completedDeckIds = [],
   onBack,
   onStart,
 }: {
   decks: AnkiDeckResult[];
   busy: boolean;
+  /** The setup help's trigger, owned by the review page so its dialog outlives this screen. */
+  help: React.ReactNode;
   filteredEmpty?: boolean;
-  completedDeckIds?: number[];
   onBack: () => void;
   onStart: (deck: AnkiDeckResult) => void;
 }) {
   const {colors} = useTheme();
-  const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
+  const anki = useAnkiDecks();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const contentInset = width < 360 ? spacing.l : spacing.contentInset;
+  const contentInset = contentInsetFor(width);
   // No cached/offline state is labelled here: the AnkiDroid read is a local provider read, and the
   // store funnels any failure to the full-screen blocked/failed step.
   // Parent decks count their children, so only the top level is added up: the same rule Home's
   // dashboard reads the collection's own due count by.
-  const ready = decks
-    .filter((deck) => !decks.some((parent) => deck.name.startsWith(`${parent.name}::`)))
-    .reduce((total, deck) => total + dueOf(deck), 0);
+  const topLevelDecks = decks.filter(
+    (deck) => !decks.some((parent) => deck.name.startsWith(`${parent.name}::`)),
+  );
+  const ready = topLevelDecks.reduce((total, deck) => total + dueOf(deck), 0);
   const allClear = !busy && decks.length > 0 && ready === 0;
+  // The three counts behind the ready bar and the deck rows, added up across the top level.
+  const newTotal = topLevelDecks.reduce((sum, deck) => sum + deck.newCount, 0);
+  const learnTotal = topLevelDecks.reduce((sum, deck) => sum + deck.learnCount, 0);
+  const reviewTotal = topLevelDecks.reduce((sum, deck) => sum + deck.reviewCount, 0);
+  // What the ready-now bar splits: the same three counts the deck rows carry, added up across the
+  // top level, drawn as one distribution in the accent's own weights. Nothing to draw is no bar —
+  // an empty or still-loading read stays metric-only.
+  const readyParts: DistributionPart[] =
+    ready === 0 || busy
+      ? []
+      : [
+          {key: "new", label: "New", count: newTotal},
+          {key: "learning", label: "Learn.", spoken: "Learning", count: learnTotal},
+          {key: "review", label: "Review", count: reviewTotal},
+        ].map((part, index) => ({
+          ...part,
+          value: String(part.count),
+          color: colors.accent,
+          opacity: READY_INTENSITY[index],
+        }));
+  const [selectedReady, setSelectedReady] = useState<string | null>(null);
+  // The analytics page's one-shot entrance: figures sweep in once, when the deck list first answers.
+  const entrance = useAnalyticsEntrance(!busy && decks.length > 0);
+  // The today figure is its own read, so it can fail or still be running while the deck list is
+  // ready: a retained earlier count says so — saved, possibly outdated — never fresh, and an unread
+  // figure is a dash with the reason beside it.
+  const todayHint =
+    anki.todayFailure != null
+      ? anki.studiedToday != null
+        ? "Saved count · may be outdated"
+        : todayFailureCopy(anki.todayFailure)
+      : anki.todayRefreshing
+        ? anki.studiedToday != null
+          ? "Updating…"
+          : "Checking…"
+        : null;
 
   return (
     <View style={[styles.screen, {backgroundColor: colors.background, paddingTop: insets.top}]}>
-      <View style={{paddingHorizontal: contentInset}}>
-        <SubHeader title="Anki" onBack={onBack} />
-      </View>
+      <ScreenHeader title="Anki" onBack={onBack} trailing={help} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
@@ -80,28 +146,59 @@ export function AnkiDeckPicker({
         ]}
       >
         <ScreenTitle style={styles.title}>Choose a deck</ScreenTitle>
-        {busy && decks.length === 0 ? (
-          <View style={[styles.loadingStatus, styles.summary]}>
-            <ActivityIndicator size="small" color={colors.accent} />
-            <Text style={[typeScale.description, {color: colors.onSurfaceVariant}]}>Syncing with Anki…</Text>
-          </View>
-        ) : allClear ? (
-          <Text style={[typeScale.description, styles.summary, {color: colors.onSurfaceVariant}]}>
-            No cards are due right now
-          </Text>
-        ) : (
-          <Text style={[typeScale.description, styles.summary, {color: colors.onSurfaceVariant}]}>
-            <Text style={ready > 0 ? {color: colors.accent} : undefined}>{ready}</Text>
-            {ready === 1 ? " card ready to study" : " cards ready to study"}
-          </Text>
+        {/* Nothing to report says nothing: the block stands only while one of its figures is a real
+            count, and an unread figure (a dash) keeps it up so its reason stays visible. */}
+        {!(anki.studiedToday === 0 && ready === 0) && (
+          <>
+            <SectionCaption style={styles.caption}>Today</SectionCaption>
+            <View style={styles.todayMetrics}>
+              <MetricPair
+                left={{
+                  value: anki.studiedToday != null ? String(anki.studiedToday) : "—",
+                  count: anki.studiedToday != null ? {value: anki.studiedToday} : null,
+                  caption: "Cards studied",
+                  note: todayHint,
+                }}
+                right={{
+                  value: busy && decks.length === 0 ? "—" : String(ready),
+                  count: busy || decks.length === 0 ? null : {value: ready},
+                  caption: "Ready now",
+                  // Only a state that needs saying is said: a failure, a read still on its way, or a
+                  // selection with nothing in it.
+                  note:
+                    busy && decks.length === 0
+                      ? "Checking…"
+                      : anki.studyDecks != null && anki.studyDecks.length === 0
+                        ? "No study decks selected"
+                        : null,
+                }}
+                entrance={entrance}
+              />
+            </View>
+          </>
+        )}
+        {readyParts.length > 0 && (
+          <>
+            <StackedBar
+              segments={readyParts}
+              selectedKey={selectedReady}
+              onSelect={setSelectedReady}
+              entrance={entrance}
+            />
+            <CountLegend
+              items={readyParts}
+              selectedKey={selectedReady}
+              onSelect={setSelectedReady}
+              entrance={entrance}
+            />
+          </>
         )}
         {allClear && (
-          <View style={[styles.notice, {backgroundColor: dark ? "#18291F" : "#ECF8F0", borderColor: dark ? "#294734" : "#D8ECDC"}]}>
+          <View style={styles.caughtUp} accessible accessibilityLabel="You're all caught up. Every available deck is clear for now.">
             <SuccessCheck />
-            <View style={styles.noticeCopy}>
-              <Text style={[styles.noticeTitle, {color: colors.onSurface}]}>You’re all caught up</Text>
-              <Text style={[styles.noticeBody, {color: colors.onSurfaceVariant}]}>Every available deck is clear for now.</Text>
-            </View>
+            <Text style={[styles.caughtUpText, {color: colors.onSurfaceVariant}]}>
+              You’re all caught up — every available deck is clear for now.
+            </Text>
           </View>
         )}
         <SectionCaption style={styles.caption}>Available decks</SectionCaption>
@@ -122,7 +219,7 @@ export function AnkiDeckPicker({
           <Text style={[typeScale.bodyMedium, styles.empty, {color: colors.onSurfaceVariant}]}>
             {filteredEmpty
               ? "No study decks selected. Choose decks in Settings → Anki cards."
-              : "No decks found. Create a deck in AnkiDroid to get started."}
+              : "No decks found. Create a deck in Anki to get started."}
           </Text>
         ) : (
           decks.map((deck) => (
@@ -132,15 +229,13 @@ export function AnkiDeckPicker({
               name={deck.name}
               counts={countsLine(deck)}
               due={dueOf(deck)}
-              completed={ready === 0 || completedDeckIds.includes(Number(deck.id))}
-              completedToday={completedDeckIds.includes(Number(deck.id))}
               onPress={() => onStart(deck)}
             />
           ))
         )}
         {busy && decks.length > 0 && (
           <View style={styles.busy}>
-            <BusyRow message="Reading AnkiDroid…" />
+            <BusyRow message="Reading Anki…" />
           </View>
         )}
       </ScrollView>
@@ -150,19 +245,17 @@ export function AnkiDeckPicker({
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
-  body: {width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center"},
+  body: CONTENT_COLUMN,
   title: {marginTop: 18},
-  summary: {marginTop: 10, marginBottom: 24},
   caption: {marginTop: 22},
+  todayMetrics: {marginTop: 12},
   empty: {marginTop: spacing.s},
-  notice: {flexDirection: "row", alignItems: "center", gap: 11, padding: 12, borderWidth: 1, borderRadius: 13},
-  noticeCopy: {flex: 1, gap: 2},
-  noticeTitle: {fontSize: 13, lineHeight: 17, fontWeight: "700"},
-  noticeBody: {fontSize: 11, lineHeight: 15},
+  // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
+  caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.m, marginBottom: 24},
+  caughtUpText: {...typeScale.bodySmall, flex: 1, minWidth: 0},
   skeletonList: {marginTop: spacing.s},
   // The skeleton is the shared row's own geometry: a hairline divider, no card, no fill.
   skeletonRow: {minHeight: 90, flexDirection: "row", alignItems: "center", gap: spacing.m, paddingVertical: spacing.m, borderBottomWidth: 1},
-  loadingStatus: {flexDirection: "row", alignItems: "center", gap: spacing.s},
   skeletonTile: {width: 48, height: 48, borderRadius: 12},
   skeletonCopy: {flex: 1, gap: spacing.s},
   skeletonName: {width: "58%", height: 15, borderRadius: 5},

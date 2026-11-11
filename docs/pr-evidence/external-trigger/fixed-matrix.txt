@@ -1,0 +1,37 @@
+=== FIXED MATRIX 2026-10-24T11:03:52+05:30 ===
+canonical+package                          open: received=1 accepted=1 frozen=1
+  Broadcast completed: result=0
+canonical+package                          close: received=1 closed=1
+canonical+implicit                         open: received=1 accepted=1 frozen=1
+  Broadcast completed: result=0
+canonical+implicit                         close: received=1 closed=1
+canonical+component                        open: received=1 accepted=1 frozen=1
+  Broadcast completed: result=0
+canonical+component                        close: received=1 closed=1
+legacy+package                             open: received=1 accepted=1 frozen=1
+  Broadcast completed: result=0
+legacy+package                             close: received=1 closed=1
+legacy+implicit                            open: received=1 accepted=1 frozen=1
+  Broadcast completed: result=0
+legacy+implicit                            close: received=1 closed=1
+legacy+component                           open: received=0 accepted=0 frozen=0
+  Broadcast completed: result=0
+legacy+component                           close: received=0 closed=0
+--- negative oldpackage ---
+oldpackage com.gaten.app                   received=0 accepted=0
+  Broadcast completed: result=0
+  run1 legacy+component open: received=1 accepted=1
+  run1 legacy+component close: received=1 closed=1
+  Broadcast completed: result=0
+  run2 legacy+component open: received=1 accepted=1
+  run2 legacy+component close: received=1 closed=1
+  Broadcast completed: result=0
+  run3 legacy+component open: received=1 accepted=1
+  run3 legacy+component close: received=1 closed=1
+
+INVALID TEST NOTE: one earlier "legacy+component" line used a malformed component
+(`-n com/gaten.app.LookupTriggerReceiver`) whose `am broadcast` still printed "result=0"; that run is
+an INVALID TEST, not an app failure, and its result must be discarded. The `||` fallback keyed on am
+exit code was also unreliable (am exits 0 without recipient proof). Correct immutable component string
+`com.gaten/com.gaten.app.LookupTriggerReceiver` was then used for the same alias 3/3 times:
+  open: received=1 accepted=1; close: received=1 closed=1 (each run, 2026-10-24 ~11:04).

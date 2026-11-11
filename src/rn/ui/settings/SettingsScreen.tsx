@@ -8,36 +8,28 @@
  * The settings hub: what lookup mode is, then a row per page under the group it belongs to.
  *
  * Everything on it is a summary read from wherever the truth lives — the platform's
- * enabled-services setting, the model directory, AnkiDroid, the stored token — and read again on
+ * enabled-services setting, the selected OCR engine, AnkiDroid, the stored token — and read again on
  * every arrival and every time the app comes back to the foreground, because all of it can change
  * while the reader is elsewhere. Nothing here asks for anything: a missing permission or model is
  * stated, and the page that owns it is where it is asked for.
  */
 import React, {useEffect, useState} from "react";
-import {AppState, ScrollView, Text, View, useWindowDimensions} from "react-native";
+import {AppState, ScrollView, View, useWindowDimensions} from "react-native";
 import {useIsFocused} from "@react-navigation/native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import * as GatenAnki from "../../native/GatenAnki";
-import * as GatenWaniKani from "../../native/GatenWaniKani";
 import * as GatenRecognition from "../../native/GatenRecognition";
+import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {AnkiStatus} from "../../native/GatenAnki";
+import type {RecognitionEngine, RecognitionSettings} from "../../native/GatenRecognition";
 import type {SettingsPageName} from "../navigation";
+import {useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme} from "../theme";
-import {BOTTOM_BAR_HEIGHT, spacing, typeScale} from "../tokens";
+import {TabHeading} from "../TabHeading";
+import {SupportSheet} from "../support/SupportSheet";
+import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
-
-/** The name of the model in place, shown on the right of the recognition row. */
-function recognitionValue(
-  installed: boolean,
-  installedId: string | null,
-  catalog: GatenRecognition.MangaOcrCatalogEntry[]
-): string {
-  if (!installed) {
-    return "None";
-  }
-  return catalog.find((entry) => entry.id === installedId)?.label ?? "None";
-}
 
 /** What the Anki row says under its name: the page's own business, or AnkiDroid's other two states. */
 function ankiSummary(status: AnkiStatus): string {
@@ -51,20 +43,32 @@ function ankiSummary(status: AnkiStatus): string {
   }
 }
 
+/** The mode's short name for the hub row; the full names live on the recognition page. */
+function recognitionModeLabel(mode: RecognitionEngine): string {
+  switch (mode) {
+    case "ml_kit":
+      return "Standard";
+    case "medium":
+      return "Enhanced";
+    default:
+      return "Standard";
+  }
+}
+
 export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) => void}) {
   const theme = useTheme();
   const colors = theme.colors;
+  const kanjiReference = useKanjiReferenceSource();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
 
   const [lookupMode, setLookupMode] = useState(false);
-  const [modelInstalled, setModelInstalled] = useState(false);
-  const [modelId, setModelId] = useState<string | null>(null);
+  const [recognitionSettings, setRecognitionSettings] = useState<RecognitionSettings | null>(null);
   const [ankiStatus, setAnkiStatus] = useState<AnkiStatus>("notInstalled");
   const [ankiDeck, setAnkiDeck] = useState<string | null>(null);
   const [wanikaniConnected, setWanikaniConnected] = useState(false);
   const [versionName, setVersionName] = useState("");
-  const [catalog, setCatalog] = useState<GatenRecognition.MangaOcrCatalogEntry[]>([]);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // Lookup mode is a system setting the reader grants outside Gaten, and a model or a token
   // changes inside a page, so the rows are read on every arrival — the return from one of the
@@ -83,10 +87,8 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
       void GatenAppInfo.isLookupModeActive().then((v) => {
         if (!cancelled) setLookupMode(v);
       });
-      void GatenAppInfo.getMangaOcrState().then((v) => {
-        if (cancelled) return;
-        setModelInstalled(v.installed);
-        setModelId(v.catalogId);
+      void GatenRecognition.getRecognitionSettings().then((v) => {
+        if (!cancelled) setRecognitionSettings(v);
       });
       void GatenAnki.status().then((v) => {
         if (!cancelled) setAnkiStatus(v);
@@ -100,9 +102,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
       void GatenAppInfo.getAppVersion().then((v) => {
         if (!cancelled) setVersionName(v);
       });
-      void GatenRecognition.getCatalog().then((v) => {
-        if (!cancelled) setCatalog(v);
-      });
     };
     readAll();
     const subscription = AppState.addEventListener("change", (state) => {
@@ -114,6 +113,16 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
     };
   }, [isFocused]);
 
+  // The selected engine's name, and whether its model is actually on the device: the bundled ML Kit
+  // is always ready, but a selected downloadable engine that is not installed is read by ML Kit
+  // instead, so the row says so rather than implying no recognition is available.
+  const recognitionMode = recognitionSettings?.mode ?? "ml_kit";
+  const selectedEngine = recognitionSettings?.engines.find(
+    (engine) => engine.id === recognitionMode,
+  );
+  const recognitionSummary =
+    selectedEngine != null && !selectedEngine.installed ? "Not downloaded · ML Kit reads" : undefined;
+
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
       {/* Keep the title below the status bar. Bottom padding lets rows scroll above the floating
@@ -123,16 +132,14 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
           style={[
             CONTENT_COLUMN,
             {
-              paddingHorizontal: width < 360 ? 16 : 22,
+              paddingHorizontal: contentInsetFor(width),
               paddingBottom: BOTTOM_BAR_HEIGHT + insets.bottom + spacing.l,
             },
           ]}
         >
           {/* One confident heading with room to breathe above it, then nothing but rows. */}
           <View style={{marginTop: 23}}>
-            <Text style={[typeScale.headlineSmall, {color: colors.onSurface}]}>
-              Settings
-            </Text>
+            <TabHeading label="Settings" color={colors.onSurface} />
           </View>
           <SettingsGroup title="Lookup" style={{marginTop: 22}}>
             <SettingsRow
@@ -146,7 +153,8 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               icon="text_snippet"
               inkIcon="text"
               title="Text recognition"
-              value={recognitionValue(modelInstalled, modelId, catalog)}
+              summary={recognitionSummary}
+              value={recognitionModeLabel(recognitionMode)}
               onPress={() => onOpenPage("recognition")}
             />
           </SettingsGroup>
@@ -165,6 +173,12 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               value={wanikaniConnected ? "Connected" : "Not connected"}
               onPress={() => onOpenPage("wanikani")}
             />
+            <SettingsRow
+              icon="school"
+              title="Kanji reference"
+              value={kanjiReference === "rtk" ? "Remembering the Kanji" : "WaniKani"}
+              onPress={() => onOpenPage("reference")}
+            />
           </SettingsGroup>
           <SettingsGroup title="App" style={{marginTop: 22}}>
             <SettingsRow
@@ -173,6 +187,13 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               title="Appearance"
               value={theme.mode}
               onPress={() => onOpenPage("appearance")}
+            />
+            {/* Always here, whatever the popup's own dismissal state: silencing the popup must
+                never take away the way to support the project. */}
+            <SettingsRow
+              icon="public"
+              title="Support Gaten"
+              onPress={() => setSupportOpen(true)}
             />
             <SettingsRow
               icon="info"
@@ -184,6 +205,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
           </SettingsGroup>
         </View>
       </ScrollView>
+      {supportOpen && <SupportSheet onDismiss={() => setSupportOpen(false)} />}
     </View>
   );
 }

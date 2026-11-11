@@ -8,6 +8,7 @@ package com.gaten.app.wanikani
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -202,19 +203,185 @@ class WaniKaniLessonTest {
         assertNull(client(lessonApi()).startLesson(7) as? WaniKaniLessonStart.Unreachable)
     }
 
+    @Test
+    fun `a kanji lesson keeps its amalgamation ids and a vocabulary keeps none`() {
+        val kanji = decodeLessonSubjectCollection(
+            WaniKaniJson.collection(WaniKaniJson.kanji(amalgamationIds = (1..40).toList())),
+            mapOf(440 to 10)
+        )!!.single()
+        // Bounded: only the first thirty are kept, since they are asked for in one url per batch.
+        assertEquals((1..30).toList(), kanji.amalgamationIds)
+        // Nothing is resolved at decode time: the words are filled in from the queue's extra request.
+        assertEquals(emptyList<WaniKaniRelatedWord>(), kanji.relatedWords)
+
+        val vocabulary = decodeLessonSubjectCollection(
+            WaniKaniJson.collection(WaniKaniJson.vocabulary(id = 2467)),
+            mapOf(2467 to 11)
+        )!!.single()
+        // A vocabulary names no amalgamations, and its own subjects are kanji, not other words.
+        assertEquals(emptyList<Int>(), vocabulary.amalgamationIds)
+        assertEquals(emptyList<WaniKaniRelatedWord>(), vocabulary.relatedWords)
+    }
+
+    @Test
+    fun `the first batch's components and the words a kanji is used in are filled in`() = runBlocking {
+        // Seven words the kanji is used in, deliberately not in level order, so the expected list
+        // below is the order the queue has to impose rather than the order WaniKani sent them in.
+        val words = listOf(
+            Triple(101, 3, "上"),
+            Triple(102, 1, "下"),
+            Triple(103, 2, "中"),
+            Triple(104, 1, "大"),
+            Triple(105, 3, "小"),
+            Triple(106, 2, "川"),
+            Triple(107, 1, "山")
+        )
+        val api = lessonApi(
+            assignments = WaniKaniJson.collection(
+                WaniKaniJson.assignment(1, 440, "kanji", AVAILABLE),
+                WaniKaniJson.assignment(2, 1, "radical", AVAILABLE),
+                *words.mapIndexed { index, word ->
+                    WaniKaniJson.assignment(3 + index, word.first, "vocabulary", AVAILABLE)
+                }.toTypedArray()
+            ),
+            subjects = WaniKaniJson.collection(
+                WaniKaniJson.kanji(
+                    id = 440,
+                    lessonPosition = 1,
+                    componentIds = listOf(1),
+                    amalgamationIds = words.map { it.first }
+                ),
+                WaniKaniJson.radical(id = 1, character = "一", lessonPosition = 2, name = "Ground"),
+                *words.mapIndexed { index, word ->
+                    WaniKaniJson.vocabulary(
+                        id = word.first,
+                        character = word.third,
+                        level = word.second,
+                        lessonPosition = 10 + index,
+                        meaning = "Word ${word.first}"
+                    )
+                }.toTypedArray()
+            )
+        )
+
+        val items = (client(api).lessonsQueue() as WaniKaniLessonQueue.Available).items
+        assertEquals(9, items.size)
+        val kanji = items.single { it.subjectId == 440 }
+        // The bare component id is resolved into a chip that can be drawn.
+        assertEquals(listOf(WaniKaniComponent(1, "一", "Ground")), kanji.components)
+        // Five of the seven, the lowest level first, the id breaking a tie.
+        assertEquals(
+            listOf(
+                WaniKaniRelatedWord("下", "いち", "Word 102"),
+                WaniKaniRelatedWord("大", "いち", "Word 104"),
+                WaniKaniRelatedWord("山", "いち", "Word 107"),
+                WaniKaniRelatedWord("中", "いち", "Word 103"),
+                WaniKaniRelatedWord("川", "いち", "Word 106")
+            ),
+            kanji.relatedWords
+        )
+    }
+
+    @Test
+    fun `a word the subscription does not reach is not shown as used in`() = runBlocking {
+        val api = lessonApi(
+            assignments = WaniKaniJson.collection(WaniKaniJson.assignment(1, 440, "kanji", AVAILABLE)),
+            subjects = WaniKaniJson.collection(
+                WaniKaniJson.kanji(id = 440, componentIds = emptyList(), amalgamationIds = listOf(101, 102)),
+                WaniKaniJson.vocabulary(id = 101, character = "上", level = 3, meaning = "Above"),
+                WaniKaniJson.vocabulary(id = 102, character = "下", level = 5, meaning = "Below")
+            ),
+            user = WaniKaniJson.user(type = "free", maxLevelGranted = 3, periodEndsAt = null)
+        )
+        val client = client(api)
+        client.connect(TOKEN)
+
+        val kanji = (client.lessonsQueue() as WaniKaniLessonQueue.Available).items.single()
+        // Level 5 is beyond a free account's grant, exactly as the lesson itself would be.
+        assertEquals(listOf(WaniKaniRelatedWord("上", "いち", "Above")), kanji.relatedWords)
+    }
+
+    @Test
+    fun `a failed detail request leaves the queue teachable with what it has`() = runBlocking {
+        val api = lessonApi(
+            assignments = WaniKaniJson.collection(WaniKaniJson.assignment(1, 440, "kanji", AVAILABLE)),
+            subjects = WaniKaniJson.collection(
+                WaniKaniJson.kanji(id = 440, componentIds = listOf(1), amalgamationIds = listOf(101))
+            ),
+            // The one request that resolves the components and the used-in words is an extra: losing
+            // it must not lose the lesson, which is still taught from its meaning and reading.
+            detail = WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE)
+        )
+
+        val queue = client(api).lessonsQueue()
+        val item = (queue as WaniKaniLessonQueue.Available).items.single()
+        assertEquals(listOf(WaniKaniComponent(1, null, null)), item.components)
+        assertEquals(emptyList<WaniKaniRelatedWord>(), item.relatedWords)
+    }
+
+    @Test
+    fun `only the first five subjects of a long queue are enriched`() = runBlocking {
+        val ids = (1..6).toList()
+        val api = lessonApi(
+            assignments = WaniKaniJson.collection(
+                *ids.map { id ->
+                    WaniKaniJson.assignment(id, 500 + id, "vocabulary", AVAILABLE)
+                }.toTypedArray()
+            ),
+            subjects = WaniKaniJson.collection(
+                *ids.map { id ->
+                    WaniKaniJson.vocabulary(
+                        id = 500 + id,
+                        character = "語",
+                        level = 1,
+                        lessonPosition = id,
+                        componentIds = listOf(900 + id)
+                    )
+                }.toTypedArray()
+            ),
+            // The extra request answers every component, the sixth included: that one is only left
+            // unresolved because it is never asked for.
+            detail = WaniKaniFetch.Body(
+                WaniKaniJson.collection(
+                    *ids.map { id ->
+                        WaniKaniJson.radical(id = 900 + id, character = "一", name = "Ground")
+                    }.toTypedArray()
+                )
+            )
+        )
+
+        val items = (client(api).lessonsQueue() as WaniKaniLessonQueue.Available).items
+        assertEquals(6, items.size)
+        assertEquals(listOf(WaniKaniComponent(901, "一", "Ground")), items.first().components)
+        assertEquals(listOf(WaniKaniComponent(905, "一", "Ground")), items[4].components)
+        // Past the batch WaniKani teaches in one sitting: the id is a chip to tap, not a lesson.
+        assertEquals(listOf(WaniKaniComponent(906, null, null)), items[5].components)
+        val requested = api.queries.last { query ->
+            query.any { it.first == "ids" }
+        }.first { it.first == "ids" }.second.split(",")
+        assertFalse(requested.contains("906"))
+    }
+
     private fun lessonApi(
         assignments: String? = null,
         subjects: String? = null,
         user: String? = null,
-        unauthorized: Boolean = false
+        unauthorized: Boolean = false,
+        detail: WaniKaniFetch? = null
     ) = FakeLessonApi().apply {
         putHandler = { if (unauthorized) WaniKaniFetch.Unauthorized else WaniKaniFetch.Body("{}") }
+        var subjectReads = 0
         getHandler = { path, query ->
             when {
                 unauthorized -> WaniKaniFetch.Unauthorized
                 path == "user" && user != null -> WaniKaniFetch.Body(user)
                 path == "assignments" && assignments != null -> WaniKaniFetch.Body(assignments)
-                path == "subjects" && subjects != null -> WaniKaniFetch.Body(subjects)
+                path == "subjects" && subjects != null -> {
+                    // The queue resolves its own subjects first, then asks for the batch's teaching
+                    // detail in a second request, which [detail] stands in for.
+                    subjectReads += 1
+                    if (subjectReads == 1 || detail == null) WaniKaniFetch.Body(subjects) else detail
+                }
                 else -> WaniKaniFetch.Failed(WaniKaniFailure.OFFLINE)
             }
         }
@@ -236,10 +403,12 @@ private class FakeLessonApi : WaniKaniApi() {
     var putHandler: (String) -> WaniKaniFetch = { WaniKaniFetch.Body("{}") }
 
     val requests = mutableListOf<String>()
+    val queries = mutableListOf<List<Pair<String, String>>>()
     val writes = mutableListOf<String>()
 
     override suspend fun get(path: String, query: List<Pair<String, String>>, token: String): WaniKaniFetch {
         requests += path
+        queries += query
         return getHandler(path, query)
     }
 

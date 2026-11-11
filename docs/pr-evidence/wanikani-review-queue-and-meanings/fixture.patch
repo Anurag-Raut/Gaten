@@ -1,0 +1,423 @@
+diff --git a/.evidence-fixture/index.js b/.evidence-fixture/index.js
+new file mode 100644
+index 0000000..b1fd629
+--- /dev/null
++++ b/.evidence-fixture/index.js
+@@ -0,0 +1,20 @@
++/**
++ * Evidence fixture entry — NOT part of the app, never imported by it.
++ *
++ * The React Native Gradle plugin resolves the bundle's entry file in this order (PathUtils.kt):
++ * the `ENTRY_FILE` environment variable, then `react { entryFile }` in app/build.gradle.kts, then
++ * `index.android.js`, then `index.js`. So this entry is chosen by the environment alone, for one
++ * build, with no production file touched:
++ *
++ *   ENTRY_FILE=.evidence-fixture/index.js ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64
++ *
++ * `debuggableVariants` is already empty in app/build.gradle.kts, so the debug variant bundles its JS
++ * into the APK and needs no Metro dev server — the fixture APK is self-contained.
++ */
++import {AppRegistry} from "react-native";
++import {ReviewFixture} from "./ReviewFixture";
++
++// MainActivity mounts the component named "Gaten", so the fixture takes that name for this build.
++// The production entry's second component, "GatenLookupSheet", is deliberately not registered: this
++// build never mounts the lookup overlay's window.
++AppRegistry.registerComponent("Gaten", () => ReviewFixture);
+diff --git a/.evidence-fixture/ReviewFixture.tsx b/.evidence-fixture/ReviewFixture.tsx
+new file mode 100644
+index 0000000..a87d58a
+--- /dev/null
++++ b/.evidence-fixture/ReviewFixture.tsx
+@@ -0,0 +1,234 @@
++/**
++ * Gaten — evidence fixture root (not part of the app; see README.md).
++ *
++ * Mounts the *production* WaniKaniReview screen over the *production* review store, with one session
++ * handed in and nothing else faked: every entry, judgement, refusal, phase and continue below is the
++ * real store's own code, so what is photographed here is what the app does.
++ *
++ * The same file is built into both builds of the pair. Where the two builds differ — the drawn lead
++ * of a subject's pair, the kana refusal, the meaning detail — the difference is the builds' own code
++ * meeting identical fixture input, which is the point of a shared harness.
++ *
++ * Three things make it safe:
++ *  - the session is installed in the store's own paused-session slot, so `startReviews()` publishes
++ *    it instead of reading the review queue (no token, no network, no account);
++ *  - `submitWaniKani` is replaced with a no-op before anything can reach it — the only path that
++ *    posts to WaniKani cannot fire even by mistake;
++ *  - the subject is synthetic (`仮語`, subject id 9001), two-part like a Vocabulary card, with a
++ *    reading to quiz, so nothing on screen claims to be a real review.
++ */
++import React, {useEffect, useRef, useState} from "react";
++import {Pressable, StyleSheet, Text, View} from "react-native";
++import {GestureHandlerRootView} from "react-native-gesture-handler";
++import {SafeAreaProvider} from "react-native-safe-area-context";
++import {KeyboardProvider} from "react-native-keyboard-controller";
++import {ThemeProvider} from "../src/rn/ui/theme";
++import {WaniKaniReview} from "../src/rn/ui/review/WaniKaniReview";
++import {
++  buildWaniKaniPromptOrder,
++  reviewStore,
++  type WaniKaniPrompt,
++  type WaniKaniSession,
++} from "../src/rn/ui/review/review-store";
++import type {WaniKaniReviewItem} from "../src/rn/native/GatenWaniKani";
++
++/**
++ * A synthetic Vocabulary subject: two parts, so the screen asks a meaning and quizzes a reading, and
++ * four accepted meanings, so the detail tab has alternates to show beside the primary one. It is not
++ * a WaniKani subject — the characters are a non-word and the id is outside the content range — so a
++ * still can never be mistaken for a real review of real content.
++ */
++const SUBJECT: WaniKaniReviewItem = {
++  subjectId: 9001,
++  type: "vocabulary",
++  characters: "仮語",
++  meanings: ["language", "dialect", "speech", "tongue"],
++  primaryMeaning: "language",
++  readings: ["ことば"],
++  primaryReading: "ことば",
++  level: 28,
++  meaningMnemonic: "Fixture subject: synthetic, so no mnemonic is claimed for it.",
++  readingMnemonic: "",
++  contextSentences: [],
++};
++
++/**
++ * The pair's order, from the production builder. Both draws are pinned so a scene is the same queue
++ * on every launch; on a build that asks a meaning first whatever it is given, the same call yields
++ * the meaning-first order, which is exactly the before-state of the drawn-lead change.
++ */
++const meaningFirst = (): WaniKaniPrompt[] => buildWaniKaniPromptOrder([2], () => 0.9);
++const readingFirst = (): WaniKaniPrompt[] => buildWaniKaniPromptOrder([2], () => 0.1);
++
++/** A session stopped at `order[cursor]`, with whatever is already in the field. */
++function sessionWith(order: WaniKaniPrompt[], cursor: number, entry: string): WaniKaniSession {
++  const at = order[cursor];
++  return {
++    items: [SUBJECT],
++    order,
++    cursor,
++    totalParts: order.length,
++    doneParts: cursor,
++    index: at.index,
++    part: at.part,
++    entry,
++    entryRefused: false,
++    incorrectMeaning: 0,
++    incorrectReading: 0,
++    wrong: [{meaning: 0, reading: 0}],
++    feedback: null,
++    retrying: false,
++    phase: "answering",
++    failure: null,
++    authRejected: false,
++  };
++}
++
++/**
++ * The scenes. Each one is the same three lines — install, then let the store judge if the scene is
++ * about a judgement — so a scene renders whatever that build does with that input:
++ *
++ *  - `meaning`      the meaning prompt, open, for the live wrong-answer → Done → retry path;
++ *  - `reading-first` the same pair with the reading drawn first (a meaning-first build shows a
++ *                   meaning here): the drawn-lead change, and the reading prompt for item 2;
++ *  - `mixed-input`  the reading prompt with `sひゅう` in the field, judged by the store: a build
++ *                   without the kana rule answers `Incorrect`, a build with it refuses the entry;
++ *  - `wrong-stop`   the meaning prompt with a wrong answer already judged, which is where the detail
++ *                   tab is opened from.
++ */
++const scenes = {
++  meaning: () => sessionWith(meaningFirst(), 0, ""),
++  "reading-first": () => sessionWith(readingFirst(), 0, ""),
++  "mixed-input": () => sessionWith(meaningFirst(), 1, "sひゅう"),
++  "wrong-stop": () => sessionWith(meaningFirst(), 0, "zzz"),
++};
++
++type Scene = keyof typeof scenes;
++
++/** The scenes the store itself judges when they are installed; the others stay open to be driven. */
++const judgedOnInstall: Scene[] = ["mixed-input", "wrong-stop"];
++
++/**
++ * The store seen from outside: the members this fixture reaches for. TypeScript marks them private,
++ * which is a compile-time idea only — reaching in here keeps every transition the real one instead
++ * of re-implementing the store's phase machine in the harness.
++ */
++type StoreInternals = {
++  pausedReview: WaniKaniSession | null;
++  submitWaniKani: () => void;
++  enterWaniKaniReview: () => Promise<void>;
++};
++
++export function ReviewFixture() {
++  const [state, setState] = useState(() => reviewStore.getState());
++  const [scene, setScene] = useState<Scene>("meaning");
++  const [unavailable, setUnavailable] = useState<string | null>(null);
++  const installed = useRef(false);
++
++  // The screen renders from the store, exactly as the page's own hook does — without that hook's
++  // AppState lifecycle, which would ask the network for counts this fixture must not touch.
++  useEffect(() => {
++    const subscription = reviewStore.subscribe(setState);
++    return () => subscription.remove();
++  }, []);
++
++  useEffect(() => {
++    if (installed.current) return;
++    installed.current = true;
++    const internals = reviewStore as unknown as StoreInternals;
++    // Fail closed: if a rename has moved either member, nothing below runs — no session is installed
++    // and `startReviews` is never called, so not even the queue read can fire.
++    if (
++      typeof internals.submitWaniKani !== "function" ||
++      typeof internals.enterWaniKaniReview !== "function"
++    ) {
++      setUnavailable("the store's private stub targets are not functions");
++      return;
++    }
++    // Nothing may be posted to WaniKani from this build, whatever is typed.
++    internals.submitWaniKani = () => {};
++    // Belt and braces: the queue read is the other door, and it is the one `startReviews` would open
++    // if the paused session were ever not published. Closing it leaves the worst case a fallback
++    // card, never a request.
++    internals.enterWaniKaniReview = () => Promise.resolve();
++    internals.pausedReview = scenes.meaning();
++    // With a paused session this publishes the step and reads no queue.
++    reviewStore.startReviews();
++  }, []);
++
++  const show = (scene: Scene) => {
++    setScene(scene);
++    const internals = reviewStore as unknown as StoreInternals;
++    internals.pausedReview = scenes[scene]();
++    reviewStore.startReviews();
++    if (judgedOnInstall.includes(scene)) reviewStore.wkCheck();
++  };
++
++  const step = state.step;
++  return (
++    <GestureHandlerRootView style={styles.root}>
++      <SafeAreaProvider>
++        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
++          <ThemeProvider>
++            <View style={styles.scenes}>
++              <Text style={styles.scenesLabel}>fixture</Text>
++              {(Object.keys(scenes) as Scene[]).map((name) => (
++                <Pressable
++                  key={name}
++                  accessibilityRole="button"
++                  onPress={() => show(name)}
++                  style={[styles.sceneButton, name === scene && styles.sceneButtonOn]}
++                >
++                  <Text style={[styles.sceneText, name === scene && styles.sceneTextOn]}>
++                    {name}
++                  </Text>
++                </Pressable>
++              ))}
++            </View>
++            <View style={styles.screen}>
++              {step.kind === "wkReview" ? (
++                <WaniKaniReview
++                  session={step.session}
++                  busy={state.busy}
++                  onBack={() => {}}
++                  onEntry={(text) => reviewStore.wkEntry(text)}
++                  onCheck={() => reviewStore.wkCheck()}
++                  onContinue={() => reviewStore.wkContinue()}
++                  onRetrySubmit={() => {}}
++                />
++              ) : (
++                <View style={styles.fallback}>
++                  <Text style={styles.fallbackText}>
++                    {unavailable == null
++                      ? "fixture: no review session - the paused session install did not take"
++                      : `fixture: not installed - ${unavailable}`}
++                  </Text>
++                </View>
++              )}
++            </View>
++          </ThemeProvider>
++        </KeyboardProvider>
++      </SafeAreaProvider>
++    </GestureHandlerRootView>
++  );
++}
++
++const styles = StyleSheet.create({
++  root: {flex: 1},
++  screen: {flex: 1},
++  scenes: {
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 6,
++    paddingHorizontal: 8,
++    paddingVertical: 6,
++    backgroundColor: "#101014",
++  },
++  scenesLabel: {color: "#8a8f98", fontSize: 11, marginRight: 2},
++  sceneButton: {paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "#22242c"},
++  sceneButtonOn: {backgroundColor: "#4d5bd6"},
++  sceneText: {color: "#c8ccd4", fontSize: 11},
++  sceneTextOn: {color: "#ffffff", fontWeight: "700"},
++  fallback: {flex: 1, alignItems: "center", justifyContent: "center", padding: 24},
++  fallbackText: {color: "#f5c2c7", textAlign: "center"},
++});
+diff --git a/.evidence-fixture/tsconfig.json b/.evidence-fixture/tsconfig.json
+new file mode 100644
+index 0000000..b6733c8
+--- /dev/null
++++ b/.evidence-fixture/tsconfig.json
+@@ -0,0 +1,4 @@
++{
++  "extends": "../tsconfig.json",
++  "include": ["../src/rn", "./ReviewFixture.tsx"]
++}
+diff --git a/.evidence-fixture/README.md b/.evidence-fixture/README.md
+new file mode 100644
+index 0000000..eebccec
+--- /dev/null
++++ b/.evidence-fixture/README.md
+@@ -0,0 +1,141 @@
++# Evidence fixture: the review card without an account
++
++An uncommitted harness for photographing the review screen's behaviour on a device with no WaniKani
++token and no network. It exists because the automation's Enter is not the reader's Enter: a
++`KEYCODE_ENTER` key event reaches `ReactEditText.onKeyUp`, which calls `hideSoftKeyboard()` for any
++single-line input, while the keyboard's visible Done key goes through `ReactTextInputManager`'s
++editor-action listener, which dispatches the submit and returns `true` without blurring. Photographing
++the real behaviour needs the *visible* key pressed, and that needs a queue — which needs an account,
++and no real account may be touched again. This fixture removes the account from the picture.
++
++## One harness, two builds
++
++The same `.evidence-fixture/` directory is compiled into both builds of the pair, so a before/after
++still sits inside identical chrome and identical code; only the app code underneath differs.
++
++| | head — `fix/wanikani-review-feedback` | baseline — `origin/dev` `b8a4b40` |
++| --- | --- | --- |
++| APK | `gaten-fixture-head-x86_64-debug.apk` | `gaten-fixture-baseline-x86_64-debug.apk` |
++| sha256 | `d0952c7142bd828680da59d3c0e8505cd7c02c3f69ee832e1b054815cace497e` | `faa521aa22085c7281b5907cddee4fdad857923606e9f32803e98d5eec768247` |
++| size | 205,486,508 B | 205,484,468 B |
++| embedded `assets/index.android.bundle` | 2,695,700 B | 2,694,320 B |
++| marker `Fixture subject: synthetic` | 1 | 1 |
++| marker `A reading is answered in kana` (head-only) | 1 | 0 |
++| marker `No recent searches found` (production shell) | 0 | 0 |
++
++Harness sources (identical in both worktrees, so both APKs carry the same harness revision):
++
++| File | sha256 |
++| --- | --- |
++| `index.js` | `46c8f1c364f3d8b4b7613de8369e100209dcfa2330f1936861c877ad0c5ea39e` |
++| `ReviewFixture.tsx` | `cc88295bacf2b70b829aef5f4dfe619f65cbda23f690fcabb90900a8de1252ce` |
++| `tsconfig.json` | `a29eee3c38477ab73b46a44b919a4fcef1bff6b1d84ed38ad8aa33c5174cdab4` |
++
++The baseline build is made in the `origin/dev` worktree at `/tmp/gaten-dev-baseline` (`b8a4b40`,
++unchanged), which carries a byte-identical copy of this directory and its generated dictionary assets.
++
++## What it renders
++
++The **production** `WaniKaniReview` over the **production** review store. Only the session is handed in:
++
++| Real | Synthetic |
++| --- | --- |
++| `src/rn/ui/review/WaniKaniReview.tsx` (the screen) | one `WaniKaniSession` per scene |
++| `src/rn/ui/review/review-store.ts` — `wkEntry`, `wkCheck`, the kana refusal, `meaningMatches`, phases, wrong counts, `wkContinue`, the retry focus effect | the subject: `仮語` (a non-word), subject id `9001`, four accepted meanings, one reading |
++| `buildWaniKaniPromptOrder` (the pair's order, draws pinned) | `onBack` / `onRetrySubmit` (no-ops) |
++| the app's provider tree from `App.js` | the lookup overlay's `GatenLookupSheet` registration |
++
++The subject is two-part like a Vocabulary card, so the screen quizzes a reading, and it carries four
++accepted meanings, so the detail tab has alternates to show beside the primary one.
++
++## Scenes
++
++A four-button bar at the top switches scenes without a rebuild. Each scene is the same three lines —
++install the session, then let the store judge it if the scene is about a judgement — so a scene
++renders whatever *that build* does with that input.
++
++| Scene | Session | Driver action | Head renders | Baseline renders |
++| --- | --- | --- | --- | --- |
++| `meaning` | meaning prompt, open | type a wrong answer, tap the keyboard's Done, tap Done again | wrong stop, then the retry armed | same (the stop is not what changed) |
++| `reading-first` | the pair ordered by `buildWaniKaniPromptOrder([2], () => 0.1)` | none needed | **Reading** prompt | **Meaning** prompt (the baseline asks a meaning first whatever the draw) |
++| `mixed-input` | reading prompt, `sひゅう` in the field, `wkCheck` on install | none needed | entry **refused**, note shown, nothing judged or counted | entry **judged**, `Incorrect` |
++| `wrong-stop` | meaning prompt, wrong answer judged on install | tap `Show answer` | Primary meaning large, **Other meanings** small | all four meanings as one flat list |
++
++`reading-first` and `mixed-input` read the same pinned order, and the cursor lands on the reading
++prompt in both builds: the baseline's builder takes one argument and ignores the draw, so the same call
++yields the meaning-first order — which is exactly the before-state of the drawn-lead change.
++
++## Capture procedure
++
++- **Open with the test IME off** (`agent-device open … testIme: false`, the CLI's `--no-test-ime`), so
++  the real Gboard stays the selected IME; check `dumpsys input_method` for
++  `com.google.android.inputmethod.latin` before typing anything.
++- **Press the visible Done key**: target it by screenshot-derived coordinates or by its own
++  accessibility node, never `agent-device keyboard enter`/`return` — those inject a hardware
++  `KEYCODE_ENTER`, which is the very thing this harness exists to avoid.
++- **Assert the scene is active before capturing.** The scene buttons publish a session and, when the
++  step is busy, `startReviews` no-ops; a snapshot must show the scene's own screen (its pill, its note)
++  before the still is taken.
++- **`mixed-input` must still refuse `sひゅう`** on the head build after the guard moved to finished
++  kana: the latin run is not convertible, so the finished text is still `sひゅう` and is still refused.
++- Nothing is ever answered correctly, so no subject is completed.
++
++## No network, by construction
++
++The fixture's entire surface on the store is `getState`, `subscribe`, `startReviews`, `wkEntry`,
++`wkCheck`, `wkContinue`. The store's native calls, and whether the fixture can reach them:
++
++| Call | Reached from | Fixture |
++| --- | --- | --- |
++| `readingAnswer` | a reading judgement | reachable — a local kana fold, no I/O |
++| `submitReview` | `submitWaniKani`, the one place a review is posted | **replaced with a no-op before the session is installed** |
++| `reviewQueue` | `enterWaniKaniReview`, which `startReviews` calls only when no paused session exists | **stubbed to a resolved promise**, and the paused session is installed first |
++| `isConfigured`, `getLearningPreferences`, `lessonsQueue`, `connect`, `startLesson` | the hub, lesson and connect paths | never called |
++
++Both members the fixture overrides were checked to be functions in these two builds — `typeof
++internals.submitWaniKani === "function"` and the same for `enterWaniKaniReview` — and the install
++**fails closed** if either has moved: it publishes no session and never calls `startReviews`, so
++nothing can be asked of the network. The names are verified for these two artifacts, not guaranteed
++for a future build. If `pausedReview` were renamed instead, the store would simply not publish the
++session and the same stubbed queue read would leave a fallback card — again no request.
++
++On top of that, **the AVD these captures run on holds no WaniKani token** (the account was
++disconnected), so there is no account for the harness to reach even by accident, and no install of it
++touches app data (`-r`/`reinstall`, never a fresh install).
++
++## Build and verify
++
++```sh
++# head
++ENTRY_FILE=.evidence-fixture/index.js ./gradlew --no-daemon :app:assembleDebug -PreactNativeArchitectures=x86_64
++# baseline
++cd /tmp/gaten-dev-baseline && ENTRY_FILE=.evidence-fixture/index.js ./gradlew --no-daemon :app:assembleDebug -PreactNativeArchitectures=x86_64
++
++# types (the repo's own config does not include this directory)
++npx tsc --noEmit -p .evidence-fixture/tsconfig.json
++
++# the APK carries the fixture, not the app
++unzip -p <apk> assets/index.android.bundle > /tmp/b.bundle
++grep -ac "Fixture subject: synthetic" /tmp/b.bundle   # 1
++grep -ac "No recent searches found" /tmp/b.bundle     # 0
++```
++
++The entry override is the React Native Gradle plugin's own precedence: `ENTRY_FILE` →
++`react { entryFile }` → `index.android.js` → `index.js` (`PathUtils.kt`), resolved against
++`react { root = file("..") }`. `debuggableVariants` is already empty in `app/build.gradle.kts`, so a
++debug variant embeds its bundle and needs no Metro server. No production file changes, no init script,
++no second Gradle module, no change to any real build entry.
++
++## Limits
++
++- It reaches three private members of the store (`pausedReview`, `submitWaniKani`,
++  `enterWaniKaniReview`) and fails closed on the two it overrides, as above.
++- One subject, two prompts. It does not exercise the queue read, the hub, the lesson quiz, or the
++  lookup overlay, and it proves nothing about a real account.
++- The session object carries `entryRefused`, a field only the head build's store has. On the baseline
++  it is inert — that build's screen never reads it — which is why `mixed-input` is judged there
++  instead of refused.
++- Hermes stores a string containing non-ASCII as UTF-16, so only ASCII markers can be grepped out of
++  the bundle; the markers above are chosen for that.
++- This directory is evidence scaffolding: it must not be committed, and it is deleted once the
++  capture is reviewed.

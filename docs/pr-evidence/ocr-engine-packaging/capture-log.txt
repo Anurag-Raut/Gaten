@@ -1,0 +1,136 @@
+[15:39:06] booting Gaten_PR19_Capture
+INFO         | Android emulator version 35.6.11.0 (build_id 13610412) (CL:N/A)
+INFO         | Graphics backend: gfxstream
+INFO         | Found systemPath /home/Qui/Android/Sdk/system-images/android-34/google_apis/x86_64/
+I1104 15:39:06.939564  203978 FeatureControlImpl.cpp:374] Feature 'GLDirectMem' (53) is overridden to 'enabled'
+I1104 15:39:06.939604  203978 FeatureControlImpl.cpp:374] Feature 'Vulkan' (21) is overridden to 'disabled'
+INFO         | Increasing RAM size to 2048MB
+INFO         | Guest GLES Driver: Auto (ext controls)
+library_mode swiftshader_indirect gpu mode swiftshader_indirect
+INFO         | Checking system compatibility:
+INFO         |   Checking: hasSufficientDiskSpace
+INFO         |      Ok: Disk space requirements to run avd: `Gaten_PR19_Capture` are met
+INFO         |   Checking: hasSufficientHwGpu
+INFO         |      Ok: Hardware GPU compatibility checks are not required
+INFO         |   Checking: hasSufficientSystem
+INFO         |      Ok: System requirements to run avd: `Gaten_PR19_Capture` are met
+INFO         | Storing crashdata in: /tmp/android-Qui/emu-crash-35.6.11.db, detection is enabled for process: 203978
+INFO         | Initializing hardware OpenGLES emulation support
+I1104 15:39:07.135322  203978 opengles.cpp:307] android_startOpenglesRenderer: gpu info
+I1104 15:39:07.135329  203978 opengles.cpp:308] 
+I1104 15:39:07.135402  203978 FrameBuffer.cpp:199] Not raising nofile soft limit from 524288.
+I1104 15:39:07.135434  203978 HealthMonitor.cpp:275] HealthMonitor disabled.
+I1104 15:39:07.135450  203978 SharedLibrary.cpp:76] SharedLibrary::open for [libGLESv2.so]: not found in map, open for the first time
+I1104 15:39:07.135451  203978 SharedLibrary.cpp:186] SharedLibrary::open for [libGLESv2.so] (posix): begin
+I1104 15:39:07.135454  203978 SharedLibrary.cpp:244] SharedLibrary::open for [libGLESv2.so] (posix,linux): call dlopen on [libGLESv2.so]
+I1104 15:39:07.135924  203978 SharedLibrary.cpp:262] SharedLibrary::open succeeded for [libGLESv2.so].
+I1104 15:39:07.135929  203978 SharedLibrary.cpp:76] SharedLibrary::open for [libEGL.so]: not found in map, open for the first time
+I1104 15:39:07.135930  203978 SharedLibrary.cpp:186] SharedLibrary::open for [libEGL.so] (posix): begin
+I1104 15:39:07.135931  203978 SharedLibrary.cpp:244] SharedLibrary::open for [libEGL.so] (posix,linux): call dlopen on [libEGL.so]
+I1104 15:39:07.135964  203978 SharedLibrary.cpp:262] SharedLibrary::open succeeded for [libEGL.so].
+I1104 15:39:07.136737  203978 SharedLibrary.cpp:64] SharedLibrary::open for [libX11]
+I1104 15:39:07.136740  203978 SharedLibrary.cpp:76] SharedLibrary::open for [libX11]: not found in map, open for the first time
+I1104 15:39:07.136741  203978 SharedLibrary.cpp:186] SharedLibrary::open for [libX11] (posix): begin
+I1104 15:39:07.136745  203978 SharedLibrary.cpp:244] SharedLibrary::open for [libX11] (posix,linux): call dlopen on [libX11.so]
+I1104 15:39:07.136771  203978 SharedLibrary.cpp:262] SharedLibrary::open succeeded for [libX11].
+I1104 15:39:07.140916  203978 FrameBuffer.cpp:460] Graphics Adapter Vendor Google (Google Inc.)
+I1104 15:39:07.140922  203978 FrameBuffer.cpp:461] Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
+I1104 15:39:07.140924  203978 FrameBuffer.cpp:462] Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+I1104 15:39:07.140926  203978 FrameBuffer.cpp:463] Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+I1104 15:39:07.140927  203978 FrameBuffer.cpp:464] Graphics Device Extensions N/A
+INFO         | Sending adb public key [QAAAAGFCz0lfHq8y69f3VzoXiNiGa9er7MFQV82f0FerbqEUPBqCboZiR75HyH5ErEJF0l5EItBD+X4B5DBJw3kjbAlyKLYE/GLGX7p8DwITyeu1XGeBSNOOHd2JEYC9+6NG6OxIw7RKlNrUrphlFrNHJomiQvRHpMrqYxZU9V4iAW2AqAD/RK0udj3pGMT3Fyq64L2DEviKIwq+E7bU/sDmdXB2Mj1qPOyCPAX7ZeExtqRLHhbUOaP9bU/wOHuuTIMCWTr51iurAGHF1QK5QEgvSQhNuDpd5affb9DV3EZmQDevu4zjx58BPCjMzqxkFNtoLBZbpyLuXrNf8h21/xpBA80h64DCQ4xKCCJmXDFGUrLrfLQ/cNx2bAh+I3DPOVqEl8FlH4uNc1DkxhMP6t0Idjp9vAZRzAamfeNjJu8+1+406BWC72qcGLba/McK7+/cPfa5kJa2Vl046l3kCmGoEnDjFy1GqvioDFzZH2wfX7TTQG94bOG8hx8424WCC/LXqjHha16vgwHqGknlCwGmXVOGrHzmHPCFeX3X3U9/3YnJjGtyNY0+z4CJ+VwwgrQ304ukbnRTAG7Hw+WBxuJyT5u2vL7KDASgDh/6Yltlj1R8SAvrWEpBYK1/ztM8Iwmf/5qq0LjVFywxklbUl9fVVZozmQp4Ttu9W7DbEmoDrrDMMnuRjQEAAQA= Qui@unknown]
+I1104 15:39:07.144715  203978 userspace-boot-properties.cpp:760] Userspace boot properties:
+I1104 15:39:07.144718  203978 userspace-boot-properties.cpp:764]   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+I1104 15:39:07.144719  203978 userspace-boot-properties.cpp:764]   androidboot.dalvik.vm.heapsize=512m
+I1104 15:39:07.144720  203978 userspace-boot-properties.cpp:764]   androidboot.debug.hwui.renderer=skiagl
+I1104 15:39:07.144721  203978 userspace-boot-properties.cpp:764]   androidboot.debug.sf.nobootanimation=1
+I1104 15:39:07.144722  203978 userspace-boot-properties.cpp:764]   androidboot.hardware=ranchu
+I1104 15:39:07.144723  203978 userspace-boot-properties.cpp:764]   androidboot.hardware.gltransport=pipe
+I1104 15:39:07.144723  203978 userspace-boot-properties.cpp:764]   androidboot.logcat=*:V
+I1104 15:39:07.144724  203978 userspace-boot-properties.cpp:764]   androidboot.opengles.version=196608
+I1104 15:39:07.144725  203978 userspace-boot-properties.cpp:764]   androidboot.qemu=1
+I1104 15:39:07.144726  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.adb.pubkey=QAAAAGFCz0lfHq8y69f3VzoXiNiGa9er7MFQV82f0FerbqEUPBqCboZiR75HyH5ErEJF0l5EItBD+X4B5DBJw3kjbAlyKLYE/GLGX7p8DwITyeu1XGeBSNOOHd2JEYC9+6NG6OxIw7RKlNrUrphlFrNHJomiQvRHpMrqYxZU9V4iAW2AqAD/RK0udj3pGMT3Fyq64L2DEviKIwq+E7bU/sDmdXB2Mj1qPOyCPAX7ZeExtqRLHhbUOaP9bU/wOHuuTIMCWTr51iurAGHF1QK5QEgvSQhNuDpd5affb9DV3EZmQDevu4zjx58BPCjMzqxkFNtoLBZbpyLuXrNf8h21/xpBA80h64DCQ4xKCCJmXDFGUrLrfLQ/cNx2bAh+I3DPOVqEl8FlH4uNc1DkxhMP6t0Idjp9vAZRzAamfeNjJu8+1+406BWC72qcGLba/McK7+/cPfa5kJa2Vl046l3kCmGoEnDjFy1GqvioDFzZH2wfX7TTQG94bOG8hx8424WCC/LXqjHha16vgwHqGknlCwGmXVOGrHzmHPCFeX3X3U9/3YnJjGtyNY0+z4CJ+VwwgrQ304ukbnRTAG7Hw+WBxuJyT5u2vL7KDASgDh/6Yltlj1R8SAvrWEpBYK1/ztM8Iwmf/5qq0LjVFywxklbUl9fVVZozmQp4Ttu9W7DbEmoDrrDMMnuRjQEAAQA= Qui@unknown
+I1104 15:39:07.144728  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.avd_name=Gaten_PR19_Capture
+I1104 15:39:07.144728  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.camera_hq_edge_processing=0
+I1104 15:39:07.144729  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.camera_protocol_ver=1
+I1104 15:39:07.144730  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.cpuvulkan.version=4202496
+I1104 15:39:07.144730  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.gltransport.drawFlushInterval=800
+I1104 15:39:07.144731  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.gltransport.name=pipe
+I1104 15:39:07.144732  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.hwcodec.avcdec=2
+I1104 15:39:07.144732  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.hwcodec.hevcdec=2
+I1104 15:39:07.144733  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.hwcodec.vpxdec=2
+I1104 15:39:07.144734  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+I1104 15:39:07.144735  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.virtiowifi=1
+I1104 15:39:07.144735  203978 userspace-boot-properties.cpp:764]   androidboot.qemu.vsync=60
+I1104 15:39:07.144736  203978 userspace-boot-properties.cpp:764]   androidboot.serialno=EMULATOR35X6X11X0
+I1104 15:39:07.144737  203978 userspace-boot-properties.cpp:764]   androidboot.vbmeta.digest=451e57ed688ff746d2c636d52169ade253e2bc5bb30a5c3ff23679ca15d3bcd3
+I1104 15:39:07.144740  203978 userspace-boot-properties.cpp:764]   androidboot.vbmeta.hash_alg=sha256
+I1104 15:39:07.144741  203978 userspace-boot-properties.cpp:764]   androidboot.vbmeta.size=6656
+I1104 15:39:07.144741  203978 userspace-boot-properties.cpp:764]   androidboot.veritymode=enforcing
+INFO         | Monitoring duration of emulator setup.
+WARNING      | The emulator now requires a signed jwt token for gRPC access! Use the -grpc flag if you really want an open unprotected grpc port
+INFO         | Using security allow list from: /home/Qui/Android/Sdk/emulator/lib/emulator_access.json
+WARNING      | *** Basic token auth should only be used by android-studio ***
+INFO         | The active JSON Web Key Sets can be found here: /run/user/1000/avd/running/203978/jwks/8606bb30-805b-44b5-84d3-24662521fcb8/active.jwk
+INFO         | Scanning /run/user/1000/avd/running/203978/jwks/8606bb30-805b-44b5-84d3-24662521fcb8 for jwk keys.
+INFO         | Started GRPC server at 127.0.0.1:8554, security: Local, auth: +token
+INFO         | Advertising in: /run/user/1000/avd/running/pid_203978.ini
+I1104 15:39:07.177697  204031 FrameBuffer.cpp:2805] Setting display: 0 configuration to: 1080x2400, dpi: 420x420 
+I1104 15:39:07.177713  204031 FrameBuffer.cpp:2818] setDisplayActiveConfig 0
+USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+INFO         | Activated packet streamer for bluetooth emulation
+INFO         | Boot completed in 12896 ms
+INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+[15:39:21] boot_completed=1 serial=emulator-5554
+[15:39:22] device: api=34 rel=14 abi=x86_64 size=Physical size: 1080x2400 density=Physical density: 420 night=Night mode: no
+[15:39:40] === after (/home/Qui/.paseo/worktrees/1t28llpl/gaten-ocr-packaging/app/build/outputs/apk/debug/app-x86_64-debug.apk) ===
+[15:39:40] install /home/Qui/.paseo/worktrees/1t28llpl/gaten-ocr-packaging/app/build/outputs/apk/debug/app-x86_64-debug.apk
+Performing Streamed Install
+Success
+Success
+[15:39:44] a11y=com.gaten/com.gaten.app.GatenAccessibilityService bound=1
+[15:39:52] screencap -> after-00-home.png (135861 bytes)
+[15:40:01] dump -> after-hub.txt
+[15:40:08] dump -> after-recognition.txt
+[15:40:08] screencap -> after-01-recognition-fresh-install.png (146373 bytes)
+[15:40:32] dump -> after-search.txt
+[15:40:43] dump -> after-worddetails.txt
+[15:40:43] screencap -> after-01c-target.png (144771 bytes)
+[15:40:55] row bounds [58,530][1024,583] -> tap 98 556
+[15:41:01] 02-lookup: hit with inset 40
+[15:41:03] screencap -> after-02-lookup.png (118599 bytes)
+[15:41:05] dump -> after-02-lookup.txt
+[15:41:05] 02-lookup hit=1
+text="猫"
+text="ねこ・ネコ"
+text="Cat (esp. the domestic cat, Felis catus), feline"
+text="猫に小判。"
+/sdcard/after.mp4: 1 file pulled, 0 skipped. 352.1 MB/s (2112182 bytes in 0.006s)
+[15:41:11] === before (/home/Qui/gaten-ocr-before/app/build/outputs/apk/debug/app-x86_64-debug.apk) ===
+[15:41:11] install /home/Qui/gaten-ocr-before/app/build/outputs/apk/debug/app-x86_64-debug.apk
+Performing Streamed Install
+Success
+Success
+[15:41:19] a11y=com.gaten/com.gaten.app.GatenAccessibilityService bound=1
+[15:41:26] screencap -> before-00-home.png (135738 bytes)
+[15:41:36] dump -> before-hub.txt
+[15:41:43] dump -> before-recognition.txt
+[15:41:43] screencap -> before-01-recognition-fresh-install.png (140910 bytes)
+[15:42:06] dump -> before-search.txt
+[15:42:17] dump -> before-worddetails.txt
+[15:42:17] screencap -> before-01c-target.png (144679 bytes)
+[15:42:29] row bounds [58,530][1024,583] -> tap 98 556
+[15:42:35] 02-lookup: hit with inset 40
+[15:42:38] screencap -> before-02-lookup.png (68715 bytes)
+[15:42:40] dump -> before-02-lookup.txt
+[15:42:40] 02-lookup hit=1
+text="猫"
+text="ねこ・ネコ"
+text="Cat (esp. the domestic cat, Felis catus), feline"
+text="猫に小判。"
+/sdcard/before.mp4: 1 file pulled, 0 skipped. 296.9 MB/s (1893926 bytes in 0.006s)
+[15:42:46] === killing emulator ===
+INFO         | Wait for emulator (pid 203978) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+
+WARNING      | Not saving state: RAM not mapped as shared
+ERROR        | stop: Not implemented

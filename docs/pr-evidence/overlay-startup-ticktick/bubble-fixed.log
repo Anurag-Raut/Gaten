@@ -1,0 +1,20 @@
+# bubble-tap fixed (trigger fired on tap), emulator-5554, idle host
+# tap->accepted 0.011/0.008/0.009 s; tap->window_added 0.062/0.053/0.056 s; tap->frozen_frame 0.098/0.094/0.095 s
+1793276653.814  6459  6459 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276653.839  6459  6459 D Gaten   : performCapture called (+25 ms since the trigger)
+1793276653.844  6459  6529 D Gaten   : Screenshot delivered (+30 ms since the trigger)
+1793276653.865  6459  6459 D Gaten   : Overlay window added for a 1080x2340 capture (+51 ms since the trigger)
+1793276653.901  6459  6459 D Gaten   : Frozen frame on screen (+87 ms since the trigger)
+1793276654.313  6459  6531 D Gaten   : Early screen scan ready in 452 ms
+1793276659.882  6459  6459 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276659.905  6459  6459 D Gaten   : performCapture called (+23 ms since the trigger)
+1793276659.909  6459  6529 D Gaten   : Screenshot delivered (+27 ms since the trigger)
+1793276659.927  6459  6459 D Gaten   : Overlay window added for a 1080x2340 capture (+45 ms since the trigger)
+1793276659.968  6459  6459 D Gaten   : Frozen frame on screen (+86 ms since the trigger)
+1793276660.339  6459  6578 D Gaten   : Early screen scan ready in 415 ms
+1793276665.948  6459  6459 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276665.972  6459  6459 D Gaten   : performCapture called (+24 ms since the trigger)
+1793276665.975  6459  6529 D Gaten   : Screenshot delivered (+27 ms since the trigger)
+1793276665.995  6459  6459 D Gaten   : Overlay window added for a 1080x2340 capture (+47 ms since the trigger)
+1793276666.034  6459  6459 D Gaten   : Frozen frame on screen (+86 ms since the trigger)
+1793276666.391  6459  6578 D Gaten   : Early screen scan ready in 401 ms

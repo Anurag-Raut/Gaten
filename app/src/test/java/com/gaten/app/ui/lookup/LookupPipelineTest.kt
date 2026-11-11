@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * [mergeLookup], the one seam of the circle path that is pure: what the crop reading and the screen
  * index become together.
  *
- * That the crop is read at all is structural — [runLookup] cuts it and calls manga-ocr before it
+ * That the crop is read at all is structural — [runLookup] cuts it and calls the engine before it
  * looks at the index, with no branch to test — so it is not covered here; the priority of the two
  * answers, the acceptance of a reading, the deduplication and the fallback are.
  */
@@ -232,10 +232,10 @@ class LookupPipelineTest {
 
     @Test
     fun aLongCropReadingIsAccepted() {
-        // 18 characters: OcrLinePolicy's length heuristic would refuse a reading that long against
-        // an empty ML Kit line, and the whole selection is one line, so its length says nothing.
+        // 18 characters: the whole selection is one line, so its length says nothing, and
+        // OcrLinePolicy applies no length cap against an empty ML Kit line.
         val reading = "猫が水を飲む猫が水を飲む猫が水を飲む"
-        assertFalse(OcrLinePolicy.acceptsMangaText("", reading))
+        assertTrue(OcrLinePolicy.acceptsEngineText("", reading))
 
         val result = mergeLookup(reading, null, dictionaryOf("猫", "水", "飲む"))
 

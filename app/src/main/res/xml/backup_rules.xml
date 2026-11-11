@@ -8,15 +8,15 @@
  -->
 
 <!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Backup rules for API 30 and below (data_extraction_rules.xml covers API 31+).
+
+   Nothing has to be excluded. The optional PP-OCRv6 Medium model is no longer app data at all: it
+   lives in Google Play's asset-pack storage and Gaten only reads it (ocr/PpOcrPack.kt), so the file
+   this rule used to exclude — the in-app model directory of the removed downloader — is never
+   written. What does stay app-owned is small and outside Android's backup by construction: the
+   WaniKani token and its cache sit under noBackupFilesDir, which is never backed up or transferred.
+
+   The file stays because the manifest points at it; an empty rules document means the platform's
+   defaults, which is what this app wants.
 -->
-<full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
-</full-backup-content>
+<full-backup-content />

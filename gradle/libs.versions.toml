@@ -23,6 +23,11 @@ kotlinxSerialization = "1.9.0"
 # Romaji to kana for the search box (tokyo -> ときょ). Pure Kotlin/JVM, MIT, no Android or
 # transitive dependencies; the only released line.
 wanakana = "1.1.1"
+# Play Asset Delivery: Play Core's asset-pack client, which drives the fast-follow `:ppocr` pack
+# that carries the optional PP-OCRv6 Medium model on a Play install. The plain artifact rather than
+# the (deprecated) -ktx one: the ktx extensions drag in an older play-services-basement whose
+# annotation classes R8 then reports missing.
+playAssetDelivery = "2.3.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -45,9 +50,12 @@ androidx-navigation3-ui = { group = "androidx.navigation3", name = "navigation3-
 androidx-lifecycle-viewmodel-navigation3 = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodelNavigation3" }
 kotlinx-serialization-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
 wanakana-core = { group = "dev.esnault.wanakana", name = "wanakana-core", version.ref = "wanakana" }
+play-asset-delivery = { group = "com.google.android.play", name = "asset-delivery", version.ref = "playAssetDelivery" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+# The asset-pack module plugin (`:ppocr`), from the same AGP release as the application plugin.
+android-asset-pack = { id = "com.android.asset-pack", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

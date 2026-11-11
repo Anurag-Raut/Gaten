@@ -6,16 +6,15 @@
 
 /**
  * The pieces every settings page is built from: the scaffold with its top bar, the row of a
- * group, the group itself, the dialogs a page raises, and the lookup-mode row with the
- * disclosure flow behind its "Turn on".
+ * group, the group itself, the dialogs a page raises, and the lookup-mode disclosure behind the
+ * switch that needs it.
  *
  * These are the RN ports of the shared composables in `SettingsScreen.kt`; the pages in
  * `ui/settings/` assemble them, and the copy stays in each page. Buttons, icons and the
  * press-scale come from `ui/components` / `ui/PressableScale`, so every tab draws them alike.
  */
-import React, {useState} from "react";
+import React, {useRef, useState} from "react";
 import {
-  Modal,
   Pressable,
   ScrollView,
   Switch as RNSwitch,
@@ -36,10 +35,14 @@ import {
   IconButton,
   SectionLabel,
 } from "../components";
+import {DialogShell} from "../DialogShell";
+import {DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
+import * as GatenHaptics from "../../native/GatenHaptics";
 import {InkIcon, type InkIconName} from "../InkIcon";
+import {ScreenHeader} from "../ScreenHeader";
 import {useTheme} from "../theme";
-import {MAX_CONTENT_WIDTH, shape, spacing, typeScale} from "../tokens";
+import {CONTENT_COLUMN as CONTENT_BLOCK, contentInsetFor, shape, spacing, typeScale} from "../tokens";
 import type {IconName} from "../icons";
 
 /**
@@ -47,19 +50,15 @@ import type {IconName} from "../icons";
  * own horizontal rhythm inside it. The pages' scrollers and the hub's own scroller share it, so
  * every settings screen puts its content in the same box.
  */
-export const CONTENT_COLUMN: ViewStyle = {
-  width: "100%",
-  maxWidth: MAX_CONTENT_WIDTH,
-  alignSelf: "center",
-  paddingHorizontal: 22,
-};
+export const CONTENT_COLUMN: ViewStyle = {...CONTENT_BLOCK, paddingHorizontal: 22};
 
-/** A neutral settings glyph using the hub's existing icon set. */
-export function RowIcon({name, inkName}: {name: IconName; inkName?: InkIconName}) {
+/** A neutral settings glyph using the hub's existing icon set; [color] is for a disabled row. */
+export function RowIcon({name, inkName, color}: {name: IconName; inkName?: InkIconName; color?: string}) {
   const {colors} = useTheme();
+  const ink = color ?? colors.iconSecondary;
   return inkName
-    ? <InkIcon name={inkName} size={22} color={colors.iconSecondary} />
-    : <Icon name={name} size={24} color={colors.iconSecondary} />;
+    ? <InkIcon name={inkName} size={22} color={ink} />
+    : <Icon name={name} size={24} color={ink} />;
 }
 
 /** A flat form section; its closing rule separates it from the next section. */
@@ -111,6 +110,8 @@ export function SettingsGroup({
 /**
  * A destination or informational row. Important values wrap instead of disappearing at large text
  * sizes; the optional description is reserved for information the title and value cannot convey.
+ * A [disabled] row — one whose action is busy — draws dimmed, carries no chevron, and reports
+ * itself disabled to a screen reader instead of looking tappable and doing nothing.
  */
 export function SettingsRow({
   icon,
@@ -119,6 +120,8 @@ export function SettingsRow({
   summary,
   value,
   onPress,
+  disabled,
+  expanded,
 }: {
   icon: IconName;
   inkIcon?: InkIconName;
@@ -126,8 +129,11 @@ export function SettingsRow({
   summary?: string;
   value?: string | null;
   onPress?: () => void;
+  disabled?: boolean;
+  expanded?: boolean;
 }) {
   const {colors} = useTheme();
+  const inactive = disabled === true;
   const rowStyle: ViewStyle = {
     minHeight: 60,
     paddingVertical: spacing.m,
@@ -137,30 +143,39 @@ export function SettingsRow({
   };
   const body = (
     <>
-      <RowIcon name={icon} inkName={inkIcon} />
+      <RowIcon name={icon} inkName={inkIcon} color={inactive ? colors.onDisabled : undefined} />
       <View style={{flex: 1, minWidth: 0}}>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+        <Text style={[typeScale.titleMedium, {color: inactive ? colors.onDisabled : colors.onSurface}]}>
+          {title}
+        </Text>
         {summary != null && (
-          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+          <Text style={[typeScale.bodySmall, {color: inactive ? colors.onDisabled : colors.onSurfaceVariant, marginTop: spacing.xs}]}>
             {summary}
           </Text>
         )}
       </View>
       {value != null && (
-        <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
+        <Text style={[typeScale.labelMedium, {color: inactive ? colors.onDisabled : colors.onSurfaceVariant, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
           {value}
         </Text>
       )}
-      {onPress != null && <InkIcon name="chevron" size={15} color={colors.fine} />}
+      {onPress != null && !inactive && (expanded == null
+        ? <InkIcon name="chevron" size={15} color={colors.fine} />
+        : <DisclosureChevron expanded={expanded} size={15} color={colors.fine} />)}
     </>
   );
-  if (onPress == null) {
-    return <View style={rowStyle}>{body}</View>;
+  if (onPress == null || inactive) {
+    return (
+      <View style={rowStyle} accessibilityState={inactive ? {disabled: true} : undefined}>
+        {body}
+      </View>
+    );
   }
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={[title, value, summary].filter(Boolean).join(". ")}
+      accessibilityState={expanded == null ? undefined : {expanded}}
       onPress={onPress}
       style={rowStyle}
     >
@@ -169,25 +184,40 @@ export function SettingsRow({
   );
 }
 
-/** Lookup status and its existing permission action, without a separate card or explanation. */
-export function LookupModeRow({
-  enabled,
-  onTurnOn,
-}: {
-  enabled: boolean;
-  onTurnOn: () => void;
-}) {
-  const {colors} = useTheme();
-  return (
-    <View style={{minHeight: 60, paddingVertical: spacing.m, flexDirection: "row", alignItems: "center", gap: spacing.m}}>
-      <Icon name={enabled ? "check_circle" : "shield"} size={24} color={enabled ? colors.success : colors.iconSecondary} />
-      <View style={{flex: 1}}>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Lookup mode</Text>
-        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>{enabled ? "On" : "Off"}</Text>
-      </View>
-      {!enabled && <Button label="Turn on" onPress={onTurnOn} />}
-    </View>
-  );
+/**
+ * The lookup-mode dialog's summary: one lead line and three check rows, in plain words. `**…**`
+ * marks the bold lead phrase of a row; the screen-reader label is the same text without markers.
+ */
+export const DISCLOSURE_SUMMARY_LEAD = "To look things up, Gaten needs Android's accessibility access.";
+export const DISCLOSURE_SUMMARY_ROWS: string[] = [
+  "**Only when you ask.** Gaten looks at the screen when you start a lookup.",
+  "**Stays on your phone.** Nothing from your screen is sent anywhere, and the screenshot is deleted right after.",
+  "**Private by design.** It never reads your notifications or types for you.",
+];
+
+/** One run of a disclosure line: plain, or the emphasised words drawn in the primary ink. */
+export type DisclosureSegment = {text: string; emphasis: boolean};
+
+/**
+ * A disclosure line as runs: `**…**` marks the emphasised words. A plain-text run never keeps a
+ * marker, so joining the runs gives the reader's wording for a screen-reader label.
+ */
+export function disclosureLineSegments(line: string): DisclosureSegment[] {
+  return line
+    .split(/(\*\*[^*]+\*\*)/g)
+    .filter(Boolean)
+    .map((part) =>
+      part.startsWith("**") && part.endsWith("**")
+        ? {text: part.slice(2, -2), emphasis: true}
+        : {text: part, emphasis: false},
+    );
+}
+
+/** The plain wording of a line: its runs joined, with no emphasis markers left in it. */
+export function disclosureLineText(line: string): string {
+  return disclosureLineSegments(line)
+    .map((segment) => segment.text)
+    .join("");
 }
 
 /** An outlined action: a quiet alternative to the filled one on the same page. */
@@ -215,8 +245,12 @@ export function OutlinedButton({
 }
 
 /**
- * The label over a field: what the field holds, in the reader's quiet ink, at the same rhythm on
- * every page that asks for something.
+ * The name of the field under it: what the field holds, at the rhythm every page that asks for
+ * something uses.
+ *
+ * It is deliberately the strongest of the two labels a form has — `labelLarge` in the page's own
+ * ink, where a section heading is the quiet 12/18 `labelMedium` — so a reader can tell "Lessons"
+ * (the group) from "New per day" (the field) at a glance.
  */
 export function FieldLabel({
   label,
@@ -229,8 +263,8 @@ export function FieldLabel({
   return (
     <Text
       style={[
-        typeScale.labelMedium,
-        {color: colors.onSurfaceVariant, marginBottom: spacing.s},
+        typeScale.labelLarge,
+        {color: colors.onSurface, marginBottom: spacing.s},
         style,
       ]}
     >
@@ -240,49 +274,58 @@ export function FieldLabel({
 }
 
 /**
- * The box a settings page types into: a white/dark surface with a
- * quiet outline and the app's own corner and control height. Everything a caller passes to a
- * `TextInput` goes through, and its own `style` still wins over the box.
+ * The box a settings page types into: the quiet filled surface the app already uses for fields, the
+ * app's own corner and control height, and no outline — not at rest, and not the ring a focused field
+ * could wear. Focus is the caret and the keyboard. Everything a caller passes to a `TextInput` goes
+ * through, and its own `style` still wins over the text inside the box.
+ *
+ * The box's inset belongs to the wrapper around the input, not to the input's own style: on Android
+ * a `TextInput` carries the platform's EditText padding, which beats the style padding for some
+ * input types — measured on the emulator, the value that had been typed sat at the platform's ~8 dp
+ * while the placeholder used the box's 16 dp. An input sized inside the wrapper's padding follows
+ * both, and the platform's own padding is cleared so it cannot add a second inset.
  */
-export function TextField(props: TextInputProps) {
+export function TextField({
+  inputRef,
+  ...props
+}: TextInputProps & {
+  /**
+   * The input itself, for a screen that has to put the caret in it — the setup help's "Open token
+   * form", which hands the reader back to a field they have already started typing into.
+   */
+  inputRef?: React.Ref<TextInput>;
+}) {
   const {colors} = useTheme();
-  const [focused, setFocused] = useState(false);
+  const input = useRef<TextInput>(null);
   return (
-    <TextInput
-      {...props}
-      onFocus={(event) => {
-        setFocused(true);
-        props.onFocus?.(event);
+    <Pressable
+      // The box is one target: a tap on the inset it keeps for the input focuses the input too.
+      // Not an accessibility element itself, so the field keeps the label it already carries.
+      accessible={false}
+      onPress={() => {
+        if (props.editable !== false) input.current?.focus();
       }}
-      onBlur={(event) => {
-        setFocused(false);
-        props.onBlur?.(event);
+      style={{
+        backgroundColor: colors.surfaceVariant,
+        borderRadius: shape.small,
+        minHeight: 49,
+        justifyContent: "center",
+        paddingLeft: spacing.l,
+        paddingRight: spacing.l,
+        paddingTop: spacing.m,
+        paddingBottom: spacing.m,
       }}
-      placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
-      underlineColorAndroid="transparent"
-      style={[
-        typeScale.bodyMedium,
-        {
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.outlineVariant,
-          borderRadius: shape.small,
-          color: colors.onSurface,
-          paddingHorizontal: spacing.l,
-          paddingVertical: spacing.m,
-          minHeight: 49,
-        },
-        props.style,
-        focused && {outlineWidth: 2, outlineColor: colors.accent, outlineOffset: 2},
-      ]}
-    />
+    >
+      <TextInput
+        {...props}
+        ref={inputRef ?? input}
+        placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
+        cursorColor={props.cursorColor ?? colors.accent}
+        underlineColorAndroid="transparent"
+        style={[typeScale.bodyMedium, {color: colors.onSurface, padding: 0}, props.style]}
+      />
+    </Pressable>
   );
-}
-
-/** A small state chip: what a row currently is, stated in the accent's own colour. */
-export function Chip({label}: {label: string}) {
-  const {colors} = useTheme();
-  return <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{label}</Text>;
 }
 
 /**
@@ -322,74 +365,25 @@ export function SwitchRow({
       </View>
       <RNSwitch
         value={value}
-        onValueChange={onValueChange}
+        // The switch is the control, so it plays the tick here rather than each screen doing it in
+        // its own handler; a disabled switch never reports a change and so never ticks.
+        onValueChange={(next) => {
+          void GatenHaptics.play("tick").catch(() => {});
+          onValueChange(next);
+        }}
         disabled={disabled}
         accessibilityLabel={title}
         accessibilityHint={summary}
         style={{minHeight: 48}}
+        // Android's thumb is a disc larger than its track, so it reaches past the track onto the
+        // row's background: the accent fills the thumb and its quiet container fills the track.
         trackColor={{
           false: disabled ? colors.disabled : colors.surfaceVariant,
-          true: disabled ? colors.disabled : colors.accent,
+          true: disabled ? colors.disabled : colors.accentSubtle,
         }}
-        thumbColor={disabled ? colors.onDisabled : value ? colors.onActionPrimary : colors.iconSecondary}
+        thumbColor={disabled ? colors.onDisabled : value ? colors.accent : colors.iconSecondary}
       />
     </View>
-  );
-}
-
-/** The base of every dialog the settings pages raise: dimmed backdrop, centred card, rounded. */
-export function DialogShell({
-  title,
-  children,
-  actions,
-  onDismiss,
-  scrollBody = false,
-  footer,
-}: {
-  title: string;
-  children: React.ReactNode;
-  actions: React.ReactNode;
-  onDismiss: () => void;
-  scrollBody?: boolean;
-  /** Pinned under the body, scrolling or not: what the reader must reach whatever the body's length. */
-  footer?: React.ReactNode;
-}) {
-  const {colors} = useTheme();
-  return (
-    <Modal transparent animationType="fade" onRequestClose={onDismiss} visible>
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: spacing.xl,
-        }}
-        onPress={onDismiss}
-      >
-        <Pressable
-          style={{
-          backgroundColor: colors.surface,
-          borderRadius: shape.medium,
-            padding: spacing.xl,
-            width: "100%",
-            maxWidth: 360,
-          }}
-          onPress={(event) => event.stopPropagation()}
-        >
-          <Text style={[typeScale.titleLarge, {color: colors.onSurface}]}>{title}</Text>
-          {scrollBody ? (
-            <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={{maxHeight: 360, marginTop: spacing.m}}>{children}</ScrollView>
-          ) : (
-            <View style={{marginTop: spacing.m}}>{children}</View>
-          )}
-          {footer}
-          <View style={{flexDirection: "row", justifyContent: "flex-end", marginTop: spacing.l}}>
-            {actions}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
 
@@ -435,20 +429,16 @@ export function HelpAction({paragraphs}: {paragraphs: string[]}) {
   const [open, setOpen] = useState(false);
   return (
     <View>
-      <IconButton
-        name="help"
-        accessibilityLabel="Open help"
-        onPress={() => setOpen(true)}
-      />
+      <IconButton name="help" accessibilityLabel="Open help" onPress={() => setOpen(true)} />
       {open && <HelpDialog paragraphs={paragraphs} onDismiss={() => setOpen(false)} />}
     </View>
   );
 }
 
 /**
- * The disclosure behind every "Turn on": the app's own explanation of the accessibility service
- * lookup mode needs first, the checkbox before the confirm, and system Settings only once the
- * reader has agreed.
+ * The dialog behind every "Turn on": the short summary, the checkbox before the confirm, and system
+ * Settings only once the reader has agreed. The checkbox and the two actions are pinned below the
+ * body, so they stay in reach at any text size; the body scrolls only when it must.
  */
 export function LookupModeDisclosureDialog({
   onAccept,
@@ -458,26 +448,46 @@ export function LookupModeDisclosureDialog({
   onDismiss: () => void;
 }) {
   const {colors} = useTheme();
+  const {fontScale} = useWindowDimensions();
   const [agreed, setAgreed] = useState(false);
+  // At the largest system text the two actions no longer fit on one line without shrinking below
+  // their touch target, so each takes a full-width line instead.
+  const stackedActions = fontScale >= 1.6;
   return (
     <DialogShell
       title="Turn on lookup mode"
       onDismiss={onDismiss}
       scrollBody
+      fitToViewport
+      bodyGap={spacing.m}
       actions={
-        <>
-          <Button variant="text" label="Cancel" onPress={onDismiss} />
-          <Button variant="text" label="Turn on" disabled={!agreed} onPress={onAccept} />
-        </>
+        <View
+          style={{
+            width: "100%",
+            flexDirection: stackedActions ? "column" : "row",
+            justifyContent: "flex-end",
+            alignItems: stackedActions ? "stretch" : "flex-end",
+            gap: spacing.s,
+          }}
+        >
+          <Button variant="text" label="Cancel" onPress={onDismiss} fullWidth={stackedActions} />
+          <Button
+            variant="text"
+            label="Open settings"
+            disabled={!agreed}
+            fullWidth={stackedActions}
+            onPress={onAccept}
+          />
+        </View>
       }
       footer={
-        // Pinned rather than a child of the scrolling body: the body is long enough on a phone that
-        // the checkbox lands below the fold, and "Turn on" then looks broken instead of gated.
-        <Pressable
+        // Pinned rather than a child of the scrolling body, so an acknowledgement the reader cannot
+        // reach never makes "Open settings" look broken instead of gated.
+        <PressableScale
           accessibilityRole="checkbox"
           accessibilityState={{checked: agreed}}
           onPress={() => setAgreed(!agreed)}
-          style={{flexDirection: "row", alignItems: "center", marginTop: spacing.l}}
+          style={{flexDirection: "row", alignItems: "center", minHeight: 48, marginTop: spacing.l}}
         >
           <View
             style={{
@@ -495,20 +505,42 @@ export function LookupModeDisclosureDialog({
           </View>
           <Text
             style={[
-              typeScale.bodySmall,
-              {color: colors.onSurfaceVariant, flex: 1, marginStart: spacing.s},
+              typeScale.description,
+              // A plain margin: the harness and older engines do not read marginStart.
+              {color: colors.onSurfaceVariant, flex: 1, marginLeft: spacing.s},
             ]}
           >
-            I understand how this permission will be used and agree to proceed
+            I understand how this permission is used
           </Text>
-        </Pressable>
+        </PressableScale>
       }
     >
       <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-        {
-          "Gaten uses one accessibility service, and only for lookup: it screenshots the screen when you start a lookup, and notices the things that end one — a call, an alarm, the screen locking — so a lookup closes by itself instead of sitting over what you are reading. The screenshot never leaves your device: the Japanese on it is recognised and looked up offline, then dropped. Between lookups nothing is captured, and the service does not read notification messages or type for you.\n\nTurning lookup mode on opens Android's own Accessibility settings, where Gaten is listed: enable it there, and come back to this page — it reads the service's state again as soon as it is on screen.\n\nOptional, and off until you ask: the stylized-text model download, and WaniKani if you connect a personal access token. Connecting checks that token with wanikani.com, and each kanji you tap asks it for that character's page. With a token connected, Gaten also reads your own study progress from wanikani.com — the level you are on, the reviews due now and in the next 24 hours, and how your items are spread across its review stages — and keeps it on this device for the analytics screen; no lesson or review is ever answered or changed. Your selected sentence, the other words and the screenshot stay on the device."
-        }
+        {DISCLOSURE_SUMMARY_LEAD}
       </Text>
+      <View style={{marginTop: spacing.m, gap: spacing.s}}>
+        {DISCLOSURE_SUMMARY_ROWS.map((line) => (
+          <View key={line} style={{flexDirection: "row", alignItems: "flex-start", gap: spacing.s}}>
+            <View style={{marginTop: 2}}>
+              <Icon name="check" size={20} color={colors.accent} />
+            </View>
+            <Text
+              // The marker-free wording: TalkBack must never read a `**` out loud.
+              accessibilityLabel={disclosureLineText(line)}
+              style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, flex: 1, minWidth: 0}]}
+            >
+              {disclosureLineSegments(line).map((segment, index) => (
+                <Text
+                  key={index}
+                  style={segment.emphasis ? {color: colors.onSurface, fontWeight: "600"} : undefined}
+                >
+                  {segment.text}
+                </Text>
+              ))}
+            </Text>
+          </View>
+        ))}
+      </View>
     </DialogShell>
   );
 }
@@ -534,7 +566,8 @@ export function useLookupModeRequest() {
       onDismiss={() => setShowDisclosure(false)}
     />
   ) : null;
-  return {request, dialog};
+  // [open] lets an onboarding page keep its own done state false while the dialog owns the scene.
+  return {request, dialog, open: showDisclosure};
 }
 
 /**
@@ -561,32 +594,19 @@ export function SettingsPageScaffold({
   const {width} = useWindowDimensions();
   return (
     <View style={{flex: 1, backgroundColor: colors.background}}>
-      <View
-        style={{
-          // The Compose top bar is 64 dp tall *below* the status bar. Yoga is border-box, so the
-          // bar's own inset padding would eat into a fixed height instead of sitting above it: the
-          // bar carries the inset and 64 dp on top of it, exactly like the search screens' bars.
-          minHeight: 64 + insets.top,
-          paddingTop: insets.top,
-          flexDirection: "row",
-          alignItems: "center",
-        }}
-      >
-        <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onClose} color={colors.onSurface} />
-        <Text
-          style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        {help != null && <HelpAction paragraphs={help} />}
+      <View style={{paddingTop: insets.top}}>
+        <ScreenHeader
+          title={title}
+          onBack={onClose}
+          trailing={help != null ? <HelpAction paragraphs={help} /> : undefined}
+        />
       </View>
       <ScrollView
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           CONTENT_COLUMN,
-          {paddingHorizontal: width < 360 ? 16 : 22, paddingBottom: insets.bottom + spacing.l},
+          {paddingHorizontal: contentInsetFor(width), paddingBottom: insets.bottom + spacing.l},
         ]}
       >
         {children}

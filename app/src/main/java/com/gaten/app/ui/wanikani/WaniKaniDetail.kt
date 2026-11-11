@@ -15,33 +15,36 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.StringRes
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,18 +54,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.gaten.app.MainActivity
 import com.gaten.app.R
+import com.gaten.app.ui.components.pressOpacity
+import com.gaten.app.ui.lookup.InlineStatusRail
+import com.gaten.app.ui.lookup.RailAction
+import com.gaten.app.ui.lookup.RailGlyph
+import com.gaten.app.ui.lookup.RailTone
 import com.gaten.app.ui.lookup.SheetType
-import com.gaten.app.ui.components.pressScale
+import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.Spacing
 import com.gaten.app.wanikani.WaniKaniComponent
 import com.gaten.app.wanikani.WaniKaniFailure
@@ -75,6 +84,16 @@ import com.gaten.app.wanikani.WaniKaniTarget
 private val RadicalImageSize = 72.dp
 private val RadicalImageSizeCompact = 56.dp
 
+/** Every control on the page is this big, whatever the glyph inside it measures. */
+private val PageActionTarget = 48.dp
+private val PageActionGlyph = 20.dp
+
+/**
+ * The usable width below which the page's title and its controls stop sharing a row. The targets keep
+ * their 48 dp; the title moves to a line of its own rather than being cut to fit beside them.
+ */
+private val ConstrainedHeaderWidth = 300.dp
+
 /** The blocks the panel's loading skeleton stands in with: a line, a chip, a label, a paragraph end. */
 private val SkeletonLine = 14.dp
 private val SkeletonChip = 28.dp
@@ -83,9 +102,12 @@ private val SkeletonLineTail = 160.dp
 
 /**
  * The WaniKani page for one kanji or radical, drawn in place of the dictionary entry inside the
- * result sheet: a pinned row with the way back and the way out to WaniKani, then meanings, readings,
- * the radicals a kanji is made of, and WaniKani's mnemonics, scrolling on its own so a long
- * mnemonic never pushes the back row off a short sheet.
+ * result sheet: its own row with the way back and the way out to WaniKani, then meanings, readings,
+ * the radicals a kanji is made of, and WaniKani's mnemonics.
+ *
+ * It lays out at its natural height and never scrolls itself: the sheet's one body scroller is what
+ * moves it, so a long mnemonic scrolls the same way the entry above it does. Nothing here is a card
+ * either — sections are captions, prose and hairlines, like the rest of the sheet.
  *
  * Every state the lookup can be in answers for itself: still looking, found (fresh or a saved
  * copy), no entry, above the account's levels, no token, a rejected token, or unreachable. Nothing
@@ -94,14 +116,6 @@ private val SkeletonLineTail = 160.dp
  *
  * [target] is the whole key of the page: a new target restarts the lookup, and the panel is
  * recreated with it, so a radical opened over a kanji starts from its own answer.
- *
- * [showBack] is for a caller that has somewhere to go back to, which is the sheet's page stack. The
- * review screen hides it: its inline panel is closed by the same chip that opened it, so an arrow
- * there would only be clutter beside the heading.
- *
- * [scrollable] is for a caller that has nowhere to put a long page: the sheet caps its panel, so the
- * page scrolls inside it. The review screen scrolls the whole deck space instead, and its panel is
- * laid out at its natural height with nothing scrolling inside it.
  *
  * [onOpenSettings] is where the two states answered in the app — no token, a rejected one — send the
  * reader. The shell passes its own route when it has one; without it the app is opened the way the
@@ -115,8 +129,6 @@ internal fun WaniKaniDetailPanel(
     type: SheetType,
     compact: Boolean,
     modifier: Modifier = Modifier,
-    showBack: Boolean = true,
-    scrollable: Boolean = true,
     onOpenSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -137,14 +149,13 @@ internal fun WaniKaniDetailPanel(
 
     val answer = lookup
     val subject = (answer as? WaniKaniLookup.Available)?.subject
-    val iconSize = if (compact) 18.dp else 20.dp
     // A token is typed on a real keyboard, which the overlay cannot offer, so the two token states
     // point at the WaniKani settings instead of asking for one here. The shell's own route wins when
     // it has one; otherwise the app is brought up, already on that page.
     val openSettings: () -> Unit = onOpenSettings ?: { openApp(context) }
     // The heading: a kanji's own character is this page's anchor, so it is drawn at the sheet's
-    // headword size in the primary text colour. A radical's anchor is its drawing, which lives in
-    // the body, so its name stays a modest title here instead of shouting at the same size.
+    // headword size. A radical's anchor is its drawing, which lives in the body, so its name stays a
+    // modest title here instead of shouting at the same size.
     val heading = when {
         subject is WaniKaniSubject.Kanji -> subject.character
         subject is WaniKaniSubject.Radical -> subject.primaryMeaning
@@ -154,150 +165,192 @@ internal fun WaniKaniDetailPanel(
     val headingIsCharacter = subject is WaniKaniSubject.Kanji || target is WaniKaniTarget.Kanji
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (showBack) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = if (compact) Modifier.size(36.dp) else Modifier
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.wk_cd_back),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(iconSize)
-                    )
-                }
-            }
-            Text(
-                text = heading,
-                style = if (headingIsCharacter) type.headword else type.reading,
-                color = if (headingIsCharacter) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            if (subject != null) {
-                // The one way to ask WaniKani again: a saved page never expires on its own. A
-                // refresh that cannot reach WaniKani leaves the saved page where it is.
-                IconButton(
-                    onClick = { retry++ },
-                    modifier = if (compact) Modifier.size(36.dp) else Modifier
-                ) {
-                    Icon(
-                        Icons.Rounded.Refresh,
-                        contentDescription = stringResource(R.string.wk_cd_refresh),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(iconSize)
-                    )
-                }
-                // A subject whose page WaniKani did not name with an https URL on its own host has
-                // none to offer, and then no link is drawn.
-                val page = subject.documentUrl
-                if (page != null) {
-                    IconButton(
-                        onClick = { openWanikaniPage(context, page) },
-                        modifier = if (compact) Modifier.size(36.dp) else Modifier
-                    ) {
-                        Icon(
-                            Icons.Rounded.OpenInNew,
-                            contentDescription = stringResource(R.string.wk_cd_open),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(iconSize)
-                        )
-                    }
-                }
-            }
-        }
-
-        // The page's own scrolling part when the caller wants one: the sheet caps its panel, so a
-        // long mnemonic scrolls here instead of pushing the header off. The review screen passes
-        // scrollable = false and scrolls the whole deck space instead, so this lays out at its
-        // natural height there and nothing scrolls inside anything else.
-        val pageScroll = rememberScrollState()
+        PageHeader(
+            heading = heading,
+            headingIsCharacter = headingIsCharacter,
+            showRefresh = subject != null,
+            pageUrl = subject?.documentUrl,
+            onBack = onBack,
+            onRefresh = { retry++ },
+            onOpen = { url -> openWanikaniPage(context, url) },
+            type = type
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (scrollable) {
-                        Modifier.weight(1f, fill = false).verticalScroll(pageScroll)
-                    } else {
-                        Modifier
-                    }
-                )
-                .padding(
-                    top = if (compact) Spacing.xs else Spacing.s,
-                    bottom = if (compact) Spacing.l else Spacing.xl
-                )
+                .padding(top = Spacing.s, bottom = Spacing.xl)
         ) {
-            when (answer) {
-                null -> Skeleton(compact = compact)
+            // The skeleton gives way to the answer with an opacity change and nothing else: it does
+            // not shimmer, so this is the only thing that marks the moment the page arrived, and a
+            // refresh failure leaves the saved page exactly where it was.
+            Crossfade(
+                targetState = answer,
+                animationSpec = tween(Motion.SHORT, easing = Motion.emphasized),
+                label = "wanikaniState"
+            ) { state ->
+                when (state) {
+                    null -> Skeleton()
 
-                is WaniKaniLookup.Available -> SubjectPage(
-                    subject = answer.subject,
-                    cached = answer.cached,
-                    stale = answer.stale,
-                    cacheFailure = answer.cacheFailure,
-                    type = type,
-                    compact = compact,
-                    onRadical = onRadical
-                )
+                    is WaniKaniLookup.Available -> SubjectPage(
+                        subject = state.subject,
+                        cached = state.cached,
+                        stale = state.stale,
+                        cacheFailure = state.cacheFailure,
+                        type = type,
+                        compact = compact,
+                        onRadical = onRadical
+                    )
 
-                WaniKaniLookup.NoEntry -> Notice(
-                    message = when (target) {
-                        is WaniKaniTarget.Kanji ->
-                            stringResource(R.string.wk_no_entry_kanji, target.character)
+                    WaniKaniLookup.NoEntry -> InlineStatusRail(
+                        text = when (target) {
+                            is WaniKaniTarget.Kanji ->
+                                stringResource(R.string.wk_no_entry_kanji, target.character)
 
-                        is WaniKaniTarget.Radical ->
-                            stringResource(R.string.wk_no_entry_radical)
-                    },
-                    type = type
-                )
+                            is WaniKaniTarget.Radical ->
+                                stringResource(R.string.wk_no_entry_radical)
+                        },
+                        glyph = RailGlyph.SearchOff,
+                        tone = RailTone.Neutral,
+                        supporting = null,
+                        action = null
+                    )
 
-                // Nothing to retry: the subject is real, the account simply does not include it.
-                WaniKaniLookup.Restricted -> Notice(
-                    message = when (target) {
-                        is WaniKaniTarget.Kanji ->
-                            stringResource(R.string.wk_restricted_kanji, target.character)
+                    // Nothing to retry: the subject is real, the account simply does not include it.
+                    WaniKaniLookup.Restricted -> InlineStatusRail(
+                        text = when (target) {
+                            is WaniKaniTarget.Kanji ->
+                                stringResource(R.string.wk_restricted_kanji, target.character)
 
-                        is WaniKaniTarget.Radical ->
-                            stringResource(R.string.wk_restricted_radical)
-                    },
-                    type = type
-                )
+                            is WaniKaniTarget.Radical ->
+                                stringResource(R.string.wk_restricted_radical)
+                        },
+                        glyph = RailGlyph.Info,
+                        tone = RailTone.Neutral,
+                        supporting = null,
+                        action = null
+                    )
 
-                // A token is typed on a real keyboard, which the overlay cannot offer, so both of
-                // these point at the WaniKani settings instead of asking for one here.
-                WaniKaniLookup.NeedsToken -> OpenAppNotice(
-                    message = stringResource(R.string.wk_needs_token),
-                    type = type,
-                    onOpen = openSettings
-                )
+                    // A token is typed on a real keyboard, which the overlay cannot offer, so both of
+                    // these point at the WaniKani settings instead of asking for one here.
+                    WaniKaniLookup.NeedsToken -> InlineStatusRail(
+                        text = stringResource(R.string.wk_needs_token),
+                        glyph = RailGlyph.Info,
+                        tone = RailTone.Neutral,
+                        supporting = null,
+                        action = RailAction(stringResource(R.string.wk_open_app), openSettings)
+                    )
 
-                WaniKaniLookup.AuthRejected -> OpenAppNotice(
-                    message = stringResource(R.string.wk_auth),
-                    type = type,
-                    onOpen = openSettings
-                )
+                    WaniKaniLookup.AuthRejected -> InlineStatusRail(
+                        text = stringResource(R.string.wk_auth),
+                        glyph = RailGlyph.Error,
+                        tone = RailTone.Error,
+                        supporting = null,
+                        action = RailAction(stringResource(R.string.wk_open_app), openSettings)
+                    )
 
-                is WaniKaniLookup.Unreachable -> Notice(
-                    message = stringResource(
-                        R.string.wk_unreachable,
-                        stringResource(wanikaniFailureLabel(answer.failure))
-                    ),
-                    type = type,
-                    actionLabel = stringResource(R.string.wk_retry),
-                    onAction = { retry++ }
-                )
+                    is WaniKaniLookup.Unreachable -> InlineStatusRail(
+                        text = stringResource(R.string.wk_unreachable),
+                        glyph = RailGlyph.Error,
+                        tone = RailTone.Error,
+                        supporting = stringResource(wanikaniFailureLabel(state.failure)),
+                        action = RailAction(stringResource(R.string.wk_retry)) { retry++ }
+                    )
+                }
             }
         }
     }
 }
 
+/**
+ * The page's own row: the way back, the character or name being read, and the two things the reader
+ * can do with the page itself — ask WaniKani again, or open it there.
+ *
+ * At a constrained measure the title and the controls take a row each instead of the targets
+ * shrinking: a 48 dp control is the part of this row that has to survive a large text scale.
+ */
+@Composable
+private fun PageHeader(
+    heading: String,
+    headingIsCharacter: Boolean,
+    showRefresh: Boolean,
+    pageUrl: String?,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onOpen: (String) -> Unit,
+    type: SheetType
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val fontScale = LocalDensity.current.fontScale
+        val stacked = maxWidth.value / fontScale < ConstrainedHeaderWidth.value
+        val title: @Composable (Modifier) -> Unit = { placement ->
+            Text(
+                text = heading,
+                // The page's own title step: the radical's name. A kanji's heading is a glyph and
+                // keeps the sheet's headword size instead.
+                style = if (headingIsCharacter) type.headword else MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = placement
+            )
+        }
+
+        if (stacked) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = PageActionTarget),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PageAction(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        R.string.wk_cd_back,
+                        onBack
+                    )
+                    if (showRefresh) {
+                        PageAction(Icons.Rounded.Refresh, R.string.wk_cd_refresh, onRefresh)
+                    }
+                    if (pageUrl != null) {
+                        PageAction(Icons.AutoMirrored.Rounded.OpenInNew, R.string.wk_cd_open) { onOpen(pageUrl) }
+                    }
+                }
+                title(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = PageActionTarget),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PageAction(Icons.AutoMirrored.Filled.ArrowBack, R.string.wk_cd_back, onBack)
+                title(Modifier.weight(1f))
+                if (showRefresh) {
+                    PageAction(Icons.Rounded.Refresh, R.string.wk_cd_refresh, onRefresh)
+                }
+                if (pageUrl != null) {
+                    PageAction(Icons.AutoMirrored.Rounded.OpenInNew, R.string.wk_cd_open) { onOpen(pageUrl) }
+                }
+            }
+        }
+    }
+}
+
+/** One header control: a bare neutral glyph in a 48 dp target, in both layouts. */
+@Composable
+private fun PageAction(icon: ImageVector, @StringRes description: Int, onClick: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    IconButton(
+        onClick = onClick,
+        interactionSource = interactions,
+        modifier = Modifier.size(PageActionTarget).pressOpacity(interactions)
+    ) {
+        Icon(
+            icon,
+            contentDescription = stringResource(description),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(PageActionGlyph)
+        )
+    }
+}
+
 /** One subject's page: its glyph, meanings, readings, the radicals behind it, and its mnemonics. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SubjectPage(
     subject: WaniKaniSubject,
@@ -311,26 +364,27 @@ private fun SubjectPage(
     when (subject) {
         is WaniKaniSubject.Kanji -> {
             // The character is already the panel's heading, so the page starts with its meaning.
-            Meanings(subject.primaryMeaning, subject.meanings, type, compact)
+            Meanings(subject.primaryMeaning, subject.meanings, type)
             if (subject.onyomi.isNotEmpty()) {
-                Readings(stringResource(R.string.wk_onyomi), subject.onyomi, type, compact)
+                Readings(stringResource(R.string.wk_onyomi), subject.onyomi, type)
             }
             if (subject.kunyomi.isNotEmpty()) {
-                Readings(stringResource(R.string.wk_kunyomi), subject.kunyomi, type, compact)
+                Readings(stringResource(R.string.wk_kunyomi), subject.kunyomi, type)
             }
             if (subject.components.isNotEmpty()) {
-                Caption(stringResource(R.string.wk_radicals), type, compact)
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+                Caption(stringResource(R.string.wk_radicals), type)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.s),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     subject.components.forEach { component ->
-                        ComponentChip(component, type, onClick = { onRadical(component.id) })
+                        ComponentAction(component, type, onClick = { onRadical(component.id) })
                     }
                 }
             }
-            Mnemonic(R.string.wk_meaning_mnemonic, subject.meaningMnemonic, type, compact)
-            Mnemonic(R.string.wk_reading_mnemonic, subject.readingMnemonic, type, compact)
+            Mnemonic(R.string.wk_meaning_mnemonic, subject.meaningMnemonic, type)
+            Mnemonic(R.string.wk_reading_mnemonic, subject.readingMnemonic, type)
         }
 
         is WaniKaniSubject.Radical -> {
@@ -347,7 +401,7 @@ private fun SubjectPage(
                 subject.character != null -> Text(
                     text = subject.character,
                     style = type.headword,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 // Image-only and nothing cached: the name is all there is to draw, and it is what
@@ -355,42 +409,57 @@ private fun SubjectPage(
                 else -> Text(
                     text = subject.primaryMeaning,
                     style = type.headword,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Meanings(subject.primaryMeaning, subject.meanings, type, compact)
-            Mnemonic(R.string.wk_meaning_mnemonic, subject.meaningMnemonic, type, compact)
+            Meanings(subject.primaryMeaning, subject.meanings, type)
+            Mnemonic(R.string.wk_meaning_mnemonic, subject.meaningMnemonic, type)
         }
     }
 
     // A page that could not be written to the device is here for this session only: saying so up
     // front is what stops the reader finding out offline. Distinct from a stale copy, which is the
-    // saved one being shown because a refresh failed.
+    // saved one being shown because a refresh failed — so both can be true, and both are said.
     if (cacheFailure != null) {
-        Spacer(Modifier.height(Spacing.s))
-        Note(stringResource(R.string.wk_not_saved), type, warning = true)
-    }
-    if (cached) {
-        Spacer(Modifier.height(Spacing.s))
-        Note(stringResource(R.string.wk_saved), type)
+        InlineStatusRail(
+            text = stringResource(R.string.wk_not_saved),
+            glyph = RailGlyph.Error,
+            tone = RailTone.Error,
+            supporting = null,
+            action = null
+        )
     }
     if (stale) {
-        Spacer(Modifier.height(Spacing.s))
-        Note(stringResource(R.string.wk_stale), type)
+        InlineStatusRail(
+            text = stringResource(R.string.wk_stale),
+            glyph = RailGlyph.Info,
+            tone = RailTone.Neutral,
+            supporting = stringResource(R.string.wk_stale_support),
+            action = null
+        )
+    } else if (cached) {
+        InlineStatusRail(
+            text = stringResource(R.string.wk_saved),
+            glyph = RailGlyph.Info,
+            tone = RailTone.Neutral,
+            supporting = null,
+            action = null
+        )
     }
 }
 
 /**
  * The panel while its answer is on its way: the shape the page will take, so switching between two
  * kanji holds the layout still instead of blanking out and filling in a beat later. Plain blocks in
- * the surface's own colour — no shimmer, no animation — and the real page drops into their place.
+ * the surface's own colour, square and unanimated — no shimmer, no radius — and the real page drops
+ * into their place.
  *
  * The heading is not part of this: the header row already shows the character being looked up. A
  * failure, an empty answer or a token that needs connecting each draw their own state; this is the
- * in-flight one only, and it is the panel's loading state in the sheet as much as inline.
+ * in-flight one only.
  */
 @Composable
-private fun Skeleton(compact: Boolean) {
+private fun Skeleton() {
     val loading = stringResource(R.string.wk_loading)
     Column(
         modifier = Modifier
@@ -398,37 +467,37 @@ private fun Skeleton(compact: Boolean) {
             // The state is still announced, even though it is drawn as shape rather than words.
             .semantics { contentDescription = loading }
     ) {
-        SkeletonLabel(compact)
+        SkeletonLabel()
         SkeletonBlock()
-        SkeletonLabel(compact)
+        SkeletonLabel()
         SkeletonBlock(width = SkeletonLabelWidth)
-        SkeletonLabel(compact)
+        SkeletonLabel()
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
             repeat(4) { SkeletonBlock(width = SkeletonChip, height = SkeletonChip) }
         }
-        SkeletonLabel(compact)
+        SkeletonLabel()
         SkeletonParagraph(lines = 3)
-        SkeletonLabel(compact)
+        SkeletonLabel()
         SkeletonParagraph(lines = 2)
     }
 }
 
 /** A label-sized block, in the same rhythm a real caption keeps: more gap above it than below. */
 @Composable
-private fun SkeletonLabel(compact: Boolean) {
-    Spacer(Modifier.height(if (compact) Spacing.s else Spacing.m))
+private fun SkeletonLabel() {
+    Spacer(Modifier.height(Spacing.xl))
     SkeletonBlock(width = SkeletonLabelWidth)
-    Spacer(Modifier.height(Spacing.xs))
+    Spacer(Modifier.height(Spacing.s))
 }
 
-/** One placeholder block: the surface's own colour, nothing to shimmer, no animation at all. */
+/** One placeholder block: the surface's own colour, square, and with nothing to shimmer. */
 @Composable
 private fun SkeletonBlock(width: Dp? = null, height: Dp = SkeletonLine) {
     Box(
         modifier = Modifier
             .then(if (width != null) Modifier.width(width) else Modifier.fillMaxWidth())
             .height(height)
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
     )
 }
 
@@ -437,7 +506,7 @@ private fun SkeletonBlock(width: Dp? = null, height: Dp = SkeletonLine) {
 private fun SkeletonParagraph(lines: Int) {
     Column(modifier = Modifier.fillMaxWidth()) {
         repeat(lines) { index ->
-            if (index > 0) Spacer(Modifier.height(Spacing.xs))
+            if (index > 0) Spacer(Modifier.height(Spacing.s))
             SkeletonBlock(width = if (index == lines - 1) SkeletonLineTail else null)
         }
     }
@@ -445,8 +514,8 @@ private fun SkeletonParagraph(lines: Int) {
 
 /** The meanings: WaniKani's own first, the alternates behind it. */
 @Composable
-private fun Meanings(primary: String, all: List<String>, type: SheetType, compact: Boolean) {
-    Caption(stringResource(R.string.wk_meaning), type, compact)
+private fun Meanings(primary: String, all: List<String>, type: SheetType) {
+    Caption(stringResource(R.string.wk_meaning), type)
     Text(
         text = primary,
         style = type.gloss,
@@ -456,20 +525,25 @@ private fun Meanings(primary: String, all: List<String>, type: SheetType, compac
     if (alternates.isNotEmpty()) {
         Text(
             text = alternates.joinToString(" · "),
-            style = type.sub,
+            style = type.gloss,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
-/** One set of readings — WaniKani keeps on'yomi and kun'yomi apart, so they are shown apart. */
+/**
+ * One set of readings — WaniKani keeps on'yomi and kun'yomi apart, so they are shown apart.
+ *
+ * Readings are secondary to the meaning, so they keep the reading role in the quiet ink: the accent
+ * on this page belongs to the characters that are actions, not to a heading.
+ */
 @Composable
-private fun Readings(label: String, readings: List<String>, type: SheetType, compact: Boolean) {
-    Caption(label, type, compact)
+private fun Readings(label: String, readings: List<String>, type: SheetType) {
+    Caption(label, type)
     Text(
         text = readings.joinToString("・"),
         style = type.reading,
-        color = MaterialTheme.colorScheme.primary
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
@@ -478,13 +552,13 @@ private fun Readings(label: String, readings: List<String>, type: SheetType, com
  * is plain text — readable, and the only thing the reader can do with it is select it.
  */
 @Composable
-private fun Mnemonic(@StringRes label: Int, text: String, type: SheetType, compact: Boolean) {
+private fun Mnemonic(@StringRes label: Int, text: String, type: SheetType) {
     if (text.isBlank()) return
-    Caption(stringResource(label), type, compact)
+    Caption(stringResource(label), type)
     SelectionContainer {
         Text(
             text = text,
-            style = type.menu,
+            style = type.gloss,
             color = MaterialTheme.colorScheme.onSurface
         )
     }
@@ -492,113 +566,52 @@ private fun Mnemonic(@StringRes label: Int, text: String, type: SheetType, compa
 
 /**
  * One radical a kanji is made of: the glyph when it has one, WaniKani's name for it when it has
- * none. The name is what the reader can act on either way; the drawing itself is on the radical's
- * own page, one tap away. A component whose cache is empty (a first look, offline) shows as
- * unknown and still opens its page, which may have it.
+ * none. Unfilled and in the accent, like the kanji strip in the entry: the name is what the reader
+ * can act on either way, and the drawing itself is on the radical's own page, one tap away. A
+ * component whose cache is empty (a first look, offline) shows as unknown and still opens its page,
+ * which may have it.
  */
 @Composable
-private fun ComponentChip(component: WaniKaniComponent, type: SheetType, onClick: () -> Unit) {
+private fun ComponentAction(component: WaniKaniComponent, type: SheetType, onClick: () -> Unit) {
     val glyph = component.character
     val label = glyph ?: component.name ?: "…"
     val description = stringResource(R.string.wk_cd_radical, label)
     val interactions = remember { MutableInteractionSource() }
-    Surface(
-        onClick = onClick,
-        interactionSource = interactions,
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.pressScale(interactions).semantics { contentDescription = description }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .defaultMinSize(minWidth = PageActionTarget, minHeight = PageActionTarget)
+            .pressOpacity(interactions)
+            .clickable(
+                interactionSource = interactions,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
+            .semantics { contentDescription = description }
+            .padding(horizontal = Spacing.xs, vertical = Spacing.xs)
     ) {
         Text(
             text = label,
-            style = type.chip,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs)
+            style = if (glyph != null) type.headword else type.reading,
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }
 
 /**
- * The small muted label above one block of the page, with the rhythm the whole panel follows: a
- * wider gap above it than below, so a label reads as belonging to what follows it.
+ * The small muted label above one block of the page, with the rhythm the whole panel follows: 20 dp
+ * above it — the separation between two sections — and 8 dp below, so a label reads as belonging to
+ * what follows it.
  */
 @Composable
-private fun Caption(text: String, type: SheetType, compact: Boolean) {
-    Spacer(Modifier.height(if (compact) Spacing.s else Spacing.m))
+private fun Caption(text: String, type: SheetType) {
+    Spacer(Modifier.height(Spacing.xl))
     Text(
         text = text,
-        style = type.small,
+        style = type.caption,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Spacer(Modifier.height(Spacing.xs))
-}
-
-/** One muted line inside the page, for the notes about how a page was answered. */
-@Composable
-private fun Note(text: String, type: SheetType, warning: Boolean = false) {
-    Text(
-        text = text,
-        style = type.small,
-        color = if (warning) {
-            MaterialTheme.colorScheme.error
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    )
-}
-
-/**
- * A state with no page to show: what happened, and — when something can be done about it — the one
- * action that can. Nothing is offered where nothing would change anything.
- */
-@Composable
-private fun Notice(
-    message: String,
-    type: SheetType,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null
-) {
-    // A card rather than a line of prose: nothing on it is content from WaniKani, so it should not
-    // read like a page. The action is filled when there is one, because it is the only thing here
-    // that does anything.
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(top = Spacing.s, bottom = Spacing.l)
-    ) {
-        Column(modifier = Modifier.padding(Spacing.l)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    Icons.Rounded.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(Spacing.s))
-                Text(
-                    text = message,
-                    style = type.menu,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (actionLabel != null && onAction != null) {
-                Spacer(Modifier.height(Spacing.m))
-                Button(onClick = onAction) { Text(actionLabel, style = type.button) }
-            }
-        }
-    }
-}
-
-/** The two notices that are answered in the app: a token is typed there, never in the overlay. */
-@Composable
-private fun OpenAppNotice(message: String, type: SheetType, onOpen: () -> Unit) {
-    Notice(
-        message = message,
-        type = type,
-        actionLabel = stringResource(R.string.wk_open_app),
-        onAction = onOpen
-    )
+    Spacer(Modifier.height(Spacing.s))
 }
 
 /**

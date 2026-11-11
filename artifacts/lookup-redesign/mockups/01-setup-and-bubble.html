@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>1 Setup and bubble</title>
+<link rel="stylesheet" href="http://127.0.0.1:8899/tokens.css">
+<style>
+
+/* Ink mockup scaffolding. The frame is authored in dp: 393 x 851 dp, rendered at
+   2.75 px/dp, so what you see is the reference device's 1080 x 2340 px. Only the
+   sp type steps scale with --ts; every dp dimension is a floor and stays put. */
+:root{--ts:1}
+html,body{margin:0;padding:0;background:#000}
+.frame{
+  position:relative;width:393px;height:851px;overflow:hidden;
+  background:var(--bg);color:var(--on-surface);
+  font-family:Inter,"Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;
+}
+.frame.land{width:851px;height:393px}
+.abs{position:absolute}
+.veil,.edge{position:absolute}
+
+/* --- type roles, in sp --- */
+.t-display{font-weight:500;font-size:calc(34px*var(--ts));line-height:calc(44px*var(--ts))}
+.t-title-l{font-weight:700;font-size:calc(17px*var(--ts));line-height:calc(21px*var(--ts))}
+.t-title-m{font-weight:600;font-size:calc(15px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-body{font-weight:400;font-size:calc(14px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-body-s{font-weight:400;font-size:calc(13px*var(--ts));line-height:calc(19px*var(--ts))}
+.t-label-l{font-weight:600;font-size:calc(15px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-label-m{font-weight:600;font-size:calc(12px*var(--ts));line-height:calc(18px*var(--ts))}
+.t-label-s{font-weight:500;font-size:calc(12px*var(--ts));line-height:calc(16px*var(--ts))}
+.t-mono{font-family:ui-monospace,"DejaVu Sans Mono",monospace;font-size:calc(13px*var(--ts));line-height:calc(19px*var(--ts))}
+
+/* --- chrome--- */
+.topinset{height:24px;background:var(--bg)}
+.appbar{height:64px;margin-top:0;display:flex;align-items:center}
+.iconbtn{width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--on-surface)}
+.page{padding:0 22px 40px}
+.group+.group{margin-top:24px}
+.ghead{margin-bottom:8px;color:var(--on-surface-variant)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;min-height:60px;border-bottom:1px solid var(--outline)}
+.ricon{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant)}
+.rmain{flex:1;min-width:0}
+.rtitle{color:var(--on-surface)}
+.rsum{margin-top:0;color:var(--on-surface-variant)}
+.rtrail{flex:none;max-width:40%;color:var(--on-surface);text-align:right}
+.kmx{margin-left:34px;padding-bottom:4px}
+.action48{height:48px;display:flex;align-items:center;color:var(--primary)}
+.switch{width:52px;height:32px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:flex-end;padding:4px}
+.switch .thumb{width:24px;height:24px;border-radius:50%;background:var(--on-primary)}
+.switch.off{background:var(--on-surface-variant);justify-content:flex-start;opacity:.5}
+
+/* --- status rail --- */
+.rail{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:360px;min-height:48px;
+  background:var(--surface);border:1px solid var(--outline);border-radius:0;display:flex;align-items:stretch}
+.railrule{width:2px;flex:none;background:var(--primary)}
+.railbody{padding:12px;display:flex;flex-direction:column;justify-content:center}
+.railrow{display:flex;align-items:center;gap:8px}
+.railsup{margin-top:4px}
+.irail{padding:16px 0;display:flex;align-items:stretch}
+.glyph{flex:none;display:block}
+
+/* --- bubble --- */
+.bubble{position:absolute;width:48px;height:48px;border-radius:50%;background:var(--primary);
+  border:2px solid var(--on-primary);display:flex;align-items:center;justify-content:center}
+
+/* --- sheet --- */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);
+  border-radius:20px 20px 0 0;display:flex;flex-direction:column;z-index:4}
+.sheetrule{position:absolute;left:0;right:0;top:0;height:20px;border:1px solid var(--outline);
+  border-bottom:none;border-radius:20px 20px 0 0;pointer-events:none}
+.grip{height:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.handle{width:32px;height:4px;border-radius:2px;background:var(--on-surface-variant);opacity:.6}
+.handle-v{width:4px;height:32px;border-radius:2px;background:var(--on-surface-variant);opacity:.6}
+.sheethead{height:48px;flex:none;display:flex;align-items:center;justify-content:flex-end;padding:0 16px}
+.sheetbody{flex:1;overflow:hidden;padding:0 16px}
+.sheetfoot{flex:none;border-top:1px solid var(--outline);padding:12px 16px 32px}
+.deck{display:flex;flex-direction:column;min-height:24px;margin-bottom:8px}
+.deck.rowform{flex-direction:row;align-items:baseline;justify-content:space-between}
+.pbtn{min-height:52px;border-radius:13px;background:var(--primary);color:var(--on-primary);
+  display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px}
+.rule{height:1px;background:var(--outline)}
+
+/* --- word tabs --- */
+.tabs{position:relative;display:flex;gap:8px;overflow:hidden}
+.tab{flex:none;min-width:48px;min-height:48px;padding:12px;display:flex;align-items:center;gap:4px;
+  color:var(--on-surface-variant);position:relative}
+.tab .slot{width:16px;height:16px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--primary)}
+.tab.sel{color:var(--primary)}
+.tab.sel::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--primary)}
+.pagearrow{position:absolute;left:0;top:0;bottom:0;width:48px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant)}
+
+/* --- glosses --- */
+.gloss{display:flex;align-items:flex-start}
+.gloss .idx{width:24px;flex:none;color:var(--on-surface-variant)}
+.gloss+.gloss{margin-top:12px}
+
+/* --- side dock --- */
+.dock{position:absolute;top:0;bottom:0;width:383px;background:var(--surface);display:flex;z-index:4}
+.dock.right{right:0;border-left:1px solid var(--outline);border-radius:20px 0 0 20px}
+.dock.left{left:0;border-right:1px solid var(--outline);border-radius:0 20px 20px 0}
+.gutter{width:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.dockcol{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 16px}
+.dockhead{height:48px;flex:none;display:flex;align-items:center}
+.dockbody{flex:1;overflow:hidden}
+
+/* --- foreign content drawn flat --- */
+.manga{position:absolute;inset:0;background:#FFFFFF}
+.panel{position:absolute;border:2px solid #111111;background:#FFFFFF;overflow:hidden}
+.tone{position:absolute;background-image:radial-gradient(#111 0.9px,transparent 0.9px);background-size:5px 5px;opacity:.55}
+.balloon{position:absolute;border:2px solid #111;border-radius:50%/40%;background:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.narr{position:absolute;border:2px solid #111;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center}
+.ink{color:#111}
+.jpline{font-size:19px;line-height:25px;font-weight:500}
+.jpline.lg{font-size:24px;line-height:32px}
+.jpline.sm{font-size:16px;line-height:22px}
+.paperline{background:#111;height:2px;position:absolute}
+.solid-black{position:absolute;background:#000}
+.white-line{position:absolute;background:#fff}
+
+.dblock+.dblock{margin-top:16px}
+.dbul{margin-top:4px;color:var(--on-surface-variant)}
+
+
+</style></head>
+<body>
+<div class="frame " data-theme="light" style="--primary:#6D28D9;--on-primary:#FFFFFF;--primary-container:#F5F3FF;--on-primary-container:#2E1065;--tertiary:#7C3AED;--ts:1">
+
+<div class="topinset"></div>
+<div class="appbar">
+  <span class="iconbtn"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></span>
+  <span class="t-title-l" style="margin-left:4px">Screen lookup</span>
+  <span style="flex:1"></span>
+  <span class="iconbtn"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.7 9.3a2.5 2.5 0 1 1 3.3 2.4c-.7.3-1 .8-1 1.5v.3"/><path d="M12 17.1h.01"/></svg></span>
+</div>
+<div class="page">
+  <div class="group">
+    <div class="ghead t-label-m">Lookup</div>
+    <div class="row">
+      <span class="ricon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.8 2.8L16.2 9.8"/></svg></span>
+      <div class="rmain"><div class="rtitle t-title-m">Lookup mode</div></div>
+      <div class="rtrail t-label-m">On</div>
+    </div>
+    <div class="row">
+      <span class="ricon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5.5 11.4a6.9 6.9 0 0 1 13 0"/><path d="M9 12a3.6 3.6 0 0 1 6 0"/><circle cx="12" cy="15.6" r="2.2" fill="currentColor" stroke="none"/></svg></span>
+      <div class="rmain">
+        <div class="rtitle t-title-m">Floating button</div>
+        <div class="rsum t-body-s">Tap to look up</div>
+      </div>
+      <div class="rtrail"><span class="switch"><span class="thumb"></span></span></div>
+    </div>
+    <div class="row">
+      <span class="ricon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.6" y="3.6" width="7" height="7" rx="1"/><rect x="13.4" y="3.6" width="7" height="7" rx="1"/><rect x="3.6" y="13.4" width="7" height="7" rx="1"/><rect x="13.4" y="13.4" width="7" height="7" rx="1"/></svg></span>
+      <div class="rmain"><div class="rtitle t-title-m">Quick Settings tile</div></div>
+      <div class="rtrail t-label-m">Added</div>
+    </div>
+    <div class="row" style="display:block;padding:12px 0">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="ricon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8.2" cy="12" r="3.4"/><path d="M11.6 12H20.4"/><path d="M18 12v3.2"/><path d="M15.2 12v2.2"/></svg></span>
+        <div class="rmain"><div class="rtitle t-title-m">Key Mapper</div></div>
+        <div class="rtrail t-label-l" style="color:var(--primary)">Set up</div>
+      </div>
+      <div class="kmx">
+        <div class="t-label-m" style="color:var(--on-surface-variant)">Broadcast action</div>
+        <div class="t-mono" style="color:var(--on-surface);margin-top:4px">com.gaten.app.action.TRIGGER_LOOKUP</div>
+        <div class="action48 t-label-l">Copy</div>
+      </div>
+    </div>
+  </div>
+  <div class="group">
+    <div class="ghead t-label-m">During lookup</div>
+    <div class="row">
+      <span class="ricon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M10 9.2v5.6M14 9.2v5.6" stroke-linecap="round"/></svg></span>
+      <div class="rmain">
+        <div class="rtitle t-title-m">Pause media</div>
+        <div class="rsum t-body-s">Pauses media during lookup</div>
+      </div>
+      <div class="rtrail t-label-m">Allowed</div>
+    </div>
+  </div>
+</div>
+
+<div class="bubble" style="right:8px;top:383px;z-index:9;color:var(--on-primary)"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M17.85 6.15 L11.35 6.15 C7.64 6.15 5.78 8.38 5.78 11.91 C5.78 15.8 8.01 17.85 11.72 17.85 L18.22 17.85 L18.22 13.02 L13.95 13.02" fill="none" stroke="currentColor" stroke-width="2.78" stroke-linecap="square" stroke-linejoin="miter"/></svg></div>
+
+</div>
+</body></html>

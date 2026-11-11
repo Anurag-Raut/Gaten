@@ -9,5 +9,13 @@
 
 <resources>
 
-    <style name="Theme.Gaten" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <style name="Theme.Gaten" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- The text stack charges the ellipsis it appends with the text view's *base* paint
+             (StaticLayout.calculateEllipsis) while the drawn ellipsis comes from the spanned text, so
+             a clamped "Recently looked up" gloss could be laid out wider than its lane and lose the
+             leading glyph of its last line. Naming the app face here gives the charge and the drawn
+             glyph the same width. Every React Native text already carries the family as a span, so no
+             visible text moves. -->
+        <item name="android:fontFamily">@font/ibm_plex_sans_jp</item>
+    </style>
 </resources>

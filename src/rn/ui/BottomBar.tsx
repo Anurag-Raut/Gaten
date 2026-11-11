@@ -38,7 +38,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useColorScheme,
 } from "react-native";
 import Reanimated, {
   cancelAnimation,
@@ -57,7 +56,6 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {PressableScale} from "./PressableScale";
 import {useTheme} from "./theme";
 import * as ThemeBridge from "../native/GatenTheme";
-import * as Haptics from "../native/GatenHaptics";
 import {FLOATING_BAR_ELEVATION, PRESS_EASING_REANIMATED, shape, spacing, typeScale} from "./tokens";
 import {Icon} from "./components";
 import type {IconName} from "./icons";
@@ -453,10 +451,9 @@ export function BottomBar({
   position,
   layout,
   searchActive = false,
-}: MaterialTopTabBarProps & {searchActive?: boolean}) {
-  const {colors, mode} = useTheme();
-  const systemMode = useColorScheme();
-  const dark = mode === "Dark" || (mode === "System" && systemMode === "dark");
+  onReady,
+}: MaterialTopTabBarProps & {searchActive?: boolean; onReady?: () => void}) {
+  const {colors, dark} = useTheme();
   // The selected pill wears the reader's accent, not the neutral action fill: the bar's active
   // state is the one place the accent is always visible, and `onPrimary` is already the ink that
   // reads on that tone in either mode.
@@ -690,6 +687,7 @@ export function BottomBar({
       ]}
     >
       <View
+        onLayout={onReady}
         style={[
           styles.surface,
           {
@@ -717,10 +715,10 @@ export function BottomBar({
             inputRange={inputRange}
             onPress={() => {
               if (index === state.index) {
-                // An already-selected tab is a no-op: no tick, no navigation.
+                // An already-selected tab is a no-op: no navigation. The press still ticks, like
+                // every other control's.
                 return;
               }
-              Haptics.play("tick");
               navigation.navigate(route.name);
               cancelAnimation(capsule);
               capsule.value = 0;

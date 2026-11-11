@@ -35,14 +35,16 @@ import type {
   AnkiStatus,
 } from "../../native/GatenAnki";
 import * as GatenPlatform from "../../native/GatenPlatform";
-import {Button, Icon, IconButton} from "../components";
+import {Button, Icon} from "../components";
+import {DialogShell} from "../DialogShell";
+import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {reviewStore} from "../review/review-store";
+import {ScreenHeader} from "../ScreenHeader";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
-import {spacing, typeScale} from "../tokens";
+import {APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
 import {
-  DialogShell,
   CONTENT_COLUMN,
   FieldLabel,
   HelpAction,
@@ -60,11 +62,11 @@ import {
 } from "./anki-validation";
 
 const HELP_PARAGRAPHS = [
-  "Without AnkiDroid access, Add to Anki opens AnkiDroid's add screen, where you choose the deck and card layout.",
+  "Without Anki access, Add to Anki is unavailable. Grant access here to add cards.",
   "Choose a deck or enter a new name. New decks are created on export.",
   "Separate tags with spaces. Leave blank for none.",
   "Map Expression to at least one field. Duplicates check the first mapped field across all decks for this note type. Select a note type again to reload its fields.",
-  "AnkiDroid note types keep their own templates and styling. Cloze note types are not supported.",
+  "Anki note types keep their own templates and styling. Cloze note types are not supported.",
   "Use {{Expression}}, {{Reading}}, and {{Meaning}} in HTML. {{FrontSide}} repeats the front on the back; conditional sections such as {{#Reading}}…{{/Reading}} are supported. {{Meaning}} includes glosses and part of speech. Layout edits affect future exports only; existing cards keep their note type.",
 ];
 
@@ -81,7 +83,7 @@ export function AnkiSettingsScreen({
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const horizontalInset = width < 360 ? 16 : 22;
+  const horizontalInset = contentInsetFor(width);
   const [draft, setDraft] = useState<AnkiPreferencesResult | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<AnkiStatus>("notInstalled");
@@ -203,22 +205,22 @@ export function AnkiSettingsScreen({
 
   if (draft == null || saved == null) {
     return (
-      <View style={{flex: 1, backgroundColor: colors.background, padding: spacing.xl, justifyContent: "center"}}>
-        <View style={{alignSelf: "flex-start", position: "absolute", top: insets.top + spacing.s, left: spacing.l}}>
-          <IconButton name="arrow_back" accessibilityLabel="Back" onPress={onClose} color={colors.onSurface} />
+      <View style={{flex: 1, backgroundColor: colors.background, paddingTop: insets.top}}>
+        <ScreenHeader title="Anki cards" onBack={onClose} />
+        <View style={{flex: 1, padding: spacing.xl, paddingBottom: spacing.xl + insets.bottom, justifyContent: "center"}}>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
+            {preferencesLoadFailed ? "Could not read Anki settings" : "Reading Anki settings…"}
+          </Text>
+          {preferencesLoadFailed && (
+            <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
+              <Button
+                label="Retry"
+                onPress={() => setPreferencesRefresh((value) => value + 1)}
+                disabled={preferencesLoading}
+              />
+            </View>
+          )}
         </View>
-        <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-          {preferencesLoadFailed ? "Could not read Anki settings" : "Reading Anki settings…"}
-        </Text>
-        {preferencesLoadFailed && (
-          <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
-            <Button
-              label="Retry"
-              onPress={() => setPreferencesRefresh((value) => value + 1)}
-              disabled={preferencesLoading}
-            />
-          </View>
-        )}
       </View>
     );
   }
@@ -267,7 +269,7 @@ export function AnkiSettingsScreen({
     setStatus(nextStatus);
     setRefresh((n) => n + 1);
     if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-      void GatenPlatform.toast("AnkiDroid did not allow writing to its database");
+      void GatenPlatform.toast("Anki did not allow writing to its database");
     }
   };
 
@@ -307,7 +309,7 @@ export function AnkiSettingsScreen({
         setLoadingFields(false);
       },
       () => {
-        void GatenPlatform.toast("Could not read AnkiDroid. Open AnkiDroid, then try Refresh.");
+        void GatenPlatform.toast("Could not read Anki. Open Anki, then try Refresh.");
         setLoadingFields(false);
       }
     );
@@ -322,25 +324,21 @@ export function AnkiSettingsScreen({
   // rectangle the calculation expects.
   return (
     <KeyboardAvoidingView behavior="padding" style={{flex: 1, backgroundColor: colors.background}}>
-      <View
-        style={{
-          // 64 dp below the status bar, as the Kotlin's TopAppBar is — see SettingsPageScaffold.
-          minHeight: 64 + insets.top,
-          flexDirection: "row",
-          alignItems: "center",
-          paddingTop: insets.top,
-        }}
-      >
-        <IconButton name="arrow_back" accessibilityLabel="Back" onPress={leave} color={colors.onSurface} />
-        <Text style={[typeScale.titleLarge, {color: colors.onSurface, flex: 1}]} numberOfLines={1}>
-          Anki cards
-        </Text>
-        <HelpAction paragraphs={HELP_PARAGRAPHS} />
-        <Button
-          variant="text"
-          label="Save"
-          disabled={!dirty || (draftDirty && error != null) || preferencesLoading || loading || loadingFields || saving}
-          onPress={save}
+      <View style={{paddingTop: insets.top}}>
+        <ScreenHeader
+          title="Anki cards"
+          onBack={leave}
+          trailing={
+            <>
+              <HelpAction paragraphs={HELP_PARAGRAPHS} />
+              <Button
+                variant="text"
+                label="Save"
+                disabled={!dirty || (draftDirty && error != null) || preferencesLoading || loading || loadingFields || saving}
+                onPress={save}
+              />
+            </>
+          }
         />
       </View>
       <ScrollView
@@ -351,18 +349,17 @@ export function AnkiSettingsScreen({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           ...CONTENT_COLUMN,
-          maxWidth: 560,
           paddingLeft: insets.left + horizontalInset,
           paddingRight: insets.right + horizontalInset,
-          paddingTop: spacing.xl,
-          paddingBottom: spacing.l + insets.bottom,
+          paddingTop: spacing.s,
+          paddingBottom: spacing.xl + insets.bottom,
         }}
       >
-        <SettingsGroup title="AnkiDroid" style={{marginTop: spacing.s}}>
-          <View style={{paddingVertical: spacing.s}}>
+        <SettingsGroup title="Anki" style={{marginTop: spacing.s}}>
+          <View style={{paddingVertical: spacing.m}}>
             {status === "notInstalled" && (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Install AnkiDroid to add cards.
+                Install Anki to add cards.
               </Text>
             )}
             {status === "needsPermission" && (
@@ -370,16 +367,19 @@ export function AnkiSettingsScreen({
                 <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
                   Allow access to choose decks and note types and add cards directly.
                 </Text>
-                <View style={{alignSelf: "flex-start"}}>
-                  <Button label="Allow AnkiDroid access" onPress={() => void requestPermission()} />
-                </View>
+                <Button
+                  fullWidth
+                  label="Allow access"
+                  style={{marginTop: spacing.m}}
+                  onPress={() => void requestPermission()}
+                />
               </>
             )}
             {status === "ready" && (
               <View style={{alignSelf: "flex-start"}}>
                 <Button
                   variant="text"
-                  label="Refresh from AnkiDroid"
+                  label="Refresh from Anki"
                   disabled={loading || loadingFields || saving || dirty || preferencesLoading}
                   onPress={() => {
                     setRefresh((n) => n + 1);
@@ -389,27 +389,27 @@ export function AnkiSettingsScreen({
               </View>
             )}
             {(loading || loadingFields) && (
-              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Reading AnkiDroid…
+              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
+                Reading Anki…
               </Text>
             )}
             {readFailed && (
-              <Text style={[typeScale.bodyMedium, {color: colors.error}]}>
-                Could not read AnkiDroid. Open AnkiDroid, then try Refresh.
+              <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.s}]}>
+                Could not read Anki. Open Anki, then try Refresh.
               </Text>
             )}
           </View>
         </SettingsGroup>
 
         <SettingsGroup title="Study decks" style={{marginTop: spacing.l}}>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             {status !== "ready" ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Allow AnkiDroid access to choose study decks.
+                Allow Anki access to choose study decks.
               </Text>
             ) : loading ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Reading AnkiDroid decks…
+                Reading Anki decks…
               </Text>
             ) : studyDecks.length === 0 ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
@@ -431,7 +431,7 @@ export function AnkiSettingsScreen({
                     />
                   </SettingsTile>
                 ))}
-                <View style={{alignSelf: "flex-start"}}>
+                <View style={{alignSelf: "flex-start", marginTop: spacing.s}}>
                   <Button
                     variant="text"
                     label="Include all decks"
@@ -450,7 +450,7 @@ export function AnkiSettingsScreen({
         </SettingsGroup>
 
         <SettingsGroup title="Export" style={{marginTop: spacing.l}}>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             <FieldLabel label="Deck" />
             <TextField
               value={draft.deckName}
@@ -467,7 +467,7 @@ export function AnkiSettingsScreen({
               </View>
             )}
           </View>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             <FieldLabel label="Tags" />
             <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginBottom: spacing.xs}]}>Separate with spaces.</Text>
             <TextField
@@ -478,7 +478,7 @@ export function AnkiSettingsScreen({
         </SettingsGroup>
 
         <SettingsGroup title="Card layout" style={{marginTop: spacing.l}}>
-          <View style={{paddingVertical: spacing.xs}}>
+          <View style={{paddingVertical: spacing.m}}>
             <PressableScale
               accessibilityRole="button"
               accessibilityState={{expanded: showAdvanced}}
@@ -488,12 +488,9 @@ export function AnkiSettingsScreen({
               <Text style={[typeScale.labelLarge, {color: colors.onSurface, flex: 1}]}>
                 Edit front, back, and styling
               </Text>
-              <Icon
-                name={showAdvanced ? "keyboard_arrow_up" : "keyboard_arrow_down"}
-                color={colors.onSurfaceVariant}
-              />
+              <DisclosureChevron expanded={showAdvanced} color={colors.onSurfaceVariant} />
             </PressableScale>
-            {showAdvanced && (
+            <Collapsible expanded={showAdvanced}>
               <View style={{marginTop: spacing.m}}>
                 <ChoiceRow
                   label="Note type"
@@ -573,7 +570,7 @@ export function AnkiSettingsScreen({
                     </>
                   )}
               </View>
-            )}
+            </Collapsible>
           </View>
         </SettingsGroup>
 
@@ -745,15 +742,17 @@ function TemplateEditor({
   return (
     <View style={{marginBottom: spacing.m}}>
       <FieldLabel label={label} />
+      {/* The box stays 60–120 dp: the text area is what gets bounded (36 + the box's 24 dp padding =
+          60, 96 + 24 = 120), so a long template scrolls inside its own box instead of growing past
+          the fields below it. */}
       <TextField
         value={value}
         onChangeText={onChange}
         multiline
         style={{
-          minHeight: 60,
-          maxHeight: 120,
+          minHeight: 36,
+          maxHeight: 96,
           textAlignVertical: "top",
-          fontFamily: "monospace",
         }}
       />
     </View>

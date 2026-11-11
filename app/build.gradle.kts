@@ -5,11 +5,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// Explicit: in a build script `java` is the Java plugin's extension, not a package.
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URI
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,6 +12,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     id("com.facebook.react")
 }
+
+val playBundle = providers.gradleProperty("playBundle").map { it.toBoolean() }.getOrElse(false)
 
 android {
     namespace = "com.gaten.app"
@@ -35,10 +32,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.gaten.app"
+        applicationId = "com.gaten"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
+        versionCode = providers.gradleProperty("versionCode").orElse("1").get().toInt()
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -46,6 +43,15 @@ android {
         androidResources {
             localeFilters += "en"
         }
+    }
+
+    androidResources {
+        // A stale Manga OCR weight directory (`src/main/assets/manga-ocr`, ~117 MB, gitignored) can
+        // still sit in a working copy from when the reader carried that engine. Nothing reads it —
+        // the engine is gone — but it must never be packaged if someone builds with it present:
+        // "<dir>name" matches a directory name in aapt's ignore pattern. The existing pattern
+        // (AGP's own defaults, if any) is kept.
+        ignoreAssetsPattern = listOfNotNull(ignoreAssetsPattern, "<dir>manga-ocr").joinToString(":")
     }
 
     buildTypes {
@@ -90,12 +96,24 @@ android {
 
     splits {
         abi {
-            isEnable = true
+            isEnable = !playBundle
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = false
         }
     }
+
+    // The PP-OCRv6 Medium fast-follow asset pack (`:ppocr`), which carries the optional recogniser
+    // on a Play install. Only a bundle can carry an asset pack, so it is declared only for the
+    // bundle build — the same condition that puts `:ppocr` in the build graph at all
+    // (settings.gradle.kts). An APK build therefore produces no pack and never touches the model.
+    //
+    // Side effect of the same flag: `-PplayBundle=true` also disables the ABI splits below, so the
+    // APK variants built under it are universal. Those APKs would carry this `assetPacks` entry too
+    // (an entry is inert without an asset-pack plugin in the same build, and it is only set when the
+    // pack is in the graph), but they are never the shipped artifact: the bundle is. If an APK is
+    // ever wanted with the pack declared, the split flag needs its own condition first.
+    if (playBundle) assetPacks += ":ppocr"
 
     compileOptions {
         // 17 to match what the React Native Gradle plugin pins for Java; Kotlin must agree.
@@ -113,6 +131,17 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+}
+
+// React Native's JS bundling task takes the whole repo root as an input (`react { root = file("..") }`
+// below), so Gradle's implicit-dependency check flags any task that writes anywhere inside it. The
+// pack's staging task is the only such writer, and it is put in order before the bundle rather than
+// declared a dependency of it: the JS bundling does not read the pack's files, so an edge would only
+// force a 76 MB fetch on a JS-only invocation.
+if (playBundle) {
+    tasks.matching { it.name.startsWith("createBundle") }.configureEach {
+        mustRunAfter(":ppocr:stagePpOcrAssets")
     }
 }
 
@@ -212,90 +241,46 @@ val verifyExamplesAsset by tasks.registering {
     }
 }
 
+// The Remembering the Kanji reference asset is generated the same way
+// (tools/build_rtk_db.py), so the same two mistakes are caught.
+val rtkSchemaVersion = 1
+val verifyRtkAsset by tasks.registering {
+    val asset = layout.projectDirectory.file("src/main/assets/db/rtk.sqlite")
+    description = "Fails the build when the generated RTK asset is missing or of another schema version."
+    doLast {
+        val file = asset.asFile
+        if (!file.isFile) {
+            error("Missing app/src/main/assets/db/rtk.sqlite — generate it with: python3 tools/build_rtk_db.py")
+        }
+        val header = ByteArray(64)
+        val read = file.inputStream().use { input -> input.read(header) }
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        val version = if (read == header.size && header.copyOfRange(0, magic.size).contentEquals(magic)) {
+            ((header[60].toLong() and 0xFF) shl 24) or ((header[61].toLong() and 0xFF) shl 16) or
+                ((header[62].toLong() and 0xFF) shl 8) or (header[63].toLong() and 0xFF)
+        } else {
+            -1L
+        }
+        if (version != rtkSchemaVersion.toLong()) {
+            error(
+                "app/src/main/assets/db/rtk.sqlite is of schema version $version, " +
+                    "this build needs $rtkSchemaVersion — regenerate it with: " +
+                    "python3 tools/build_rtk_db.py"
+            )
+        }
+    }
+}
+
 tasks.named("preBuild") {
     dependsOn(verifyDictionaryAsset)
     dependsOn(verifyExamplesAsset)
+    dependsOn(verifyRtkAsset)
 }
 
-// The optional manga-ocr model (~117 MB) is never shipped in a release APK: the user imports it
-// from device storage, or a debug build downloads it here. `-PbundleMangaOcr=true` makes Gradle
-// fetch the three files into a gitignored, debug-only asset directory (release variants never see
-// it) so the debug APK carries the model for testing; without the property nothing is downloaded.
-val bundleMangaOcr = providers.gradleProperty("bundleMangaOcr").map { it.toBoolean() }.getOrElse(false)
-val mangaOcrAssets = layout.projectDirectory.dir("src/debug/assets/manga-ocr")
-
-/** Streams [url] into [target] through a temp file, following redirects (Hugging Face serves 307s). */
-fun downloadFollowingRedirects(url: String, target: File) {
-    val temp = File(target.parentFile, "${target.name}.part")
-    var current = URI(url).toURL()
-    var redirects = 0
-    while (true) {
-        val connection = (current.openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects = false
-            connectTimeout = 30_000
-            readTimeout = 120_000
-            setRequestProperty("User-Agent", "gaten-gradle")
-        }
-        connection.connect()
-        val code = connection.responseCode
-        if (code in 300..399) {
-            val location = connection.getHeaderField("Location")
-            connection.disconnect()
-            if (location == null) error("HTTP $code from $current without a Location header")
-            if (++redirects > 5) error("too many redirects for $url")
-            current = current.toURI().resolve(location).toURL()
-            continue
-        }
-        if (code != 200) {
-            connection.disconnect()
-            error("HTTP $code from $current")
-        }
-        connection.inputStream.use { input -> temp.outputStream().use { input.copyTo(it) } }
-        connection.disconnect()
-        break
-    }
-    if (!temp.renameTo(target)) {
-        target.delete()
-        if (!temp.renameTo(target)) error("cannot move ${temp.path} to ${target.path}")
-    }
-}
-
-val fetchMangaOcrModel by tasks.registering {
-    val targetDir = mangaOcrAssets.asFile
-    val downloads = mapOf(
-        "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/encoder_model_int8.onnx" to "encoder.onnx",
-        "https://huggingface.co/onnx-community/manga-ocr-base-ONNX/resolve/main/onnx/decoder_model_int8.onnx" to "decoder.onnx",
-        "https://huggingface.co/kha-white/manga-ocr-base/resolve/main/vocab.txt" to "vocab.txt"
-    )
-    description = "Downloads the optional manga-ocr ONNX model into ${mangaOcrAssets.asFile.relativeTo(projectDir)} (debug builds with -PbundleMangaOcr=true)."
-    // Nothing to do while every file is there, so a rebuild after the first fetch is free.
-    outputs.upToDateWhen { downloads.values.all { File(targetDir, it).isFile } }
-    doLast {
-        targetDir.mkdirs()
-        for ((url, name) in downloads) {
-            val file = File(targetDir, name)
-            if (file.isFile && file.length() > 0) {
-                logger.lifecycle("manga-ocr: $name is already there, skipping")
-                continue
-            }
-            logger.lifecycle("manga-ocr: downloading $url")
-            try {
-                downloadFollowingRedirects(url, file)
-            } catch (e: Exception) {
-                error("Could not download $url: ${e.message} — remove ${targetDir.path} and retry, or use tools/fetch_manga_ocr.sh")
-            }
-            logger.lifecycle("manga-ocr: wrote $name (${file.length() / 1024 / 1024} MB)")
-        }
-    }
-}
-
-// Only the debug build, and only when asked for: the model must never reach a release APK, and a
-// normal debug build must not touch the network.
-if (bundleMangaOcr) {
-    tasks.matching { it.name == "mergeDebugAssets" }.configureEach {
-        dependsOn(fetchMangaOcrModel)
-    }
-}
+// The optional PP-OCRv6 Medium model is not bundled: a Play install gets it from the `:ppocr`
+// fast-follow asset pack (ocr/PpOcrPack.kt), and every other install downloads it from the pinned
+// upstream sources (ocr/PpOcrModel.kt). A stale `src/main/assets/manga-ocr` copy is excluded from
+// packaging by the `androidResources.ignoreAssetsPattern` entry in the `android {}` block above.
 
 dependencies {
     // ReactActivity (via ReactActivityDelegate) requires an AppCompat theme; the RN bridge
@@ -345,12 +330,19 @@ dependencies {
 
     // AnkiDroid's instant-add API: a ContentProvider, so an export reads and writes on-device and
     // needs no network — nor does anything a card carries: glosses and parts of speech both come from
-    // the bundled dictionary in assets/db. The app's INTERNET permission is for the optional OCR
-    // model download and the optional WaniKani pages, nothing here.
+    // the bundled dictionary in assets/db. The app's INTERNET permission is for optional WaniKani
+    // pages, nothing here.
     implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 
-    // ONNX Runtime Mobile, for the optional manga-ocr second pass (ocr/MangaOcrEngine.kt). The
-    // library asks for INTERNET in its manifest, which the app manifest removes; the model itself
-    // is never bundled in a release APK (see fetchMangaOcrModel above).
+    // ONNX Runtime Mobile, for the optional PP-OCRv6 crop engine (ocr/PpOcrEngine.kt). The library
+    // asks for INTERNET in its manifest; no weights are bundled — the model arrives from Play's
+    // fast-follow asset pack or the in-app downloader, and is verified either way (ocr/PpOcrPack.kt,
+    // ocr/PpOcrModel.kt).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
+
+    // Play Asset Delivery, for the `:ppocr` fast-follow pack that carries the optional PP-OCRv6
+    // Medium model on a Play install (ocr/PpOcrPack.kt). Its API is a no-op where the pack does not
+    // exist — a sideloaded APK, a device without Play — and the in-app downloader is used instead,
+    // so the library ships in every build rather than only the bundle.
+    implementation(libs.play.asset.delivery)
 }

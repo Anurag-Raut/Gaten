@@ -12,13 +12,21 @@
     <string name="anki_add">Add to Anki</string>
     <string name="anki_added">Added</string>
     <string name="anki_duplicate">Already in Anki</string>
-    <string name="anki_error_permission">AnkiDroid did not allow writing to its database</string>
-    <string name="anki_error_deck">Could not create the deck in AnkiDroid</string>
-    <string name="anki_error_model">Could not create the note type in AnkiDroid</string>
-    <string name="anki_error_failed">Could not add the word to AnkiDroid</string>
-    <string name="anki_error_share">AnkiDroid cannot be opened for sharing</string>
-    <string name="anki_error_configuration">Anki settings no longer match the note type. Open Customize cards and select the note type again.</string>
-    <string name="anki_error_empty_first_field">The first Anki field is empty for this word. Choose a different field mapping.</string>
+    <string name="anki_checking">Checking Anki…</string>
+    <string name="anki_adding">Adding…</string>
+    <string name="anki_deck">Anki deck</string>
+    <!-- The deck row in the sheet's footer is a control: it names the change it opens. -->
+    <string name="anki_deck_change">Change deck</string>
+    <string name="anki_deck_cancel">Close the deck list</string>
+    <string name="anki_deck_empty">AnkiDroid has no decks to choose</string>
+    <string name="anki_deck_retry">Try again</string>
+    <string name="anki_not_installed">Install AnkiDroid to add cards</string>
+    <string name="anki_error_permission">Anki denied access</string>
+    <string name="anki_error_deck">Could not create the deck</string>
+    <string name="anki_error_model">Could not create the note type</string>
+    <string name="anki_error_failed">Could not add the word</string>
+    <string name="anki_error_configuration">Check the note type in Anki cards</string>
+    <string name="anki_error_empty_first_field">The first Anki field is empty. Check field mappings in Anki cards.</string>
     <string name="anki_settings_title">Anki</string>
     <string name="anki_settings_summary">Choose a deck, map note fields, and customize your cards.</string>
     <string name="anki_settings_open">Customize cards</string>
@@ -26,7 +34,7 @@
     <string name="anki_settings_save">Save</string>
     <string name="anki_settings_saved">Anki settings saved</string>
     <string name="anki_settings_not_installed">Install AnkiDroid to add cards. You can configure Gaten cards here first.</string>
-    <string name="anki_settings_permission">Allow AnkiDroid access to choose existing decks and note types and add cards directly. Without access, Add to Anki opens AnkiDroid’s add screen, where you choose the destination and card layout.</string>
+    <string name="anki_settings_permission">Allow AnkiDroid access to choose existing decks and note types and add cards directly. Without access, Add to Anki is unavailable; grant access here.</string>
     <string name="anki_settings_connect">Allow AnkiDroid access</string>
     <string name="anki_settings_refresh">Refresh from AnkiDroid</string>
     <string name="anki_settings_load_failed">Could not read AnkiDroid. Open AnkiDroid, then try Refresh.</string>

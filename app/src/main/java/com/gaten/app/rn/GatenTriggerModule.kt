@@ -54,6 +54,9 @@ class GatenTriggerModule(reactContext: ReactApplicationContext) :
             Intent(TriggerPreferences.ACTION_FLOATING_BUTTON_CHANGED)
                 .setPackage(context.packageName)
         )
+        // Announce the write to JS as well, so a Screen lookup page that is already open (and did
+        // not make this change) re-reads the switch instead of showing a stale value.
+        GatenBridgeEmitter.emitFloatingButtonChanged()
         promise.resolve(null)
     }
 
@@ -68,6 +71,26 @@ class GatenTriggerModule(reactContext: ReactApplicationContext) :
     fun setTileAdded(added: Boolean, promise: Promise) {
         TriggerPreferences.setTileAdded(reactApplicationContext, added)
         promise.resolve(null)
+    }
+
+    /** Whether the tile is switched on; the tile service reads the same flag for its own state. */
+    @ReactMethod
+    fun tileEnabled(promise: Promise) {
+        promise.resolve(TriggerPreferences.tileEnabled(reactApplicationContext))
+    }
+
+    /**
+     * Stores whether the tile is switched on; the running tile refreshes its state the next time the
+     * shade is opened. A failure to store is the page's to report, so it is rejected.
+     */
+    @ReactMethod
+    fun setTileEnabled(enabled: Boolean, promise: Promise) {
+        try {
+            TriggerPreferences.setTileEnabled(reactApplicationContext, enabled)
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject(CODE_SET_TILE_ENABLED, "Could not store the tile setting", e)
+        }
     }
 
     /**
@@ -111,5 +134,6 @@ class GatenTriggerModule(reactContext: ReactApplicationContext) :
         const val NAME = "GatenTrigger"
 
         private const val CODE_ADD_TILE = "E_TRIGGER_ADD_TILE"
+        private const val CODE_SET_TILE_ENABLED = "E_TRIGGER_SET_TILE_ENABLED"
     }
 }

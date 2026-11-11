@@ -29,6 +29,20 @@ data class WaniKaniContextSentence(
 )
 
 /**
+ * One vocabulary word a kanji appears in, for the teach screen's "Used in" step.
+ *
+ * WaniKani's API gives a kanji no example sentence of its own, so the only examples it has are the
+ * words it is used to build - `amalgamation_subject_ids`. [characters] is never null here: a word
+ * without characters could not be drawn in that list, so such a subject is left out rather than
+ * shown blank. [reading] stays null for a word WaniKani does not quiz on one.
+ */
+data class WaniKaniRelatedWord(
+    val characters: String,
+    val reading: String?,
+    val meaning: String
+)
+
+/**
  * One subject waiting to be learned, as the teach screen draws it and the quiz judges it.
  *
  * [meanings] and [readings] are the *accepted* answers only, exactly as [WaniKaniReviewItem] builds
@@ -72,7 +86,19 @@ data class WaniKaniLessonItem(
     /** Example sentences, for a vocabulary subject; empty for the kinds WaniKani gives none. */
     val contextSentences: List<WaniKaniContextSentence>,
     /** The subject's page on wanikani.com, or null when WaniKani's url was not one. */
-    val documentUrl: String?
+    val documentUrl: String?,
+    /**
+     * For a kanji: up to five vocabulary words it is used in, the lowest level first. This is what
+     * the teach screen shows in place of the example sentences WaniKani does not give a kanji;
+     * empty for every other kind of subject.
+     */
+    val relatedWords: List<WaniKaniRelatedWord> = emptyList(),
+    /**
+     * The `amalgamation_subject_ids` a kanji was decoded with, at most thirty of them. A native-side
+     * detail only: [relatedWords] is resolved from it by the client, and it is never sent to JS,
+     * which has no use for the ids of words it does not show.
+     */
+    val amalgamationIds: List<Int> = emptyList()
 )
 
 /**

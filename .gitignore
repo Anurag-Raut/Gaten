@@ -23,9 +23,20 @@ app/src/main/assets/db/jmdict.sqlite
 # Generated example sentences: build it with tools/build_examples_db.py
 app/src/main/assets/db/examples.sqlite
 
-# Optional manga-ocr model: downloaded by the debug build with -PbundleMangaOcr=true, or by
-# tools/fetch_manga_ocr.sh. ~117 MB of weights, debug-only, never part of a release APK.
-app/src/debug/assets/manga-ocr/
+# Generated Remembering the Kanji reference: build it with tools/build_rtk_db.py.
+# Generated rather than committed because the bundled prose is third-party content whose
+# redistribution rights have not been cleared (docs/jp-prototype/rtk/DATA.md).
+app/src/main/assets/db/rtk.sqlite
+
+# Stale manga-ocr weights: the reader no longer carries that engine, and nothing fetches these. The
+# entry just keeps an old ~117 MB local copy out of history; the build also excludes the directory
+# from packaging (app/build.gradle.kts, androidResources.ignoreAssetsPattern).
+app/src/main/assets/manga-ocr/
+
+# The PP-OCRv6 Medium weights staged into the :ppocr fast-follow asset pack by its
+# stagePpOcrAssets task (ppocr/build.gradle.kts). They are fetched from the pinned upstream sources
+# at bundle-build time and are never committed.
+ppocr/src/main/assets/pp-ocr/
 
 # Device evidence screenshots stay out of history
 docs/jp-prototype/**/*.png

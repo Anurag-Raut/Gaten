@@ -11,6 +11,8 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.gaten.app.wanikani.MAX_DAILY_LESSONS
+import com.gaten.app.wanikani.MIN_DAILY_LESSONS
 import com.gaten.app.wanikani.WaniKaniConnection
 import com.gaten.app.wanikani.WaniKaniFailure
 import com.gaten.app.wanikani.WaniKaniLessonItem
@@ -81,7 +83,12 @@ class GatenWaniKaniModule(
         promise.resolve(WaniKaniRepository.isConfigured(reactApplicationContext))
     }
 
-    /** Reads the optional daily lesson goal and this device's count of successful starts today. */
+    /**
+     * Reads the optional daily lesson goal, today's count of successful lesson starts, and today's
+     * count of distinct subjects whose review WaniKani accepted - the day's own activity for the
+     * account the stored token belongs to. The account itself is a digest the Kotlin side keeps, and
+     * it never appears in this answer.
+     */
     @ReactMethod
     fun getLearningPreferences(promise: Promise) {
         try {
@@ -91,17 +98,22 @@ class GatenWaniKaniModule(
         }
     }
 
-    /** Saves a daily lesson goal; null means unlimited. */
+    /**
+     * Saves a daily lesson goal. The goal is always a number: there is no unlimited setting, and the
+     * range is enforced here and again in the preferences layer, so nothing outside it is stored even
+     * if a caller asks.
+     */
     @ReactMethod
-    fun setDailyLessonLimit(limit: Double?, promise: Promise) {
+    fun setDailyLessonLimit(limit: Double, promise: Promise) {
         try {
-            val validatedLimit = limit?.let {
-                require(it.isFinite() && it % 1.0 == 0.0 && it in 1.0..1000.0) {
-                    "Daily lesson limit must be a whole number from 1 to 1000, or unlimited."
-                }
-                it.toInt()
+            require(
+                limit.isFinite() &&
+                    limit % 1.0 == 0.0 &&
+                    limit in MIN_DAILY_LESSONS.toDouble()..MAX_DAILY_LESSONS.toDouble()
+            ) {
+                "Daily lesson limit must be a whole number from $MIN_DAILY_LESSONS to $MAX_DAILY_LESSONS."
             }
-            promise.resolve(learningPreferences.setDailyLimit(validatedLimit).toJsMap())
+            promise.resolve(learningPreferences.setDailyLimit(limit.toInt()).toJsMap())
         } catch (e: IllegalArgumentException) {
             promise.reject("WK_INVALID_DAILY_LIMIT", e.message, e)
         } catch (e: Exception) {
@@ -277,6 +289,11 @@ class GatenWaniKaniModule(
      * and a submission that did not go through resolves as `{ status: "failed", failure }` with
      * `retryAfterSeconds` when there is one — whether WaniKani refused the request or never answered
      * it — exactly as [reviewQueue] does.
+     *
+     * A review WaniKani accepted is counted once for its subject today, and the cached stats are
+     * marked outdated so the next dashboard read is a fresh one. Neither is allowed to fail the
+     * answer: the remote write happened and is never sent again, and a counter that could not be
+     * written is reported by the next [getLearningPreferences] read instead.
      */
     @ReactMethod
     fun submitReview(
@@ -287,6 +304,10 @@ class GatenWaniKaniModule(
     ) {
         scope.launch {
             try {
+                // The account this review belongs to, taken before the request: the counters are
+                // scoped to it, and an answer landing after the credential was replaced must not be
+                // counted for the account that replaced it.
+                val account = learningPreferences.currentAccount()
                 when (
                     val submission = WaniKaniRepository.submitReview(
                         reactApplicationContext,
@@ -295,7 +316,18 @@ class GatenWaniKaniModule(
                         incorrectReadingAnswers.toInt()
                     )
                 ) {
-                    WaniKaniReviewSubmission.Submitted -> promise.resolve(status("accepted"))
+                    WaniKaniReviewSubmission.Submitted -> {
+                        // Best-effort: the review is WaniKani's already, and no local counter may
+                        // turn that into a rejected promise. A counter that could not be kept is
+                        // reported by the next getLearningPreferences read.
+                        try {
+                            learningPreferences.recordReviewedSubject(subjectId.toInt(), account)
+                        } catch (e: Exception) {
+                            // Nothing to do about it here; the answer is accepted either way.
+                        }
+                        waniKaniStats(reactApplicationContext).markDirty(account)
+                        promise.resolve(status("accepted"))
+                    }
                     WaniKaniReviewSubmission.NeedsToken -> promise.resolve(status("needsToken"))
                     WaniKaniReviewSubmission.AuthRejected -> promise.resolve(status("authRejected"))
                     is WaniKaniReviewSubmission.Unreachable -> promise.resolve(
@@ -352,6 +384,10 @@ class GatenWaniKaniModule(
      * Enforces the device-local daily limit before starting a new assignment. Same-day successful
      * assignment retries resolve as started without another request. Other outcomes are started,
      * dailyLimitReached (with the limit and count), needsToken, authRejected or failed.
+     *
+     * A lesson WaniKani started is counted once for its assignment today, and the cached stats are
+     * marked outdated so the next dashboard read is a fresh one — both best-effort, as in
+     * [submitReview].
      */
     @ReactMethod
     fun startLesson(assignmentId: Double, promise: Promise) {
@@ -369,19 +405,32 @@ class GatenWaniKaniModule(
                         promise.resolve(status("needsToken"))
                         return@withLock
                     }
-                    if (learningPreferences.wasStartedToday(id)) {
+                    // The account today's counts and this start belong to, taken before the request:
+                    // an answer landing after the credential was replaced is not counted for the
+                    // account that replaced it.
+                    val account = learningPreferences.currentAccount()
+                    if (learningPreferences.wasStartedToday(id, account)) {
                         promise.resolve(status("started"))
                         return@withLock
                     }
                     val preferences = learningPreferences.read()
-                    val dailyLimit = preferences.dailyLimit
-                    if (dailyLimit != null && preferences.learnedToday >= dailyLimit) {
-                        promise.resolve(dailyLimitReached(dailyLimit, preferences.learnedToday))
+                    if (preferences.learnedToday >= preferences.dailyLimit) {
+                        promise.resolve(
+                            dailyLimitReached(preferences.dailyLimit, preferences.learnedToday)
+                        )
                         return@withLock
                     }
                     when (val result = WaniKaniRepository.startLesson(reactApplicationContext, id)) {
                         WaniKaniLessonStart.Started -> {
-                            learningPreferences.recordStartedAssignment(id)
+                            // Best-effort, as in submitReview: the lesson is WaniKani's already, and
+                            // a counter that could not be kept is reported by the next preferences
+                            // read rather than failing this answer.
+                            try {
+                                learningPreferences.recordStartedAssignment(id, account)
+                            } catch (e: Exception) {
+                                // The answer is started either way.
+                            }
+                            waniKaniStats(reactApplicationContext).markDirty(account)
                             promise.resolve(status("started"))
                         }
                         WaniKaniLessonStart.NeedsToken -> promise.resolve(status("needsToken"))
@@ -401,9 +450,10 @@ class GatenWaniKaniModule(
 
     /**
      * The account's own numbers for the dashboard: the level, what is due now, the next review time,
-     * the next 24 hours by the hour, the SRS spread of everything the account has started, and the
-     * cumulative accuracy of its reviews. That last section is the one part that may be `null` while
-     * everything else is there: it is optional data, and its absence says nothing about the rest.
+     * the next 24 hours by the hour, the SRS spread of everything the account has started, the
+     * cumulative accuracy of its reviews, and the account's own level history. The last two are the
+     * parts that may be `null` while everything else is there: they are optional data, and the absence
+     * of either says nothing about the rest.
      *
      * Resolves the cached snapshot while it is younger than five minutes and a fresh read otherwise.
      * [refreshStats] is the same read with the cache ignored — the dashboard's refresh action — and a
@@ -490,21 +540,69 @@ class GatenWaniKaniModule(
                 )
                 val recall = snapshot.recall
                 if (recall == null) putNull("recall") else putMap("recall", recall.toJsMap())
+                val levelHistory = snapshot.levelHistory
+                if (levelHistory == null) {
+                    putNull("levelHistory")
+                } else {
+                    putArray(
+                        "levelHistory",
+                        Arguments.createArray().apply {
+                            levelHistory.forEach { progression ->
+                                pushMap(
+                                    Arguments.createMap().apply {
+                                        putInt("id", progression.id)
+                                        putInt("level", progression.level)
+                                        progression.startedAt?.let { putDouble("startedAt", it.toDouble()) }
+                                            ?: putNull("startedAt")
+                                        progression.passedAt?.let { putDouble("passedAt", it.toDouble()) }
+                                            ?: putNull("passedAt")
+                                        progression.abandonedAt?.let {
+                                            putDouble("abandonedAt", it.toDouble())
+                                        } ?: putNull("abandonedAt")
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
                 putDouble("fetchedAt", snapshot.fetchedAt.toDouble())
             }
         )
     }
 
     /**
-     * The recall section: the account's cumulative reading and meaning accuracy, and the subjects it
-     * gets wrong most often. Every percentage here is over every answer the account has ever given —
-     * WaniKani keeps running totals rather than a log — and each row's `attempts` is the sample its
-     * percentage came from, so a subject answered five times is never read like one answered five
-     * hundred.
+     * The recall section: the account's cumulative reading and meaning accuracy, the same accuracy
+     * per kind of subject, and the subjects it gets wrong most often. Every percentage here is over
+     * every answer the account has ever given — WaniKani keeps running totals rather than a log — and
+     * each row's `attempts` is the sample its percentage came from, so a subject answered five times
+     * is never read like one answered five hundred. `bySubject` is one row per kind of subject —
+     * `radical`, `kanji`, `vocabulary`, with kana vocabulary folded into the last — always all three
+     * and always in that order, so a kind the account has never answered reads as a zero row; it is
+     * null only when the stored section carries no such rows.
      */
     private fun WaniKaniRecall.toJsMap(): WritableMap = Arguments.createMap().apply {
         putRecallSide("reading", reading)
         putRecallSide("meaning", meaning)
+        val bySubject = bySubject
+        if (bySubject == null) {
+            putNull("bySubject")
+        } else {
+            putArray(
+                "bySubject",
+                Arguments.createArray().apply {
+                    bySubject.forEach { row ->
+                        pushMap(
+                            Arguments.createMap().apply {
+                                putString("key", row.key)
+                                putString("label", row.label)
+                                putInt("correct", row.correct)
+                                putInt("total", row.total)
+                            }
+                        )
+                    }
+                }
+            )
+        }
         putArray(
             "difficult",
             Arguments.createArray().apply {
@@ -547,10 +645,20 @@ class GatenWaniKaniModule(
             putInt("learnedToday", learnedToday)
         }
 
+    /**
+     * The day's counters as JS reads them. Everything is written, nulls included, so the screen can
+     * tell "nothing done" from "nothing to read": `learnedToday` stays a number because the daily
+     * goal is checked against it, while `reviewedToday` is null exactly when a counter could not be
+     * read or written. The account the counters are scoped to is a digest the Kotlin side keeps and
+     * neither its value nor anything it was derived from is written here.
+     */
     private fun WaniKaniLearningPreferences.Snapshot.toJsMap(): WritableMap =
         Arguments.createMap().apply {
-            if (dailyLimit == null) putNull("dailyLimit") else putInt("dailyLimit", dailyLimit)
+            putInt("dailyLimit", dailyLimit)
             putInt("learnedToday", learnedToday)
+            reviewedToday?.let { putInt("reviewedToday", it) } ?: putNull("reviewedToday")
+            putString("activityDate", activityDate)
+            if (activityFailure) putString("activityFailure", "STORAGE") else putNull("activityFailure")
         }
 
     /**
@@ -574,6 +682,22 @@ class GatenWaniKaniModule(
         putString("primaryMeaning", primaryMeaning)
         putArray("readings", readings.toJsArray())
         putString("primaryReading", primaryReading)
+        putInt("level", level)
+        putString("meaningMnemonic", meaningMnemonic)
+        putString("readingMnemonic", readingMnemonic)
+        putArray(
+            "contextSentences",
+            Arguments.createArray().apply {
+                contextSentences.forEach { sentence ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putString("japanese", sentence.japanese)
+                            putString("english", sentence.english)
+                        }
+                    )
+                }
+            }
+        )
     }
 
     private fun WaniKaniLessonItem.toJsMap(): WritableMap = Arguments.createMap().apply {
@@ -612,6 +736,23 @@ class GatenWaniKaniModule(
                         Arguments.createMap().apply {
                             putString("japanese", sentence.japanese)
                             putString("english", sentence.english)
+                        }
+                    )
+                }
+            }
+        )
+        // The words a kanji is shown as being used in. `reading` is left out when it is null, as a
+        // component's `name` is, because JS reads it as optional; `amalgamationIds` never crosses:
+        // it is how these words were resolved, not something the screen draws.
+        putArray(
+            "relatedWords",
+            Arguments.createArray().apply {
+                relatedWords.forEach { word ->
+                    pushMap(
+                        Arguments.createMap().apply {
+                            putString("characters", word.characters)
+                            word.reading?.let { putString("reading", it) }
+                            putString("meaning", word.meaning)
                         }
                     )
                 }

@@ -23,6 +23,7 @@ class GatenBridgePackage : ReactPackage {
             GatenDictModule(reactContext),
             GatenAnkiModule(reactContext),
             GatenWaniKaniModule(reactContext),
+            GatenRtkModule(reactContext),
             GatenThemeModule(reactContext),
             GatenHapticsModule(reactContext),
             GatenAppInfoModule(reactContext),
@@ -30,8 +31,9 @@ class GatenBridgePackage : ReactPackage {
             GatenTriggerModule(reactContext),
             GatenPlatformModule(reactContext),
             GatenRecognitionModule(reactContext),
+            GatenLookupSheetModule(reactContext),
         )
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
-        listOf(GatenCardWebViewManager())
+        listOf(GatenCardWebViewManager(), GatenThemeTransitionManager())
 }

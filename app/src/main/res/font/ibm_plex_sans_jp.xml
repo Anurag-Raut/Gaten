@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Gaten
+  Copyright (C) 2026 Anurag Raut
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  IBM Plex Sans JP as React Native needs it: one family the Android font stack can pick a weight from.
+
+  The four static faces come from google/fonts (OFL 1.1, bundled in
+  assets/licenses/IBMPlexSansJP-OFL.txt). One family covers the whole app: the JP faces carry the same
+  IBM Plex Latin design as IBM Plex Sans (about 5 % larger on the em, to sit with the kana) alongside
+  the Japanese glyphs, so a mixed string — "12 weeks · Anki", a gloss beside a headword — is drawn in
+  one face with no per-script split. A glyph the face does not carry still falls back to the
+  platform's own, as any font does.
+
+  React Native hands a text's weight to `Typeface.create`, which resolves it against a family's
+  declared entries, so every weight the type scale asks for has its own entry. Consumed through
+  ReactFontManager.addCustomFont(..., R.font.ibm_plex_sans_jp) as the face "IBM Plex Sans JP"; the
+  Compose overlay names the same four resources directly.
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/ibm_plex_sans_jp_regular"
+        android:fontStyle="normal"
+        android:fontWeight="400" />
+    <font
+        android:font="@font/ibm_plex_sans_jp_medium"
+        android:fontStyle="normal"
+        android:fontWeight="500" />
+    <font
+        android:font="@font/ibm_plex_sans_jp_semibold"
+        android:fontStyle="normal"
+        android:fontWeight="600" />
+    <font
+        android:font="@font/ibm_plex_sans_jp_bold"
+        android:fontStyle="normal"
+        android:fontWeight="700" />
+</font-family>

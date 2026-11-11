@@ -107,7 +107,7 @@ class ScreenLineReaderTest {
 
     @Test
     fun aNonJapaneseLineIsStillOfferedToTheModel() {
-        // ML Kit reading a stylized line as Latin is exactly the case manga-ocr is here for.
+        // ML Kit reading a stylized line as Latin is exactly the case the engine is here for.
         val screen = screenOf("Hello world")
 
         val text = runBlocking { readerAnswering(screen, "猫が水を飲む").read(0) }
@@ -324,5 +324,39 @@ class ScreenLineReaderTest {
 
         assertEquals("", text)
         assertFalse(asked.contains(9))
+    }
+
+    private fun boxOnlyScreen(): ScreenText {
+        val box = Box(0, 0, 1000, 60)
+        return ScreenText(
+            listOf(ScreenLine("", box, vertical = false, charBoxes = listOf(box))),
+            width = 1080,
+            height = 2400
+        )
+    }
+
+    @Test
+    fun aBoxOnlyLineReadLongIsKeptAndItsBoxesRealigned() {
+        val reading = "猫が水を飲む猫が水を飲む猫が水を飲む猫が水を飲む" // 24 chars
+        val reader = readerAnswering(boxOnlyScreen(), reading)
+
+        val text = runBlocking { reader.read(0) }
+
+        val line = reader.text.value.lines[0]
+        assertEquals(reading, text)
+        assertEquals(reading, line.text)
+        assertEquals(reading.length, line.charBoxes.size)
+    }
+
+    @Test
+    fun aBoxOnlyLineThatReadsNothingIsDroppedNotReturnedAsAPhrase() {
+        val reader = reader(boxOnlyScreen()) { null }
+
+        val text = runBlocking { reader.read(0) }
+
+        val line = reader.text.value.lines[0]
+        assertEquals("", text)
+        assertEquals("", line.text)
+        assertTrue(line.charBoxes.isEmpty())
     }
 }

@@ -7,8 +7,6 @@
 package com.gaten.app.ui.lookup
 
 import android.graphics.Bitmap
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -26,7 +24,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
@@ -40,41 +37,79 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.gaten.app.ocr.Box
+import com.gaten.app.ocr.ScreenLine
 
 /** Degenerate gestures (a tap or a sliver) are ignored below this side length, in view px. */
 internal const val MIN_SELECTION_PX = 24f
 
 /*
- * The lasso trail is three passes over one smoothed path, the way a route is drawn on a map: a
- * wide translucent bloom for the glow, a dark casing that carries the contrast, then the gradient
- * core inside it. The core is the theme's indigo - primary drifting to tertiary and back, the same
- * two tones the edge outline uses - and the casing under it is deliberately NOT a theme role: the
- * theme's dark-mode roles flip polarity, so a role-derived casing would vanish on one kind of page
- * or the other. A fixed dark casing keeps the stroke readable on a white manga page and on a
- * dark game UI alike.
+ * The lasso trail is two solid passes over one smoothed path: an `onPrimary` keyline under a
+ * `primary` core. The pair is the theme's own contrast couple — a deep accent keyed with white in
+ * light mode, a pale one keyed with #111111 in dark — so neither pass has to sample the page under
+ * it, and neither is translucent: the widths alone carry the hierarchy, whatever distance the
+ * finger travelled.
  */
-private val TrailBloomWidth = 14.dp
-private val TrailCasingWidth = 5.5.dp
-private val TrailCoreWidth = 3.dp
-private const val TrailBloomAlpha = 0.14f
-private const val TrailCasingAlpha = 0.75f
+private val TrailOuterWidth = 5.dp
+private val TrailInnerWidth = 3.dp
 
-/** The selection edge: the same bloom-over-core language, drawn around the box instead. */
-private val EdgeBloomWidth = 10.dp
-private val EdgeCoreWidth = 2.dp
-private const val EdgeBloomAlpha = 0.18f
+/** The selection edge: the same pair around the box, lighter once the answer is up. */
+private val EdgeOuterWidth = 4.dp
+private val EdgeInnerWidth = 2.dp
+private val EdgeResultOuterWidth = 3.dp
+private val EdgeResultInnerWidth = 1.dp
 
 /** How far the clear region's corners are rounded out of the dim, in dp. */
-private val SelectionCorner = 12.dp
-
-/** The dim over everything outside the selection. */
-private const val ScrimAlpha = 0.35f
+private val SelectionCorner = 4.dp
 
 /**
- * What the selection edge is cut back to once the result sheet is up: still there,
- * marking the region the answer came from, but no longer the subject of the screen.
+ * The dim over everything outside the selection. The veil is the one colour in the overlay that is
+ * not a theme role: it dims somebody else's pixels, so it is plain black in both themes — no tint,
+ * no accent wash, and nothing taken from the screenshot it covers.
  */
-private const val ResultEmphasis = 0.4f
+private const val ScrimAlpha = 0.40f
+
+/** Opacity of the accent fill inside the loop while it is being drawn. */
+private const val LoopFillAlpha = 0.18f
+
+/** Opacity of the accent tint over the characters the lasso selected, once it is released. */
+private const val TextHighlightAlpha = 0.28f
+
+/** How far the selected-text highlight is rounded, and how far it stands off the glyphs, in dp. */
+private val HighlightCorner = 6.dp
+private val HighlightPadding = 4.dp
+
+/**
+ * Even-odd point-in-polygon test: true when ([x], [y]) is inside the closed loop through [polygon].
+ * The loop closes itself from the last point back to the first, as the drawn fill does.
+ */
+internal fun polygonContains(polygon: List<Offset>, x: Float, y: Float): Boolean {
+    if (polygon.size < 3) return false
+    var inside = false
+    var j = polygon.lastIndex
+    for (i in polygon.indices) {
+        val a = polygon[i]
+        val b = polygon[j]
+        if ((a.y > y) != (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside
+        j = i
+    }
+    return inside
+}
+
+/**
+ * The text a lasso selected: for each indexed line, one box spanning the characters whose centres
+ * fall inside [polygon]. Boxes and polygon share one coordinate space (the capture's pixels), blank
+ * characters never count, and a line with no character inside contributes nothing.
+ */
+internal fun lassoTextBoxes(lines: List<ScreenLine>, polygon: List<Offset>): List<Box> =
+    lines.mapNotNull { line ->
+        if (line.charBoxes.size != line.text.length) return@mapNotNull null
+        val hit = line.charBoxes.filterIndexed { i, box ->
+            !line.text[i].isWhitespace() && polygonContains(polygon, box.centreX.toFloat(), box.centreY.toFloat())
+        }
+        if (hit.isEmpty()) null
+        else Box(hit.minOf { it.left }, hit.minOf { it.top }, hit.maxOf { it.right }, hit.maxOf { it.bottom })
+    }
 
 /** A rounded [Stroke] of [width] dp, resolved once per density rather than per drawn frame. */
 @Composable
@@ -118,12 +153,15 @@ internal fun trailInto(path: Path, points: List<Offset>) {
  * The full-screen selection canvas over the frozen screenshot.
  *
  * Draws the dim-over-everything scrim as one even-odd fill — the whole canvas less a rounded hole
- * at the selection, so the clear region the reader chose has soft corners — then the selection's
- * own edge and the live lasso trail only while the user is drawing. Drag and tap gestures are active
- * only while [interactive]; the result sheet sits on top and handles its own touches afterwards.
+ * at the selection, so the clear region the reader chose is the frozen capture itself, unaltered —
+ * then the selection's own edge and the live lasso trail only while the user is drawing. Drag and
+ * tap gestures are active only while [interactive]; the result sheet sits on top and handles its own
+ * touches afterwards.
  *
- * The selection edge is cut back once the result is up ([ResultEmphasis]): the reader can still
- * see which region was read while the sheet explains it. The trail disappears on finger lift.
+ * The edge changes weight once a result is up — [EdgeResultOuterWidth] and [EdgeResultInnerWidth] in
+ * place of the drawing pair — so the region the answer came from reads as a marker instead of as the
+ * subject, by weight rather than by fading over pixels the app cannot predict. The trail disappears
+ * on finger lift.
  *
  * The points themselves are hoisted into [LookupOverlay] so the lasso can survive recomposition
  * and be reset on "select again"; [onLassoEnd] reads that state at call time.
@@ -133,6 +171,7 @@ fun LassoLayer(
     screenshot: Bitmap?,
     points: List<Offset>,
     frozenBox: Rect?,
+    textHighlights: List<Rect>,
     interactive: Boolean,
     showingResult: Boolean,
     onLassoStart: (Offset) -> Unit,
@@ -143,40 +182,17 @@ fun LassoLayer(
     modifier: Modifier = Modifier
 ) {
     val primary = MaterialTheme.colorScheme.primary
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
     val currentStart by rememberUpdatedState(onLassoStart)
     val currentUpdate by rememberUpdatedState(onLassoUpdate)
     val currentEnd by rememberUpdatedState(onLassoEnd)
     val currentCancel by rememberUpdatedState(onLassoCancel)
     val currentTap by rememberUpdatedState(onTap)
-    val liveBox = remember(points) { boundingBoxOf(points) }
-    val box = frozenBox ?: liveBox
+    val box = frozenBox
 
-    // The selection keeps a quieter edge under the sheet, so the region that was read stays marked.
-    val edgeEmphasis by animateFloatAsState(
-        targetValue = if (showingResult) ResultEmphasis else 1f,
-        animationSpec = tween(220),
-        label = "edgeEmphasis"
-    )
-
-    // Measured once. The two things that are laid out from the canvas — the trail's sheen and the
-    // scrim's outer rectangle — are then built in composition rather than per drawn frame.
+    // Measured once: the scrim's outer rectangle is built in composition from the canvas size,
+    // never inside the draw scope.
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
-
-    // The sheen: the theme's two indigo tones along the viewport diagonal, so one stroke changes
-    // tone as it crosses the display. Fixed in screen space, rebuilt only when the theme or the
-    // size changes, and null until the canvas is measured — a zero-length gradient is no brush.
-    val tertiary = MaterialTheme.colorScheme.tertiary
-    val trailBrush = remember(viewSize, primary, tertiary) {
-        if (viewSize.width <= 0 || viewSize.height <= 0) {
-            null
-        } else {
-            Brush.linearGradient(
-                colors = listOf(primary, tertiary, primary),
-                start = Offset.Zero,
-                end = Offset(viewSize.width.toFloat(), viewSize.height.toFloat())
-            )
-        }
-    }
 
     // Rebuilt as the finger moves, never inside the draw scope: smoothing is O(points) work.
     val liveTrail = remember { Path() }
@@ -199,11 +215,23 @@ fun LassoLayer(
         }
     }
 
-    val trailBloomStroke = roundStroke(TrailBloomWidth)
-    val trailCasingStroke = roundStroke(TrailCasingWidth)
-    val trailCoreStroke = roundStroke(TrailCoreWidth)
-    val edgeBloomStroke = roundStroke(EdgeBloomWidth)
-    val edgeCoreStroke = roundStroke(EdgeCoreWidth)
+    // While the loop is being drawn the dim has the loop itself cut out of it, so the text inside
+    // reads clear under the accent fill. Rebuilt with the points, never inside the draw scope.
+    val loopScrim = remember { Path().apply { fillType = PathFillType.EvenOdd } }
+    remember(viewSize, points) {
+        loopScrim.reset()
+        if (points.size > 2 && viewSize.width > 0 && viewSize.height > 0) {
+            loopScrim.addRect(Rect(Offset.Zero, Size(viewSize.width.toFloat(), viewSize.height.toFloat())))
+            loopScrim.addPath(liveTrail)
+        }
+    }
+
+    val trailOuterStroke = roundStroke(TrailOuterWidth)
+    val trailInnerStroke = roundStroke(TrailInnerWidth)
+    // One weight while the reader draws — and while the crop they committed is being read — and the
+    // lighter pair once there is an answer to look at.
+    val edgeOuterStroke = roundStroke(if (showingResult) EdgeResultOuterWidth else EdgeOuterWidth)
+    val edgeInnerStroke = roundStroke(if (showingResult) EdgeResultInnerWidth else EdgeInnerWidth)
 
     Canvas(
         modifier = modifier
@@ -229,57 +257,63 @@ fun LassoLayer(
                 }
             }
     ) {
-        // Bloom, dark casing and themed core for the live stroke.
+        // The live stroke: the keyline first, the accent core over it, both fully opaque.
         fun DrawScope.drawTrail(path: Path) {
-            drawPath(path, primary.copy(alpha = TrailBloomAlpha), style = trailBloomStroke)
-            drawPath(
-                path,
-                Color.Black.copy(alpha = TrailCasingAlpha),
-                style = trailCasingStroke
-            )
-            val brush = trailBrush
-            if (brush != null) {
-                drawPath(path, brush, style = trailCoreStroke)
-            } else {
-                drawPath(path, primary, style = trailCoreStroke)
-            }
+            drawPath(path, onPrimary, style = trailOuterStroke)
+            drawPath(path, primary, style = trailInnerStroke)
         }
 
         val scrim = Color.Black.copy(alpha = ScrimAlpha)
-        if (box == null) {
+        if (textHighlights.isNotEmpty()) {
+            // Released: the loop and the dim are gone, and only the characters the lasso read are
+            // marked, each line as one rounded block in the reader's accent.
+            val corner = CornerRadius(HighlightCorner.toPx())
+            val pad = HighlightPadding.toPx()
+            for (rect in textHighlights) {
+                // A little air around the glyphs, so the block never sits tight against the text.
+                val padded = rect.inflate(pad)
+                drawRoundRect(
+                    color = primary.copy(alpha = TextHighlightAlpha),
+                    topLeft = padded.topLeft,
+                    size = padded.size,
+                    cornerRadius = corner
+                )
+            }
+        } else if (interactive && points.size > 2) {
+            // Drawing: the dim with the loop cut out, and the accent fill inside the loop.
+            drawPath(loopScrim, scrim)
+            drawPath(liveTrail, primary.copy(alpha = LoopFillAlpha))
+        } else if (box == null) {
             drawRect(scrim)
         } else {
             // One even-odd fill: the whole canvas less the rounded hole at the selection, so the
-            // dim frames a clear region with soft corners instead of four square ones.
+            // frozen pixels the reader chose stay exactly as captured instead of sitting under a
+            // second, softer surface of the app's own.
             drawPath(scrimPath, scrim)
             val corner = CornerRadius(cornerPx.coerceAtMost(minOf(box.width, box.height) / 2f))
-            // The selection's own edge: bloom under core, the same language as the trail.
+            // The selection's own edge, the same two passes as the trail.
             drawRoundRect(
-                color = primary.copy(alpha = EdgeBloomAlpha * edgeEmphasis),
+                color = onPrimary,
                 topLeft = box.topLeft,
                 size = box.size,
                 cornerRadius = corner,
-                style = edgeBloomStroke
+                style = edgeOuterStroke
             )
             drawRoundRect(
-                color = primary.copy(alpha = edgeEmphasis),
+                color = primary,
                 topLeft = box.topLeft,
                 size = box.size,
                 cornerRadius = corner,
-                style = edgeCoreStroke
+                style = edgeInnerStroke
             )
         }
         // The user's own stroke while drawing. A single sample — the first event of a drag — is a
-        // dot, so the gesture is answered by the first move rather than by the second.
-        if (interactive && points.size == 1) {
+        // dot, so the gesture is answered by the first touch rather than by the second.
+        if (textHighlights.isEmpty() && interactive && points.size == 1) {
             val center = points[0]
-            drawCircle(
-                Color.Black.copy(alpha = TrailCasingAlpha),
-                trailCasingStroke.width / 2f,
-                center
-            )
-            drawCircle(primary, trailCoreStroke.width / 2f, center)
-        } else if (interactive && points.size > 1) {
+            drawCircle(onPrimary, trailOuterStroke.width / 2f, center)
+            drawCircle(primary, trailInnerStroke.width / 2f, center)
+        } else if (textHighlights.isEmpty() && interactive && points.size > 1) {
             drawTrail(liveTrail)
         }
     }

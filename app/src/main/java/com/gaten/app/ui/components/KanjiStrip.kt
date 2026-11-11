@@ -6,41 +6,34 @@
 
 package com.gaten.app.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import com.gaten.app.R
 import com.gaten.app.ui.lookup.SheetType
-import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.Spacing
+
+/** Every character here is a target, and a target is never smaller than this. */
+private val KanjiTarget = 48.dp
 
 /**
  * The distinct kanji of [text], in order, one string per code point.
@@ -77,84 +70,71 @@ internal fun KanjiStrip(
 }
 
 /**
- * The same strip for a caller that already knows which characters to offer — the review screen,
- * which keeps only the kanji its question side already shows, so a tap can never reveal part of the
- * answer. The characters are drawn in the order given, one chip each, and [selected] marks the one
- * whose details are open underneath: the chip that opened them is also the chip that closes them.
+ * The same strip for a caller that already knows which characters to offer. The characters are drawn
+ * in the order given, one bare action each.
  *
- * [modifier] lands on the chip row itself, which is what a caller wanting to scroll the strip into
- * view measures; the label above it is part of the strip's own spacing.
+ * Nothing here is a chip: these characters really are actions, so the accent is the honest way to
+ * say so, and a tile, a border or a radius around each one would only put a container where a target
+ * belongs. [modifier] lands on the row itself, which is what a caller measuring it will read.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun KanjiStrip(
     characters: List<String>,
     onKanji: (String) -> Unit,
     type: SheetType,
-    selected: String? = null,
     modifier: Modifier = Modifier
 ) {
     if (characters.isEmpty()) return
 
-    Spacer(Modifier.height(Spacing.s))
+    // The 20 dp belongs to the strip's own place in the entry: it is a section after the meanings and
+    // the parts of speech, not a paragraph of them.
+    Spacer(Modifier.height(Spacing.xl))
     Text(
         text = stringResource(R.string.wk_strip_label),
-        style = type.small,
+        style = type.caption,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Spacer(Modifier.height(Spacing.xs))
-    Row(
-        modifier = Modifier.fillMaxWidth().then(modifier).horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+    Spacer(Modifier.height(Spacing.s))
+    // Wrapping rather than scrolling sideways: the whole set stays visible on a wide screen, and a
+    // word with many characters never hides one past an edge the reader has to find.
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+        verticalArrangement = Arrangement.spacedBy(Spacing.s),
+        modifier = Modifier.fillMaxWidth().then(modifier)
     ) {
         characters.forEach { character ->
-            val description = stringResource(R.string.wk_cd_kanji, character)
-            val open = character == selected
-            val interactions = remember { MutableInteractionSource() }
-            val container by animateColorAsState(
-                if (open) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                tween(Motion.SHORT), label = "kanjiChipColor"
-            )
-            val check by animateFloatAsState(
-                if (open) 1f else 0f, Motion.overshoot, label = "kanjiChipCheck"
-            )
-            Surface(
-                onClick = { onKanji(character) },
-                interactionSource = interactions,
-                shape = MaterialTheme.shapes.small,
-                color = container,
-                // The open character is the only one ringed: the chip that opened the details below
-                // is the one that closes them, and the ring says which one that is.
-                border = if (open) {
-                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                } else {
-                    null
-                },
-                modifier = Modifier.pressScale(interactions).semantics {
-                    contentDescription = description
-                    this.selected = open
-                }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (open) {
-                        Icon(
-                            Icons.Rounded.Check, contentDescription = null,
-                            modifier = Modifier.size(18.dp).graphicsLayer { scaleX = check; scaleY = check }
-                        )
-                    }
-                    Text(
-                        text = character,
-                        style = type.headword,
-                        color = if (open) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
-            }
+            KanjiAction(character, onKanji, type)
         }
+    }
+}
+
+/**
+ * One character as a bare action: the glyph itself in the accent, on the sheet's own paper, with no
+ * tile under it. The 4 dp above and below is what makes the target grow with the glyph at a large
+ * text scale instead of the glyph outgrowing its own target.
+ */
+@Composable
+private fun KanjiAction(character: String, onKanji: (String) -> Unit, type: SheetType) {
+    val interactions = remember { MutableInteractionSource() }
+    val description = stringResource(R.string.wk_cd_kanji, character)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .defaultMinSize(minWidth = KanjiTarget, minHeight = KanjiTarget)
+            .pressOpacity(interactions)
+            .clickable(
+                interactionSource = interactions,
+                indication = LocalIndication.current,
+                onClick = { onKanji(character) }
+            )
+            .semantics { contentDescription = description }
+            .padding(vertical = Spacing.xs)
+    ) {
+        Text(
+            text = character,
+            style = type.headword,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }

@@ -20,7 +20,7 @@ import {svgDocument} from "../wanikani/WaniKaniPanel";
 import {useTheme} from "../theme";
 
 export function RadicalDrawing({subjectId}: {subjectId: number}) {
-  const {colors, mode} = useTheme();
+  const {colors, dark} = useTheme();
   const [svg, setSvg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,8 +42,8 @@ export function RadicalDrawing({subjectId}: {subjectId: number}) {
   }, [subjectId]);
 
   const document = useMemo(
-    () => (svg == null ? null : svgDocument(svg, mode === "Dark")),
-    [svg, mode]
+    () => (svg == null ? null : svgDocument(svg, dark)),
+    [svg, dark]
   );
 
   if (document == null) return <View style={styles.drawing} />;

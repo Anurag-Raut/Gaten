@@ -5,116 +5,341 @@
  */
 
 /**
- * The optional manga-ocr model: what is installed, the models the catalog offers, and the ways
- * onto the phone.
+ * Text recognition: the reader's manual engine choice, and the explicit confirmed downloads that put
+ * an engine on the device.
  *
- * There is no switch: manga-ocr is the reader as soon as its model is on the phone, and with none
- * installed the built-in reader (ML Kit) reads the screen — the Help dialog says so, because the
- * sentence is longer than a row. Downloading is one of the app's two network uses, and it only
- * happens after the size has been shown and confirmed; importing opens a document picker for a
- * phone with no network or a model fetched elsewhere. Both end in the same directory, and Remove
- * takes the model off again.
+ * Two choices, no classifier. Standard is bundled and is the default: it reads out of the box with
+ * nothing to download. Enhanced is the optional recommended reader for ordinary screen and novel
+ * text; it downloads only when its own button is pressed, asks for confirmation first (warning that
+ * Wi-Fi is recommended and mobile data may incur charges), then works offline. An unavailable engine
+ * still selects, and lookups fall back to Standard. Whether a download is running is read from the
+ * native module, so leaving and returning does not show a download as finished.
  *
- * All of that state lives in the recognition store, outside any screen: leaving the page, opening
- * another one or the phone turning neither cancels a running download nor throws away what it has
- * done.
+ * The rows name the modes, not the models behind them: "Standard" is the bundled recognizer and
+ * "Enhanced" is the optional one, so the reader chooses a capability rather than a vendor.
  */
-import React, {useEffect, useState} from "react";
-import {AppState, Text, View} from "react-native";
+import React, {useEffect, useRef, useState} from "react";
+import {Alert, AppState, Text, View} from "react-native";
+import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenRecognition from "../../native/GatenRecognition";
-import type {MangaOcrCatalogEntry} from "../../native/GatenRecognition";
-import {Button} from "../components";
+import type {
+  EngineStatus,
+  RecognitionEngine,
+  RecognitionSettings,
+} from "../../native/GatenRecognition";
+import {Icon} from "../components";
+import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
-import {useRecognition} from "./useRecognition";
 import {
-  Chip,
-  DialogShell,
   OutlinedButton,
   RowIcon,
   SettingsGroup,
   SettingsPageScaffold,
-  SettingsTile,
 } from "./settings-components";
 
+const ML_KIT: RecognitionEngine = "ml_kit";
+
 const HELP_PARAGRAPHS = [
-  "Without a model, ML Kit reads the screen. manga-ocr helps with stylized lettering; unreadable lines keep ML Kit's text.",
-  "Recognition runs on this device. Import model files offline, or download after confirming the size.",
+  "Every lookup reads the selection with the mode you choose here. Standard is included with Gaten, so text is read out of the box with nothing to download.",
+  "Enhanced is optional and downloads only when you press Download and confirm, then works offline. It is recommended for ordinary screen and novel text. Any connection works; Wi-Fi is recommended, and mobile data may incur charges.",
+  "Standard finds the lines in every mode. When Enhanced cannot read a selection — it is not installed yet, or its read fails or holds no Japanese — Standard reads it instead.",
 ];
 
-/** "manga-ocr (int8) installed (117 MB)", or just what is there when the entry is not known. */
-function statusText(
-  installed: boolean,
-  installedId: string | null,
-  sizeBytes: number,
-  catalog: MangaOcrCatalogEntry[]
-): string {
-  const size = shortFileSize(sizeBytes);
-  const label = catalog.find((entry) => entry.id === installedId)?.label ?? null;
-  if (!installed) {
-    return "No model installed";
-  }
-  return label != null
-    ? `${label} installed (${size})`
-    : `Installed model (${size})`;
+/** The pinned download size as decimal MB, matching the size named in the docs and NOTICE. */
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
-/** "42% · decoder.onnx", or just the file name when the entry declares no sizes. */
-function progressText(progress: {fraction: number | null; fileName: string} | null): string {
-  if (progress == null) {
-    return "Starting…";
+/** What a mode is for, so the row says more than its name. */
+function engineUse(engine: EngineStatus): string {
+  switch (engine.id) {
+    case "ml_kit":
+      return "Japanese text";
+    case "medium":
+      return "Screen and novels";
+    default:
+      return "Screen and novels";
   }
-  if (progress.fraction == null) {
-    return progress.fileName;
-  }
-  return `${Math.round(progress.fraction * 100)}% · ${progress.fileName}`;
 }
 
-/** A short file size, the way the Compose screen formatted one (1.2 MB, 340 kB). */
-function shortFileSize(bytes: number): string {
-  if (bytes >= 1_000_000) {
-    return `${(bytes / 1_000_000).toFixed(bytes >= 10_000_000 ? 0 : 1)} MB`;
-  }
-  if (bytes >= 1_000) {
-    return `${Math.round(bytes / 1_000)} kB`;
-  }
-  return `${bytes} B`;
+/** What is actually on the device: the bundled default, an installed download, or neither. */
+function engineState(engine: EngineStatus): string {
+  if (engine.bundled) return "bundled · works offline";
+  return engine.installed ? "installed · works offline" : "not installed";
+}
+
+/** The note under a selected engine that is not installed: Standard reads meanwhile. */
+const ML_KIT_FALLBACK_NOTE = "Not installed · Standard reads text in the meantime.";
+
+/** The "Recommended" marker beside the engine it names. */
+function RecommendedBadge({label}: {label: string}) {
+  const {colors} = useTheme();
+  return (
+    <View
+      style={{
+        backgroundColor: colors.accentSubtle,
+        borderRadius: 6,
+        paddingHorizontal: spacing.s,
+        paddingVertical: 1,
+      }}
+    >
+      <Text style={[typeScale.labelSmall, {color: colors.onPrimaryContainer}]}>{label}</Text>
+    </View>
+  );
+}
+
+/** One selectable engine: title, one-line state, and a check on the selected one. */
+function ModeRow({
+  title,
+  summary,
+  badge,
+  selected,
+  disabled,
+  onPress,
+}: {
+  title: string;
+  summary: string;
+  badge?: string;
+  selected: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const {colors} = useTheme();
+  return (
+    <PressableScale
+      accessibilityRole="radio"
+      accessibilityState={{selected, disabled}}
+      accessibilityLabel={badge != null ? `${title}, ${badge}` : title}
+      accessibilityHint={summary}
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.m,
+        minHeight: 60,
+        paddingVertical: spacing.m,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <RowIcon name="text_snippet" />
+      <View style={{flex: 1, minWidth: 0}}>
+        <View style={{flexDirection: "row", alignItems: "center", gap: spacing.s}}>
+          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>{title}</Text>
+          {badge != null && <RecommendedBadge label={badge} />}
+        </View>
+        <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}>
+          {summary}
+        </Text>
+      </View>
+      {selected && <Icon name="check" size={20} color={colors.accent} />}
+    </PressableScale>
+  );
+}
+
+/** One engine: the choice row, and its download button while it is not installed. */
+function EngineRow({
+  engine,
+  selected,
+  downloading,
+  busy,
+  disabled,
+  onSelect,
+  onDownload,
+}: {
+  engine: EngineStatus;
+  selected: boolean;
+  downloading: boolean;
+  busy: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  onDownload: () => void;
+}) {
+  const {colors} = useTheme();
+  const size = formatMegabytes(engine.downloadBytes);
+  const summary = `${engineUse(engine)} · ${engineState(engine)}`;
+  return (
+    <View>
+      <ModeRow
+        title={engine.name}
+        summary={summary}
+        badge={engine.recommended ? "Recommended" : undefined}
+        selected={selected}
+        disabled={disabled}
+        onPress={onSelect}
+      />
+      {!engine.installed && (
+        <View style={{marginBottom: spacing.m, marginStart: 22 + spacing.m}}>
+          <OutlinedButton
+            label={downloading ? "Downloading…" : `Download · ${size}`}
+            disabled={downloading || busy || disabled === true}
+            onPress={onDownload}
+          />
+          {selected && (
+            <Text
+              style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
+            >
+              {ML_KIT_FALLBACK_NOTE}
+            </Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
 }
 
 export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
-  const {state, refreshInstalled, download, cancelDownload, importFiles, removeModel} =
-    useRecognition();
-  const {colors} = useTheme();
-  // The entry the confirm dialog is asking about. The download itself belongs to the store.
-  const [confirmDownload, setConfirmDownload] = useState<MangaOcrCatalogEntry | null>(null);
-  const [metered, setMetered] = useState(false);
-  const busy = state.busy;
-
-  // The model directory can change while this page is not looking — a debug build copies its
-  // bundled model out on the first lookup, which the accessibility service runs with the app in
-  // the background — so what is installed is re-read on every arrival and every foregrounding.
-  // The store drops the ask while a download or an import owns the directory.
-  useEffect(() => {
-    refreshInstalled();
-    const subscription = AppState.addEventListener("change", (appState) => {
-      if (appState === "active") refreshInstalled();
-    });
-    return () => subscription.remove();
-  }, [refreshInstalled]);
+  const [settings, setSettings] = useState<RecognitionSettings | null>(null);
+  const [requested, setRequested] = useState<RecognitionEngine | null>(null);
+  // One mode save at a time: the native writes run on a multi-threaded IO dispatcher, so two quick
+  // taps must not race which persisted value wins.
+  const [saving, setSaving] = useState(false);
+  const readSeq = useRef(0);
+  const mounted = useRef(true);
+  // Guards one download confirmation at a time; Android fires Alert's onDismiss after a button press
+  // too, so the button paths clear this before acting and onDismiss only handles a real dismissal.
+  const confirmOpen = useRef(false);
 
   useEffect(() => {
-    if (confirmDownload == null) return;
-    let cancelled = false;
-    void GatenRecognition.isMetered().then((v) => {
-      if (!cancelled) setMetered(v);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // One read applied only while it is still the newest: a read that started before a switch must
+  // not put the old mode or download state back on screen.
+  const refresh = () => {
+    readSeq.current += 1;
+    const seq = readSeq.current;
+    void GatenRecognition.getRecognitionSettings()
+      .then((next) => {
+        if (seq === readSeq.current && mounted.current) setSettings(next);
+      })
+      .catch(() => {
+        if (seq === readSeq.current && mounted.current) {
+          void GatenPlatform.toast("Could not read text recognition settings.");
+        }
+      });
+  };
+
+  useEffect(() => {
+    refresh();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
     });
     return () => {
-      cancelled = true;
+      readSeq.current += 1;
+      subscription.remove();
     };
-  }, [confirmDownload]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const content = colors.onSurface;
-  const valueColor = state.installed ? colors.success : colors.onSurfaceVariant;
+  const nativeDownloading = settings?.downloading ?? [];
+  const downloadingKey = nativeDownloading.join(",");
+
+  // A download is native module state that outlives this screen. While one is running — including
+  // one started before the screen opened — read it at a low rate so completion, or a module torn
+  // down under it, is observed; the interval clears itself once nothing is downloading.
+  useEffect(() => {
+    if (downloadingKey === "") return;
+    const timer = setInterval(refresh, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloadingKey]);
+
+  const selectMode = (mode: RecognitionEngine) => {
+    if (settings == null || settings.mode === mode || saving) return;
+    // Discard any read that started before this choice: it would put the old mode back.
+    readSeq.current += 1;
+    setSaving(true);
+    setSettings({...settings, mode});
+    void GatenRecognition.setRecognitionMode(mode)
+      .catch(() => {
+        void GatenPlatform.toast("Could not save the recognition engine.");
+      })
+      // Re-read once the save has settled, so the screen converges on what was persisted.
+      .then(() => refresh())
+      .finally(() => {
+        if (mounted.current) setSaving(false);
+      });
+  };
+
+  /** The confirmed download: the only path that reaches the network. */
+  const startDownload = (engine: RecognitionEngine) => {
+    if (!mounted.current) return;
+    if (saving || nativeDownloading.includes(engine)) {
+      setRequested(null);
+      return;
+    }
+    setRequested(engine);
+    void GatenRecognition.downloadRecognitionEngine(engine)
+      .then(() => {
+        // Re-read rather than trust the response: a mode chosen while the download ran is the
+        // newest truth, and refresh() applies only reads it started itself.
+        refresh();
+      })
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "The model could not be downloaded.";
+        void GatenPlatform.toast(message);
+        refresh();
+      })
+      .finally(() => {
+        if (mounted.current) setRequested(null);
+      });
+  };
+
+  /**
+   * A Download tap: nothing is fetched until the reader confirms. The chosen engine is marked
+   * pending immediately, so every other row and button is disabled while the alert is up.
+   */
+  const requestDownload = (engine: EngineStatus) => {
+    if (requested !== null || saving || confirmOpen.current || nativeDownloading.includes(engine.id)) {
+      return;
+    }
+    confirmOpen.current = true;
+    setRequested(engine.id);
+    Alert.alert(
+      `Download ${engine.name}?`,
+      `${engine.name} is ${formatMegabytes(engine.downloadBytes)}. Wi-Fi is recommended. Downloading on mobile data may incur charges.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => {
+            confirmOpen.current = false;
+            if (mounted.current) setRequested(null);
+          },
+        },
+        {
+          text: "Download",
+          onPress: () => {
+            confirmOpen.current = false;
+            // An alert left over from a screen that has gone away must not start a transfer.
+            if (mounted.current) startDownload(engine.id);
+          },
+        },
+      ],
+      {
+        cancelable: true,
+        // Only reached when the alert was dismissed without a button; a pressed button has already
+        // cleared the flag and taken ownership of the pending state.
+        onDismiss: () => {
+          if (!confirmOpen.current) return;
+          confirmOpen.current = false;
+          if (mounted.current) setRequested(null);
+        },
+      },
+    );
+  };
+
+  const mode = settings?.mode ?? ML_KIT;
+  const engines = settings?.engines ?? [];
+  const busy = requested !== null;
 
   return (
     <SettingsPageScaffold
@@ -122,172 +347,20 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
       onClose={onClose}
       help={HELP_PARAGRAPHS}
     >
-      <SettingsGroup title="Model" style={{marginTop: spacing.s}}>
-        <View style={{paddingVertical: spacing.m, flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: content, flex: 1}]}>Text recognition</Text>
-          <Text style={[typeScale.labelMedium, {color: valueColor, marginStart: spacing.m, maxWidth: "40%", flexShrink: 1, textAlign: "right"}]}>
-            {statusText(state.installed, state.installedId, state.sizeBytes, state.catalog)}
-          </Text>
-        </View>
-      </SettingsGroup>
-
-      <SettingsGroup title="Available model" style={{marginTop: spacing.xl}}>
-        {state.catalog.map((entry) => (
-          <React.Fragment key={entry.id}>
-            <ModelRow
-              entry={entry}
-              installed={state.installed && state.installedId === entry.id}
-              busy={busy}
-              onDownload={() => setConfirmDownload(entry)}
-            />
-          </React.Fragment>
+      <SettingsGroup title="Reader" style={{marginTop: spacing.s}}>
+        {engines.map((engine) => (
+          <EngineRow
+            key={engine.id}
+            engine={engine}
+            selected={mode === engine.id}
+            downloading={requested === engine.id || nativeDownloading.includes(engine.id)}
+            busy={busy && requested !== engine.id}
+            disabled={saving}
+            onSelect={() => selectMode(engine.id)}
+            onDownload={() => requestDownload(engine)}
+          />
         ))}
       </SettingsGroup>
-
-      {state.downloading != null && (
-        <View style={{marginTop: spacing.l}}>
-          <SettingsTile>
-            <View style={{paddingVertical: spacing.m}}>
-              <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-                {`Downloading ${state.downloading.label}…`}
-              </Text>
-              <View
-                style={{
-                  marginTop: spacing.s,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: colors.surfaceVariant,
-                  overflow: "hidden",
-                }}
-              >
-                {state.progress?.fraction != null && (
-                  <View
-                    style={{
-                      height: 4,
-                      borderRadius: 2,
-                      backgroundColor: colors.accent,
-                      width: `${Math.round(state.progress.fraction * 100)}%` as `${number}%`,
-                    }}
-                  />
-                )}
-              </View>
-              <View style={{flexDirection: "row", alignItems: "center", marginTop: spacing.s}}>
-                <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, flex: 1}]}>
-                  {progressText(state.progress)}
-                </Text>
-                <Button
-                  variant="text"
-                  label="Cancel"
-                  onPress={() => cancelDownload()}
-                />
-              </View>
-            </View>
-          </SettingsTile>
-        </View>
-      )}
-
-      <View style={{marginTop: spacing.xl, flexDirection: "row", flexWrap: "wrap", gap: spacing.s}}>
-        <OutlinedButton
-          label="Import model files"
-          disabled={busy}
-          onPress={() => {
-            void GatenRecognition.pickModelFiles().then((uris) => {
-              if (uris.length > 0) importFiles(uris);
-            });
-          }}
-        />
-        {state.installed && (
-          <OutlinedButton label="Remove" disabled={busy} onPress={() => removeModel()} />
-        )}
-      </View>
-
-      <View style={{height: spacing.xl}} />
-      {confirmDownload != null && (
-        <ConfirmDownloadDialog
-          entry={confirmDownload}
-          metered={metered}
-          onConfirm={() => {
-            download(confirmDownload);
-            setConfirmDownload(null);
-          }}
-          onDismiss={() => setConfirmDownload(null)}
-        />
-      )}
     </SettingsPageScaffold>
-  );
-}
-
-/**
- * One catalog entry: what it is, how big it is, and the one thing that can be done with it. The
- * size is the row's value on the right of the name — the one fact that makes two entries
- * comparable.
- */
-function ModelRow({
-  entry,
-  installed,
-  busy,
-  onDownload,
-}: {
-  entry: MangaOcrCatalogEntry;
-  installed: boolean;
-  busy: boolean;
-  onDownload: () => void;
-}) {
-  const {colors} = useTheme();
-  return (
-    <View style={{paddingVertical: spacing.m, flexDirection: "row"}}>
-      <RowIcon name="download" />
-      <View style={{flex: 1, marginStart: spacing.m}}>
-        <View style={{flexDirection: "row", alignItems: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface, flex: 1}]}>{entry.label}</Text>
-          <Text style={[typeScale.labelMedium, {color: colors.onSurfaceVariant, marginStart: spacing.s}]}>
-            {`~${entry.approxSizeMb} MB`}
-          </Text>
-        </View>
-        <View style={{marginTop: spacing.s, alignSelf: "flex-start"}}>
-          {installed ? (
-            <Chip label="Installed" />
-          ) : (
-            <OutlinedButton label="Download" disabled={busy} onPress={onDownload} />
-          )}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/**
- * The size is shown before anything is fetched, and on mobile data the wording says so: the
- * download must never start as a surprise on a metered connection.
- */
-function ConfirmDownloadDialog({
-  entry,
-  metered,
-  onConfirm,
-  onDismiss,
-}: {
-  entry: MangaOcrCatalogEntry;
-  metered: boolean;
-  onConfirm: () => void;
-  onDismiss: () => void;
-}) {
-  const {colors} = useTheme();
-  return (
-    <DialogShell
-      title={`Download ${entry.label}?`}
-      onDismiss={onDismiss}
-      actions={
-        <>
-          <Button variant="text" label="Cancel" onPress={onDismiss} />
-          <Button variant="text" label="Download" onPress={onConfirm} />
-        </>
-      }
-    >
-      <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-        {metered
-          ? `You are on mobile data. About ${entry.approxSizeMb} MB will be downloaded from huggingface.co — use Wi-Fi if you can.`
-          : `About ${entry.approxSizeMb} MB will be downloaded from huggingface.co. Use Wi-Fi if you can.`}
-      </Text>
-    </DialogShell>
   );
 }

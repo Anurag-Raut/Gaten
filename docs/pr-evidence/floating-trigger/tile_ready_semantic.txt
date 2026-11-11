@@ -1,0 +1,52 @@
+# Quick Settings tile — semantic evidence (after the scoped enabled-state fix)
+
+Device: emulator-5554, sdk_gphone64_x86_64, Android 14 / API 34.
+Installed APK: app-x86_64-debug.apk
+  sha256 78ec032b2c47c588cde6a0115d7a698ff1dbb64e9c97086104c8713dfdaccd5c
+State: accessibility service enabled and bound; floating-button preference = false
+  (the floater was disabled for this check).
+
+Note: `gaten_24_tile_ready.png` does NOT show the Gaten tile. It was taken while the Quick
+Settings pager was on page 2 (QR code scan, Battery Saver, Screen Cast, Screen record, Nearby
+Share, Mic access, Camera access, Security & privacy). It is not evidence of the "Ready"
+state and must not be cited as such. The Gaten tile was on the following page.
+
+## 1. Tile reads "Ready" after the fix
+
+`agent-device snapshot -i --raw` — extracted fields for the Gaten tile node:
+
+    "label":"Screen lookup, Ready"
+    "rect":{"x":44,"y":792,"width":485,"height":220}
+    "ref":"e94"
+    "label":"Screen lookup"
+    "rect":{"x":171,"y":849,"width":242,"height":53}
+    "ref":"e98"
+
+Before the fix, the same tile node read:
+
+    "label":"Screen lookup, Setup needed"
+
+and the tile's own logcat line on tap was `Tile clicked. Service enabled: false`. See
+`gaten_21_qs_shade.png` for the "Setup needed" subtitle before the fix.
+
+## 2. Tap sequence
+
+    $ agent-device press @e94 --settle
+    Tapped @e94 (287, 902)
+    settled after 1798ms: +35 -153 (~1 unchanged)
+
+logcat (tag `Gaten`, pid of the com.gaten process):
+
+    09:13:42.188 D Gaten: Tile clicked. Service enabled: true
+    09:13:42.189 D Gaten: Trigger accepted (+0 ms since the trigger)
+    09:13:42.189 D Gaten: Starting the ordered capture pipeline (fromShade=true, +0 ms since the trigger)
+    09:13:42.700 D Gaten: Frozen frame on screen (+511 ms since the trigger)
+
+Result screenshot: `gaten_25_tile_lookup.png` (frozen frame with the lookup overlay up).
+
+## Missing visual
+
+No screenshot of the "Ready" tile itself exists from the test session. The visual proof of
+the tile state is missing; the semantic snapshot above and the logcat lines are the available
+evidence. A short later evidence session (with a device lease) could capture the page-3 tile
+showing "Ready" before the tap.

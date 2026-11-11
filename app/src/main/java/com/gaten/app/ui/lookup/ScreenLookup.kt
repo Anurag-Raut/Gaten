@@ -146,6 +146,7 @@ fun lookupFromSelection(
     val selected = ArrayList<String>(spans.size)
     for (span in spans) {
         val text = OcrRepair.repair(screen.lines[span.lineIndex].text, cachedLookup)
+        if (span.start >= span.endExclusive || span.endExclusive > text.length) continue
         selected.add(text.substring(span.start, span.endExclusive))
         words.addAll(
             WordScanner.scanLine(text, span.start, span.endExclusive, cachedLookup)
@@ -172,6 +173,8 @@ fun lookupFromTap(
 ): TapLookup? {
     val lineIndex = ScreenHits.hitTestLine(screen, x, y, tolerancePx) ?: return null
     val line = screen.lines[lineIndex]
+    // A box-only line has no reading yet; the tap path reads it (runTapLookup), this one cannot.
+    if (line.text.isEmpty()) return null
     val cachedLookup = memoizedLookup(lookup)
     val text = OcrRepair.repair(line.text, cachedLookup)
     if (maxWords <= 0) return TapLookup(LookupResult(text, emptyList()), line.bounds)

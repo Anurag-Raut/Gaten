@@ -1,0 +1,8 @@
+# queued-tap end-to-end: control (tap after the index was ready), combined APK c57ee24b
+1793278693.644  8834  8834 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793278693.732  8834  8834 D Gaten   : Overlay window added for a 1080x2340 capture (+89 ms since the trigger)
+1793278693.765  8834  8834 D Gaten   : Frozen frame on screen (+122 ms since the trigger)
+1793278694.592  8834  9015 D Gaten   : Early screen scan ready in 869 ms
+1793278694.593  8834  8834 D Gaten   : Screen scan ready in 787 ms (26 lines)
+1793278694.861  8834  8834 D Gaten   : Tap hit line 4
+1793278695.294  8834  8834 D Gaten   : Tap complete in 432 ms

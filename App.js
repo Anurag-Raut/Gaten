@@ -15,17 +15,27 @@ import {GestureHandlerRootView} from "react-native-gesture-handler";
 import {SafeAreaProvider} from "react-native-safe-area-context";
 import {KeyboardProvider} from "react-native-keyboard-controller";
 import {AppShell} from "./src/rn/ui/AppShell";
+import {primeOnboardingStep} from "./src/rn/ui/boot";
+import {SystemInsetsProvider} from "./src/rn/ui/SystemInsetsProvider";
 import {ThemeProvider} from "./src/rn/ui/theme";
 
 function App() {
+  // Start the first-run step read alongside the theme bootstrap rather than after it: the shell
+  // mounts below the theme provider, so a read started there would wait for the theme first.
+  React.useEffect(() => {
+    primeOnboardingStep();
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-          <ThemeProvider>
-            <AppShell />
-          </ThemeProvider>
-        </KeyboardProvider>
+        <SystemInsetsProvider>
+          <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+            <ThemeProvider>
+              <AppShell />
+            </ThemeProvider>
+          </KeyboardProvider>
+        </SystemInsetsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -1,5 +1,4 @@
 import React, {useId, useMemo} from "react";
-import {useColorScheme} from "react-native";
 import Svg, {Circle, ClipPath, Defs, G, Path, Rect} from "react-native-svg";
 import {deckArtSpec} from "./deck-art";
 import {useTheme} from "../theme";
@@ -18,9 +17,7 @@ export default function DeckThumbnail({
   width = 44,
   height = 44,
 }: Props) {
-  const {mode} = useTheme();
-  const systemScheme = useColorScheme();
-  const dark = mode === "Dark" || (mode === "System" && systemScheme === "dark");
+  const {dark} = useTheme();
   const stableKey = `${accountScope}:${deckId}`;
   const art = useMemo(() => deckArtSpec(stableKey, dark), [stableKey, dark]);
   const clipId = `deck-art-${useId().replace(/:/g, "")}`;

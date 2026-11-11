@@ -20,6 +20,7 @@ import android.graphics.Bitmap
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
+import android.provider.Settings
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
@@ -40,6 +41,7 @@ import com.gaten.app.lifecycle.displayChanged
 import com.gaten.app.lifecycle.lookupAdmitted
 import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.OcrModels
+import com.gaten.app.rn.GatenBridgeEmitter
 import com.gaten.app.trigger.FloatingTriggerButton
 import com.gaten.app.trigger.TriggerPreferences
 import com.gaten.app.ui.overlay.OverlayWindowController
@@ -49,10 +51,21 @@ import java.util.concurrent.Executors
 
 /**
  * How long a trigger from the Quick Settings tile waits for the shade to collapse before capturing.
- * The service does not ask for the window list (flagRetrieveInteractiveWindows), so it cannot watch
- * the shade go and waits a fixed time long enough for a normal collapse instead.
+ *
+ * The service can see the shade — `flagRetrieveInteractiveWindows` is set in
+ * `accessibility_service_config.xml` — but nothing short of the pixels proves the collapse has
+ * finished. The window list keeps the shade's window at full-display bounds for the whole
+ * animation and only hands focus back when the dismissal starts, on the emulator at ≈125 ms into a
+ * ≈185 ms collapse; SystemUI emits no completion event. Capturing on that signal froze a
+ * half-collapsed shade, so the tile waits a fixed time.
+ *
+ * Measured on the API 34 emulator at animation scale 1.0, the shade is visually gone ≈150–200 ms
+ * after the dismissal dispatch. This wait is that bound plus a safety band; every tile capture in
+ * `docs/pr-evidence/overlay-startup-ticktick/` was taken with it and held no shade. If a device's
+ * collapse is slower, the band absorbs it; a half-collapsed shade in a capture means this is too
+ * short for that device and it must go back up.
  */
-private const val ShadeCollapseMs = 400L
+private const val ShadeCollapseMs = 300L
 
 /**
  * Gaten' only use of the accessibility framework: screenshots the screen when a lookup is
@@ -88,6 +101,10 @@ class GatenAccessibilityService : AccessibilityService() {
     private var serviceConnected = false
     /** True while the screen receiver is registered, so it is unregistered exactly once. */
     private var receiverRegistered = false
+    /** The service's receiver for external trigger broadcasts; see [LookupTriggerReceiver]. */
+    private val lookupTriggerReceiver = LookupTriggerReceiver()
+    /** True while that receiver is registered, so it is unregistered exactly once. */
+    private var triggerReceiverRegistered = false
     private var displayListenerRegistered = false
     /** The capture in flight and its single-flight flag, moved on by a dismissal or a new trigger. */
     private val captureToken = CaptureToken()
@@ -97,6 +114,17 @@ class GatenAccessibilityService : AccessibilityService() {
     private var overlayGeometry: DisplayGeometry? = null
     /** The foreground app before a capture; SystemUI and our overlay do not replace it. */
     private var foregroundPackage: String? = null
+
+    /**
+     * The package of the input method in use, or null when the platform names none. Read once: a
+     * keyboard can only be switched from a system picker, which takes the screen and ends any lookup
+     * that is up through the ordinary dismissal paths, so the value cannot go stale while one is.
+     */
+    private val inputMethodPackage: String? by lazy {
+        Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+            ?.substringBefore('/')
+            ?.takeIf { it.isNotBlank() }
+    }
     private var capturePackage: String? = null
 
     private val powerManager by lazy { getSystemService(PowerManager::class.java) }
@@ -176,6 +204,7 @@ class GatenAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         serviceConnected = true
         registerScreenReceiver()
+        registerTriggerReceiver()
         if (!displayListenerRegistered) {
             displayManager.registerDisplayListener(displayListener, mainHandler)
             displayListenerRegistered = true
@@ -193,6 +222,7 @@ class GatenAccessibilityService : AccessibilityService() {
         // a service that is on its way out can never re-show the button.
         serviceConnected = false
         unregisterScreenReceiver()
+        unregisterTriggerReceiver()
         unregisterDisplayListener()
         cancelLookup()
         floatingButton?.hide()
@@ -209,6 +239,7 @@ class GatenAccessibilityService : AccessibilityService() {
         // No window may be added after this point, so the flag goes first.
         serviceConnected = false
         unregisterScreenReceiver()
+        unregisterTriggerReceiver()
         unregisterDisplayListener()
         cancelLookup()
         // The screenshot executor is stopped before the overlay goes: a queued or late callback must
@@ -323,6 +354,38 @@ class GatenAccessibilityService : AccessibilityService() {
                     }
                     foregroundPackage = source
                 }
+
+                // The reader left while the frozen frame was up. The overlay holds the window focus
+                // itself - it is an accessibility overlay above every app window, and it has to be
+                // focusable for the keyboard to reach the query field - so when the launcher or
+                // another app comes forward the overlay is never told about it through a focus loss,
+                // and without this the frozen screen would sit on top of whatever the reader
+                // switched to.
+                //
+                // What counts is a full-screen window from a package that is neither ours nor the app
+                // the capture froze: the app beneath emits its own window events as it settles behind
+                // the overlay (a paused player raising its controls, say), and those must not end a
+                // lookup the reader is still using. The keyboard's window is not full screen, so
+                // typing never lands here either.
+                //
+                // The frozen app is unknown in one case - the service was enabled while that app was
+                // already in the foreground, so no event ever named it - and there any full-screen
+                // window from another package counts. The alternative is worse: a frozen screen left
+                // covering whatever the reader switched to.
+                //
+                // The keyboard is excluded by name: it is a window of its own that reports itself as
+                // full screen, and it arrives exactly when the reader starts typing in the query
+                // field, so without this the lookup would close the moment they tried to search.
+                val frozen = capturePackage
+                if (overlay.isShowing && source != null && event.isFullScreen &&
+                    source != packageName && source != inputMethodPackage &&
+                    (frozen == null || frozen != source)
+                ) {
+                    Log.d(TAG, "Another app took the foreground while the lookup was up" +
+                        " - ending it ($source)")
+                    cancelLookup()
+                    syncFloatingButton()
+                }
             }
 
             AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED -> {
@@ -411,7 +474,13 @@ class GatenAccessibilityService : AccessibilityService() {
         if (TriggerPreferences.floatingButtonEnabled(this)) {
             if (floatingButton?.isShowing == true) return
             val button = floatingButton
-                ?: FloatingTriggerButton(this) { triggerCapture() }.also { floatingButton = it }
+                ?: FloatingTriggerButton(
+                    context = this,
+                    onTrigger = { triggerCapture() },
+                    // The remove button writes the preference off itself; this is only the bridge
+                    // announcement, so an open Screen lookup page re-reads its switch.
+                    onDismissed = { GatenBridgeEmitter.emitFloatingButtonChanged() }
+                ).also { floatingButton = it }
             try {
                 button.show()
             } catch (e: Exception) {
@@ -627,6 +696,38 @@ class GatenAccessibilityService : AccessibilityService() {
             unregisterReceiver(screenReceiver)
         } catch (e: IllegalArgumentException) {
             Log.w(TAG, "Screen receiver was not registered", e)
+        }
+    }
+
+    /**
+     * Registers the external trigger broadcast for as long as the service is connected, so a
+     * custom, action-only broadcast — which a manifest receiver cannot receive on apps targeting
+     * Android 8.0+ — reaches [LookupTriggerReceiver]. Both the canonical and the legacy action are
+     * handled exactly once; an explicit component send is answered by the manifest receiver.
+     */
+    private fun registerTriggerReceiver() {
+        if (triggerReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP)
+            addAction(LookupTriggerReceiver.ACTION_TRIGGER_LOOKUP_LEGACY)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Exported: the broadcast comes from another app (the key remapper).
+            registerReceiver(lookupTriggerReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(lookupTriggerReceiver, filter)
+        }
+        triggerReceiverRegistered = true
+    }
+
+    private fun unregisterTriggerReceiver() {
+        if (!triggerReceiverRegistered) return
+        triggerReceiverRegistered = false
+        try {
+            unregisterReceiver(lookupTriggerReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Trigger receiver was not registered", e)
         }
     }
 

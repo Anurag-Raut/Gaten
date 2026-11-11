@@ -6,8 +6,9 @@
 
 /**
  * The full-screen WaniKani pages the Search tab pushes: one behind a tapped kanji chip, one
- * behind a tapped radical component. No app bar — the panel brings its own heading and back
- * arrow, since the real title is not known until the lookup answers.
+ * behind a tapped radical component. Full pages use the shared app bar; below it a kanji draws its
+ * character and a radical draws its name as the page's own content (`WaniKaniPanel`). The lookup
+ * overlay keeps its compact panel heading for a kanji and its local back action either way.
  *
  * A radical tap hands the id straight to the shell, which owns the Tick and the open-or-toggle
  * decision: only the shell knows whether the tap opens a new radical page or closes the open one
@@ -17,20 +18,38 @@ import React from "react";
 import {View} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {WaniKaniPanel, type WaniKaniTarget} from "../wanikani/WaniKaniPanel";
+import {RtkKanjiPanel} from "../rtk/RtkKanjiPanel";
+import {useKanjiReferenceSource} from "../kanjiReference";
+import {ScreenHeader} from "../ScreenHeader";
 import {useTheme} from "../theme";
 
 export interface SearchKanjiScreenProps {
   character: string;
   onBack: () => void;
   onOpenRadical: (id: number) => void;
-  onOpenSettingsPage: (page: "wanikani") => void;
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  /**
+   * Whether the page offers the WaniKani settings shortcut. The lookup overlay leaves it off: it is
+   * a window over somebody else's screen and never offered a route into app settings.
+   */
+  showSettings?: boolean;
+  /**
+   * The lookup overlay hosts the page inside its own bottom sheet rather than as a full screen:
+   * the sheet is not under the status bar and already paints the surface, so the page drops the
+   * status-bar inset and the top padding and matches the sheet's own background.
+   */
+  overlay?: boolean;
 }
 
 export interface SearchRadicalScreenProps {
   id: number;
   onBack: () => void;
   onOpenRadical: (id: number) => void;
-  onOpenSettingsPage: (page: "wanikani") => void;
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  /** @see SearchKanjiScreenProps.showSettings */
+  showSettings?: boolean;
+  /** @see SearchKanjiScreenProps.overlay */
+  overlay?: boolean;
 }
 
 function ReferencePage({
@@ -38,31 +57,61 @@ function ReferencePage({
   onBack,
   onOpenRadical,
   onOpenSettingsPage,
+  showSettings = true,
+  overlay = false,
 }: {
   target: WaniKaniTarget;
   onBack: () => void;
   onOpenRadical: (id: number) => void;
-  onOpenSettingsPage: (page: "wanikani") => void;
+  onOpenSettingsPage?: (page: "wanikani") => void;
+  showSettings?: boolean;
+  overlay?: boolean;
 }) {
+  const onSettings =
+    showSettings && onOpenSettingsPage != null
+      ? () => onOpenSettingsPage("wanikani")
+      : undefined;
   const {colors} = useTheme();
   const insets = useSafeAreaInsets();
+  // The chosen reference decides what a kanji page is. Radicals exist only in WaniKani's subject
+  // graph, so a radical page is always WaniKani's regardless of the choice.
+  const source = useKanjiReferenceSource();
+  const rememberKanji = target.kind === "kanji" && source === "rtk";
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.background,
-        paddingTop: insets.top,
+        backgroundColor: overlay ? colors.surface : colors.background,
+        paddingTop: overlay ? 0 : insets.top,
         paddingBottom: insets.bottom,
       }}
     >
-      <WaniKaniPanel
-        target={target}
-        showBack
-        onBack={onBack}
-        scrollable
-        onRadical={onOpenRadical}
-        onSettings={() => onOpenSettingsPage("wanikani")}
-      />
+      {!overlay && (
+        <ScreenHeader
+          title={target.kind === "kanji" ? "Kanji details" : "Radical details"}
+          onBack={onBack}
+        />
+      )}
+      {/* The overlay hosts either panel on the sheet's own surface, so both are flat there. */}
+      {rememberKanji && target.kind === "kanji" ? (
+        <RtkKanjiPanel
+          character={target.character}
+          showBack={overlay}
+          onBack={onBack}
+          scrollable
+          flat={overlay}
+        />
+      ) : (
+        <WaniKaniPanel
+          target={target}
+          showBack={overlay}
+          onBack={onBack}
+          scrollable
+          onRadical={onOpenRadical}
+          onSettings={onSettings}
+          flat={overlay}
+        />
+      )}
     </View>
   );
 }
@@ -72,6 +121,8 @@ export function SearchKanjiScreen({
   onBack,
   onOpenRadical,
   onOpenSettingsPage,
+  showSettings,
+  overlay,
 }: SearchKanjiScreenProps) {
   return (
     <ReferencePage
@@ -79,6 +130,8 @@ export function SearchKanjiScreen({
       onBack={onBack}
       onOpenRadical={onOpenRadical}
       onOpenSettingsPage={onOpenSettingsPage}
+      showSettings={showSettings}
+      overlay={overlay}
     />
   );
 }
@@ -88,6 +141,8 @@ export function SearchRadicalScreen({
   onBack,
   onOpenRadical,
   onOpenSettingsPage,
+  showSettings,
+  overlay,
 }: SearchRadicalScreenProps) {
   return (
     <ReferencePage
@@ -95,6 +150,8 @@ export function SearchRadicalScreen({
       onBack={onBack}
       onOpenRadical={onOpenRadical}
       onOpenSettingsPage={onOpenSettingsPage}
+      showSettings={showSettings}
+      overlay={overlay}
     />
   );
 }

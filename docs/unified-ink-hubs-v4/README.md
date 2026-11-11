@@ -4,8 +4,12 @@ This is the user-supplied *Gaten unified Ink hubs V4* agent package, kept in the
 hub specification stays readable next to the screens it governs. It is the current screen-specific
 visual authority for **both** provider hubs: Anki's deck picker and WaniKani's study hub now share
 one row grammar, and WaniKani's earlier black Start buttons are gone. Read it with
-[Gaten / Ink v1](../Gaten_Ink_Design_Language_v1.md) (the app-wide authority) and the
-[implementation map](../design-language.md).
+[Gaten / Ink v1](../Gaten_Ink_Design_Language_v1.md), the app-wide authority whose study-hub rules
+(§8) are current.
+
+Those rules supersede this frozen prototype's fixed-green completion marks, unconditional chevrons
+and refresh-only stale-row actions, and add separate daily activity figures. The prototype files
+remain unchanged as a record of the supplied V4 design.
 
 ## What is in the package
 

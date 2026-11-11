@@ -1,0 +1,38 @@
+# bubble-tap baseline (pre-change), emulator-5554, idle host
+# tap->accepted 0.161/0.165/0.170/0.174/0.161/0.169 s; tap->window_added 0.222-0.234 s; tap->frozen_frame 0.261-0.274 s
+1793276472.351  5497  5497 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276472.388  5497  5497 D Gaten   : performCapture called (+38 ms since the trigger)
+1793276472.391  5497  5576 D Gaten   : Screenshot delivered (+41 ms since the trigger)
+1793276472.413  5497  5497 D Gaten   : Overlay window added for a 1080x2340 capture (+62 ms since the trigger)
+1793276472.452  5497  5497 D Gaten   : Frozen frame on screen (+101 ms since the trigger)
+1793276472.809  5497  5625 D Gaten   : Early screen scan ready in 402 ms
+1793276478.418  5497  5497 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276478.456  5497  5497 D Gaten   : performCapture called (+38 ms since the trigger)
+1793276478.459  5497  5576 D Gaten   : Screenshot delivered (+42 ms since the trigger)
+1793276478.478  5497  5497 D Gaten   : Overlay window added for a 1080x2340 capture (+60 ms since the trigger)
+1793276478.517  5497  5497 D Gaten   : Frozen frame on screen (+100 ms since the trigger)
+1793276478.861  5497  5901 D Gaten   : Early screen scan ready in 388 ms
+1793276484.484  5497  5497 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276484.522  5497  5497 D Gaten   : performCapture called (+38 ms since the trigger)
+1793276484.525  5497  5576 D Gaten   : Screenshot delivered (+41 ms since the trigger)
+1793276484.546  5497  5497 D Gaten   : Overlay window added for a 1080x2340 capture (+62 ms since the trigger)
+1793276484.584  5497  5497 D Gaten   : Frozen frame on screen (+100 ms since the trigger)
+1793276484.944  5497  5901 D Gaten   : Early screen scan ready in 404 ms
+1793276490.551  5497  5497 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276490.588  5497  5497 D Gaten   : performCapture called (+37 ms since the trigger)
+1793276490.591  5497  5576 D Gaten   : Screenshot delivered (+40 ms since the trigger)
+1793276490.611  5497  5497 D Gaten   : Overlay window added for a 1080x2340 capture (+60 ms since the trigger)
+1793276490.651  5497  5497 D Gaten   : Frozen frame on screen (+100 ms since the trigger)
+1793276491.005  5497  5901 D Gaten   : Early screen scan ready in 399 ms
+1793276496.601  5497  5497 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276496.639  5497  5497 D Gaten   : performCapture called (+38 ms since the trigger)
+1793276496.642  5497  5576 D Gaten   : Screenshot delivered (+41 ms since the trigger)
+1793276496.662  5497  5497 D Gaten   : Overlay window added for a 1080x2340 capture (+61 ms since the trigger)
+1793276496.701  5497  5497 D Gaten   : Frozen frame on screen (+100 ms since the trigger)
+1793276497.041  5497  5578 D Gaten   : Early screen scan ready in 384 ms
+1793276502.668  5497  5497 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276502.707  5497  5497 D Gaten   : performCapture called (+39 ms since the trigger)
+1793276502.710  5497  5576 D Gaten   : Screenshot delivered (+42 ms since the trigger)
+1793276502.731  5497  5497 D Gaten   : Overlay window added for a 1080x2340 capture (+63 ms since the trigger)
+1793276502.768  5497  5497 D Gaten   : Frozen frame on screen (+100 ms since the trigger)
+1793276503.124  5497  5901 D Gaten   : Early screen scan ready in 399 ms

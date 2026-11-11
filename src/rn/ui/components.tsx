@@ -23,12 +23,10 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
-import {PressableScale} from "./PressableScale";
+import {PressableScale, type PressScale} from "./PressableScale";
 import {ICON_PATHS, type IconName} from "./icons";
-import * as GatenHaptics from "../native/GatenHaptics";
 import {useTheme} from "./theme";
 import {
   CARD_ELEVATION,
@@ -56,6 +54,22 @@ export function Icon({
       ))}
     </Svg>
   );
+}
+
+/**
+ * The house status dot: 6 dp, rounded, at one of the status tones — `success` for connected,
+ * `warning` for attention, the quiet neutral otherwise. Colour alone is never the message (§13):
+ * the caller pairs the dot with a word in the same row.
+ */
+export function StatusDot({tone}: {tone: "connected" | "warning" | "neutral"}) {
+  const {colors} = useTheme();
+  const color =
+    tone === "connected"
+      ? colors.success
+      : tone === "warning"
+        ? colors.warning
+        : colors.iconSecondary;
+  return <View style={{width: 6, height: 6, borderRadius: 3, backgroundColor: color}} />;
 }
 
 /** Flat content surface; screens use spacing and separators to establish grouping. */
@@ -215,16 +229,13 @@ export function SectionLabel({
   );
 }
 
-/** The "common" marker beside a headword. */
+/**
+ * The "common" marker beside a headword: the bare word, because the result card behind it is the
+ * only box — a marker in its own fill would be a box inside that box.
+ */
 export function CommonChip({label = "common"}: {label?: string}) {
   const {colors} = useTheme();
-  return (
-    <ChipBase
-      label={label}
-      background={colors.primaryContainer}
-      color={colors.onPrimaryContainer}
-    />
-  );
+  return <Text style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>{label}</Text>;
 }
 
 /** A count or short figure the screens float beside a heading. */
@@ -281,6 +292,9 @@ export function Button({
   fullWidth = false,
   leading = null,
   accessibilityLabel,
+  accessibilityHint,
+  pressScale,
+  surfaceWhileDisabled = false,
   style,
 }: {
   label?: string;
@@ -290,10 +304,22 @@ export function Button({
   fullWidth?: boolean;
   leading?: React.ReactNode;
   accessibilityLabel?: string;
+  /** What the press does, for a label that does not say it (§13's readable secondary detail). */
+  accessibilityHint?: string;
+  /** Scale down on press, back up on release, with a held fill; see [PressScale]. */
+  pressScale?: PressScale;
+  /**
+   * Keep the variant's own fill, border and ink while [disabled]. For a control whose label and
+   * action change with state — the onboarding flow's primary, which reads "Checking…" between pages
+   * — so the surface never flashes away and back. The press is still refused and still announced as
+   * disabled; only the colours stay.
+   */
+  surfaceWhileDisabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const {colors} = useTheme();
   const bare = variant === "text";
+  const dimmed = disabled && !surfaceWhileDisabled;
   const container: ViewStyle = {
     minHeight: bare ? 48 : 52,
     borderRadius: shape.button,
@@ -305,21 +331,21 @@ export function Button({
     gap: spacing.s,
     alignSelf: fullWidth ? ("stretch" as const) : ("auto" as const),
     ...(variant === "filled"
-      ? {backgroundColor: disabled ? colors.disabled : colors.actionPrimary}
+      ? {backgroundColor: dimmed ? colors.disabled : colors.actionPrimary}
       : variant === "tonal"
         ? {
-            backgroundColor: disabled ? colors.disabled : colors.actionSecondary,
+            backgroundColor: dimmed ? colors.disabled : colors.actionSecondary,
           }
       : variant === "outlined"
         ? {
             borderWidth: 1,
-            borderColor: disabled ? colors.disabled : colors.accent,
+            borderColor: dimmed ? colors.disabled : colors.accent,
           }
         : null),
   };
   // Every variant carries the accent: the filled one as its fill, and the quieter ones as their ink —
-  // disabled is the one state that leaves the accent behind.
-  const textColor = disabled
+  // disabled is the one state that leaves the accent behind, unless the surface is asked to stay.
+  const textColor = dimmed
     ? colors.onDisabled
     : variant === "filled"
       ? colors.onActionPrimary
@@ -332,7 +358,9 @@ export function Button({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{disabled}}
+      pressScale={pressScale}
       style={[container, style]}
     >
       {leading}
@@ -453,10 +481,8 @@ export function distinctIdeographs(word: string): string[] {
 /**
  * The horizontally scrolling kanji chips under a word: one chip per ideograph of the headword.
  *
- * A tap plays the Tick haptic per [haptic]: "always" ticks on every press, "onOpen" only when the
- * tapped character is not the selected one (the review screen, where tapping the open kanji closes
- * it silently), and "none" never ticks — the mode a screen uses when the shell owns the Tick,
- * because only the shell knows whether a tap opens something new or closes it.
+ * Each chip is a control and ticks like every other one (see [PressableScale]); the strip adds no
+ * haptic of its own.
  *
  * The strip brings all of its own vertical spacing — 8 dp above the label and 4 dp below it — as the
  * Kotlin's does, so a caller puts nothing between it and what is above.
@@ -466,13 +492,11 @@ export function KanjiStrip({
   selected = null,
   onKanji,
   label = "WaniKani kanji",
-  haptic = "always",
 }: {
   characters: string[];
   selected?: string | null;
   onKanji: (character: string) => void;
   label?: string | null;
-  haptic?: "always" | "onOpen" | "none";
 }) {
   const {colors} = useTheme();
   if (characters.length === 0) {
@@ -500,12 +524,7 @@ export function KanjiStrip({
             key={character}
             character={character}
             selected={character === selected}
-            onPress={() => {
-              if (haptic === "always" || (haptic === "onOpen" && character !== selected)) {
-                void GatenHaptics.play("tick").catch(() => {});
-              }
-              onKanji(character);
-            }}
+            onPress={() => onKanji(character)}
           />
         ))}
       </ScrollView>
@@ -516,16 +535,11 @@ export function KanjiStrip({
 /** How long the open chip's container colour takes to change: Kotlin's `Motion.SHORT`. */
 const CHIP_MS = 150;
 
-/** The check's own size, and the spring it lands on: Kotlin's `Motion.overshoot` (ζ 0.8, k 380). */
-const CHECK_SIZE = 18;
-const CHECK_SPRING = {mass: 1, stiffness: 380, damping: 31.19};
-
 /**
  * One kanji chip: the character at the sheet's headword size in a pill that is exactly as wide as its
- * content, and the check that marks the open one. The check is drawn *only* while the chip is open
- * and takes no room of its own — it sits in front of the character, so a closed chip is narrower than
- * an open one — while the container eases between its two colours and the check lands on the
- * overshoot spring, both as the Kotlin's chip does.
+ * content. The open one is told apart by its fill and its hairline border alone — no mark takes room
+ * inside it, so the chip never changes width as it opens — and the container eases between its two
+ * colours as the Kotlin's chip does.
  */
 function KanjiChip({
   character,
@@ -538,15 +552,13 @@ function KanjiChip({
 }) {
   const {colors} = useTheme();
   const open = useSharedValue(selected ? 1 : 0);
-  const check = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
     open.value = withTiming(selected ? 1 : 0, {
       duration: CHIP_MS,
       easing: PRESS_EASING_REANIMATED,
     });
-    check.value = withSpring(selected ? 1 : 0, CHECK_SPRING);
-  }, [selected, open, check]);
+  }, [selected, open]);
 
   const containerStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
@@ -554,10 +566,6 @@ function KanjiChip({
       [0, 1],
       [colors.surfaceVariant, colors.primaryContainer],
     ),
-  }));
-
-  const checkStyle = useAnimatedStyle(() => ({
-    transform: [{scale: check.value}],
   }));
 
   return (
@@ -581,11 +589,6 @@ function KanjiChip({
           containerStyle,
         ]}
       >
-        {selected && (
-          <Animated.View style={checkStyle}>
-            <Icon name="check" size={CHECK_SIZE} color={colors.onPrimaryContainer} />
-          </Animated.View>
-        )}
         <Text
           style={[
             typeScale.displaySmall,

@@ -6,8 +6,9 @@
 
 /**
  * The review page's view of its own store: the whole state the screen renders from, the actions that
- * move it, and the lifecycle the page owns — the paused/resumed queue re-read (AppState), and the
- * leave catch-up when the screen unmounts without its owner ever pausing.
+ * move it, and the lifecycle the page owns — the paused/resumed queue re-read (AppState, except
+ * while a detour this flow opened has the reader in another app), and the leave catch-up when the
+ * screen unmounts without its owner ever pausing.
  *
  * The state itself lives in review-store.ts, so leaving the page mid-session keeps the hub's counts,
  * the card on screen and a WaniKani review in progress; this hook only subscribes and drives the
@@ -34,6 +35,7 @@ export const reviewActions = {
   startLessons: () => reviewStore.startLessons(),
   retryWaniKaniSync: () => reviewStore.retryWaniKaniSync(),
   lessonNext: () => reviewStore.lessonNext(),
+  lessonBack: () => reviewStore.lessonBack(),
   lessonEntry: (text: string) => reviewStore.lessonEntry(text),
   lessonCheck: () => reviewStore.lessonCheck(),
   lessonRetrySubmit: () => reviewStore.lessonRetrySubmit(),
@@ -52,10 +54,11 @@ export const reviewActions = {
   closeDetails: () => reviewStore.closeDetails(),
   wkEntry: (text: string) => reviewStore.wkEntry(text),
   wkCheck: () => reviewStore.wkCheck(),
+  wkContinue: () => reviewStore.wkContinue(),
   wkRetrySubmit: () => reviewStore.wkRetrySubmit(),
   retryWaniKani: () => reviewStore.retryWaniKani(),
   onPaused: () => reviewStore.onPaused(),
-  onResumed: () => reviewStore.onResumed(),
+  onResumed: (requeue = true) => reviewStore.onResumed(requeue),
 };
 
 /**
@@ -63,8 +66,13 @@ export const reviewActions = {
  * Done sound) fires here, exactly on the move *into* a finished state — the step first seen is
  * remembered per composition, so remounting onto a session left finished stays silent, matching the
  * Compose screen's seenStep guard.
+ *
+ * `settingsDetour` says the reader is on a page this flow opened that can leave the app — WaniKani's
+ * settings, whose Get a token hands them to the browser. The foreground edge then does not re-read
+ * the queue: the card is not stale, because nothing outside Gaten could have answered it, and the
+ * reader must land back on the answer they left, with the reference they had open.
  */
-export function useReview(): ReviewState & {
+export function useReview(settingsDetour = false): ReviewState & {
   actions: typeof reviewActions;
 } {
   const [state, setState] = useState<ReviewState>(reviewStore.getState());
@@ -73,6 +81,13 @@ export function useReview(): ReviewState & {
     const subscription = reviewStore.subscribe(setState);
     return () => subscription.remove();
   }, []);
+
+  // Read at event time, so the AppState subscription never churns when the detour starts or ends:
+  // the foreground edge that matters arrives while the reader is in the browser, not here.
+  const detour = useRef(settingsDetour);
+  useEffect(() => {
+    detour.current = settingsDetour;
+  }, [settingsDetour]);
 
   // An open hub can cross midnight without an AppState change. Re-read only the local daily budget.
   useEffect(() => {
@@ -95,9 +110,13 @@ export function useReview(): ReviewState & {
   // Activity owned those edges in Compose; AppState owns them here. Unmounting without the app
   // ever pausing — leaving the page — takes the pause moment now, exactly like the Compose
   // screen's onDispose did.
+  //
+  // The one exception is a detour this flow opened (see `settingsDetour`): the reader is in the
+  // browser fetching a WaniKani token, so the card cannot have gone stale, and they must come back
+  // to the answer they left, with the reference open under it.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (status) => {
-      if (status === "active") reviewActions.onResumed();
+      if (status === "active") reviewActions.onResumed(!detour.current);
       else reviewActions.onPaused();
     });
     return () => {

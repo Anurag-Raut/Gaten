@@ -1,0 +1,36 @@
+## Changes
+
+<!-- Explain the problem and list the changes made. For a bug fix, briefly
+     describe the cause and how the fix changes the behavior. Link the issue
+     if one exists. Mention breaking changes if any. -->
+
+-
+
+## Visual evidence
+
+UI changes require screenshots embedded below. Include a real-app recording for changes to interactions, navigation, or motion.
+
+<!-- No UI changes? Write "No UI changes" and delete the rest. -->
+
+- **UI changed:** <!-- Yes, or "No UI changes". -->
+- **Screenshots:** <!-- Paste the rendered screenshots inline in this body, not a link — the changed screen, before/after where a before exists. -->
+- **Interaction, navigation or motion:** <!-- Direct link to a short recording of the affected steps and their result, captured from the real app — never a preview or mockup. -->
+- **Source:** <!-- Head SHA, device/emulator, build command and APK hash; what the capture did not exercise. -->
+- **Assets:** <!-- Upload evidence as PR attachments; keep local copies outside the repository. Include device, build SHA, and limitations here. Do not commit evidence or capture notes. -->
+- **Blocked capture:** <!-- No device, no test account, flaky emulator: state what is missing and why, and keep this pull request a draft / not ready for review. -->
+
+## Verification
+
+<!-- Authors and agents: verify on the current head before asking for review.
+     Compile, type and unit checks complement the visual evidence above; they
+     never stand in for it. -->
+
+- **Steps and result:** <!-- What you did and what happened -->
+- **Checks:** <!-- Build/tests actually run and their results; note anything not run -->
+
+## Problems
+
+<!-- List known issues, verification blockers, or remaining limitations.
+     Write "None" if there are none. -->
+
+-

@@ -1,0 +1,14 @@
+# broadcast-trigger fixed, bubble enabled, emulator-5554, idle host
+# Trigger accepted -> frozen frame: 95-97 ms
+1793276575.356  6163  6163 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276575.388  6163  6163 D Gaten   : performCapture called (+32 ms since the trigger)
+1793276575.391  6163  6252 D Gaten   : Screenshot delivered (+35 ms since the trigger)
+1793276575.410  6163  6163 D Gaten   : Overlay window added for a 1080x2340 capture (+54 ms since the trigger)
+1793276575.451  6163  6163 D Gaten   : Frozen frame on screen (+95 ms since the trigger)
+1793276575.797  6163  6254 D Gaten   : Early screen scan ready in 391 ms
+1793276582.389  6163  6163 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276582.421  6163  6163 D Gaten   : performCapture called (+32 ms since the trigger)
+1793276582.424  6163  6252 D Gaten   : Screenshot delivered (+35 ms since the trigger)
+1793276582.443  6163  6163 D Gaten   : Overlay window added for a 1080x2340 capture (+54 ms since the trigger)
+1793276582.486  6163  6163 D Gaten   : Frozen frame on screen (+97 ms since the trigger)
+1793276582.822  6163  6254 D Gaten   : Early screen scan ready in 384 ms

@@ -5,9 +5,17 @@
  */
 
 import React, {useState} from "react";
-import {ActivityIndicator, StyleSheet, Text, View, useWindowDimensions} from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type TextLayoutEvent,
+} from "react-native";
 import {useTheme} from "../theme";
-import {Icon} from "../components";
+import {Icon, StatusDot} from "../components";
+import {Collapsible} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
@@ -88,7 +96,9 @@ function StreakBanner({
   return (
     <View style={[styles.streakCard, {borderBottomColor: colors.outlineVariant}]}>
       <View style={styles.streakTop}>
-        <StreakFlameMark />
+        <View style={styles.streakFlame}>
+          <StreakFlameMark />
+        </View>
         <View style={styles.streakCopy}>
           <Text
             accessibilityLabel="Daily streak. Anki study days follow your collection's rollover."
@@ -98,7 +108,7 @@ function StreakBanner({
           </Text>
         </View>
         <View style={styles.streakTotal}>
-          <Text style={[styles.streakCount, {color: ink}]}>{streakDaysLabel}</Text>
+          <Text style={[typeScale.titleMedium, {color: colors.accent}]}>{streakDaysLabel}</Text>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[typeScale.bodySmall, styles.streakTotalLabel, {color: muted}]}>days</Text>
         </View>
       </View>
@@ -177,7 +187,7 @@ function AnkiCard({
       status = anki.refreshing ? "Refreshing…" : "Connected";
       statusTone = anki.refreshing ? "neutral" : "connected";
       action = onOpen;
-      hint = "Opens AnkiDroid's decks";
+      hint = "Opens Anki's decks";
       if (due != null) {
         count = due;
         countLabel = completed != null && completed > 0 ? "remaining" : "reviews due";
@@ -197,7 +207,7 @@ function AnkiCard({
       statusTone = "error";
       action = onOpen;
       actionLabel = "Grant access";
-      hint = "Opens the Anki screen to grant AnkiDroid access";
+      hint = "Opens the Anki screen to grant Anki access";
       break;
     case "notSetUp":
       status = "Not set up";
@@ -392,11 +402,6 @@ function ServiceCard({
   const ink = colors.onSurface;
   const muted = colors.onSurfaceVariant;
   const statusColor = statusTone === "error" ? colors.error : muted;
-  const statusDotColor = statusTone === "connected"
-    ? colors.success
-    : statusTone === "error"
-      ? colors.warning
-      : colors.iconSecondary;
   const visibleDescription = count != null
     ? `${count} ${countLabel}`
     : actionLabel
@@ -420,7 +425,9 @@ function ServiceCard({
             {loading ? (
               <ActivityIndicator size={12} color={colors.accent} />
             ) : (
-              <View style={[styles.serviceStatusDot, {backgroundColor: statusDotColor}]} />
+              <StatusDot
+                tone={statusTone === "connected" ? "connected" : statusTone === "error" ? "warning" : "neutral"}
+              />
             )}
             <Text numberOfLines={2} style={[typeScale.bodySmall, styles.serviceStatus, {color: statusColor}]}>{status}</Text>
           </View>
@@ -479,7 +486,6 @@ function RecentLookups({
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
   const {recentLookups, recentLookupsError, recentLookupsStatus} = home;
-  const visibleLookups = expanded ? recentLookups : recentLookups.slice(0, 3);
 
   return (
     <View style={styles.recentSection}>
@@ -501,14 +507,24 @@ function RecentLookups({
       </View>
       {recentLookups.length > 0 ? (
         <View style={styles.recentList}>
-          {visibleLookups.map((hit, index) => (
+          {recentLookups.slice(0, 3).map((hit, index) => (
             <RecentLookupRow
               key={hit.id}
               hit={hit}
-              last={index === visibleLookups.length - 1}
+              last={index === Math.min(recentLookups.length, 3) - 1 && !expanded}
               onPress={() => onOpenWord(hit.id)}
             />
           ))}
+          <Collapsible expanded={expanded}>
+            {recentLookups.slice(3).map((hit, index) => (
+              <RecentLookupRow
+                key={hit.id}
+                hit={hit}
+                last={index === recentLookups.length - 4}
+                onPress={() => onOpenWord(hit.id)}
+              />
+            ))}
+          </Collapsible>
         </View>
       ) : recentLookupsStatus === "loading" ? (
         <EmptyRecent
@@ -557,11 +573,24 @@ function RecentLookupRow({
 }) {
   const {colors} = useTheme();
   const {fontScale} = useWindowDimensions();
-  // A narrow gloss column truncates the definition once the type grows, so larger text moves the
-  // gloss under the word and lets it wrap in full instead of clipping it.
+  // Larger text moves the definition below the word to give it more room to wrap.
   const stacked = fontScale > 1.2;
   const reading = hit.kana[0] ?? "";
   const gloss = hit.glosses[0] ?? "";
+  // Android draws the tail ellipsis as U+2026, which this face sets a third of an em above the
+  // baseline. Once the platform has reported where it cut the second line, swap that character for
+  // three periods, which sit on the baseline and measure a hair narrower, so the cut text and its
+  // marker still fit on one line with no second ellipsis.
+  const [cutGloss, setCutGloss] = useState<string | null>(null);
+  const onGlossLayout = (event: TextLayoutEvent) => {
+    if (cutGloss !== null) return;
+    const first = event.nativeEvent.lines[0];
+    const second = event.nativeEvent.lines[1];
+    if (!second) return;
+    const cut = second.text.split("\u2026")[0];
+    if (cut === second.text) return; // the platform drew no ellipsis: nothing was cut
+    setCutGloss(`${first.text.trimEnd()}\n${cut}...`);
+  };
   return (
     <PressableScale
       accessibilityRole="button"
@@ -585,7 +614,8 @@ function RecentLookupRow({
       </View>
       {gloss ? (
         <Text
-          numberOfLines={stacked ? undefined : 2}
+          numberOfLines={2}
+          onTextLayout={onGlossLayout}
           style={[
             typeScale.bodySmall,
             styles.lookupGloss,
@@ -593,7 +623,7 @@ function RecentLookupRow({
             {color: colors.onSurfaceVariant},
           ]}
         >
-          {gloss}
+          {cutGloss ?? gloss}
         </Text>
       ) : null}
     </PressableScale>
@@ -655,8 +685,16 @@ const styles = StyleSheet.create({
   },
   streakCopy: {flex: 1, minWidth: 0},
   streakTitle: {flexShrink: 1},
-  streakTotal: {minWidth: 88, alignItems: "flex-end", justifyContent: "center", gap: 3},
-  streakCount: {fontSize: 20, lineHeight: 22, fontWeight: "500"},
+  streakTotal: {
+    minWidth: 88,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "flex-end",
+    gap: 3,
+  },
+  // The flame's own box is 24 × 28 in a 38 dp row; its mass sits low, so it reads centred a couple of
+  // dp under the title it labels. The nudge is the wrapper's, not the artwork's.
+  streakFlame: {transform: [{translateY: -2}]},
   streakTotalLabel: {textAlign: "right"},
   weekRow: {flexDirection: "row", justifyContent: "space-between", marginTop: 20},
   weekDay: {flex: 1, minWidth: 0, alignItems: "center", gap: spacing.s},
@@ -683,7 +721,6 @@ const styles = StyleSheet.create({
   },
   serviceTitles: {flex: 1, minWidth: 0},
   serviceStatusRow: {marginTop: spacing.xs, flexDirection: "row", alignItems: "center", gap: spacing.xs},
-  serviceStatusDot: {width: 6, height: 6, borderRadius: 3},
   serviceStatus: {flexShrink: 1},
   serviceFooter: {flexShrink: 1, maxWidth: 132, flexDirection: "row", alignItems: "center", gap: 7},
   serviceFooterScaled: {width: "100%", maxWidth: "100%", alignSelf: "flex-end", justifyContent: "flex-end"},
@@ -691,9 +728,9 @@ const styles = StyleSheet.create({
   // Once the outcome drops below the header, the count needs to travel with the chevron on the
   // trailing edge instead of stretching the full row and reading as a second title.
   serviceCountLineScaled: {flex: 0, flexShrink: 1, marginStart: "auto", justifyContent: "flex-end"},
-  serviceCount: {fontSize: 24, lineHeight: 24, letterSpacing: -0.9, fontWeight: "700"},
+  serviceCount: {...typeScale.homeCount},
   serviceCountLabel: {flexShrink: 1},
-  serviceAction: {fontSize: 13, lineHeight: 18, fontWeight: "600"},
+  serviceAction: {...typeScale.labelMedium},
   serviceDetail: {flexShrink: 1},
   recentSection: {marginTop: 34},
   recentHeading: {
@@ -716,14 +753,18 @@ const styles = StyleSheet.create({
   },
   lookupRowStacked: {flexDirection: "column", alignItems: "stretch", gap: spacing.xs},
   lookupWord: {flex: 1, minWidth: 0},
-  lookupGloss: {maxWidth: "34%", textAlign: "right"},
-  lookupGlossStacked: {maxWidth: "100%", textAlign: "left"},
+  // The gloss block hangs on the row's own bottom edge: its last line sits on the row's content bottom,
+  // below the reading's line, and the row's 4 dp vertical padding is what keeps the descenders clear of
+  // the divider. In the stacked layout this is the cross axis and the 100 % lane fills it, so nothing
+  // moves there.
+  lookupGloss: {width: "34%", textAlign: "right", alignSelf: "flex-end"},
+  lookupGlossStacked: {width: "100%", textAlign: "left"},
   noRecentLookups: {alignItems: "center", marginTop: 20, paddingBottom: spacing.m},
   emptyArtwork: {width: "100%", maxWidth: 340, marginBottom: spacing.m},
   emptyRecent: {flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 16, paddingBottom: 16},
   emptyIcon: {width: 39, height: 39, borderRadius: shape.empty, alignItems: "center", justifyContent: "center"},
   emptyCopy: {flex: 1, minWidth: 0},
-  emptyTitle: {fontSize: 13, lineHeight: 18, fontWeight: "700", textAlign: "center"},
+  emptyTitle: {...typeScale.homeCaption, textAlign: "center"},
   emptyMessage: {marginTop: 4},
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},

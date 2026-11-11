@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>2 Armed</title>
+<link rel="stylesheet" href="http://127.0.0.1:8899/tokens.css">
+<style>
+
+/* Ink mockup scaffolding. The frame is authored in dp: 393 x 851 dp, rendered at
+   2.75 px/dp, so what you see is the reference device's 1080 x 2340 px. Only the
+   sp type steps scale with --ts; every dp dimension is a floor and stays put. */
+:root{--ts:1}
+html,body{margin:0;padding:0;background:#000}
+.frame{
+  position:relative;width:393px;height:851px;overflow:hidden;
+  background:var(--bg);color:var(--on-surface);
+  font-family:Inter,"Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;
+}
+.frame.land{width:851px;height:393px}
+.abs{position:absolute}
+.veil,.edge{position:absolute}
+
+/* --- type roles, in sp --- */
+.t-display{font-weight:500;font-size:calc(34px*var(--ts));line-height:calc(44px*var(--ts))}
+.t-title-l{font-weight:700;font-size:calc(17px*var(--ts));line-height:calc(21px*var(--ts))}
+.t-title-m{font-weight:600;font-size:calc(15px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-body{font-weight:400;font-size:calc(14px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-body-s{font-weight:400;font-size:calc(13px*var(--ts));line-height:calc(19px*var(--ts))}
+.t-label-l{font-weight:600;font-size:calc(15px*var(--ts));line-height:calc(20px*var(--ts))}
+.t-label-m{font-weight:600;font-size:calc(12px*var(--ts));line-height:calc(18px*var(--ts))}
+.t-label-s{font-weight:500;font-size:calc(12px*var(--ts));line-height:calc(16px*var(--ts))}
+.t-mono{font-family:ui-monospace,"DejaVu Sans Mono",monospace;font-size:calc(13px*var(--ts));line-height:calc(19px*var(--ts))}
+
+/* --- chrome--- */
+.topinset{height:24px;background:var(--bg)}
+.appbar{height:64px;margin-top:0;display:flex;align-items:center}
+.iconbtn{width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--on-surface)}
+.page{padding:0 22px 40px}
+.group+.group{margin-top:24px}
+.ghead{margin-bottom:8px;color:var(--on-surface-variant)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;min-height:60px;border-bottom:1px solid var(--outline)}
+.ricon{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant)}
+.rmain{flex:1;min-width:0}
+.rtitle{color:var(--on-surface)}
+.rsum{margin-top:0;color:var(--on-surface-variant)}
+.rtrail{flex:none;max-width:40%;color:var(--on-surface);text-align:right}
+.kmx{margin-left:34px;padding-bottom:4px}
+.action48{height:48px;display:flex;align-items:center;color:var(--primary)}
+.switch{width:52px;height:32px;border-radius:16px;background:var(--primary);display:flex;align-items:center;justify-content:flex-end;padding:4px}
+.switch .thumb{width:24px;height:24px;border-radius:50%;background:var(--on-primary)}
+.switch.off{background:var(--on-surface-variant);justify-content:flex-start;opacity:.5}
+
+/* --- status rail --- */
+.rail{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:360px;min-height:48px;
+  background:var(--surface);border:1px solid var(--outline);border-radius:0;display:flex;align-items:stretch}
+.railrule{width:2px;flex:none;background:var(--primary)}
+.railbody{padding:12px;display:flex;flex-direction:column;justify-content:center}
+.railrow{display:flex;align-items:center;gap:8px}
+.railsup{margin-top:4px}
+.irail{padding:16px 0;display:flex;align-items:stretch}
+.glyph{flex:none;display:block}
+
+/* --- bubble --- */
+.bubble{position:absolute;width:48px;height:48px;border-radius:50%;background:var(--primary);
+  border:2px solid var(--on-primary);display:flex;align-items:center;justify-content:center}
+
+/* --- sheet --- */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);
+  border-radius:20px 20px 0 0;display:flex;flex-direction:column;z-index:4}
+.sheetrule{position:absolute;left:0;right:0;top:0;height:20px;border:1px solid var(--outline);
+  border-bottom:none;border-radius:20px 20px 0 0;pointer-events:none}
+.grip{height:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.handle{width:32px;height:4px;border-radius:2px;background:var(--on-surface-variant);opacity:.6}
+.handle-v{width:4px;height:32px;border-radius:2px;background:var(--on-surface-variant);opacity:.6}
+.sheethead{height:48px;flex:none;display:flex;align-items:center;justify-content:flex-end;padding:0 16px}
+.sheetbody{flex:1;overflow:hidden;padding:0 16px}
+.sheetfoot{flex:none;border-top:1px solid var(--outline);padding:12px 16px 32px}
+.deck{display:flex;flex-direction:column;min-height:24px;margin-bottom:8px}
+.deck.rowform{flex-direction:row;align-items:baseline;justify-content:space-between}
+.pbtn{min-height:52px;border-radius:13px;background:var(--primary);color:var(--on-primary);
+  display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px}
+.rule{height:1px;background:var(--outline)}
+
+/* --- word tabs --- */
+.tabs{position:relative;display:flex;gap:8px;overflow:hidden}
+.tab{flex:none;min-width:48px;min-height:48px;padding:12px;display:flex;align-items:center;gap:4px;
+  color:var(--on-surface-variant);position:relative}
+.tab .slot{width:16px;height:16px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--primary)}
+.tab.sel{color:var(--primary)}
+.tab.sel::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--primary)}
+.pagearrow{position:absolute;left:0;top:0;bottom:0;width:48px;background:var(--surface);
+  display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant)}
+
+/* --- glosses --- */
+.gloss{display:flex;align-items:flex-start}
+.gloss .idx{width:24px;flex:none;color:var(--on-surface-variant)}
+.gloss+.gloss{margin-top:12px}
+
+/* --- side dock --- */
+.dock{position:absolute;top:0;bottom:0;width:383px;background:var(--surface);display:flex;z-index:4}
+.dock.right{right:0;border-left:1px solid var(--outline);border-radius:20px 0 0 20px}
+.dock.left{left:0;border-right:1px solid var(--outline);border-radius:0 20px 20px 0}
+.gutter{width:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.dockcol{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 16px}
+.dockhead{height:48px;flex:none;display:flex;align-items:center}
+.dockbody{flex:1;overflow:hidden}
+
+/* --- foreign content drawn flat --- */
+.manga{position:absolute;inset:0;background:#FFFFFF}
+.panel{position:absolute;border:2px solid #111111;background:#FFFFFF;overflow:hidden}
+.tone{position:absolute;background-image:radial-gradient(#111 0.9px,transparent 0.9px);background-size:5px 5px;opacity:.55}
+.balloon{position:absolute;border:2px solid #111;border-radius:50%/40%;background:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.narr{position:absolute;border:2px solid #111;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center}
+.ink{color:#111}
+.jpline{font-size:19px;line-height:25px;font-weight:500}
+.jpline.lg{font-size:24px;line-height:32px}
+.jpline.sm{font-size:16px;line-height:22px}
+.paperline{background:#111;height:2px;position:absolute}
+.solid-black{position:absolute;background:#000}
+.white-line{position:absolute;background:#fff}
+
+.dblock+.dblock{margin-top:16px}
+.dbul{margin-top:4px;color:var(--on-surface-variant)}
+
+
+</style></head>
+<body>
+<div class="frame " data-theme="light" style="--primary:#000000;--on-primary:#FFFFFF;--primary-container:#EAEAEA;--on-primary-container:#17171A;--tertiary:#4A4A4A;--ts:1">
+
+<div class="manga">
+  <div class="panel" style="left:14px;top:14px;width:365px;height:292px">
+    <div class="tone" style="left:236px;top:26px;width:128px;height:118px"></div>
+    <div style="position:absolute;left:236px;top:26px;width:128px;height:118px;border:2px solid #111"></div>
+    <div class="paperline" style="left:300px;top:26px;width:2px;height:118px"></div>
+    <div class="paperline" style="left:236px;top:83px;width:128px;height:2px"></div>
+    <div style="position:absolute;left:44px;top:118px;width:72px;height:72px;border:2px solid #111;border-radius:50%;background:#fff"></div>
+    <div style="position:absolute;left:56px;top:186px;width:48px;height:92px;border:2px solid #111;border-radius:14px 14px 0 0;background:#fff"></div>
+    <div class="balloon" style="left:150px;top:170px;width:200px;height:92px">
+      <div class="ink jpline">猫が窓のそばで</div><div class="ink jpline">眠っている。</div>
+    </div>
+  </div>
+  <div class="panel" style="left:14px;top:318px;width:176px;height:246px">
+    <div class="tone" style="left:0;top:0;width:176px;height:64px"></div>
+    <div style="position:absolute;left:26px;top:96px;width:52px;height:34px;border:2px solid #111;border-radius:50%;background:#fff"></div>
+    <div style="position:absolute;left:98px;top:96px;width:52px;height:34px;border:2px solid #111;border-radius:50%;background:#fff"></div>
+    <div class="balloon" style="left:22px;top:158px;width:132px;height:74px">
+      <div class="ink jpline sm">今日は</div><div class="ink jpline sm">少し寒いね。</div>
+    </div>
+  </div>
+  <div class="panel" style="left:204px;top:318px;width:176px;height:246px">
+    <div class="narr" style="left:20px;top:22px;width:136px;height:86px">
+      <div class="ink jpline sm">春の風が</div>
+    </div>
+    <div class="tone" style="left:20px;top:130px;width:136px;height:94px"></div>
+    <div class="paperline" style="left:20px;top:130px;width:136px;height:2px"></div>
+    <div class="paperline" style="left:20px;top:222px;width:136px;height:2px"></div>
+  </div>
+  <div class="panel" style="left:14px;top:578px;width:365px;height:259px">
+    <div class="paperline" style="left:0;top:96px;width:365px;height:2px"></div>
+    <div style="position:absolute;left:70px;top:120px;width:56px;height:56px;border:2px solid #111;border-radius:50%;background:#fff"></div>
+    <div style="position:absolute;left:78px;top:170px;width:40px;height:80px;border:2px solid #111;border-radius:12px 12px 0 0;background:#fff"></div>
+    <div style="position:absolute;left:250px;top:126px;width:48px;height:48px;border:2px solid #111;border-radius:50%;background:#fff"></div>
+    <div style="position:absolute;left:256px;top:170px;width:36px;height:80px;border:2px solid #111;border-radius:12px 12px 0 0;background:#fff"></div>
+    <div class="balloon" style="left:130px;top:18px;width:220px;height:80px">
+      <div class="ink jpline">あの本を読んでから</div><div class="ink jpline">出かけよう。</div>
+    </div>
+  </div>
+</div>
+
+<div class="veil" style="left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.40);z-index:5"></div>
+<div class="rail" style="top:40px;z-index:8">
+  <div class="railrule"></div>
+  <div class="railbody">
+    <div class="railrow">
+      <span class="glyph" style="color:var(--on-surface-variant)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18.4 12.2a6.4 5.2 0 1 1-2.9-4.4"/><path d="M15.6 4.4l3.1 3.3-3.4 1.4"/></svg></span>
+      <span class="t-body" style="color:var(--on-surface)">Circle or tap Japanese text</span>
+    </div>
+  </div>
+</div>
+
+</div>
+</body></html>

@@ -1,0 +1,8 @@
+# fixed build end-to-end smoke: trigger -> capture -> overlay -> frozen frame -> ML Kit index
+1793276716.021  6459  6459 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793276716.056  6459  6459 D Gaten   : performCapture called (+35 ms since the trigger)
+1793276716.059  6459  6529 D Gaten   : Screenshot delivered (+38 ms since the trigger)
+1793276716.079  6459  6459 D Gaten   : Overlay window added for a 1080x2340 capture (+58 ms since the trigger)
+1793276716.118  6459  6459 D Gaten   : Frozen frame on screen (+97 ms since the trigger)
+1793276716.488  6459  6659 D GatenOcr: Indexed 6 ML Kit lines in 414 ms
+1793276716.488  6459  6659 D Gaten   : Early screen scan ready in 414 ms

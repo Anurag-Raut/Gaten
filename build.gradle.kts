@@ -8,6 +8,8 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
     alias(libs.plugins.android.application) apply false
+    // The `:ppocr` fast-follow asset pack, only part of a bundle build (see settings.gradle.kts).
+    alias(libs.plugins.android.asset.pack) apply false
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false

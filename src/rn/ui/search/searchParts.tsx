@@ -9,9 +9,10 @@
  * cards. They were the Search tab's own file; the Home tab now shows the same field and the same
  * rows inline, so both screens draw from here rather than from two copies. Nothing here holds
  * state — the query, the results and the reading position all live in `searchStore`, and every
- * screen that shows them reads the same store.
+ * screen that shows them reads the store in scope: Home's default, or the lookup sheet's own
+ * scoped instance while the overlay is up.
  */
-import React from "react";
+import React, {useRef} from "react";
 import {
   StyleSheet,
   Text,
@@ -31,7 +32,8 @@ import {InkIcon} from "../InkIcon";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {
-  MAX_CONTENT_WIDTH,
+  CONTENT_COLUMN,
+  contentInsetFor,
   PRESS_EASING_REANIMATED,
   shape,
   spacing,
@@ -40,6 +42,7 @@ import {
 import type {SearchResult} from "../../native/GatenDict";
 import {SearchArtwork} from "./SearchArtwork";
 import * as store from "./searchStore";
+import {useSearchStore} from "./searchStore";
 
 /** How long the field's focus ring takes to fade in or out. */
 const FOCUS_MS = 150;
@@ -105,12 +108,15 @@ export function searchRows(state: store.SearchState): SearchRow[] {
 }
 
 /** One result row: the count line, a prefix header, or the card for a hit. */
-export function SearchRowItem({
+export const SearchRowItem = React.memo(function SearchRowItem({
   row,
   onOpen,
+  flat = false,
 }: {
   row: SearchRow;
   onOpen: (entryId: number) => void;
+  /** The hosted list already paints the surface; the card carries it down to the row. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   if (row.kind === "count") {
@@ -127,11 +133,28 @@ export function SearchRowItem({
       </Text>
     );
   }
-  return <ResultCard hit={row.hit} onOpen={onOpen} />;
-}
+  return <ResultCard hit={row.hit} onOpen={onOpen} flat={flat} />;
+});
 
-/** The gap between two rows of the results. */
-export function SearchRowSeparator() {
+/** Stable key extractor so the list does not see a new function every render. */
+export const searchRowKey = (row: SearchRow) => row.key;
+
+/**
+ * The gap between two rows of the results. A flat list has no card fill to part its rows, so the gap
+ * becomes the hairline the sheet's own separators use.
+ */
+export function SearchRowSeparator({flat = false}: {flat?: boolean}) {
+  const {colors} = useTheme();
+  if (flat) {
+    return (
+      <View
+        style={{
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.outlineVariant,
+        }}
+      />
+    );
+  }
   return <View style={{height: spacing.m}} />;
 }
 
@@ -142,14 +165,18 @@ export function SearchRowSeparator() {
  * lesson on what the field takes. A chip is a choice rather than typing, so it is asked for at once
  * — anything half-typed is cancelled so it cannot land over it.
  */
-export function SearchIdlePrompt() {
+export function SearchIdlePrompt({flat = false}: {flat?: boolean}) {
   const {colors} = useTheme();
   const {width} = useWindowDimensions();
-  const {recentSearches} = store.useSearchState();
+  const searchStore = useSearchStore();
+  const {recentSearches} = React.useSyncExternalStore(
+    searchStore.subscribe,
+    searchStore.getState,
+  );
   const firstSearch = recentSearches.length === 0;
   // The list already insets itself by the screen's own content inset; the drawing takes what is
   // left of that column, up to the width it is drawn for.
-  const inset = width < 360 ? spacing.l : spacing.contentInset;
+  const inset = contentInsetFor(width);
   const artWidth = Math.min(ART_MAX_WIDTH, width - (inset + spacing.l) * 2);
   return (
     <View style={styles.prompt}>
@@ -165,10 +192,10 @@ export function SearchIdlePrompt() {
             accessibilityRole="button"
             accessibilityLabel={`Search for ${word}`}
             onPress={() => {
-              store.onQueryChange(word);
-              store.searchNow();
+              searchStore.onQueryChange(word);
+              searchStore.searchNow();
             }}
-            style={[styles.exampleChip, {backgroundColor: colors.surfaceVariant}]}
+            style={[styles.exampleChip, flat ? styles.exampleChipFlat : {backgroundColor: colors.surfaceVariant}]}
           >
             <Text numberOfLines={1} style={[typeScale.titleMedium, {color: colors.onSurface}]}>
               {word}
@@ -179,7 +206,7 @@ export function SearchIdlePrompt() {
       <View style={styles.art}>
         <SearchArtwork width={artWidth} />
         <Text style={[typeScale.bodyMedium, styles.artCaption, {color: colors.onSurfaceVariant}]}>
-          Find your next Japanese word
+          Search by kanji, kana, or a reading in romaji.
         </Text>
       </View>
     </View>
@@ -197,8 +224,10 @@ export function SearchField({
   onChangeQuery,
   onSearch,
   onFocus,
+  onBlur,
   style,
   compact = false,
+  flat = false,
 }: {
   inputRef: React.RefObject<TextInput | null>;
   query: string;
@@ -206,17 +235,22 @@ export function SearchField({
   onChangeQuery: (text: string) => void;
   onSearch: () => void;
   onFocus?: () => void;
+  onBlur?: () => void;
   style?: React.ComponentProps<typeof View>["style"];
   compact?: boolean;
+  /** The hosted tree already paints the surface: a hairline rule stands in for the filled shell. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const focus = useSharedValue(0);
+  // Flat, the resting rule is the surface's own hairline; the accent still arrives on focus.
+  const restBorder = flat ? colors.outlineVariant : "transparent";
   const focusRing = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
       focus.value,
       [0, 1],
-      ["transparent", colors.accent],
+      [restBorder, colors.accent],
     ),
   }));
   const settle = (target: number) => {
@@ -224,14 +258,22 @@ export function SearchField({
       ? target
       : withTiming(target, {duration: FOCUS_MS, easing: PRESS_EASING_REANIMATED});
   };
+  // Android moves focus to the first text input when the screen above it goes away (the onboarding
+  // overlay, for one), which opened the search and keyboard on its own. Focus is honoured only when
+  // the reader's own touch on the field came first; any other focus is dropped at once.
+  const touched = useRef(false);
   return (
     <View style={style}>
       <Animated.View
+        onTouchStartCapture={() => {
+          touched.current = true;
+        }}
         onTouchEnd={() => inputRef.current?.focus()}
         style={[
           styles.fieldShell,
           compact && styles.compactFieldShell,
-          {backgroundColor: colors.surfaceVariant},
+          flat && styles.flatFieldShell,
+          !flat && {backgroundColor: colors.surfaceVariant},
           focusRing,
         ]}
       >
@@ -241,13 +283,22 @@ export function SearchField({
           value={query}
           onChangeText={onChangeQuery}
           onFocus={() => {
+            if (!touched.current) {
+              inputRef.current?.blur();
+              return;
+            }
             settle(1);
             onFocus?.();
           }}
-          onBlur={() => settle(0)}
+          onBlur={() => {
+            touched.current = false;
+            settle(0);
+            onBlur?.();
+          }}
           accessibilityLabel="Search Japanese dictionary"
           placeholder="猫, ねこ, neko..."
           placeholderTextColor={colors.onSurfaceVariant}
+          cursorColor={colors.accent}
           returnKeyType="search"
           onSubmitEditing={onSearch}
           style={[styles.field, {color: colors.onSurface}]}
@@ -264,19 +315,22 @@ export function SearchField({
 }
 
 /** One dictionary entry as a card: the headword, its reading, its first glosses and its part of speech. */
-export function ResultCard({
+export const ResultCard = React.memo(function ResultCard({
   hit,
   onOpen,
+  flat = false,
 }: {
   hit: SearchResult;
   onOpen: (entryId: number) => void;
+  /** The hosted list already paints the surface: the card drops its fill and rounding. */
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   return (
     <PressableCard
       accessibilityLabel={`Open ${hit.primary}`}
       onPress={() => onOpen(hit.id)}
-      style={[styles.resultCard, {backgroundColor: colors.surfaceVariant}]}
+      style={[styles.resultCard, flat ? styles.resultCardFlat : {backgroundColor: colors.surfaceVariant}]}
     >
       <View style={styles.resultRow}>
         <View style={styles.resultMain}>
@@ -303,7 +357,7 @@ export function ResultCard({
             </Text>
           )}
           {hit.pos.length > 0 && (
-            <View style={[styles.metaPill, {backgroundColor: colors.surface}]}>
+            <View style={styles.metaPill}>
               <Text numberOfLines={1} style={[typeScale.labelSmall, {color: colors.onSurfaceVariant}]}>
                 {hit.pos[0]}
               </Text>
@@ -322,13 +376,11 @@ export function ResultCard({
       </View>
     </PressableCard>
   );
-}
+});
 
 /** The box a results list puts its rows in: the app's content column, with the screen's rhythm. */
 export const SEARCH_LIST_CONTENT = {
-  width: "100%" as const,
-  maxWidth: MAX_CONTENT_WIDTH,
-  alignSelf: "center" as const,
+  ...CONTENT_COLUMN,
   paddingHorizontal: spacing.l,
   paddingTop: spacing.m,
   paddingBottom: spacing.xxl,
@@ -354,6 +406,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.m,
   },
+  // Flat, the chip is the bare word: the fill and its rounding go, but the 48 dp target stays —
+  // `minWidth` is what keeps a one-character example from shrinking below it.
+  exampleChipFlat: {borderRadius: 0, paddingHorizontal: 0, minWidth: 48},
   fieldShell: {
     flexDirection: "row",
     alignItems: "center",
@@ -374,11 +429,20 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     gap: 13,
   },
+  // Flat, the field keeps its size and drops to a hairline rule on the surface's own ink.
+  flatFieldShell: {
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: 0,
+  },
   field: {flex: 1, minWidth: 0, paddingHorizontal: 0, paddingVertical: spacing.m, ...typeScale.bodyMedium},
   limitNote: {marginHorizontal: spacing.xl, marginTop: spacing.xs},
   header: {marginTop: spacing.s},
   resultCount: {marginBottom: spacing.xs},
   resultCard: {borderRadius: shape.small},
+  // Flat, the card is a row on the surface: no fill, no rounding, parted from the next by the list's
+  // own hairline.
+  resultCardFlat: {backgroundColor: "transparent", borderRadius: 0},
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -387,13 +451,8 @@ const styles = StyleSheet.create({
   },
   resultMain: {flex: 1},
   headwordRow: {flexDirection: "row", alignItems: "center", gap: spacing.s},
-  metaPill: {
-    alignSelf: "flex-start",
-    borderRadius: shape.brandTile,
-    paddingHorizontal: spacing.s,
-    paddingVertical: spacing.xs,
-    marginTop: spacing.xs,
-  },
+  // The part of speech is the line of text itself: the card it sits in is the only box.
+  metaPill: {alignSelf: "flex-start", marginTop: spacing.xs},
   line: {marginTop: spacing.xs},
   glosses: {marginTop: spacing.s},
 });

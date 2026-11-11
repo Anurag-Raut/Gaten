@@ -183,11 +183,15 @@ let cache: {
 let inFlight: Promise<AnkiStatsSnapshot> | null = null;
 
 /**
- * The Anki snapshot, read once when the page mounts — every page mounts up front — and again on a
- * foreground return, cached for [ANKI_STATS_TTL_MS]. `refresh` forces a read. Every figure is
- * collection-wide: there is no deck choice to make here any more.
+ * The Anki snapshot, read once when the page is first in view — the screen passes its focus — and
+ * again on a foreground return, cached for [ANKI_STATS_TTL_MS]. `refresh` forces a read. Every figure
+ * is collection-wide: there is no deck choice to make here any more.
+ *
+ * [enabled] is the page's own visibility. Off-screen the read does not start, so the 88 searches the
+ * snapshot costs never compete with Home's own reads at a cold start; the first focus loads it once,
+ * and a caller that never disables it (the default) keeps the old behaviour.
  */
-export function useAnkiStats(): AnkiStatsState {
+export function useAnkiStats(enabled = true): AnkiStatsState {
   const [data, setData] = useState<AnkiStatsSnapshot | null>(cache?.snapshot ?? null);
   const [failure, setFailure] = useState<AnkiStatsFailure | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -245,18 +249,21 @@ export function useAnkiStats(): AnkiStatsState {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     load(false);
-  }, [load]);
+  }, [enabled, load]);
 
   // A foreground return cannot be seen by the effect above, so it is listened for here. The read it
   // asks for is TTL-aware: it answers from the cache it already has, and only asks AnkiDroid again
   // once that snapshot has aged out.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (status) => {
-      if (status === "active") load(false);
+      if (status === "active" && enabled) load(false);
     });
     return () => subscription.remove();
-  }, [load]);
+  }, [enabled, load]);
 
   const refresh = useCallback(() => load(true), [load]);
 

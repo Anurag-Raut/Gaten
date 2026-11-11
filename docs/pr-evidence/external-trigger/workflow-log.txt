@@ -1,0 +1,17 @@
+=== 2026-10-24T11:33:46+05:30 CLEAN: open+record (no agent-device screenshot) ===
+Session state: /home/Qui/.agent-device/sessions/cwd_e9671acd244849c5_android
+=== broadcast open 2026-10-24T11:33:47+05:30 ===
+=== broadcast close 2026-10-24T11:33:50+05:30 ===
+=== record stop 2026-10-24T11:33:52+05:30 ===
+/home/Qui/gaten-external-trigger-evidence/device-run-2/fixed-trigger-open-close.mp4
+=== logcat ===
+10-24 11:33:47.363 11712 11712 D Gaten   : Trigger broadcast received: com.gaten.action.TRIGGER_LOOKUP
+10-24 11:33:47.363 11712 11712 D Gaten   : Trigger accepted (+0 ms since the trigger)
+10-24 11:33:47.488 11712 11712 D Gaten   : Overlay window added for a 1080x2340 capture (+125 ms since the trigger)
+10-24 11:33:47.568 11712 11712 D Gaten   : Frozen frame on screen (+205 ms since the trigger)
+10-24 11:33:50.387 11712 11712 D Gaten   : Trigger broadcast received: com.gaten.action.TRIGGER_LOOKUP
+10-24 11:33:50.402 11712 11712 D Gaten   : Overlay window removed (resumed=true)
+10-24 11:33:50.405 11712 11712 D Gaten   : Lookup panel was open - closing it
+=== helper started during sequence? ===
+10-24 11:33:47.137   591  1814 I ActivityManager: Killing 13745:com.callstack.agentdevice.snapshothelper/u0a197 (adj 0): stop com.callstack.agentdevice.snapshothelper due to finished inst
+10-24 11:33:47.141   591  6989 V ActivityManager: Got obituary of 13745:com.callstack.agentdevice.snapshothelper

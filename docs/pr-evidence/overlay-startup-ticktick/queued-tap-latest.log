@@ -1,0 +1,11 @@
+# latest-tap-wins: two taps in Scanning (line 4 then line 2); one replay, second tap wins
+1793278740.062  8834  8834 D Gaten   : Trigger accepted (+0 ms since the trigger)
+1793278740.107  8834  8834 D Gaten   : Overlay window added for a 1080x2340 capture (+45 ms since the trigger)
+1793278740.149  8834  8834 D Gaten   : Frozen frame on screen (+87 ms since the trigger)
+1793278740.278  8834  8834 D Gaten   : Tap queued while the screen index is still building
+1793278740.546  8834  8834 D Gaten   : Tap queued while the screen index is still building
+1793278740.844  8834  9013 D Gaten   : Early screen scan ready in 740 ms
+1793278740.844  8834  8834 D Gaten   : Screen scan ready in 682 ms (26 lines)
+1793278740.857  8834  8834 D Gaten   : Replaying the queued tap
+1793278740.857  8834  8834 D Gaten   : Tap hit line 2
+1793278741.493  8834  8834 D Gaten   : Tap complete in 636 ms

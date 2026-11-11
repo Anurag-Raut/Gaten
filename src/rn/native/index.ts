@@ -12,3 +12,4 @@ export * from "./GatenShell";
 export * from "./GatenTrigger";
 export * from "./GatenPlatform";
 export * from "./GatenRecognition";
+export * from "./GatenLookupSheet";

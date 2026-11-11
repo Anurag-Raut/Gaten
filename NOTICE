@@ -37,6 +37,33 @@ ML Kit Text Recognition (Japanese)
 © Google LLC
 Licence: Google ML Kit terms of service
 https://developers.google.com/ml-kit/terms
+Bundled and used on-device: it finds the lines and their boxes and is the default recognizer; its
+reading of a line is also what the optional engine falls back to.
+
+PP-OCRv6 Medium (optional text recognition)
+------------------------------------------
+PP-OCRv6_medium_rec_onnx, by PaddlePaddle.
+Licence: Apache License 2.0
+https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx
+(revision 50c7eacafc52fa7bcf4194e8cd08e46f8558504b)
+
+ppocrv6_dict.txt, from PaddlePaddle/PaddleOCR (the recognizer's character dictionary).
+Licence: Apache License 2.0
+https://github.com/PaddlePaddle/PaddleOCR
+(revision b03f46425e8ff4442b268ce449e3eef758146cd4)
+
+Not bundled, and not downloaded by Gaten: on a Google Play install the files arrive through Gaten's
+`ppocr` fast-follow asset pack, which Play fetches and verifies; an install Google Play did not make
+has no copy of them. The Apache License 2.0 text is bundled at
+assets/licenses/PP-OCRv6-Apache-2.0.txt.
+
+Play Asset Delivery (asset-pack client)
+---------------------------------------
+© Google LLC, `com.google.android.play:asset-delivery`
+Licence: Play Core software development kit terms of service
+https://developer.android.com/guide/playcore
+Ships with the app and is used to read the `ppocr` asset pack when Google Play delivered it; inert
+where no pack exists.
 
 ONNX Runtime (inference engine)
 -------------------------------
@@ -44,11 +71,21 @@ Copyright (c) Microsoft Corporation
 Licence: MIT
 https://onnxruntime.ai/
 
-Manrope (bundled variable font)
--------------------------------
-Copyright 2018 The Manrope Project Authors
-Licence: SIL Open Font License 1.1 (bundled in assets/licenses/Manrope-OFL.txt)
-https://github.com/googlefonts/manrope
+IBM Plex Sans JP (bundled typeface)
+-----------------------------------
+Copyright (c) 2017 IBM Corp. with Reserved Font Name "Plex"
+Licence: SIL Open Font License 1.1 (bundled in assets/licenses/IBMPlexSansJP-OFL.txt)
+https://github.com/IBM/plex
+Four weights (400/500/600/700) from google/fonts, drawing every Latin and Japanese string in the app.
+
+Poppins SemiBold (tab-heading outlines)
+---------------------------------------
+The Analytics and Settings headings draw the letters the approved Gaten wordmark does not carry
+(A, S, l, y, i, c, s, g) from Poppins SemiBold outlines, scaled and stroked to the wordmark's metrics
+by docs/pr-evidence/tab-heading-typography/build-glyphs.py. No Poppins font file is bundled.
+Copyright 2020 The Poppins Project Authors
+Licence: SIL Open Font License 1.1 (bundled in assets/licenses/Poppins-OFL.txt)
+https://github.com/google/fonts/tree/main/ofl/poppins
 
 wanakana-kt (romaji to kana in the search box)
 ---------------------------------------------

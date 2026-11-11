@@ -100,6 +100,14 @@ export interface WaniKaniRecall {
   reading: {correct: number; total: number} | null;
   /** The meanings, counted the same way and over the same reviews. */
   meaning: {correct: number; total: number} | null;
+  /**
+   * The same accuracy per kind of subject, always all three and always in this order: `radical`,
+   * `kanji`, `vocabulary` — with kana vocabulary counted as vocabulary, because the split only says
+   * which vocabulary is written in kana. `correct` and `total` are sums of the account's own answer
+   * counts, never averages of per-subject percentages, so a kind the account has never answered is a
+   * zero row rather than a missing one. Null only when the stored section carries no such rows.
+   */
+  bySubject: {key: string; label: string; correct: number; total: number}[] | null;
   /** The worst three subjects with a sample worth ranking, weakest first. */
   difficult: {
     subjectId: number;
@@ -138,6 +146,24 @@ export interface WaniKaniStatsSnapshot {
    * of them, and a section whose sides are null means the account has simply never been asked.
    */
   recall: WaniKaniRecall | null;
+  /**
+   * Every attempt the account has made at a level, oldest first, or null when that read could not be
+   * made at all. A level reached, reset out of and reached again is two rows — each keeps its own
+   * `id`, and the attempt the reset left behind carries `abandonedAt` — so nothing here assumes sixty
+   * rows, and an account that has never started a level's first lesson answers with an empty list
+   * rather than a null: a history of nothing is not a missing history.
+   */
+  levelHistory: {
+    /** WaniKani's own id for this attempt, which tells two attempts at one level apart. */
+    id: number;
+    level: number;
+    /** Epoch milliseconds the level's first lesson was started, or null. */
+    startedAt: number | null;
+    /** Epoch milliseconds at least 90% of the level's kanji were passed, or null. */
+    passedAt: number | null;
+    /** Epoch milliseconds the level was abandoned (a reset), or null when it was not. */
+    abandonedAt: number | null;
+  }[] | null;
   /** Epoch milliseconds when this snapshot was read from WaniKani. */
   fetchedAt: number;
 }
@@ -183,6 +209,14 @@ export interface WaniKaniReviewItem {
   readings: string[];
   /** The primary reading, or null when the subject is not quizzed on one. */
   primaryReading: string | null;
+  /** WaniKani's level for the subject, shown beside its type; 0 when the payload omitted it. */
+  level: number;
+  /** The subject's meaning mnemonic, or empty when WaniKani gives none. */
+  meaningMnemonic: string;
+  /** The subject's reading mnemonic, or empty when WaniKani gives none. */
+  readingMnemonic: string;
+  /** Example sentences for a vocabulary subject; empty for the kinds WaniKani gives none. */
+  contextSentences: WaniKaniContextSentence[];
 }
 
 /** What the queue answered: the subjects due now, or the one thing that is missing. */
@@ -204,6 +238,13 @@ export type WaniKaniReviewSubmissionResult =
 export interface WaniKaniContextSentence {
   japanese: string;
   english: string;
+}
+
+/** One vocabulary word a kanji lesson is taught with: the word, its reading and its meaning. */
+export interface WaniKaniRelatedWord {
+  characters: string;
+  reading?: string;
+  meaning: string;
 }
 
 /**
@@ -235,6 +276,8 @@ export interface WaniKaniLessonItem {
   components: WaniKaniComponent[];
   /** Example sentences for a vocabulary subject; empty for the kinds WaniKani gives none. */
   contextSentences: WaniKaniContextSentence[];
+  /** For a kanji lesson: up to five vocabulary words it appears in, lowest level first; empty otherwise. */
+  relatedWords: WaniKaniRelatedWord[];
   documentUrl?: string;
 }
 
@@ -256,18 +299,32 @@ export type WaniKaniLessonStartResult =
   | { status: "authRejected" }
   | { status: "failed"; failure: WaniKaniFailure; retryAfterSeconds?: number };
 
-/** Device-local daily goal and successful lesson starts since local midnight. */
+/**
+ * Device-local daily goal, and what the account connected to this device has done since local
+ * midnight: the lesson starts and the distinct subjects whose reviews WaniKani accepted. Both counts
+ * are the account's own — the native side scopes them to the stored credential, which never reaches
+ * this layer — and both belong to the date in `activityDate`.
+ */
 export interface WaniKaniLearningPreferences {
-  /** Null means no daily goal is set. */
-  dailyLimit: number | null;
-  /** Unique assignments successfully started on this device today. */
+  /** The daily goal the device works to: 1–20, and 15 until the reader sets one. */
+  dailyLimit: number;
+  /** Unique assignments successfully started today; the number the daily goal is checked against. */
   learnedToday: number;
+  /** Unique subjects whose review WaniKani accepted today, or null when the counters could not be read or written. */
+  reviewedToday?: number | null;
+  /** The local calendar day the counts belong to, `YYYY-MM-DD`. */
+  activityDate?: string;
+  /**
+   * `STORAGE` when today's counters could not be read or written on this device, null otherwise; the
+   * hub shows both counts as unavailable while it is set.
+   */
+  activityFailure?: "STORAGE" | null;
 }
 
 interface GatenWaniKaniNative {
   isConfigured(): Promise<boolean>;
   getLearningPreferences(): Promise<WaniKaniLearningPreferences>;
-  setDailyLessonLimit(limit: number | null): Promise<WaniKaniLearningPreferences>;
+  setDailyLessonLimit(limit: number): Promise<WaniKaniLearningPreferences>;
   connect(token: string): Promise<WaniKaniConnectionResult>;
   reconnect(): Promise<WaniKaniConnectionResult>;
   disconnect(): Promise<boolean>;
@@ -298,8 +355,8 @@ export function getLearningPreferences(): Promise<WaniKaniLearningPreferences> {
   return GatenWaniKani.getLearningPreferences();
 }
 
-/** Saves a daily goal from 1 through 1000, or null to allow unlimited lessons. */
-export function setDailyLessonLimit(limit: number | null): Promise<WaniKaniLearningPreferences> {
+/** Saves a daily goal from 1 through 20; the native side refuses anything outside that range. */
+export function setDailyLessonLimit(limit: number): Promise<WaniKaniLearningPreferences> {
   return GatenWaniKani.setDailyLessonLimit(limit);
 }
 

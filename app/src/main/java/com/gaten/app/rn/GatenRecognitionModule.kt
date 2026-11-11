@@ -7,265 +7,205 @@
 package com.gaten.app.rn
 
 import android.app.Activity
-import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.Uri
-import com.facebook.react.bridge.ActivityEventListener
+import android.content.Context
 import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.WritableMap
-import com.gaten.app.ocr.MangaOcrCatalog
-import com.gaten.app.ocr.MangaOcrDownloader
-import com.gaten.app.ocr.MangaOcrModel
+import com.gaten.app.ocr.PpOcrModel
+import com.gaten.app.ocr.PpOcrPack
+import com.gaten.app.ocr.RecognitionMode
+import com.gaten.app.ocr.RecognitionPreference
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The optional manga-ocr model, as the recognition page reaches it: what is on the phone, the
- * catalog, and the ways onto the phone.
+ * The text recognition settings bridge: the selected mode, install state for every engine (the
+ * bundled ML Kit and the optional PP-OCRv6 Medium), and the explicit download that asks Google Play
+ * for the optional engine's asset pack. The bundled ML Kit has no download, and PP-OCRv6 Medium ships
+ * no weights in the APK: on a Play install it arrives through Play's `ppocr` fast-follow asset pack,
+ * and on an install Play did not make it cannot be installed at all.
  *
- * The download runs in this module's scope rather than the page's — the Compose shell owned its
- * RecognitionViewModel for the same reason — so leaving the page neither cancels a running
- * download nor throws away what it has done. Progress travels to JS as the
- * [GatenBridgeEmitter.RECOGNITION_PROGRESS] event, and the final outcome as the promise's answer.
- * One mutation at a time is the rule: a second one would write over what the first is staging.
+ * Every call that touches storage runs on [Dispatchers.IO]. The reader confirms the download in the
+ * settings UI — which warns that mobile data may incur charges — and Play verifies the transfer it
+ * makes ([PpOcrModel.download]). An engine already downloading rejects a second request here instead
+ * of issuing a second fetch. The scope is cancelled with the module, so an in-flight request is
+ * abandoned rather than finishing into a dead React context.
  */
 class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    /** The document picker's answer, or nothing when the reader dismissed it. */
-    private var pickerPromise: Promise? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val pickerListener: ActivityEventListener =
-        object : BaseActivityEventListener() {
-            override fun onActivityResult(
-                activity: Activity,
-                requestCode: Int,
-                resultCode: Int,
-                data: Intent?
-            ) {
-                if (requestCode != PICK_MODEL_FILES_REQUEST) return
-                val promise = pickerPromise
-                pickerPromise = null
-                if (promise == null) return
-                val uris = Arguments.createArray()
-                if (resultCode == Activity.RESULT_OK && data != null) {
-                    data.clipData?.let { clip ->
-                        for (index in 0 until clip.itemCount) {
-                            uris.pushString(clip.getItemAt(index).uri.toString())
-                        }
-                    }
-                    data.data?.let { uris.pushString(it.toString()) }
-                }
-                promise.resolve(uris)
-            }
-        }
+    /** Engine ids with a download running; guarded by its own concurrent set. */
+    private val downloading = ConcurrentHashMap.newKeySet<String>()
 
     init {
         GatenBridgeEmitter.attach(reactContext)
-        reactContext.addActivityEventListener(pickerListener)
+        // A fast-follow pack can have been downloaded by Play before this module (or this process)
+        // existed, so the live state is re-read here rather than assumed.
+        PpOcrPack.refresh(reactContext)
     }
 
     override fun getName(): String = NAME
 
-    private val scope = bridgeScope()
-    private val busy = AtomicBoolean(false)
-    private val downloader = MangaOcrDownloader(MangaOcrModel.dir(reactApplicationContext))
-
-    /** The model directory's state, re-read on every call. */
+    /** The selected mode and whether each optional engine is installed. */
     @ReactMethod
-    fun getInstalled(promise: Promise) {
-        promise.resolve(installedState(reactApplicationContext))
-    }
-
-    /** The entries the catalog offers, with the sizes the confirm dialog shows. */
-    @ReactMethod
-    fun getCatalog(promise: Promise) {
-        val catalog = Arguments.createArray()
-        for (entry in MangaOcrCatalog.entries) {
-            val map = Arguments.createMap()
-            map.putString("id", entry.id)
-            map.putString("label", entry.label)
-            map.putString("description", entry.description)
-            map.putInt("approxSizeMb", entry.approxSizeMb)
-            catalog.pushMap(map)
-        }
-        promise.resolve(catalog)
-    }
-
-    /**
-     * Fetches one catalog entry, whose size the reader has already confirmed. The promise answers
-     * only when the whole download ends: `installed`, `cancelled`, or `failed` with the reason the
-     * downloader produced — the same strings the Compose screen toasted.
-     */
-    @ReactMethod
-    fun download(catalogId: String, promise: Promise) {
-        val entry = MangaOcrCatalog.byId(catalogId)
-        if (entry == null) {
-            promise.reject(CODE_CATALOG, "No catalog entry named $catalogId")
-            return
-        }
-        if (!busy.compareAndSet(false, true)) {
-            promise.resolve(outcomeMap("busy"))
-            return
-        }
-        scope.launch(Dispatchers.IO) {
-            try {
-                val outcome = downloader.download(entry) { progress ->
-                    GatenBridgeEmitter.emitRecognitionProgress(progress.fraction, progress.fileName)
-                }
-                promise.resolve(
-                    when (outcome) {
-                        is MangaOcrDownloader.Outcome.Installed -> outcomeMap("installed")
-                        is MangaOcrDownloader.Outcome.Cancelled -> outcomeMap("cancelled")
-                        is MangaOcrDownloader.Outcome.Failed -> outcomeMap("failed").apply { putString("reason", outcome.reason) }
-                    }
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                promise.reject(CODE_DOWNLOAD, "The download could not run", e)
-            } finally {
-                busy.set(false)
-            }
-        }
-    }
-
-    /** Asks the download in flight to stop; nothing is installed and the staged files are deleted. */
-    @ReactMethod
-    fun cancelDownload(promise: Promise) {
-        downloader.cancel()
-        promise.resolve(true)
-    }
-
-    /** Opens the document picker for the model files; resolves the chosen URIs. */
-    @ReactMethod
-    fun pickModelFiles(promise: Promise) {
-        val activity = reactApplicationContext.currentActivity
-        if (activity == null) {
-            promise.reject(CODE_PICKER, "No activity to open the picker from")
-            return
-        }
-        pickerPromise = promise
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            type = "*/*"
-        }
-        try {
-            activity.startActivityForResult(intent, PICK_MODEL_FILES_REQUEST)
-        } catch (e: Exception) {
-            pickerPromise = null
-            promise.reject(CODE_PICKER, "Could not open the document picker", e)
-        }
-    }
-
-    /**
-     * Copies the picked files in, each recognised by the role its name stands for; `done` tells
-     * whether the model became complete. A picker that came back while a download was running, or
-     * a second tap, is dropped rather than queued.
-     */
-    @ReactMethod
-    fun importFiles(uris: ReadableArray, promise: Promise) {
-        if (!busy.compareAndSet(false, true)) {
-            promise.resolve(outcomeMap("busy"))
-            return
-        }
-        val uriList = mutableListOf<Uri>()
-        for (index in 0 until uris.size()) {
-            val value = uris.getString(index) ?: continue
-            uriList.add(Uri.parse(value))
-        }
+    fun getRecognitionSettings(promise: Promise) {
         scope.launch {
             try {
-                val done = withContext(Dispatchers.IO) {
-                    uriList.isNotEmpty() && MangaOcrModel.importFrom(reactApplicationContext, uriList)
-                }
-                promise.resolve(outcomeMap("imported").apply { putBoolean("done", done) })
+                promise.resolve(settings(reactApplicationContext))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_IMPORT, "The imported files could not be copied in", e)
-            } finally {
-                busy.set(false)
+                promise.reject(CODE_STATUS_FAILED, e.message ?: "Could not read text recognition settings.", e)
             }
         }
     }
 
-    /**
-     * Takes the model off the phone; `removed` tells whether the directory really went, read back
-     * rather than assumed, because a directory that cannot be deleted leaves the model in place.
-     */
+    /** Stores the reader's manual choice. An uninstalled PP mode is allowed and falls back at read time. */
     @ReactMethod
-    fun removeModel(promise: Promise) {
-        if (!busy.compareAndSet(false, true)) {
-            promise.resolve(outcomeMap("busy"))
+    fun setRecognitionMode(modeId: String, promise: Promise) {
+        val mode = RecognitionMode.entries.firstOrNull { it.id == modeId }
+        if (mode == null) {
+            promise.reject(CODE_INVALID_MODE, "Unknown text recognition mode: $modeId")
             return
         }
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { MangaOcrModel.remove(reactApplicationContext) }
-                val removed = !MangaOcrModel.isInstalled(reactApplicationContext)
-                promise.resolve(outcomeMap("removed").apply { putBoolean("removed", removed) })
+                RecognitionPreference.setMode(reactApplicationContext, mode)
+                promise.resolve(null)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                promise.reject(CODE_REMOVE, "The model files could not be removed", e)
-            } finally {
-                busy.set(false)
+                promise.reject(CODE_SAVE_FAILED, e.message ?: "Could not save the text recognition mode.", e)
             }
         }
     }
 
-    /** True when the active network is metered, i.e. a download would run on mobile data. */
+    /** Downloads the optional engine, then answers with the refreshed state. */
     @ReactMethod
-    fun isMetered(promise: Promise) {
-        val metered = try {
-            reactApplicationContext
-                .getSystemService(ConnectivityManager::class.java)
-                ?.isActiveNetworkMetered == true
-        } catch (_: Exception) {
-            false
+    fun downloadRecognitionEngine(engineId: String, promise: Promise) {
+        val engine = ENGINES.firstOrNull { it.id == engineId }
+        if (engine == null) {
+            promise.reject(CODE_INVALID_ENGINE, "Unknown recognition engine: $engineId")
+            return
         }
-        promise.resolve(metered)
+        if (engine.bundled) {
+            promise.reject(
+                CODE_ALREADY_BUNDLED,
+                "${engineName(engine)} is bundled with Gaten; there is nothing to download."
+            )
+            return
+        }
+        val context = reactApplicationContext
+        // The reader has already confirmed this tap in the settings UI, which warns about mobile
+        // data; the model downloader owns the transfer and its file verification.
+        if (!downloading.add(engine.id)) {
+            promise.reject(CODE_DOWNLOAD_IN_PROGRESS, "That model is already downloading.")
+            return
+        }
+        scope.launch {
+            try {
+                // [currentActivity] only matters when Play asks the user to accept the pack download.
+                download(context, engine, reactApplicationContext.currentActivity)
+                // Publish the finished state: the id must be out of [downloading] before the
+                // refreshed settings are read, or they would still report the download running.
+                downloading.remove(engine.id)
+                promise.resolve(settings(context))
+            } catch (e: CancellationException) {
+                promise.reject(CODE_DOWNLOAD_CANCELLED, "The model download was cancelled.")
+                throw e
+            } catch (e: Exception) {
+                promise.reject(CODE_DOWNLOAD_FAILED, e.message ?: "The model could not be downloaded.", e)
+            } finally {
+                downloading.remove(engine.id)
+            }
+        }
     }
 
     override fun invalidate() {
         scope.cancel()
+        super.invalidate()
     }
 
-    private fun installedState(context: ReactApplicationContext): WritableMap =
-        Arguments.createMap().apply {
-            putBoolean("installed", MangaOcrModel.isInstalled(context))
-            val catalogId = MangaOcrModel.installedCatalogId(context)
-            if (catalogId != null) putString("catalogId", catalogId) else putNull("catalogId")
-            putDouble("sizeBytes", MangaOcrModel.installedSizeBytes(context).toDouble())
+    private suspend fun settings(context: Context): WritableMap {
+        // Awaited, not fired and forgotten: this read is what the settings screen shows, and a
+        // refresh that resolved after it would report a live fast-follow transfer as not
+        // downloading — a claim the JS side never re-checks on its own.
+        PpOcrPack.refreshNow(context)
+        val map = Arguments.createMap()
+        map.putString("mode", RecognitionPreference.mode(context).id)
+        val engines = Arguments.createArray()
+        for (engine in ENGINES) {
+            val item = Arguments.createMap()
+            item.putString("id", engine.id)
+            item.putString("name", engineName(engine))
+            item.putDouble("downloadBytes", engineBytes(engine).toDouble())
+            item.putBoolean("installed", isInstalled(context, engine))
+            item.putBoolean("bundled", engine.bundled)
+            item.putBoolean("recommended", engine.recommended)
+            engines.pushMap(item)
         }
+        map.putArray("engines", engines)
+        // In-flight work comes from two places: a request this module is running, and Play's own
+        // fast-follow transfer, which can have started before this module existed and outlives the
+        // process. Both are reported, so a settings screen opened mid-transfer still shows the
+        // engine downloading instead of offering a second Download.
+        val inFlight = LinkedHashSet<String>()
+        inFlight.addAll(downloading)
+        if (PpOcrPack.isTransferring) {
+            ENGINES.firstOrNull { it.ppEngine() != null }?.let { inFlight.add(it.id) }
+        }
+        val downloadingArray = Arguments.createArray()
+        for (id in inFlight) downloadingArray.pushString(id)
+        map.putArray("downloading", downloadingArray)
+        return map
+    }
 
-    /** The promise's answer for one long operation: the kind, plus a detail where one exists. */
-    private fun outcomeMap(kind: String): WritableMap =
-        Arguments.createMap().apply {
-            putString("kind", kind)
-            
-        }
+    /** Display name: the PP catalog's own for the optional engine, the bundled name otherwise. */
+    private fun engineName(engine: RecognitionMode): String =
+        engine.ppEngine()?.displayName ?: ML_KIT_NAME
+
+    /** Expected install size from the catalog; nothing for the bundled recognizer. */
+    private fun engineBytes(engine: RecognitionMode): Long =
+        engine.ppEngine()?.approximateDownloadBytes ?: 0L
+
+    /** Installed means the pack's files are complete; the bundled recognizer always is. */
+    private fun isInstalled(context: Context, engine: RecognitionMode): Boolean {
+        if (engine.bundled) return true
+        if (engine.ppEngine() == null) return false
+        return PpOcrModel.isInstalled(context)
+    }
+
+    /** Drives Play's fetch for [engine]'s model, and Play verifies the transfer itself. */
+    private suspend fun download(context: Context, engine: RecognitionMode, activity: Activity?) {
+        val pp = engine.ppEngine() ?: return
+        PpOcrModel.download(context, pp, activity)
+    }
 
     companion object {
         const val NAME = "GatenRecognition"
 
-        private const val PICK_MODEL_FILES_REQUEST = 7241
-        private const val CODE_CATALOG = "E_RECOGNITION_CATALOG"
-        private const val CODE_DOWNLOAD = "E_RECOGNITION_DOWNLOAD"
-        private const val CODE_PICKER = "E_RECOGNITION_PICKER"
-        private const val CODE_IMPORT = "E_RECOGNITION_IMPORT"
-        private const val CODE_REMOVE = "E_RECOGNITION_REMOVE"
+        private const val ML_KIT_NAME = "Standard"
+
+        /** Every engine, in the order the settings screen shows them (the bundled ML Kit first). */
+        private val ENGINES = RecognitionMode.entries
+
+        private const val CODE_STATUS_FAILED = "RECOGNITION_STATUS_FAILED"
+        private const val CODE_INVALID_MODE = "INVALID_RECOGNITION_MODE"
+        private const val CODE_SAVE_FAILED = "RECOGNITION_MODE_SAVE_FAILED"
+        private const val CODE_INVALID_ENGINE = "INVALID_RECOGNITION_ENGINE"
+        private const val CODE_ALREADY_BUNDLED = "ENGINE_ALREADY_BUNDLED"
+        private const val CODE_DOWNLOAD_IN_PROGRESS = "DOWNLOAD_IN_PROGRESS"
+        private const val CODE_DOWNLOAD_CANCELLED = "DOWNLOAD_CANCELLED"
+        private const val CODE_DOWNLOAD_FAILED = "RECOGNITION_DOWNLOAD_FAILED"
     }
 }

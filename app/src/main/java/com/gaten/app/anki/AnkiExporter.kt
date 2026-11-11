@@ -67,8 +67,7 @@ data class AnkiCollection(
  * Adds looked-up words to AnkiDroid through its instant-add API.
  *
  * [AddContentApi] talks to AnkiDroid's `flashcards` ContentProvider, not to a network service: the
- * export stays on-device, and the app's INTERNET permission is only ever used for the optional OCR
- * model download and the optional WaniKani reference pages (see the README). AnkiDroid must be
+ * export stays on-device, and the app's INTERNET permission is only ever used for the optional WaniKani reference pages (see the README). AnkiDroid must be
  * declared in the manifest's `<queries>` for that provider to be visible at all on Android 11+, and
  * a write needs its `READ_WRITE_DATABASE` permission. The
  * overlay is drawn from the accessibility service, which can check that permission but never ask for

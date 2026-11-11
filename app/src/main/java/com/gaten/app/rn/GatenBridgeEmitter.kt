@@ -31,8 +31,26 @@ object GatenBridgeEmitter {
     /** Carries the settings page an outside launch asked for: {"page": "wanikani"} or empty. */
     const val SETTINGS_PAGE_REQUEST = "gaten.settingsPageRequest"
 
-    /** Carries a model download's progress: {"fraction": 0..1 or null, "fileName": string}. */
-    const val RECOGNITION_PROGRESS = "gaten.recognitionProgress"
+    /**
+     * One lookup-sheet state, as a map the RN sheet renders: the mode, the selected words, the
+     * source line and the Anki state. Emitted by [GatenLookupSheetModule] whenever the overlay's
+     * session changes; the sheet also reads the current map once on mount through the module.
+     */
+    const val LOOKUP_SHEET_STATE = "gaten.lookupSheetState"
+
+    /**
+     * The floating-button preference changed, from the on-screen remove button or from a settings
+     * write. The payload carries nothing; the Screen lookup page re-reads the preference, which is
+     * what keeps its switch in step with a dismissal it did not perform.
+     */
+    const val FLOATING_BUTTON_CHANGED = "gaten.floatingButtonChanged"
+
+    /**
+     * One recognition model download advancing: its engine id, phase ("downloading" or
+     * "verifying") and cumulative byte counts. Emitted, throttled, by [GatenRecognitionModule]
+     * while a download runs, and never after its promise settles.
+     */
+    const val RECOGNITION_DOWNLOAD_PROGRESS = "GatenRecognitionDownloadProgress"
 
     private val reactContext = AtomicReference<ReactContext?>(null)
 
@@ -47,6 +65,14 @@ object GatenBridgeEmitter {
     }
 
     /**
+     * Tells JS the floating-button preference changed; the payload carries nothing, so the Screen
+     * lookup page re-reads the switch.
+     */
+    fun emitFloatingButtonChanged() {
+        emit(FLOATING_BUTTON_CHANGED, Arguments.createMap())
+    }
+
+    /**
      * Tells JS an outside launch asked for one settings page, or that the pending request is gone
      * (an empty page). Fired from [MainActivity.onNewIntent]; a lost event costs nothing because
      * the field is also readable through [GatenShellModule].
@@ -57,12 +83,16 @@ object GatenBridgeEmitter {
         emit(SETTINGS_PAGE_REQUEST, payload)
     }
 
-    /** Tells JS how far the model download is; `fraction` is null until totals are known. */
-    fun emitRecognitionProgress(fraction: Double?, fileName: String) {
-        val payload = Arguments.createMap()
-        if (fraction != null) payload.putDouble("fraction", fraction) else payload.putNull("fraction")
-        payload.putString("fileName", fileName)
-        emit(RECOGNITION_PROGRESS, payload)
+    /** Sends one lookup-sheet state to the RN sheet. */
+    fun emitLookupSheetState(
+        payload: com.facebook.react.bridge.WritableMap
+    ) {
+        emit(LOOKUP_SHEET_STATE, payload)
+    }
+
+    /** Sends one model-download progress event; the module owns its payload and its rate. */
+    fun emitRecognitionDownloadProgress(payload: com.facebook.react.bridge.WritableMap) {
+        emit(RECOGNITION_DOWNLOAD_PROGRESS, payload)
     }
 
     /** Sends one event through the shared context; quiet when JS is not listening yet. */

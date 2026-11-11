@@ -9,13 +9,17 @@ package com.gaten.app.rn
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
+import android.util.Log
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.common.LifecycleState
+import com.facebook.react.uimanager.UIManagerHelper
 import com.gaten.app.ui.theme.AccentColor
 import com.gaten.app.ui.theme.DarkError
 import com.gaten.app.ui.theme.DarkErrorContainer
@@ -58,6 +62,34 @@ class GatenThemeModule(
         promise.resolve(prefsToJsMap())
     }
 
+    /** Captures the old theme on the UI thread; a cosmetic failure never prevents a theme change. */
+    @ReactMethod
+    fun prepareThemeTransition(viewTag: Int, promise: Promise) {
+        UiThreadUtil.runOnUiThread {
+            if (reactApplicationContext.lifecycleState != LifecycleState.RESUMED) {
+                promise.resolve(false)
+                return@runOnUiThread
+            }
+            try {
+                val view = UIManagerHelper.getUIManagerForReactTag(reactApplicationContext, viewTag)
+                    ?.resolveView(viewTag) as? GatenThemeTransitionView
+                if (view == null) {
+                    promise.resolve(false)
+                } else {
+                    view.prepareTransition(reactApplicationContext.currentActivity?.window) {
+                        promise.resolve(it)
+                    }
+                }
+            } catch (error: Exception) {
+                Log.w(NAME, "Could not capture the theme transition", error)
+                promise.resolve(false)
+            } catch (error: OutOfMemoryError) {
+                Log.w(NAME, "Not enough memory for the theme transition", error)
+                promise.resolve(false)
+            }
+        }
+    }
+
     /** Stores the mode (`System`, `Light` or `Dark`) and announces it. */
     @ReactMethod
     fun setThemeMode(mode: String, promise: Promise) {
@@ -66,7 +98,12 @@ class GatenThemeModule(
             promise.reject(CODE_UNKNOWN, "Unknown theme mode '$mode'")
             return
         }
-        ThemePreferences.setThemeMode(reactApplicationContext, value)
+        try {
+            ThemePreferences.setThemeMode(reactApplicationContext, value)
+        } catch (error: Exception) {
+            promise.reject(CODE_SAVE, "Could not save the theme mode.", error)
+            return
+        }
         promise.resolve(prefsToJsMap())
         GatenBridgeEmitter.emitThemeChanged()
     }
@@ -79,7 +116,12 @@ class GatenThemeModule(
             promise.reject(CODE_UNKNOWN, "Unknown accent '$accent'")
             return
         }
-        ThemePreferences.setAccent(reactApplicationContext, value)
+        try {
+            ThemePreferences.setAccent(reactApplicationContext, value)
+        } catch (error: Exception) {
+            promise.reject(CODE_SAVE, "Could not save the accent.", error)
+            return
+        }
         promise.resolve(prefsToJsMap())
         GatenBridgeEmitter.emitThemeChanged()
     }
@@ -209,6 +251,7 @@ class GatenThemeModule(
         const val NAME = "GatenTheme"
 
         private const val CODE_UNKNOWN = "E_THEME_UNKNOWN"
+        private const val CODE_SAVE = "E_THEME_SAVE"
         private const val CODE_SYSTEM_BAR = "E_THEME_SYSTEM_BAR"
     }
 }

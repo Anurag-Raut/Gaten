@@ -16,15 +16,14 @@ import com.gaten.app.dict.JmdictRepository
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.dict.WordScanner
 import com.gaten.app.ocr.Box
-import com.gaten.app.ocr.CharBoxAlign
 import com.gaten.app.ocr.JapaneseOcr
-import com.gaten.app.ocr.MangaOcrModel
 import com.gaten.app.ocr.JapaneseText
 import com.gaten.app.ocr.OcrLinePolicy
 import com.gaten.app.ocr.OcrRepair
+import com.gaten.app.ocr.PpOcrModel
+import com.gaten.app.ocr.RecognitionMode
+import com.gaten.app.ocr.RecognitionPreference
 import com.gaten.app.ocr.ScreenLine
-import com.gaten.app.ocr.ScreenText
-import com.gaten.app.ocr.interpolateCharBoxes
 import com.gaten.app.ocr.withText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -45,9 +44,10 @@ data class LookupResult(
 private val NO_LOOKUP: (String) -> List<DictEntry> = { emptyList() }
 
 /**
- * Screenshot-scoped cache for raw manga-ocr readings. Calls for the same crop join one read;
+ * Screenshot-scoped cache for raw recognition readings. Calls for the same crop join one read;
  * failed, cancelled, and null reads are removed so a later lookup can retry. Create one instance
- * per screenshot and call [setModelRevision] when the installed model changes.
+ * per screenshot and call [setModelRevision] when the selected engine or an installed model
+ * changes, so a result read by one engine is never served after a switch.
  */
 internal class ExactCropOcrCache(
     modelRevision: String = "default",
@@ -123,72 +123,51 @@ internal class ExactCropOcrCache(
     }
 }
 
-/**
- * One selection lookup: the exact crop is read by manga-ocr, and the selected index lines
- * supplement that reading's words. Circles pass their drawn bounds; taps use [runTapLookup].
- *
- * The crop is read first and unconditionally — whatever the index found on the screen at large,
- * whether or not its lines have Japanese in them, and whether or not there is an index at all.
- * Stylized lettering is exactly what ML Kit misreads, and there is no way to tell from the index
- * whether that happened, so the circle goes to the model regardless. The crop is cut first and read
- * with its own full bounds, so [com.gaten.app.ocr.OcrPreprocess]'s padding has nowhere to reach but
- * the crop's own edge: the selection never grows into the lines beside it. The crop is never
- * recycled — `Bitmap.createBitmap` may hand back the source itself.
- *
- * [index] is asked for only after that, so the answer the reader asked for never queues behind
- * reading the lines beside it. What it returns is the live index, with the lines the selection
- * covers already read; null means there is no index yet, and ML Kit's own reading of the crop
- * stands in for it. Either way those lines only supplement the crop ([mergeLookup]) and nothing
- * outside the drawn box is ever read or answered with.
- *
- * [repo] is null when the dictionary failed to open; the caller turns that into [LookupResult.error],
- * and no words are produced — the text is still the crop's, or the Japanese the selection covered.
- */
+/** Reads the drawn selection with the selected recognizer; detector text never supplies results. */
 internal suspend fun runLookup(
     context: Context,
     screenshot: Bitmap,
     selection: Rect,
     repo: JmdictRepository?,
-    cache: ExactCropOcrCache? = null,
-    onPrimary: suspend (LookupResult) -> Unit = {},
-    index: suspend () -> ScreenText?
+    cache: ExactCropOcrCache? = null
 ): LookupResult {
-    val box = Box(
-        selection.left.toInt(),
-        selection.top.toInt(),
-        selection.right.toInt(),
-        selection.bottom.toInt()
-    )
-    val clamped = clampedBox(screenshot, box)
-    val crop = Bitmap.createBitmap(screenshot, clamped.left, clamped.top,
-        clamped.right - clamped.left, clamped.bottom - clamped.top)
-    val reading = readExactCrop(context, crop, clamped, cache)
-
+    val box = clampedBox(screenshot, Box(selection.left.toInt(), selection.top.toInt(),
+        selection.right.toInt(), selection.bottom.toInt()))
+    val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
+    val reading = readExactCrop(context, crop, box, cache)
     return withContext(Dispatchers.Default) {
-        val lookup: (String) -> List<DictEntry> =
+        readingLookupResult(
+            reading,
             if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
-        val cachedLookup = memoizedLookup(lookup)
-        val primaryStarted = SystemClock.elapsedRealtime()
-        val primary = mergeLookup(reading, null, cachedLookup)
-        Log.d(LOOKUP_TAG, "primary dictionary=${SystemClock.elapsedRealtime() - primaryStarted}ms")
-        if (primary.ocrText.isNotEmpty() || primary.words.isNotEmpty()) onPrimary(primary)
-        val supplementStarted = SystemClock.elapsedRealtime()
-        val screen = index()
-        // An index with no lines at all (failed scan, or ML Kit read nothing) stands for "no index
-        // yet", so the crop's own ML Kit reading still supplements the circle. An index with lines
-        // that merely don't intersect the box does not: the index is the record of the screen.
-        val supplement = if (screen != null && screen.lines.isNotEmpty()) {
-            lookupFromSelection(japaneseLines(screen), box, cachedLookup)
-        } else {
-            cropIndex(crop)?.let {
-                lookupFromSelection(japaneseLines(it), Box(0, 0, crop.width, crop.height), cachedLookup)
-            }
-        }
-        val result = if (supplement == null) primary else mergePrimary(primary, supplement)
-        Log.d(LOOKUP_TAG, "supplement=${SystemClock.elapsedRealtime() - supplementStarted}ms")
-        result
+        )
     }
 }
+
+/**
+ * Rejects a failed recognition instead of silently answering with an empty result: a reading that
+ * holds no Japanese is no reading, and the reader gets [error] with no words.
+ */
+internal fun readingLookupResult(
+    reading: String?,
+    lookup: (String) -> List<DictEntry>,
+    error: String = UNREADABLE_READING
+): LookupResult {
+    if (acceptedReading(reading) == null) {
+        return LookupResult("", emptyList(), error)
+    }
+    return mergeLookup(reading, null, lookup)
+}
+
+/**
+ * What a failed read tells the reader: retry.
+ *
+ * The bundled ML Kit always reads, so every engine failure already ends in an ML Kit reading of the
+ * crop and this message appears only when even that held no Japanese. There is no "download a model"
+ * advice to give and no install state to probe: a missing downloadable engine is not a failure, it
+ * is a fallback.
+ */
+internal const val UNREADABLE_READING =
+    "Text recognition could not read this text. Please select it again."
 
 /** Reads an already-cut bitmap with the same foreground OCR and screenshot cache for both gestures. */
 private suspend fun readExactCrop(
@@ -199,80 +178,56 @@ private suspend fun readExactCrop(
 ): String? = withContext(Dispatchers.Default) {
     cache?.setModelRevision(modelRevision(context))
     val started = SystemClock.elapsedRealtime()
+    val bounds = Box(0, 0, crop.width, crop.height)
     val read = suspend {
-        JapaneseOcr.readLineWithMangaOcr(context, crop, Box(0, 0, crop.width, crop.height))
+        // The selected downloadable engine first; the bundled ML Kit reading is the fallback, since
+        // the rectangle cut here may cover text the screen index never held.
+        JapaneseOcr.readLine(context, crop, bounds) ?: JapaneseOcr.readWithMlKit(crop, bounds)
     }
     (if (cache == null) read() else cache.read(box, read)).also {
         Log.d(LOOKUP_TAG, "crop read=${SystemClock.elapsedRealtime() - started}ms")
     }
 }
 
-/** Reads a padded phrase, then answers the whole frozen line without waiting for background OCR. */
+/** Reads the entire tapped line with the selected recognizer, then ranks words nearest the tap. */
 internal suspend fun runTapLookup(
     context: Context,
     screenshot: Bitmap,
     line: ScreenLine,
-    phrase: TapPhrase?,
     x: Int,
     y: Int,
     repo: JmdictRepository?,
     cache: ExactCropOcrCache
 ): LookupResult = withContext(Dispatchers.Default) {
-    val reading = phrase?.let {
-        val box = clampedBox(screenshot, it.bounds)
-        val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
-        readExactCrop(context, crop, box, cache)
-    }
-    val lookup: (String) -> List<DictEntry> =
-        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) }
-    tapLookupResult(line, phrase, reading, x, y, lookup)
+    // Pad before cutting: preprocessing cannot restore pixels outside an already-cut bitmap.
+    val bounds = line.detectorBounds
+    val pad = maxOf(2, ((if (line.vertical) bounds.width else bounds.height) * 0.1f).toInt())
+    val box = clampedBox(screenshot, Box(bounds.left - pad, bounds.top - pad,
+        bounds.right + pad, bounds.bottom + pad))
+    val crop = Bitmap.createBitmap(screenshot, box.left, box.top, box.width, box.height)
+    val reading = readExactCrop(context, crop, box, cache)
+    tapLookupResult(line, reading, x, y,
+        if (repo == null) NO_LOOKUP else { term -> repo.lookup(term) })
 }
 
-/**
- * Corrects only the frozen phrase span, keeping surrounding text and geometry intact. Scanning the
- * corrected sentence keeps word offsets and Anki context consistent, even when OCR inserts characters.
- * Distance ranking precedes deduplication and the display cap so the tapped occurrence survives.
- */
+/** Uses only recognized text; the index supplies geometry for ordering, never dictionary words. */
 internal fun tapLookupResult(
     line: ScreenLine,
-    phrase: TapPhrase?,
     reading: String?,
     x: Int,
     y: Int,
     lookup: (String) -> List<DictEntry>,
-    maxWords: Int = 24
+    maxWords: Int = 24,
+    error: String = UNREADABLE_READING
 ): LookupResult {
+    val text = acceptedReading(reading) ?: return readingLookupResult(reading, lookup, error)
     val cachedLookup = memoizedLookup(lookup)
-    var corrected = line.withText(OcrRepair.repair(line.text, cachedLookup))
-    val region = phrase?.takeIf {
-        it.start >= 0 && it.endExclusive > it.start && it.endExclusive <= line.text.length &&
-            line.charBoxes.size == line.text.length && it.bounds.width > 0 && it.bounds.height > 0
-    }
-    val replacement = if (region == null) null else acceptedReading(reading)
-        ?.let { OcrRepair.repair(it, cachedLookup) }
-    if (region != null && replacement != null) {
-        val from = region.start
-        val to = region.endExclusive
-        val boxes = CharBoxAlign.align(
-            corrected.text.substring(from, to), corrected.charBoxes.subList(from, to),
-            replacement, region.bounds, line.vertical
-        )
-        corrected = corrected.copy(
-            text = corrected.text.replaceRange(from, to, replacement),
-            charBoxes = corrected.charBoxes.take(from) + boxes + corrected.charBoxes.drop(to)
-        )
-    }
+    val corrected = line.withText(OcrRepair.repair(text, cachedLookup))
     if (maxWords <= 0) return LookupResult(corrected.text, emptyList())
-    val words = WordScanner.scan(corrected.text, cachedLookup, maxWords = maxOf(1, corrected.text.length))
-        .map { it.copy(context = corrected.text) }
-    val preferredStart = if (replacement != null && region != null) region.start else 0
-    val preferredEnd = preferredStart + (replacement?.length ?: 0)
-    return LookupResult(
-        ocrText = corrected.text,
-        words = rankWordsByTapDistance(words, corrected, x, y, preferredStart, preferredEnd)
-            .distinctBy { it.surface }
-            .take(maxWords)
-    )
+    val words = WordScanner.scan(corrected.text, cachedLookup,
+        maxWords = maxOf(1, corrected.text.length)).map { it.copy(context = corrected.text) }
+    return LookupResult(corrected.text, rankWordsByTapDistance(words, corrected, x, y)
+        .distinctBy { it.surface }.take(maxWords))
 }
 
 internal fun mergePrimary(primary: LookupResult, supplement: LookupResult, maxWords: Int = 24): LookupResult =
@@ -281,10 +236,22 @@ internal fun mergePrimary(primary: LookupResult, supplement: LookupResult, maxWo
         words = (primary.words + supplement.words).distinctBy { it.surface }.take(maxWords)
     )
 
-private fun modelRevision(context: Context): String = MangaOcrModel.Slot.entries.joinToString("|") { slot ->
-    val file = MangaOcrModel.file(context, slot)
-    "${file.path}:${file.length()}:${file.lastModified()}"
-}
+/**
+ * The key that decides whether a cached crop reading is still current: the selected mode and the
+ * installed files behind the optional engine. Switching engines, or re-installing a PP model,
+ * therefore invalidates the exact-crop cache instead of serving a reading from the previous engine.
+ *
+ * Pure, so the composition is unit-tested.
+ */
+internal fun recognitionRevision(
+    mode: RecognitionMode,
+    ppRevision: String
+): String = "${mode.id}|pp:$ppRevision"
+
+private fun modelRevision(context: Context): String = recognitionRevision(
+    RecognitionPreference.mode(context),
+    PpOcrModel.revision(context)
+)
 
 /**
  * The circle's answer, assembled: the crop reading first, the index's own words behind it.
@@ -324,60 +291,15 @@ fun mergeLookup(
 
 /**
  * The crop reading when it is a reading at all: not blank, not one of the model's placeholders, and
- * Japanese — the decoder writes Japanese, so a reading without any is noise the sheet must not show
+ * Japanese — the recognizer writes Japanese, so a reading without any is noise the sheet must not show
  * and the dictionary must not be handed.
  *
- * Deliberately not [OcrLinePolicy.acceptsMangaText]: the whole selection is one line, so there is
+ * Deliberately not [OcrLinePolicy.acceptsEngineText]: the whole selection is one line, so there is
  * no ML Kit reading of it to measure the length against, and a long crop reading is a legitimate
  * one — a circle can hold a whole sentence.
  */
 private fun acceptedReading(reading: String?): String? =
     reading?.trim()?.takeIf { !OcrLinePolicy.isUnreadable(it) && JapaneseText.isJapaneseLine(it) }
-
-/**
- * [screen] with every line that holds no Japanese dropped, indices kept.
- *
- * The index keeps every line ML Kit read — a line it read as Latin can still be stylized Japanese —
- * and drops the ones whose final text has no Japanese in it. This applies the same rule, in one
- * pass, to what the index still holds unread, so only actually intersecting Japanese text can
- * supplement the crop. A dropped line keeps its place (empty text, no boxes), so the indices a
- * gesture handed back stay valid.
- */
-private fun japaneseLines(screen: ScreenText): ScreenText = screen.copy(
-    lines = screen.lines.map { line ->
-        if (JapaneseText.isJapaneseLine(line.text)) {
-            line
-        } else {
-            line.copy(text = "", charBoxes = emptyList())
-        }
-    }
-)
-
-/**
- * ML Kit's lines inside [crop], as a throwaway index in the crop's own coordinates.
- *
- * This supplements a circle drawn before the screen index exists — while the scan is still running,
- * or when ML Kit found nothing to index. The crop is the selection, so every line ML Kit reads in
- * it is strictly inside the circle by construction. Null when it read nothing, and never read with
- * manga-ocr: the crop itself already was.
- */
-private suspend fun cropIndex(crop: Bitmap): ScreenText? {
-    val lines = JapaneseOcr.detectLines(crop)
-    if (lines.isEmpty()) return null
-    return ScreenText(
-        lines.map { line ->
-            val vertical = line.bounds.height > line.bounds.width * 1.5f
-            ScreenLine(
-                line.text,
-                line.bounds,
-                vertical,
-                interpolateCharBoxes(line.text, line.bounds, vertical)
-            )
-        },
-        crop.width,
-        crop.height
-    )
-}
 
 private fun clampedBox(screenshot: Bitmap, box: Box): Box {
     val left = box.left.coerceIn(0, screenshot.width - 1)

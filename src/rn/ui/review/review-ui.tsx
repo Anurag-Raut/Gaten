@@ -18,36 +18,44 @@
  * by `BottomBar`.
  *
  * Motion is the design's own, and only ever the result of something the reader did: a nested screen
- * entering (8 dp horizontally, 70% to full opacity), the progress line moving to its new value, and
- * the press feedback every control in the app already answers with (`PressableScale`). All of it is
- * skipped when the system asks for reduced motion.
+ * entering (8 dp horizontally, 70% to full opacity), the progress line moving to its new value, the
+ * typed answer shaken once when its answer comes back wrong, and the press feedback every control in
+ * the app already answers with (`PressableScale`). All of it is skipped when the system asks for
+ * reduced motion.
  */
-import React, {useEffect, useRef, useState} from "react";
+import React, {useEffect, useRef} from "react";
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type StyleProp,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing as ReanimatedEasing,
+  ReduceMotion,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import {InkIcon} from "../InkIcon";
-import {Icon} from "../components";
+import {Button, Icon} from "../components";
 import {PressableScale} from "../PressableScale";
-import {shape, spacing, typeScale} from "../tokens";
+import {ScreenHeader} from "../ScreenHeader";
+import {spacing, typeScale} from "../tokens";
 import {useTheme} from "../theme";
 import {AnkiServiceMark, ToriiServiceMark} from "../home/HomeArtwork";
 import DeckThumbnail from "./DeckThumbnail";
+import {answerShake} from "./wanikani-cue";
 
 /** The curve every short Ink transition uses: fast out, settled in — the app's own emphasized one. */
 const INK_EASING = ReanimatedEasing.bezier(0.2, 0, 0, 1);
@@ -58,6 +66,10 @@ const ENTER_TRAVEL = 8;
 
 /** How long the progress line takes to reach a new value. */
 const PROGRESS_MS = 180;
+
+/** How far the typed answer moves on a wrong answer, and how long each leg of the shake takes. */
+const SHAKE_TRAVEL = 10;
+const SHAKE_STEP_MS = 50;
 
 /** When WaniKani's next reviews come up: a clock time today, and a weekday when it is later. */
 export function nextReviewLabel(at: number): string {
@@ -131,15 +143,20 @@ export function SectionCaption({
  * The brand mark in its own holder: the app's real Anki or WaniKani logo on the service's own tint,
  * which is the one place a brand colour belongs. The tint is read from the canvas rather than from a
  * theme role because it is a brand surface, not an app one.
+ *
+ * A flat mark drops the holder: a host that already paints the surface — a dialog card — shows the
+ * bare logo, at the size and in the colours it draws in either way.
  */
 export function BrandTile({
   brand,
   size = 43,
   radius = 12,
+  flat = false,
 }: {
   brand: "anki" | "wanikani";
   size?: number;
   radius?: number;
+  flat?: boolean;
 }) {
   const {colors} = useTheme();
   const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
@@ -157,7 +174,11 @@ export function BrandTile({
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.tile, {width: size, height: size, borderRadius: radius, backgroundColor: background}]}
+      style={[
+        styles.tile,
+        {width: size, height: size},
+        flat ? null : {borderRadius: radius, backgroundColor: background},
+      ]}
     >
       {brand === "anki" ? (
         <AnkiServiceMark size={glyph} />
@@ -246,9 +267,12 @@ export function SourceRow({
 }
 
 /**
- * The compact header of a step inside the flow: the way back, what the screen is, and — when
- * there is one — the count or state that belongs to it. The glyph is the design's 21 dp; its target is
- * Android's own 48 dp, so the arrow sits where the design puts it without being hard to hit.
+ * The header of a step inside the flow: the same shared app bar every pushed screen draws — the way
+ * back, the step's name left-aligned at the app's bar type, and, when there is one, the count that
+ * belongs to it on the trailing edge. Kept as a thin adapter so the flow's call sites read the same
+ * way they always have while the bar itself lives in one place (`ui/ScreenHeader`).
+ *
+ * The screen supplies the top inset; the shared bar handles horizontal safe areas.
  */
 export function SubHeader({
   title,
@@ -261,24 +285,17 @@ export function SubHeader({
 }) {
   const {colors} = useTheme();
   return (
-    <View style={styles.subHeader}>
-      <PressableScale
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={onBack}
-        style={styles.backButton}
-      >
-        <InkIcon name="back" size={21} color={colors.onSurface} />
-      </PressableScale>
-      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.subHeaderTitle, {color: colors.onSurface}]}>
-        {title}
-      </Text>
-      {right != null && (
-        <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.onSurfaceVariant}]}>
-          {right}
-        </Text>
-      )}
-    </View>
+    <ScreenHeader
+      title={title}
+      onBack={onBack}
+      trailing={
+        right != null ? (
+          <Text numberOfLines={1} style={[styles.subHeaderRight, {color: colors.onSurfaceVariant}]}>
+            {right}
+          </Text>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -287,7 +304,7 @@ export function SubHeader({
  * animates to its new value and never bounces, and it is the only thing on the screen that moves
  * while a card is being answered.
  */
-export function ProgressLine({value}: {value: number}) {
+export function ProgressLine({value, height = 2}: {value: number; height?: number}) {
   const {colors} = useTheme();
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(value);
@@ -303,8 +320,8 @@ export function ProgressLine({value}: {value: number}) {
 
   return (
     <View style={styles.progressArea} accessible accessibilityRole="progressbar" accessibilityValue={{min: 0, max: 100, now: Math.round(clamped * 100)}}>
-      <View style={[styles.progressTrack, {backgroundColor: colors.outlineVariant}]}>
-        <Animated.View style={[styles.progressFill, {backgroundColor: colors.accent}, fill]} />
+      <View style={[styles.progressTrack, {height, backgroundColor: colors.outlineVariant}]}>
+        <Animated.View style={[styles.progressFill, {height, backgroundColor: colors.accent}, fill]} />
       </View>
     </View>
   );
@@ -312,12 +329,12 @@ export function ProgressLine({value}: {value: number}) {
 
 /**
  * The one success mark the app draws: a filled disc with a tick on it, at 22 dp. The pair is the
- * design's own green in both modes — a light disc with dark ink on it in the dark theme, so the tick
- * keeps its contrast on the lighter green.
+ * reader's chosen accent with the ink that reads on it — the same accent/onPrimary pairing the
+ * filled actions and the selected navigation pill are held to — so the mark follows the accent
+ * chosen in Settings instead of a fixed status green.
  */
 export function SuccessCheck({size = 22}: {size?: number}) {
   const {colors} = useTheme();
-  const dark = Number.parseInt(colors.background.slice(1, 3), 16) < 128;
   return (
     <View
       accessible={false}
@@ -329,11 +346,57 @@ export function SuccessCheck({size = 22}: {size?: number}) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: dark ? "#69C796" : "#238858",
+          backgroundColor: colors.accent,
         },
       ]}
     >
-      <Icon name="check" size={size * 0.64} color={dark ? "#17171A" : "#FFFFFF"} />
+      <Icon name="check" size={size * 0.64} color={colors.onPrimary} />
+    </View>
+  );
+}
+
+/**
+ * Two flat figures side by side, split by one vertical hairline — the paired-figure grammar the
+ * Analytics page uses, without any card around it. A "—" value means the figure is not known; the
+ * optional hint says why, or names the scope the figure covers. A narrow window or large type stacks
+ * the pair so no line is clipped.
+ */
+export function MetricPair({
+  metrics,
+}: {
+  metrics: Array<{value: string; label: string; hint?: string | null}>;
+}) {
+  const {colors} = useTheme();
+  // A narrow window or large type leaves each half-column too little room for its hint to read:
+  // the pair then stacks, so every line grows to the full content width and wraps freely.
+  const {width, fontScale} = useWindowDimensions();
+  const stacked = width < 340 || fontScale >= 1.5;
+  return (
+    <View style={[styles.metricRow, stacked && styles.metricRowStacked]}>
+      {metrics.map((metric, index) => (
+        <View
+          key={metric.label}
+          accessible
+          accessibilityLabel={`${
+            metric.value === "—" ? "Not available" : metric.value
+          }, ${metric.label}${metric.hint == null ? "" : `, ${metric.hint}`}`}
+          style={[
+            styles.metric,
+            !stacked && index > 0 && styles.metricSpaced,
+            !stacked && index > 0 && {borderStartColor: colors.outlineVariant},
+          ]}
+        >
+          <Text style={[styles.metricValue, {color: colors.onSurface}]}>{metric.value}</Text>
+          <Text numberOfLines={2} style={[styles.metricLabel, {color: colors.onSurfaceVariant}]}>
+            {metric.label}
+          </Text>
+          {metric.hint != null && (
+            <Text style={[styles.metricHint, {color: colors.onSurfaceVariant}]}>
+              {metric.hint}
+            </Text>
+          )}
+        </View>
+      ))}
     </View>
   );
 }
@@ -353,6 +416,7 @@ export function StudyRow({
   extra = null,
   trailing = null,
   complete = false,
+  loading = false,
   minHeight,
   accessibilityLabel,
   disabled = false,
@@ -370,6 +434,8 @@ export function StudyRow({
   /** The count and its caption; null when the queue has nothing to count. */
   trailing?: {value: string; label: string} | null;
   complete?: boolean;
+  /** True while the row's own action is in flight: a spinner takes the trailing lane's place. */
+  loading?: boolean;
   minHeight: number;
   accessibilityLabel: string;
   disabled?: boolean;
@@ -416,27 +482,36 @@ export function StudyRow({
         )}
       </View>
       <View style={styles.studyTrailing}>
-        {complete ? (
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.accent} />
+        ) : complete ? (
           <SuccessCheck />
         ) : trailing != null ? (
           <Text numberOfLines={1} style={[styles.studyCount, {color: colors.accent}]}>
             {trailing.value}
           </Text>
         ) : null}
-        {!complete && trailing != null && (
+        {!complete && !loading && trailing != null && (
           <Text numberOfLines={1} style={[styles.studyCountLabel, {color: colors.onSurfaceVariant}]}>
             {trailing.label}
           </Text>
         )}
       </View>
-      <InkIcon name="chevron" size={22} color={colors.onSurfaceVariant} />
+      {/* The chevron says the row leads somewhere: a cleared or locked informational row has none. */}
+      {onPress != null && <InkIcon name="chevron" size={22} color={colors.onSurfaceVariant} />}
     </>
   );
   const rowStyle = [styles.studyRow, {minHeight, borderBottomColor: colors.outlineVariant}];
 
   if (onPress == null) {
     return (
-      <View accessible accessibilityRole="none" accessibilityLabel={accessibilityLabel} style={rowStyle}>
+      <View
+        accessible
+        accessibilityRole="none"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={loading ? {busy: true} : undefined}
+        style={rowStyle}
+      >
         {content}
       </View>
     );
@@ -446,7 +521,7 @@ export function StudyRow({
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{disabled}}
+      accessibilityState={{disabled, busy: loading}}
       disabled={disabled}
       onPress={onPress}
       style={rowStyle}
@@ -462,28 +537,22 @@ export function DeckRow({
   name,
   counts,
   due,
-  completed = false,
-  completedToday = false,
   onPress,
 }: {
   deckId: number | string;
   name: string;
   counts: string;
   due: number;
-  completed?: boolean;
-  /** True only when a session in this deck finished today, which is the evidence "Completed today" needs. */
-  completedToday?: boolean;
   onPress: () => void;
 }) {
-  // Nothing due is clear on its own: a deck with no cards left does not need a receipt to say so, and
-  // the receipt only changes the words. A deck with cards due is never called clear.
+  // Nothing due is clear on its own: a deck with no cards left does not need a receipt to say so.
+  // A deck with cards due is never called clear.
   const cleared = due === 0;
-  const caughtUp = cleared && completed;
   return (
     <StudyRow
       art={<DeckThumbnail deckId={deckId} width={48} height={48} />}
       title={name}
-      subline={cleared ? (caughtUp && completedToday ? "Completed today" : "Clear for now") : counts}
+      subline={cleared ? "Clear for now" : counts}
       trailing={cleared ? null : {value: String(due), label: "due"}}
       complete={cleared}
       minHeight={90}
@@ -493,67 +562,43 @@ export function DeckRow({
   );
 }
 
-/** The screen's one dominant action: a flat fill at the design's 52 dp and 13 dp radius. */
+/**
+ * The screen's one dominant action: the shared filled `Button` at the design's 52 dp and 13 dp
+ * radius, stretched across its lane. A caller's own geometry — WaniKani's taller 54 dp button, at
+ * its own radius — still wins over the base style.
+ */
 export function FilledAction({
   label,
   onPress,
   disabled,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** Optional layout adjustment for an action. */
+  style?: StyleProp<ViewStyle>;
 }) {
-  const {colors} = useTheme();
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{disabled: disabled ?? false}}
-      disabled={disabled}
-      onPress={onPress}
-      style={[
-        styles.action,
-        {backgroundColor: disabled ? colors.disabled : colors.actionPrimary},
-      ]}
-    >
-      <Text
-        style={[
-          styles.actionLabel,
-          {color: disabled ? colors.onDisabled : colors.onActionPrimary},
-        ]}
-      >
-        {label}
-      </Text>
-    </PressableScale>
+    <Button label={label} onPress={onPress} disabled={disabled} fullWidth style={style} />
   );
 }
 
-/**
- * The actions pinned above the system navigation: one hairline, the screen's own canvas behind them,
- * and the reader's gesture inset inside the padding. Nothing here scrolls, so a control the reader
- * needs is never under the keyboard or the gesture bar.
- */
+/** Floating actions above the gesture area; the surrounding space lets content and touches through. */
 export function ActionFooter({
   children,
   bottomInset,
-  style,
+  onHeightChange,
 }: {
   children: React.ReactNode;
   bottomInset: number;
-  style?: StyleProp<ViewStyle>;
+  onHeightChange: (height: number) => void;
 }) {
-  const {colors} = useTheme();
   return (
     <View
-      style={[
-        styles.footer,
-        {
-          backgroundColor: colors.background,
-          borderTopColor: colors.outlineVariant,
-          paddingBottom: spacing.s + bottomInset,
-        },
-        style,
-      ]}
+      pointerEvents="box-none"
+      onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
+      style={[styles.footer, {paddingBottom: spacing.s + bottomInset}]}
     >
       {children}
     </View>
@@ -650,57 +695,100 @@ export function RatingBar({
 }
 
 /**
- * The field a WaniKani answer is typed into: the design's own line rather than a box, centred, in the
- * reader's ink. Its underline takes the accent while it has focus, which is the one focus indicator
- * this screen draws.
+ * The field a WaniKani answer is typed into: the design's own line rather than a box - no top, side or
+ * rounded border, no focus ring or background. The answer's own text takes the outcome colour; the
+ * line stays an action accent.
+ *
+ * The line itself is NOT this view's border: [AnswerShake] draws it, in the static view the input
+ * moves inside, which is what lets a wrong answer shake the text without the line moving with it.
+ * Used without that wrapper the input is just the text and its placeholder.
  */
-export function AnswerInput(props: TextInputProps) {
+export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function AnswerInput(
+  props,
+  ref,
+) {
   const {colors} = useTheme();
-  const [focused, setFocused] = useState(false);
   return (
     <TextInput
+      ref={ref}
       {...props}
-      onFocus={(event) => {
-        setFocused(true);
-        props.onFocus?.(event);
-      }}
-      onBlur={(event) => {
-        setFocused(false);
-        props.onBlur?.(event);
-      }}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
+      cursorColor={props.cursorColor ?? colors.accent}
       underlineColorAndroid="transparent"
-      style={[
-        styles.input,
-        {color: colors.onSurface, borderBottomColor: focused ? colors.accent : colors.outlineVariant},
-        props.style,
-      ]}
+      style={[styles.input, {color: colors.onSurface}, props.style]}
     />
   );
-}
+});
 
 /**
  * The one line of feedback an answer gets: what happened, and — when the answer was wrong — what the
- * right one was. Colour is never the only signal; the words say it too.
+ * right one was. Colour is never the only signal; the words say it too. It holds still: the answer
+ * the reader got wrong is what moves, so the verdict that names the mistake stays put and readable.
  */
-export function Feedback({
-  tone,
-  text,
-}: {
-  tone: "right" | "wrong";
-  text: string;
-}) {
+export function Feedback({tone, text}: {tone: "right" | "wrong"; text: string}) {
   const {colors} = useTheme();
   return (
     <Text
       accessibilityLiveRegion="polite"
-      style={[
-        styles.feedback,
-        {color: tone === "right" ? colors.success : colors.error},
-      ]}
+      style={[styles.feedback, {color: tone === "right" ? colors.success : colors.error}]}
     >
       {text}
     </Text>
+  );
+}
+
+/**
+ * The answer field: the stroke it sits on, and the answer's own text, shaken once when that answer is
+ * judged wrong.
+ *
+ * Only the text moves. The stroke is this component's own static view - the input is translated
+ * inside it - so the line the reader typed on, and the verdict under it, both hold still while the
+ * thing they got wrong moves: the answer, not the frame around it.
+ *
+ * It wraps [AnswerInput] rather than the input shaking itself, so the field keeps one identity - and
+ * so its focus and keyboard - across the shake. It shakes on [shakeKey] changing to a key it has not
+ * shaken for, and holds still for every other render: a keystroke in the retry a wrong answer opens,
+ * or the correct answer that follows, which clears the key. A caller showing a wrong answer it did
+ * not just judge - a session resumed as it is - passes no key, and the field arrives still. The
+ * system's reduced-motion setting turns the shake off like every other motion here; the words and
+ * the colour still say what happened.
+ */
+export function AnswerShake({
+  shakeKey,
+  children,
+}: {
+  /** Identifies the wrong answer this field holds: a new one shakes, the same one never does. */
+  shakeKey: string | null;
+  children: React.ReactNode;
+}) {
+  const {colors} = useTheme();
+  const reducedMotion = useReducedMotion();
+  const offset = useSharedValue(0);
+  const shaken = useRef<string | null>(null);
+
+  useEffect(() => {
+    const previous = shaken.current;
+    shaken.current = shakeKey;
+    if (!answerShake(previous, shakeKey) || reducedMotion) {
+      offset.value = 0;
+      return;
+    }
+    offset.value = withSequence(
+      withTiming(-SHAKE_TRAVEL, {duration: SHAKE_STEP_MS, easing: INK_EASING}),
+      withTiming(SHAKE_TRAVEL, {duration: SHAKE_STEP_MS * 2, easing: INK_EASING}),
+      withTiming(0, {duration: SHAKE_STEP_MS, easing: INK_EASING})
+    );
+  }, [shakeKey, reducedMotion, offset]);
+
+  const shake = useAnimatedStyle(() => ({transform: [{translateX: offset.value}]}));
+
+  return (
+    <View style={styles.answerStroke}>
+      <Animated.View style={[styles.answerShake, shake]}>{children}</Animated.View>
+      {/* Over the field's last 2 dp rather than a border under them: the stroke must not add height,
+          or the whole block below it would ride 2 dp up from where the design puts it. */}
+      <View style={[styles.answerStrokeLine, {backgroundColor: colors.accent}]} />
+    </View>
   );
 }
 
@@ -753,12 +841,53 @@ export function StateChip({label}: {label: string}) {
   );
 }
 
+/**
+ * The busy row's spinner. The native `ActivityIndicator` is an Android `ProgressBar`; when the
+ * system animator duration scale is 0 it falls back to the platform's static refresh-arrow vector.
+ * This ring is drawn and rotated by Reanimated, so it keeps a circular loading shape independently
+ * of that platform fallback.
+ *
+ * Sized by the style's own 16 dp unless a caller asks for another one: the review flow's rows are
+ * the default, and the search notice's 24 dp glyph column asks for a ring that sits inside it.
+ */
+export function BusySpinner({size}: {size?: number} = {}) {
+  const {colors} = useTheme();
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    spin.value = 0;
+    spin.value = withRepeat(
+      withTiming(1, {
+        duration: 900,
+        easing: ReanimatedEasing.linear,
+        reduceMotion: ReduceMotion.Never,
+      }),
+      -1,
+      false
+    );
+    return () => cancelAnimation(spin);
+  }, [spin]);
+  const rotation = useAnimatedStyle(() => ({
+    transform: [{rotate: `${spin.value * 360}deg`}],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.busySpinner,
+        size != null && {width: size, height: size, borderRadius: size / 2},
+        {borderColor: colors.accent, borderTopColor: "transparent"},
+        rotation,
+      ]}
+    />
+  );
+}
+
 /** "Something is on its way": one small spinner beside its own line, at the layout's own rhythm. */
 export function BusyRow({message}: {message: string}) {
   const {colors} = useTheme();
   return (
     <View style={styles.busyRow} accessible accessibilityLabel={message}>
-      <ActivityIndicator size="small" color={colors.accent} />
+      <BusySpinner />
       <Text style={[typeScale.bodySmall, styles.busyText, {color: colors.onSurfaceVariant}]}>
         {message}
       </Text>
@@ -825,27 +954,15 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   sourceMain: {flex: 1, minWidth: 0, marginStart: 14},
-  sourceName: {fontSize: 16, fontWeight: "700", letterSpacing: -0.4},
+  sourceName: {...typeScale.titleLarge},
   sourceStatus: {marginTop: 5},
   sourceSide: {alignItems: "flex-end", marginStart: spacing.m},
-  sourceValue: {fontSize: 17, fontWeight: "700", letterSpacing: -0.45},
-  sourceValueLabel: {fontSize: 10, lineHeight: 13},
-  sourceAction: {fontSize: 11, lineHeight: 15, textAlign: "right"},
-  subHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 66,
-    paddingTop: 20,
-    paddingBottom: 10,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    alignItems: "flex-start",
-    justifyContent: "center",
-  },
-  subHeaderTitle: {fontSize: 14, fontWeight: "700", letterSpacing: -0.3, marginStart: 2},
-  subHeaderRight: {fontSize: 11, marginStart: "auto", paddingStart: spacing.m},
+  sourceValue: {...typeScale.titleLarge},
+  sourceValueLabel: {...typeScale.micro},
+  sourceAction: {...typeScale.micro, textAlign: "right"},
+  // The review's own count/state on the shared app bar's trailing edge, in the flow's quiet tone. It
+  // shrinks and ellipsizes rather than pushing the title off at a large font or a long count.
+  subHeaderRight: {...typeScale.micro, flexShrink: 1},
   progressArea: {marginTop: 2},
   progressTrack: {height: 2, width: "100%", overflow: "hidden"},
   progressFill: {height: 2},
@@ -867,25 +984,29 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   studyMain: {flex: 1, minWidth: 0},
-  studyTitle: {fontWeight: "700", letterSpacing: -0.25},
-  studySubline: {fontSize: 12, lineHeight: 16, marginTop: 3},
-  studyExtra: {fontSize: 11, lineHeight: 15, marginTop: 3},
+  // The row title's size is the caller's — WaniKani's 17 dp, Anki's 15 dp, both drawn at the row's
+  // own line height — so the role supplies the weight and the face only; the tracking is the row's.
+  studyTitle: {...typeScale.titleMedium, letterSpacing: -0.25},
+  studySubline: {...typeScale.bodySmall, marginTop: 3},
+  studyExtra: {...typeScale.micro, marginTop: 3},
   studyTrailing: {alignItems: "flex-end", marginStart: spacing.s},
-  studyCount: {fontSize: 25, lineHeight: 29, fontWeight: "700", letterSpacing: -0.8},
-  studyCountLabel: {fontSize: 10, lineHeight: 13, marginTop: 1},
-  action: {
-    minHeight: 52,
-    borderRadius: shape.button,
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    paddingHorizontal: spacing.xl,
-  },
-  actionLabel: {fontSize: 15, fontWeight: "600", letterSpacing: -0.18},
+  studyCount: {...typeScale.metric},
+  studyCountLabel: {...typeScale.micro, marginTop: 1},
+  metricRow: {flexDirection: "row", alignItems: "flex-start", marginTop: spacing.s},
+  metricRowStacked: {flexDirection: "column", gap: spacing.l},
+  metric: {flex: 1, minWidth: 0},
+  // One vertical hairline between the two figures, as the paired figures elsewhere in the app use.
+  metricSpaced: {borderStartWidth: 1, paddingStart: spacing.l, marginStart: spacing.l},
+  metricValue: {...typeScale.metric},
+  metricLabel: {...typeScale.labelMedium, marginTop: 3},
+  metricHint: {...typeScale.micro, marginTop: 3},
   footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: spacing.contentInset,
     paddingTop: 17,
-    borderTopWidth: 1,
     width: "100%",
   },
   ratingRow: {flexDirection: "row", width: "100%"},
@@ -900,20 +1021,32 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.s,
     paddingHorizontal: spacing.xs,
   },
-  ratingName: {fontSize: 12, fontWeight: "600"},
-  ratingInterval: {fontSize: 10, lineHeight: 13, marginTop: 2},
+  ratingName: {...typeScale.labelMedium},
+  ratingInterval: {...typeScale.micro, marginTop: 2},
   input: {
-    fontSize: 17,
-    textAlign: "center",
+    ...typeScale.headline,
+    // The typed answer carries no tracking of its own, so the state title's tightening is cancelled
+    // here rather than letting the field's characters crowd as the reader types.
+    letterSpacing: 0,
+    textAlign: "left",
     width: "100%",
-    paddingVertical: 13,
-    paddingHorizontal: spacing.s,
-    borderBottomWidth: 1,
+    minHeight: 62,
+    paddingTop: 9,
+    paddingBottom: 7,
+    paddingHorizontal: 1,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderRadius: 0,
   },
-  feedback: {fontSize: 12, lineHeight: 18, minHeight: 21, marginTop: 17},
+  feedback: {...typeScale.bodySmall, minHeight: 21, marginTop: 17},
+  answerStroke: {width: "100%"},
+  answerStrokeLine: {position: "absolute", left: 0, right: 0, bottom: 0, height: 2},
+  answerShake: {width: "100%"},
   stateBlock: {alignItems: "center", width: "100%", maxWidth: 300, alignSelf: "center"},
   stateMark: {marginBottom: 21},
-  stateTitle: {fontSize: 23, fontWeight: "700", letterSpacing: -0.7, textAlign: "center"},
+  stateTitle: {...typeScale.headline, textAlign: "center"},
   stateBody: {marginTop: 14, textAlign: "center"},
   stateNote: {marginTop: spacing.m, textAlign: "center"},
   stateActions: {marginTop: 21, width: "100%", gap: spacing.m},
@@ -926,6 +1059,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   busyRow: {flexDirection: "row", alignItems: "center", minHeight: 21},
+  busySpinner: {width: 16, height: 16, borderRadius: 8, borderWidth: 2},
   busyText: {marginStart: spacing.m, flexShrink: 1},
   enter: {flex: 1},
 });

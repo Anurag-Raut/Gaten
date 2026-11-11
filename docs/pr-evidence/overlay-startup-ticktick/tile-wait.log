@@ -1,0 +1,60 @@
+Quick Settings tile — shade-collapse wait, 400 ms → 300 ms
+==========================================================
+
+Build: this head, debug APK (JS bundled), emulator-5554 Gaten_Lookup_Review.
+
+Method: `cmd statusbar expand-settings`, `cmd statusbar click-tile
+com.gaten/com.gaten.app.LookupTileService`, then read the service's own
+`elapsedSinceTrigger()` stage lines. The shade is dismissed by the tile itself
+(`GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE`). Eight takes total (five checked for
+shade pixels, three with the full chain below); every frozen frame was shade-free.
+
+Engine animation scales all 1.0 (`window`, `transition`, `animator`).
+
+Measured collapse (screenrecord, `cmd statusbar collapse`): the shade is visually gone
+~150–200 ms after the dismissal dispatch; window focus returns (~125 ms) before it does,
+and the accessibility window list keeps the shade at full-display bounds throughout, so
+no earlier signal is safe. 300 ms = that bound plus a safety band.
+
+Baseline (this repo's dev, ShadeCollapseMs = 400)
+-------------------------------------------------
+  Trigger accepted (+0 ms)
+  Starting the ordered capture pipeline (fromShade=true, +0 ms)
+  performCapture called (+404 ms)
+  takeScreenshot requested (+404 ms)
+  Screenshot delivered (+411 ms)
+  Overlay window added (+441 ms)
+  Frozen frame on screen (+484 ms)
+  (a second baseline run: performCapture +408, Overlay window added +449, Frozen +516;
+   a third: Overlay window added +487, Frozen +539)
+
+This head (ShadeCollapseMs = 300)
+---------------------------------
+  take 1
+    performCapture called (+303 ms)
+    takeScreenshot requested (+303 ms)
+    Overlay window added (+338 ms)
+    Frozen frame on screen (+375 ms)
+  take 2
+    performCapture called (+303 ms)
+    takeScreenshot requested (+303 ms)
+    Overlay window added (+338 ms)
+    Frozen frame on screen (+371 ms)
+  take 3
+    performCapture called (+303 ms)
+    takeScreenshot requested (+304 ms)
+    Overlay window added (+329 ms)
+    Frozen frame on screen (+374 ms)
+
+Summary (tile tap → stage)
+---------------------------------
+  Stage                 Baseline (400)   This head (300)
+  Overlay window added  +441–+493 ms     +329–+338 ms   (~ −130 ms)
+  Frozen frame on screen +484–+540 ms    +371–+375 ms   (~ −140 ms)
+
+Shade-pixel check: the five extra takes all froze an app frame with the top band's mean
+luminance 151.9–152.6 (a shade frame reads far darker); no shade rows were present.
+
+Caveat: measured on an AOSP API 34 emulator. A device whose collapse is slower than the
+safety band would freeze a half-collapsed shade; that is the failure mode to watch for and
+the wait must go back up if it appears.

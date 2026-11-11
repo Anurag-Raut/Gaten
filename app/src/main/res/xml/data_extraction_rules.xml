@@ -8,21 +8,19 @@
  -->
 
 <!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+   Data extraction rules for API 31+ (backup_rules.xml covers API 30 and below).
+
+   Nothing has to be excluded, from cloud backup or from device transfer. The optional PP-OCRv6
+   Medium model is no longer app data at all: it lives in Google Play's asset-pack storage and Gaten
+   only reads it (ocr/PpOcrPack.kt), so the in-app model directory the removed downloader wrote — and
+   the exclusion that used to name it — are gone. What stays app-owned is small and outside Android's
+   backup by construction: the WaniKani token and its cache sit under noBackupFilesDir, which is never
+   backed up or transferred.
+
+   The file stays because the manifest points at it; empty rule sets mean the platform's defaults,
+   which is what this app wants.
 -->
 <data-extraction-rules>
-    <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
-    </cloud-backup>
-    <!--
-    <device-transfer>
-        <include .../>
-        <exclude .../>
-    </device-transfer>
-    -->
+    <cloud-backup />
+    <device-transfer />
 </data-extraction-rules>

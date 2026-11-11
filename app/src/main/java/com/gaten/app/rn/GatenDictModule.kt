@@ -6,7 +6,6 @@
 
 package com.gaten.app.rn
 
-import android.content.Context
 import android.content.SharedPreferences
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -15,6 +14,7 @@ import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableArray
+import com.gaten.app.data.SearchHistory
 import com.gaten.app.dict.DictionarySearch
 import com.gaten.app.dict.SearchHit
 import kotlinx.coroutines.Dispatchers
@@ -182,15 +182,10 @@ class GatenDictModule(
     fun recentSearches(promise: Promise) {
         scope.launch {
             try {
-                val queries = historyMutex.withLock {
-                    withContext(Dispatchers.IO) {
-                        preferences().getString(KEY_RECENT_SEARCHES, "[]")?.let(::JSONArray)
-                            ?: JSONArray()
-                    }
-                }
+                val queries = SearchHistory.recents(reactApplicationContext)
                 promise.resolve(Arguments.createArray().apply {
-                    for (index in 0 until queries.length()) {
-                        pushString(queries.getString(index))
+                    for (query in queries) {
+                        pushString(query)
                     }
                 })
             } catch (e: CancellationException) {
@@ -202,7 +197,7 @@ class GatenDictModule(
     }
 
     /**
-     * Saves a query the reader searched with, keeping the latest [MAX_RECENT_SEARCHES] unique
+     * Saves a query the reader searched with, keeping the latest [SearchHistory.LIMIT] unique
      * queries. The screen's own debounce asks about text the reader is still typing, so only the
      * queries they acted on reach here.
      */
@@ -210,26 +205,7 @@ class GatenDictModule(
     fun rememberSearch(query: String, promise: Promise) {
         scope.launch {
             try {
-                val trimmed = query.trim()
-                require(trimmed.isNotEmpty()) { "The search to remember is empty" }
-                require(trimmed.length <= MAX_SEARCH_LENGTH) { "The search to remember is too long" }
-                historyMutex.withLock {
-                    withContext(Dispatchers.IO) {
-                        val preferences = preferences()
-                        val old = preferences.getString(KEY_RECENT_SEARCHES, "[]")?.let(::JSONArray)
-                            ?: JSONArray()
-                        val updated = JSONArray().put(trimmed)
-                        for (index in 0 until old.length()) {
-                            val prior = old.getString(index)
-                            if (prior != trimmed && updated.length() < MAX_RECENT_SEARCHES) {
-                                updated.put(prior)
-                            }
-                        }
-                        if (!preferences.edit().putString(KEY_RECENT_SEARCHES, updated.toString()).commit()) {
-                            throw IOException("Recent search history was not saved")
-                        }
-                    }
-                }
+                SearchHistory.remember(reactApplicationContext, query)
                 promise.resolve(null)
             } catch (e: CancellationException) {
                 throw e
@@ -318,8 +294,7 @@ class GatenDictModule(
         }
     }
 
-    private fun preferences(): SharedPreferences = reactApplicationContext
-        .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+    private fun preferences(): SharedPreferences = SearchHistory.preferences(reactApplicationContext)
 
     companion object {
         const val NAME = "GatenDict"
@@ -330,14 +305,9 @@ class GatenDictModule(
         const val CODE_EXAMPLES = "E_DICT_EXAMPLES"
         const val CODE_HISTORY_INPUT = "E_DICT_HISTORY_INPUT"
 
-        private const val PREFERENCES = "gaten_dictionary_history"
         private const val KEY_RECENT_LOOKUPS = "recent_lookups"
         private const val MAX_RECENT_LOOKUPS = 12
-        private const val KEY_RECENT_SEARCHES = "recent_searches"
-        private const val MAX_RECENT_SEARCHES = 6
 
-        /** A bound on what may be written, well past [DictionarySearch.QUERY_LIMIT]. */
-        private const val MAX_SEARCH_LENGTH = 64
         private val MATCHES = setOf("EXACT", "NORMALIZED", "LOOSE", "PREFIX")
     }
 }

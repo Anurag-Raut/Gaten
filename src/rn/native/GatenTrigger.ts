@@ -2,13 +2,15 @@
  * The floating-trigger bridge: the on-screen bubble's switch, stored in `gaten_settings` and
  * announced to the running service through the floating-button-changed broadcast.
  */
-import { NativeModules } from "react-native";
+import { DeviceEventEmitter, NativeModules } from "react-native";
 
 interface GatenTriggerNative {
   getFloatingButtonEnabled(): Promise<boolean>;
   setFloatingButtonEnabled(enabled: boolean): Promise<void>;
   tileAdded(): Promise<boolean>;
   setTileAdded(added: boolean): Promise<void>;
+  tileEnabled(): Promise<boolean>;
+  setTileEnabled(enabled: boolean): Promise<void>;
   /** "added" or "notAdded" is the system's own answer; "failed" means the request could not be made. */
   requestAddTile(): Promise<"added" | "notAdded" | "failed">;
 }
@@ -28,6 +30,15 @@ export function setFloatingButtonEnabled(enabled: boolean): Promise<void> {
   return GatenTrigger.setFloatingButtonEnabled(enabled);
 }
 
+/**
+ * The floating-button preference changed — from the on-screen remove button or a settings write.
+ * The payload carries nothing; listen and re-read [getFloatingButtonEnabled], so a Screen lookup
+ * page that did not make the change does not keep showing a stale switch.
+ */
+export function onFloatingButtonChanged(listener: () => void): { remove: () => void } {
+  return DeviceEventEmitter.addListener("gaten.floatingButtonChanged", listener);
+}
+
 /** Whether the lookup tile is already in the reader's Quick Settings, as Gaten recorded it. */
 export function tileAdded(): Promise<boolean> {
   return GatenTrigger.tileAdded();
@@ -36,6 +47,22 @@ export function tileAdded(): Promise<boolean> {
 /** Records the tile's presence; the system's own editor owns removing it. */
 export function setTileAdded(added: boolean): Promise<void> {
   return GatenTrigger.setTileAdded(added);
+}
+
+/**
+ * Whether the tile is switched on in Gaten's settings. Separate from presence: a tile can be in
+ * Quick Settings and switched off, and only Android's editor removes one.
+ */
+export function tileEnabled(): Promise<boolean> {
+  return GatenTrigger.tileEnabled();
+}
+
+/**
+ * Switches the tile on or off; the running tile refreshes its state when the shade is opened next.
+ * A rejection is the page's to report.
+ */
+export function setTileEnabled(enabled: boolean): Promise<void> {
+  return GatenTrigger.setTileEnabled(enabled);
 }
 
 /**

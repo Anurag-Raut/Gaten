@@ -13,52 +13,41 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
 import com.gaten.app.ui.theme.Motion
 
-/** How far a pressed surface shrinks: enough to answer the touch, not enough to move the layout. */
-private const val PressedScale = 0.98f
+/** How far a pressed control dims: enough to answer the touch, not enough to lose the label. */
+private const val PressedAlpha = 0.72f
 
 /**
- * The app's one answer to a touch: the surface scales from 1.0 to [pressedScale] while a finger is on
- * it and eases back on release, over [Motion.SHORT] with [Motion.pressEasing] — instead of the
- * elevation bump a Material card would otherwise jump by.
+ * The overlay's one answer to a touch: the control fades from alpha 1.0 to [PressedAlpha] while a
+ * finger is on it and eases back on release, over [Motion.SHORT] with [Motion.pressEasing].
+ *
+ * Opacity, not scale: these controls sit on a frozen screenshot inside a window whose geometry the
+ * capture mapping depends on, and a scaled control would move pixels the reader is aiming at. The
+ * whole overlay is drawn over somebody else's content, so the feedback has to stay inside the
+ * control's own box.
  *
  * It observes a press; it never handles one. The caller passes the *same* [interactionSource] it gave
- * its own tappable, so the control's own press state drives the scale and nothing here consumes,
+ * its own tappable, so the control's own press state drives the fade and nothing here consumes,
  * re-detects or duplicates a click — and a control that is disabled, whose press is cancelled (a drag
- * that turns into a scroll), or that is activated from a keyboard reports no press at all, so the
- * surface the reader's finger is really on is the only one that moves.
+ * that turns into a scroll), or that is activated from a keyboard reports no press at all.
  *
  * ```
  * val interactions = remember { MutableInteractionSource() }
- * Card(
- *     onClick = …,
- *     interactionSource = interactions,
- *     modifier = Modifier.pressScale(interactions)
- * )
+ * IconButton(onClick = …, modifier = Modifier.pressOpacity(interactions)) { … }
  * ```
  *
  * A `Modifier.clickable` takes an interaction source too, so a row that is not a Material component
- * is wired the same way. A tappable that owns its source and does not expose it cannot be scaled from
- * here; that is the one case this does not cover.
- *
- * The scale is drawn in a layer and read at draw time, so a frame of the animation never recomposes
- * the surface it is attached to.
+ * is wired the same way.
  */
 @Composable
-fun Modifier.pressScale(
-    interactionSource: InteractionSource,
-    pressedScale: Float = PressedScale
-): Modifier {
+fun Modifier.pressOpacity(interactionSource: InteractionSource): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale = animateFloatAsState(
-        targetValue = if (pressed) pressedScale else 1f,
+    val fade = animateFloatAsState(
+        targetValue = if (pressed) PressedAlpha else 1f,
         animationSpec = tween(Motion.SHORT, easing = Motion.pressEasing),
-        label = "pressScale"
+        label = "pressOpacity"
     )
-    return this.graphicsLayer {
-        scaleX = scale.value
-        scaleY = scale.value
-    }
+    return this.alpha(fade.value)
 }

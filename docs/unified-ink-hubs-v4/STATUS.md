@@ -2,7 +2,13 @@
 
 Read out of the working tree on 21 October 2026. This file records what the code does and the
 deviations taken on purpose; the package itself is indexed in [README.md](README.md), and
-[the implementation map](../design-language.md) stays the app-wide source of precedence.
+[the design language](../Gaten_Ink_Design_Language_v1.md) is the app-wide source of precedence.
+
+**25 October update:** the design language's [study-hub rules](../Gaten_Ink_Design_Language_v1.md)
+add Today figures, selected-accent completion marks and explicit refresh/pending states. Cleared
+rows no longer carry a navigation chevron or claim a per-deck dated completion. Stale nonempty
+WaniKani rows open their own live queues directly. The sections below describe the historical
+21 October implementation, not the current behavior of those superseded details.
 
 ## What the app implements now
 

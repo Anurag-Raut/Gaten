@@ -42,5 +42,4 @@
     <string name="search_detail_anki_deck">Deck: %1$s</string>
     <string name="search_detail_anki_added">Added &#10003;</string>
     <string name="search_detail_anki_settings">Anki settings</string>
-    <string name="search_detail_send_to_anki">Send to AnkiDroid instead</string>
 </resources>

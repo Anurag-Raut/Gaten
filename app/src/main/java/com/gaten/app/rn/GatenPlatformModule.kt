@@ -20,6 +20,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.media.hasNotificationAccess
 
 /**
@@ -64,6 +65,28 @@ class GatenPlatformModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun isNotificationAccessEnabled(promise: Promise) {
         promise.resolve(hasNotificationAccess(reactApplicationContext))
+    }
+
+    /**
+     * Turns Gaten's own accessibility service off. Only the service can do that, through
+     * `disableSelf`, and only from the main thread. Resolves `false` when no service instance is
+     * connected: the caller then falls back to the system screen instead of pretending it moved.
+     */
+    @ReactMethod
+    fun disableAccessibilityService(promise: Promise) {
+        val service = GatenAccessibilityService.instance
+        if (service == null) {
+            promise.resolve(false)
+            return
+        }
+        mainHandler.post {
+            try {
+                service.disableSelf()
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject(CODE_DISABLE_SERVICE, "Could not turn the accessibility service off", e)
+            }
+        }
     }
 
     /** Puts text on the clipboard, the way the Key Mapper instructions offer it. */
@@ -112,5 +135,6 @@ class GatenPlatformModule(reactContext: ReactApplicationContext) :
 
         private const val CODE_START = "E_PLATFORM_START"
         private const val CODE_CLIPBOARD = "E_PLATFORM_CLIPBOARD"
+        private const val CODE_DISABLE_SERVICE = "E_PLATFORM_DISABLE_SERVICE"
     }
 }

@@ -1,14 +1,26 @@
 /**
  * The haptics bridge: the touch feedback the Compose screens played, through the same Feedback
  * class — haptics from the window that is on screen, sounds only when the reader turned them on.
+ *
+ * "The window that is on screen" is the lookup sheet's own surface while the accessibility overlay
+ * is up, and the main activity's window otherwise, so a button in either surface feels the same.
  */
 import { NativeModules } from "react-native";
 
 /**
  * What play() plays: `tick`, `lookup` and `confirm` are haptics (a step, a dictionary hit, an
- * action that landed); `added` and `done` are the two sound cues, gated by the sounds preference.
+ * action that landed); `right` and `wrong` are the answers' own vibration patterns — one short
+ * pulse for a right answer, a double buzz for a wrong one; `added` and `done` are the two sound
+ * cues, gated by the sounds preference.
  */
-export type FeedbackKind = "tick" | "lookup" | "confirm" | "added" | "done";
+export type FeedbackKind =
+  | "tick"
+  | "lookup"
+  | "confirm"
+  | "right"
+  | "wrong"
+  | "added"
+  | "done";
 
 interface GatenHapticsNative {
   play(kind: FeedbackKind): Promise<boolean>;
@@ -20,7 +32,8 @@ const GatenHaptics = NativeModules.GatenHaptics as GatenHapticsNative;
 
 /**
  * Plays `kind`. Rejects with `E_FEEDBACK_KIND` for an unknown kind, and with `E_NO_WINDOW` when
- * there is no activity window to feel the haptic through.
+ * there is no visible window — neither the lookup sheet nor an activity — to feel the haptic
+ * through.
  */
 export function play(kind: FeedbackKind): Promise<boolean> {
   return GatenHaptics.play(kind);

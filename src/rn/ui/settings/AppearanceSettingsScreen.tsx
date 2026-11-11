@@ -13,29 +13,28 @@
  * not the device's.
  */
 import React, {useEffect, useState} from "react";
-import {Text, useColorScheme, useWindowDimensions, View} from "react-native";
+import {Text, useWindowDimensions, View} from "react-native";
 import * as GatenHaptics from "../../native/GatenHaptics";
 import * as GatenTheme from "../../native/GatenTheme";
 import type {Accent, ThemeMode} from "../../native/GatenTheme";
 import {PressableScale} from "../PressableScale";
 import {SwitchRow, SettingsGroup, SettingsPageScaffold, RowIcon} from "./settings-components";
 import {useTheme} from "../theme";
-import {MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
+import {contentInsetFor, MAX_CONTENT_WIDTH, spacing, typeScale} from "../tokens";
 
 /** The accents, in the order the Compose screen laid them out: a 4 + 3 block. */
 const ACCENTS: Accent[] = ["Indigo", "Blue", "Violet", "Teal", "Green", "Rose", "Black"];
 
 export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   const theme = useTheme();
-  const scheme = useColorScheme();
   const {width} = useWindowDimensions();
-  const horizontalPadding = width < 360 ? 16 : 22;
+  const horizontalPadding = contentInsetFor(width);
   const accentGridWidth = Math.min(width - horizontalPadding * 2, MAX_CONTENT_WIDTH - 44);
   const accentCellWidth = Math.floor(
     (accentGridWidth - spacing.s * 3) / 4
   );
   // What the swatches below sit on: the reader's choice, not their device's.
-  const dark = theme.mode === "Dark" || (theme.mode === "System" && scheme === "dark");
+  const {dark} = theme;
 
   // Each accent's primary, resolved once per mode through the bridge, so every swatch shows the
   // accent's own tone rather than the selected one's.
@@ -58,9 +57,9 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   }, [dark]);
 
   const selectAccent = (accent: Accent) => {
-    // A tap that lands on the accent already chosen changes nothing and gets no tick for it.
+    // A tap that lands on the accent already chosen changes nothing — but it is still a control
+    // press, so it still ticks; the tick comes from the swatch itself.
     if (accent === theme.accent) return;
-    void GatenHaptics.play("tick").catch(() => {});
     theme.setAccent(accent);
   };
 
@@ -79,7 +78,6 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
     if (next === soundsEnabled) return;
     setSoundsEnabled(next);
     void GatenHaptics.setSoundsEnabled(next).catch(() => {});
-    void GatenHaptics.play("tick").catch(() => {});
   };
 
   return (
