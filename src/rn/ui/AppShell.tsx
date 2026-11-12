@@ -540,6 +540,12 @@ export function AppShell() {
   // screen, one tab per step. The reader is looking at Home throughout, so each scene mounts behind
   // it instead of on the frame their tap selects it — which is what used to show an empty page and
   // then the page itself. Nothing is skipped: a tap that beats the warm-up still mounts its tab.
+  //
+  // Mounting is all that happens early. React Navigation composes a child navigator's focus from its
+  // parent's (NavigationProvider: a route is focused only while its navigator is), so a warmed scene
+  // reads `useIsFocused()` as false until its tab is selected: the analytics entrance has not started
+  // (its figures are still at 0, and the one-shot sweep is spent when the reader arrives), and the
+  // reads gated on focus — the Anki snapshot, the settings hub's summaries — stay unasked.
   useEffect(() => {
     if (warmTabs >= 2 || !setupDone || handoff) {
       return;
