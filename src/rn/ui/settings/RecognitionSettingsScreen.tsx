@@ -28,10 +28,10 @@ import type {
   RecognitionEngine,
   RecognitionSettings,
 } from "../../native/GatenRecognition";
-import {Icon} from "../components";
+import {Button, Icon} from "../components";
 import {DownloadBar} from "../DownloadBar";
 import {DownloadConfirmDialog} from "../DownloadConfirmDialog";
-import {downloadProgressText, formatMegabytes} from "../onboarding/onboarding-steps";
+import {downloadProgressText} from "../onboarding/onboarding-steps";
 import {PressableScale} from "../PressableScale";
 import {
   ENHANCED_FALLBACK_NOTE,
@@ -41,7 +41,6 @@ import {
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 import {
-  OutlinedButton,
   RowIcon,
   SettingsGroup,
   SettingsPageScaffold,
@@ -139,29 +138,25 @@ function ModeRow({
   );
 }
 
-/** One engine: the choice row, and its download button while it is not installed. */
+/** One engine: the choice row, its live download and the cancel for a running transfer. */
 function EngineRow({
   engine,
   selected,
   downloading,
   progress,
-  busy,
   disabled,
-  onSelect,
-  onDownload,
+  onPress,
 }: {
   engine: EngineStatus;
   selected: boolean;
   downloading: boolean;
   /** The live report for this engine, or null before the first event. */
   progress: DownloadProgress | null;
-  busy: boolean;
   disabled?: boolean;
-  onSelect: () => void;
-  onDownload: () => void;
+  /** Selects an installed engine; for one that is not installed, asks to download it. */
+  onPress: () => void;
 }) {
   const {colors} = useTheme();
-  const size = formatMegabytes(engine.downloadBytes);
   // A running download with no event yet still says it is working: the module may be delivering
   // through Play, which reports no bytes, or the first event may not have arrived.
   const progressShown: DownloadProgress | null = downloading
@@ -172,8 +167,8 @@ function EngineRow({
         bytesTotal: engine.downloadBytes,
       })
     : null;
-  // While the transfer runs, its plain state replaces the benefit line; the button, dialog and
-  // status rows carry everything about downloading and installation.
+  // While the transfer runs, its plain state replaces the benefit line; the dialog and status rows
+  // carry everything about downloading and installation.
   const summary = progressShown != null ? downloadProgressText(progressShown) : engineSummary(engine.id);
   const status = engineReadyLine(engine.id, engine.installed, downloading);
   return (
@@ -186,28 +181,32 @@ function EngineRow({
         badge={engine.recommended ? "Recommended" : undefined}
         selected={selected}
         disabled={disabled}
-        onPress={onSelect}
+        onPress={onPress}
       />
-      {!engine.installed && (
+      {!engine.installed && progressShown != null && (
         <View style={{marginBottom: spacing.m, marginStart: 22 + spacing.m, gap: spacing.xs}}>
-          {progressShown != null && (
-            <View style={{gap: spacing.xs}}>
-              <DownloadBar progress={progressShown} />
-            </View>
-          )}
-          <OutlinedButton
-            label={downloading ? "Downloading…" : `Download · ${size}`}
-            disabled={downloading || busy || disabled === true}
-            onPress={onDownload}
-          />
-          {selected && (
-            <Text
-              style={[typeScale.bodySmall, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
-            >
-              {ENHANCED_FALLBACK_NOTE}
-            </Text>
+          <DownloadBar progress={progressShown} />
+          {GatenRecognition.canCancelDownload() && (
+            <Button
+              variant="text"
+              label="Cancel"
+              onPress={() => {
+                void GatenRecognition.cancelDownload().catch(() => {});
+              }}
+              fullWidth
+            />
           )}
         </View>
+      )}
+      {!engine.installed && progressShown == null && selected && (
+        <Text
+          style={[
+            typeScale.bodySmall,
+            {color: colors.onSurfaceVariant, marginStart: 22 + spacing.m, marginBottom: spacing.m},
+          ]}
+        >
+          {ENHANCED_FALLBACK_NOTE}
+        </Text>
       )}
     </View>
   );
@@ -218,7 +217,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [requested, setRequested] = useState<RecognitionEngine | null>(null);
   // The engine whose confirmation dialog is open. It is deliberately not the same state as
-  // [requested]: the row must keep its normal Download button until the reader confirms.
+  // [requested]: the row must keep its normal not-installed state until the reader confirms.
   const [confirming, setConfirming] = useState<EngineStatus | null>(null);
   // One mode save at a time: the native writes run on a multi-threaded IO dispatcher, so two quick
   // taps must not race which persisted value wins.
@@ -354,7 +353,6 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
 
   const mode = settings?.mode ?? ML_KIT;
   const engines = settings?.engines ?? [];
-  const busy = requested !== null;
 
   return (
     <>
@@ -371,10 +369,10 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
               selected={mode === engine.id}
               downloading={requested === engine.id || nativeDownloading.includes(engine.id)}
               progress={progress?.engine === engine.id ? progress : null}
-              busy={busy && requested !== engine.id}
               disabled={saving}
-              onSelect={() => selectMode(engine.id)}
-              onDownload={() => requestDownload(engine)}
+              onPress={() =>
+                engine.installed ? selectMode(engine.id) : requestDownload(engine)
+              }
             />
           ))}
         </SettingsGroup>

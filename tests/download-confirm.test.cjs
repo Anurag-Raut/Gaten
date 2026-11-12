@@ -127,6 +127,32 @@ test('Onboarding marks a download running only after the reader confirms', () =>
   assert.match(start, /setMedium\("downloading"\)/);
 });
 
+test('neither screen draws a separate Download button under the Enhanced row', () => {
+  const settings = read('src/rn/ui/settings/RecognitionSettingsScreen.tsx');
+  const onboarding = read('src/rn/ui/onboarding/OnboardingFlow.tsx');
+  assert.doesNotMatch(settings, /OutlinedButton/);
+  assert.doesNotMatch(settings, /Download · \$\{/);
+  assert.doesNotMatch(onboarding, /Download · \$\{/);
+});
+
+test('the uninstalled Settings row opens the confirmation, while an installed row selects', () => {
+  const settings = read('src/rn/ui/settings/RecognitionSettingsScreen.tsx');
+  assert.match(
+    settings,
+    /engine\.installed\s*\?\s*selectMode\(engine\.id\)\s*:\s*requestDownload\(engine\)/,
+  );
+  assert.match(settings, /GatenRecognition\.canCancelDownload\(\)/);
+  assert.match(settings, /GatenRecognition\.cancelDownload\(\)/);
+});
+
+test('the Onboarding row opens the confirmation, and Done/Skip stay outside the row', () => {
+  const onboarding = read('src/rn/ui/onboarding/OnboardingFlow.tsx');
+  assert.match(onboarding, /medium === "installed" \? selectMedium : requestDownload/);
+  // The page actions are the shell's own Done/Skip, not a control inside the Enhanced row.
+  assert.match(onboarding, /label: "Done"/);
+  assert.match(onboarding, /skipLabel: "Skip"/);
+});
+
 test('both screens describe the engines from the same approved, non-technical strings', () => {
   const onboarding = read('src/rn/ui/onboarding/OnboardingFlow.tsx');
   const settings = read('src/rn/ui/settings/RecognitionSettingsScreen.tsx');
