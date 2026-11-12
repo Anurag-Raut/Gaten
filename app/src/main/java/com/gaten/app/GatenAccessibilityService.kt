@@ -41,6 +41,7 @@ import com.gaten.app.lifecycle.displayChanged
 import com.gaten.app.lifecycle.lookupAdmitted
 import com.gaten.app.media.MediaPauser
 import com.gaten.app.ocr.OcrModels
+import com.gaten.app.rn.AccessibilityReturn
 import com.gaten.app.rn.GatenBridgeEmitter
 import com.gaten.app.trigger.FloatingTriggerButton
 import com.gaten.app.trigger.TriggerPreferences
@@ -210,6 +211,34 @@ class GatenAccessibilityService : AccessibilityService() {
             displayListenerRegistered = true
         }
         syncFloatingButton()
+        returnToGatenAfterEnable()
+    }
+
+    /**
+     * Brings Gaten back after the reader enabled the service from onboarding. The bridge arms a
+     * short-lived one-shot flag immediately before it opens Accessibility settings; consuming it
+     * here means the first connection after that hand-off returns straight to the app instead of
+     * leaving the reader to press Back through Settings. An unrelated enable later is not armed, and
+     * an old request expires, so it cannot pull the reader out of what they are doing.
+     *
+     * Accessibility services may start activities from the background, but the start is still
+     * guarded: a device that refuses it must not take down the service that is now connected.
+     */
+    private fun returnToGatenAfterEnable() {
+        if (!AccessibilityReturn.consume(this)) return
+        try {
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    )
+                }
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not return to Gaten after the accessibility service connected", e)
+        }
     }
 
     /**

@@ -23,13 +23,32 @@ interface GatenPlatformNative {
   openUrl(url: string): Promise<boolean>;
   copyToClipboard(text: string): Promise<boolean>;
   toast(message: string): Promise<boolean>;
+  /**
+   * Arms the next accessibility connection to bring Gaten to the foreground. Optional because a
+   * build without the bridge method must keep every existing opener working.
+   */
+  markAwaitingAccessibilityReturn?(): Promise<void>;
 }
 
 const GatenPlatform = NativeModules.GatenPlatform as GatenPlatformNative;
+/** The same module, seen as possibly absent, so the optional marker can no-op off-device. */
+const nativePlatform = NativeModules.GatenPlatform as GatenPlatformNative | undefined;
 
 /** Opens the system's Accessibility screen; `false` when no activity could take it. */
 export function openAccessibilitySettings(): Promise<boolean> {
   return GatenPlatform.openAccessibilitySettings();
+}
+
+/**
+ * Arms the one automatic return from the system's Accessibility screen: the next time Gaten's
+ * accessibility service connects, the app comes to the foreground, so the reader lands back on the
+ * page that sent them there. Safe on a build without the bridge method and off-device: it then just
+ * resolves, leaving the reader to come back the usual way.
+ */
+export function markAwaitingAccessibilityReturn(): Promise<void> {
+  const mark = nativePlatform?.markAwaitingAccessibilityReturn;
+  if (typeof mark !== "function") return Promise.resolve();
+  return mark.call(nativePlatform);
 }
 
 /** Opens the system's Notification Access screen; `false` when no activity could take it. */

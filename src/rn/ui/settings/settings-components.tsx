@@ -28,7 +28,11 @@ import {
   type ViewStyle,
 } from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {openAccessibilitySettings, toast} from "../../native/GatenPlatform";
+import {
+  markAwaitingAccessibilityReturn,
+  openAccessibilitySettings,
+  toast,
+} from "../../native/GatenPlatform";
 import {
   Button,
   Icon,
@@ -559,9 +563,16 @@ export function useLookupModeRequest() {
         setShowDisclosure(false);
         // The only switch that exists is Android's own accessibility service list, so this is the
         // screen the reader enables Gaten on. `false` means nothing on the device took the intent.
-        void openAccessibilitySettings().then((opened) => {
-          if (!opened) void toast("Could not open Accessibility Settings");
-        });
+        // Arm the return first: the next time the service connects, Gaten comes back to the page
+        // that sent the reader here. A build without the bridge resolves quietly, and a marker
+        // failure must never keep the Settings screen from opening.
+        void markAwaitingAccessibilityReturn()
+          .catch(() => {})
+          .then(() => {
+            void openAccessibilitySettings().then((opened) => {
+              if (!opened) void toast("Could not open Accessibility Settings");
+            });
+          });
       }}
       onDismiss={() => setShowDisclosure(false)}
     />
