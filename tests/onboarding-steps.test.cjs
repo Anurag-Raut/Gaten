@@ -215,10 +215,10 @@ test('the last page finishes onboarding and other pages step forward', () => {
   assert.equal(steps.nextStep(3), 3);
 });
 
-test('a download line reads the brief: phase, percent, the figure done and the total', () => {
+test('a download line reads plainly as its phase and whole percent', () => {
   const downloading = {engine: 'medium', phase: 'downloading', bytesDone: 32_200_000, bytesTotal: 76_600_000};
   assert.equal(steps.downloadPercent(downloading), 42);
-  assert.equal(steps.downloadProgressText(downloading), 'Downloading\u2026 42% \u00b7 32.2 of 76.6 MB');
+  assert.equal(steps.downloadProgressText(downloading), 'Downloading\u2026 42%');
   assert.equal(
     steps.downloadProgressText({...downloading, phase: 'verifying'}),
     'Verifying\u2026',
