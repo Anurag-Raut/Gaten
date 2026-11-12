@@ -344,15 +344,15 @@ export function downloadBarState(progress: DownloadProgressLike): DownloadBarSta
 }
 
 /**
- * The one line a reader's download row shows, in the brief's own shape: its phase, its percent, the
- * figure done, and the total with the unit — "Downloading… 42% · 32.2 of 76.6 MB".
+ * The one line a reader's download row shows: its phase and, once bytes arrive, the whole percent.
+ * The size belongs to the button or the confirmation, not to this line — "Downloading… 42%".
  */
 export function downloadProgressText(progress: DownloadProgressLike): string {
   if (progress.phase === "verifying") return "Verifying…";
   // Play's pack transfer reports no bytes: say it is working rather than pin a false 0%.
   if (progress.bytesDone <= 0) return "Downloading…";
   const percent = downloadPercent(progress);
-  return `Downloading… ${percent}% · ${(progress.bytesDone / 1_000_000).toFixed(1)} of ${formatMegabytes(progress.bytesTotal)}`;
+  return `Downloading… ${percent}%`;
 }
 
 /**
