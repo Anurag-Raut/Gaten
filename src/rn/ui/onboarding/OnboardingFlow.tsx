@@ -61,6 +61,7 @@ import Animated, {
 import {Gesture, GestureDetector} from "react-native-gesture-handler";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
+import * as GatenHaptics from "../../native/GatenHaptics";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
@@ -1138,8 +1139,11 @@ export function OnboardingFlow({
       return;
     }
     // The one-shot booking is spent only on the write that actually happens: a transient refusal
-    // leaves the visit re-armable.
+    // leaves the visit re-armable. The haptic belongs to that same moment — one confirm for the
+    // page that really moves — never to a stale, cancelled or retried timer, and never alongside a
+    // manual Done, which has already ticked from its own press.
     autoFiredVisit.current = inputs.navRun;
+    void GatenHaptics.play("confirm").catch(() => {});
     write(nextStep(inputs.step));
   }, [write, swipePose, contentProgress]);
 
@@ -2108,7 +2112,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     progress ?? {engine: "medium" as const, phase: "downloading" as const, bytesDone: 0, bytesTotal: mediumBytes};
   const mediumSummary =
     medium === "installed"
-      ? "Installed \u00b7 offline"
+      ? "Installed · offline"
       : medium === "downloading"
         ? null
         : mediumBytes > 0
@@ -2143,7 +2147,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
           <View>
             <ReaderRow
               title="Standard"
-              summary="Included \u00b7 offline"
+              summary={"Included · offline"}
               hint="Japanese text, included with Gaten"
               selected={!mediumSelected}
               disabled={medium === "downloading"}

@@ -406,3 +406,54 @@ test('the download bar sweeps until a byte is reported, then fills from the real
     100,
   );
 });
+
+test('no user-facing string ships a raw backslash escape', () => {
+  const offenders = [];
+  const uiRoot = path.join(root, 'src/rn/ui');
+
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (/\.(ts|tsx)$/.test(entry.name)) inspect(absolute);
+    }
+  };
+
+  const inspect = (absolute) => {
+    const source = fs.readFileSync(absolute, 'utf8');
+    const relative = path.relative(root, absolute);
+
+    // The regression that started this guard: `summary="Included \u00b7 offline"` is not a JS string,
+    // so the reader saw the four characters "\u00b7" on screen. No JSX attribute may carry a
+    // backslash escape at all; a real escape belongs inside `{...}`.
+    const sourceFile = ts.createSourceFile(
+      absolute,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      absolute.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+    const visit = (node) => {
+      if (
+        ts.isJsxAttribute(node) &&
+        node.initializer != null &&
+        ts.isStringLiteral(node.initializer) &&
+        node.initializer.text.includes('\\')
+      ) {
+        const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+        offenders.push(`${relative}:${line} ${node.name.getText(sourceFile)}=${JSON.stringify(node.initializer.text)}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+
+    // And the middle dot especially is always the character itself, never an escape waiting for a
+    // future attribute or text node to turn it back into a backslash sequence.
+    source.split('\n').forEach((line, index) => {
+      if (line.includes('\\u00b7')) offenders.push(`${relative}:${index + 1} raw \\u00b7`);
+    });
+  };
+
+  walk(uiRoot);
+  assert.deepEqual(offenders, []);
+});
