@@ -32,8 +32,16 @@ internal object AccessibilityReturn {
     /** Serialises a mark and the service's consume, which arrive on different threads. */
     private val lock = Any()
 
+    /**
+     * Wall-clock time behind one seam, as [com.gaten.app.support.SupportPreferences] keeps its own:
+     * the AnkiDroid lint check the release build runs rejects a bare `System.currentTimeMillis()`,
+     * and an object has no constructor to take a clock through. The callers below keep their
+     * [nowMs] parameter so a JVM test can still hand in its own reading.
+     */
+    private val now: () -> Long = System::currentTimeMillis
+
     /** Arms the next service connection to return to Gaten, replacing any earlier request. */
-    fun mark(context: Context, nowMs: Long = System.currentTimeMillis()) = synchronized(lock) {
+    fun mark(context: Context, nowMs: Long = now()) = synchronized(lock) {
         prefs(context).edit()
             .putBoolean(KEY_ARMED, true)
             .putLong(KEY_MARKED_AT, nowMs)
@@ -44,7 +52,7 @@ internal object AccessibilityReturn {
      * Reads and clears the hand-off. The flag is cleared even when it has expired, so an old request
      * can never fire later; only a live one returns true.
      */
-    fun consume(context: Context, nowMs: Long = System.currentTimeMillis()): Boolean =
+    fun consume(context: Context, nowMs: Long = now()): Boolean =
         synchronized(lock) {
             val prefs = prefs(context)
             val armed = prefs.getBoolean(KEY_ARMED, false)
