@@ -308,19 +308,32 @@ const STACK_SCREEN_OPTIONS: NativeStackNavigationOptions = {
  * - `animationEnabled` off when the system asks for reduced motion, so a tap lands on the spot
  *   instead of sliding there. A swipe is the reader's own gesture and stays available.
  *
- * Only the focused tab's scene is mounted (`lazy: true`, no preload distance): Home while it is
- * focused, and the other two deferred to their first selection. With every scene eager, the commit
- * that revealed Home also mounted Analytics' and Settings' native stacks and first renders. Lazy
- * mounting keeps the mount to Home and the bar — and Home's own mount is moved off the reveal
- * entirely: the shell mounts the tabs beneath the flow one macrotask after the flow's last page
- * appears, so the completed setup's reveal is a commit and an [HANDOFF_FADE_MS] fade rather than a
- * mount. Each screen's data work is already gated on focus, so nothing is fetched until its tab is
- * actually selected.
+ * Only the focused tab's scene is mounted to begin with (`lazy: true`, no preload distance): Home
+ * while it is focused, and the other two deferred. With every scene eager, the commit that revealed
+ * Home also mounted Analytics' and Settings' native stacks and first renders — so the reveal mounts
+ * Home and the bar alone (and Home's own mount is moved off the reveal entirely: the shell mounts the
+ * tabs beneath the flow one macrotask after the flow's last page appears, so the completed setup's
+ * reveal is a commit and an [HANDOFF_FADE_MS] fade rather than a mount).
+ *
+ * The deferral is a head start, not a permanent state: the other two are mounted behind Home once it
+ * and the bar are the visible screen ([TAB_WARMUP_DELAY_MS]). A scene mounted by its own selection
+ * is an empty page for the frames its stack and first render take, which is the blank the reader saw
+ * on their first tap; mounted while they are still on Home, the tap finds the page already drawn.
+ * Each screen's data work is gated on focus, not on mount, so a mounted tab fetches nothing until it
+ * is actually selected.
  */
 const Tab = createMaterialTopTabNavigator<RootTabParamList>();
 
 /** The completed setup's whole-page crossfade, in ms: inside the tap-to-Home budget. */
 const HANDOFF_FADE_MS = 50;
+
+/**
+ * The warm-up of the two tabs Home is not, in ms after Home and the bar are the visible screen. Long
+ * enough that the mounts land after the open's own work is done and well before the reader's first
+ * tap; the two are [TAB_WARMUP_STEP_MS] apart so each mount is its own commit rather than one.
+ */
+const TAB_WARMUP_DELAY_MS = 220;
+const TAB_WARMUP_STEP_MS = 80;
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const AnalyticsStack = createNativeStackNavigator<AnalyticsStackParamList>();
@@ -412,6 +425,10 @@ export function AppShell() {
   // The deferral keeps the mount off the transition onto that page (and the first frame is never
   // touched); a reader who completes before it lands still waits for readiness, never a blank Home.
   const [prewarm, setPrewarm] = useState(false);
+  // The tabs mounted behind Home: 0 nothing yet, 1 Analytics, 2 Analytics and Settings. Counted in
+  // steps rather than held as two flags because the second waits on the first, so the two mounts are
+  // two commits.
+  const [warmTabs, setWarmTabs] = useState(0);
   // The completed handoff: the tabs are mounted beneath the setup flow while Home and the bar
   // settle, and the flow is only removed once it has faded. [handoffFading] is the second half —
   // the fade has started, so the flow is inert and the tabs own the screen. With the warm mount the
@@ -518,6 +535,27 @@ export function AppShell() {
     const timer = setTimeout(() => setPrewarm(true), STEP_SCENE_MS + 120);
     return () => clearTimeout(timer);
   }, [onboardingStep, prewarm]);
+
+  // The warm-up of the tabs Home is not: once the setup flow has gone and Home and the bar are the
+  // screen, one tab per step. The reader is looking at Home throughout, so each scene mounts behind
+  // it instead of on the frame their tap selects it — which is what used to show an empty page and
+  // then the page itself. Nothing is skipped: a tap that beats the warm-up still mounts its tab.
+  //
+  // Mounting is all that happens early. React Navigation composes a child navigator's focus from its
+  // parent's (NavigationProvider: a route is focused only while its navigator is), so a warmed scene
+  // reads `useIsFocused()` as false until its tab is selected: the analytics entrance has not started
+  // (its figures are still at 0, and the one-shot sweep is spent when the reader arrives), and the
+  // reads gated on focus — the Anki snapshot, the settings hub's summaries — stay unasked.
+  useEffect(() => {
+    if (warmTabs >= 2 || !setupDone || handoff) {
+      return;
+    }
+    const timer = setTimeout(
+      () => setWarmTabs((step) => step + 1),
+      warmTabs === 0 ? TAB_WARMUP_DELAY_MS : TAB_WARMUP_STEP_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [handoff, setupDone, warmTabs]);
 
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
@@ -778,8 +816,18 @@ export function AppShell() {
                 })}
               >
                 <Tab.Screen name="Home" component={HomeTabStack} />
-                <Tab.Screen name="Analytics" component={AnalyticsTabStack} />
-                <Tab.Screen name="Settings" component={SettingsTabStack} />
+                {/* `lazy` is per screen: the shell's own `lazy: true` gates every scene, and the
+                    warm-up clears it for one tab at a time (see [TAB_WARMUP_DELAY_MS]). */}
+                <Tab.Screen
+                  name="Analytics"
+                  component={AnalyticsTabStack}
+                  options={{lazy: warmTabs < 1}}
+                />
+                <Tab.Screen
+                  name="Settings"
+                  component={SettingsTabStack}
+                  options={{lazy: warmTabs < 2}}
+                />
               </Tab.Navigator>
             </NavigationContainer>
           </View>
