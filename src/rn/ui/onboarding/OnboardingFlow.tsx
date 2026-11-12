@@ -1940,7 +1940,11 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
         if (!mounted.current || seq !== ocrSeq.current) return;
         const engine = settings.engines.find((candidate) => candidate.id === "medium");
         setMediumBytes(engine?.downloadBytes ?? 0);
-        setMediumSelected(settings.mode === "medium");
+        // A read that started before the selection write landed can still answer "ml_kit"; once
+        // the write has been accepted, the row stays Enhanced instead of flickering back.
+        setMediumSelected(
+          settings.mode === "medium" || (engine?.installed === true && mediumApplied.current),
+        );
         setMedium(
           settings.downloading.includes("medium")
             ? "downloading"
@@ -1955,7 +1959,16 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
           mediumApplied.current = true;
           setModeSettling(true);
           void setRecognitionMode("medium")
-            .catch(() => {})
+            .then(() => {
+              // The write is what makes the row Enhanced: without this the radio kept drawing
+              // Standard even though the selection had really moved.
+              if (mounted.current) setMediumSelected(true);
+            })
+            .catch(() => {
+              // Leave the row on Standard, but let the next read try again rather than silently
+              // treating a failed write as the one that already happened.
+              mediumApplied.current = false;
+            })
             .finally(() => {
               if (mounted.current) setModeSettling(false);
             });

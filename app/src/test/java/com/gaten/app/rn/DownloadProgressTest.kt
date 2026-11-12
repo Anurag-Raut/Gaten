@@ -7,7 +7,11 @@
 package com.gaten.app.rn
 
 import com.gaten.app.ocr.PpOcrModel
+import com.gaten.app.ocr.RecognitionAutoSelect
+import com.gaten.app.ocr.RecognitionMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
@@ -166,5 +170,67 @@ class DownloadProgressTest {
         )
         assertEquals(samples.dropLast(1) + total, seen.done)
         assertEquals(List(samples.size) { total }, seen.totals)
+    }
+
+    // ---- RecognitionAutoSelect: one automatic mode change, only inside a finished download. ----
+
+    @Test
+    fun `a completed download selects Enhanced when nobody chose a mode`() {
+        assertTrue(
+            RecognitionAutoSelect.shouldSelectEnhanced(
+                downloadCompleted = true,
+                downloadWindowOpen = true,
+                manualChoiceSinceDownloadBegan = false,
+                currentMode = RecognitionMode.ML_KIT
+            )
+        )
+    }
+
+    @Test
+    fun `a manual choice during the download is the veto`() {
+        assertFalse(
+            RecognitionAutoSelect.shouldSelectEnhanced(
+                downloadCompleted = true,
+                downloadWindowOpen = true,
+                manualChoiceSinceDownloadBegan = true,
+                currentMode = RecognitionMode.ML_KIT
+            )
+        )
+    }
+
+    @Test
+    fun `an unfinished download does not select anything`() {
+        assertFalse(
+            RecognitionAutoSelect.shouldSelectEnhanced(
+                downloadCompleted = false,
+                downloadWindowOpen = true,
+                manualChoiceSinceDownloadBegan = false,
+                currentMode = RecognitionMode.ML_KIT
+            )
+        )
+    }
+
+    @Test
+    fun `a completion outside a download window is ignored`() {
+        assertFalse(
+            RecognitionAutoSelect.shouldSelectEnhanced(
+                downloadCompleted = true,
+                downloadWindowOpen = false,
+                manualChoiceSinceDownloadBegan = false,
+                currentMode = RecognitionMode.ML_KIT
+            )
+        )
+    }
+
+    @Test
+    fun `an already selected Enhanced mode is not rewritten`() {
+        assertFalse(
+            RecognitionAutoSelect.shouldSelectEnhanced(
+                downloadCompleted = true,
+                downloadWindowOpen = true,
+                manualChoiceSinceDownloadBegan = false,
+                currentMode = RecognitionMode.PP_MEDIUM
+            )
+        )
     }
 }

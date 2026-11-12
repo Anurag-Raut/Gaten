@@ -18,6 +18,7 @@ import com.facebook.react.bridge.WritableMap
 import com.gaten.app.ocr.PpOcrModel
 import com.gaten.app.ocr.PpOcrPack
 import com.gaten.app.ocr.PpOcrPackState
+import com.gaten.app.ocr.RecognitionAutoSelect
 import com.gaten.app.ocr.RecognitionMode
 import com.gaten.app.ocr.RecognitionPreference
 import kotlinx.coroutines.CancellationException
@@ -44,7 +45,8 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * While Play transfers the pack the module emits [GatenBridgeEmitter.RECOGNITION_DOWNLOAD_PROGRESS]
  * with Play's own byte counts, throttled by [DownloadProgressThrottle], including for a transfer that
- * began before this module (or this process) existed.
+ * began before this module (or this process) existed. When that transfer completes it makes the one
+ * automatic mode selection [RecognitionAutoSelect] allows, even if no screen is subscribed.
  */
 class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -60,8 +62,8 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     init {
         GatenBridgeEmitter.attach(reactContext)
         // Watch Play's pack state for the life of the module. A fast-follow transfer can start, and
-        // finish, while no screen is listening; progress is a native report, not something a mounted
-        // screen has to be present for.
+        // finish, while no screen is listening; progress and the completion's auto-select are native
+        // decisions, not something a mounted screen has to be present for.
         scope.launch { observePack() }
     }
 
@@ -125,6 +127,9 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
         }
         scope.launch {
             try {
+                // A transfer about to be requested still counts as "began": the window is what lets
+                // the completion select the engine when the reader has left the download screen.
+                RecognitionPreference.beginDownloadWindow(context)
                 // [currentActivity] only matters when Play asks the user to accept the pack download.
                 download(context, engine, reactApplicationContext.currentActivity)
                 // Publish the finished state: the id must be out of [downloading] before the
@@ -160,20 +165,29 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Keeps Play's pack report flowing into JS. The initial read is awaited so a transfer that began
-     * before this process existed is reported from its current byte count, not from zero.
+     * Keeps Play's pack report flowing into JS and into the one-time auto-select. The initial read is
+     * awaited so a transfer that began before this process existed is reported from its current byte
+     * count, not from zero.
      */
     private suspend fun observePack() {
         val context = reactApplicationContext
         PpOcrPack.refreshNow(context)
-        PpOcrPack.state.collect { state -> onPackState(state) }
+        PpOcrPack.state.collect { state -> onPackState(context, state) }
     }
 
-    /** Turns one Play state into progress events. */
-    private fun onPackState(state: PpOcrPackState) {
+    /** Turns one Play state into progress events, and a completion into the auto-select decision. */
+    private fun onPackState(context: Context, state: PpOcrPackState) {
         when {
-            state.isActivelyTransferring -> reportProgress(state)
-            state.isCompleted -> reportComplete(state)
+            state.isActivelyTransferring -> {
+                // A fast-follow transfer can predate the module; opening here is what makes its
+                // completion eligible for auto-select without any screen having requested it.
+                RecognitionPreference.beginDownloadWindow(context)
+                reportProgress(state)
+            }
+            state.isCompleted -> {
+                reportComplete(state)
+                applyAutoSelect(context)
+            }
             else -> stopProgress()
         }
     }
@@ -212,6 +226,24 @@ class GatenRecognitionModule(reactContext: ReactApplicationContext) :
     private fun stopProgress() {
         progressThrottle?.stop()
         progressThrottle = null
+    }
+
+    /**
+     * Selects Enhanced once a completed pack's window is closed. A mode the reader picked while the
+     * download ran is the veto; a completion outside a window (a pack delivered before this process
+     * watched it) changes nothing. Closing afterwards makes later completion reports harmless.
+     */
+    private fun applyAutoSelect(context: Context) {
+        if (!RecognitionPreference.isDownloadWindowOpen(context)) return
+        val select = RecognitionAutoSelect.shouldSelectEnhanced(
+            downloadCompleted = true,
+            downloadWindowOpen = true,
+            manualChoiceSinceDownloadBegan =
+                RecognitionPreference.manualChoiceSinceDownloadBegan(context),
+            currentMode = RecognitionPreference.mode(context)
+        )
+        if (select) RecognitionPreference.selectEnhancedAutomatically(context)
+        RecognitionPreference.closeDownloadWindow(context)
     }
 
     /** One progress event: the engine, the phase, and Play's cumulative byte counts. */
