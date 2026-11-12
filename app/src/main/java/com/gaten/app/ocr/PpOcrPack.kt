@@ -13,6 +13,7 @@ import android.util.Log
 import com.google.android.gms.tasks.Task
 import com.google.android.play.core.assetpacks.AssetPackManager
 import com.google.android.play.core.assetpacks.AssetPackManagerFactory
+import com.google.android.play.core.assetpacks.AssetPackState
 import com.google.android.play.core.assetpacks.AssetPackStateUpdateListener
 import com.google.android.play.core.assetpacks.model.AssetPackStatus
 import kotlinx.coroutines.CancellationException
@@ -20,6 +21,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -29,6 +32,30 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/**
+ * One report Play makes about the pack: its state and the transfer's byte counts.
+ *
+ * [bytesDownloaded] and [totalBytesToDownload] are Play's own numbers, kept together with the status
+ * so a listener callback and an on-demand status read cannot leave the bar on an older byte count
+ * than the state it belongs to. Before Play speaks both are zero, and a status that is not a transfer
+ * may leave the last values in place: the completion report is what closes the bar.
+ */
+internal data class PpOcrPackState(
+    val status: Int = AssetPackStatus.UNKNOWN,
+    val bytesDownloaded: Long = 0L,
+    val totalBytesToDownload: Long = 0L
+) {
+    /** Play is moving bytes now — not merely queued, confirming, or waiting for Wi-Fi. */
+    val isActivelyTransferring: Boolean
+        get() = status == AssetPackStatus.PENDING ||
+            status == AssetPackStatus.DOWNLOADING ||
+            status == AssetPackStatus.TRANSFERRING
+
+    /** Play reports every byte on disk and extracted. */
+    val isCompleted: Boolean
+        get() = status == AssetPackStatus.COMPLETED
+}
 
 /**
  * Google Play's fast-follow asset pack for the optional PP-OCRv6 Medium model.
@@ -69,8 +96,15 @@ internal object PpOcrPack {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** The last state Play reported, kept live by [manager]'s listener; UNKNOWN until it speaks. */
-    private val _status = MutableStateFlow(AssetPackStatus.UNKNOWN)
+    /**
+     * The last state Play reported, kept live by [manager]'s listener; UNKNOWN until it speaks.
+     * Exposed so the bridge can turn Play's byte counts into progress events, including for a
+     * transfer that began before this process did.
+     */
+    private val _state = MutableStateFlow(PpOcrPackState())
+
+    /** The live pack state; conflated, but every changed byte count is a distinct value. */
+    val state: StateFlow<PpOcrPackState> = _state.asStateFlow()
 
     private var manager: AssetPackManager? = null
 
@@ -80,12 +114,7 @@ internal object PpOcrPack {
      * as one would leave the settings screen saying "Downloading…" indefinitely.
      */
     val isTransferring: Boolean
-        get() {
-            val status = _status.value
-            return status == AssetPackStatus.PENDING ||
-                status == AssetPackStatus.DOWNLOADING ||
-                status == AssetPackStatus.TRANSFERRING
-        }
+        get() = _state.value.isActivelyTransferring
 
     /**
      * The pack's asset directory when Play has delivered a *complete* copy of [files] into it, else
@@ -120,7 +149,7 @@ internal object PpOcrPack {
             val states = withTimeoutOrNull(STATE_READ_TIMEOUT_MS) {
                 manager.getPackStates(listOf(PACK_NAME)).await()
             }
-            states?.packStates()?.get(PACK_NAME)?.let { _status.value = it.status() }
+            states?.packStates()?.get(PACK_NAME)?.let { record(it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -167,14 +196,14 @@ internal object PpOcrPack {
         // non-terminal one first makes the first matching emission necessarily this attempt's.
         // [fetchError] carries a rejection Play reports through the Task rather than as a state.
         val fetchError = AtomicReference<String?>(null)
-        _status.value = AssetPackStatus.PENDING
+        _state.value = PpOcrPackState(status = AssetPackStatus.PENDING)
         val request = try {
             manager.fetch(listOf(PACK_NAME))
         } catch (e: Exception) {
             // A throw here happens before any listener exists, so nothing would ever replace the
             // armed sentinel: without this the row would read a download that is not running. The
             // request is refused, not queued, so say so and end the wait.
-            _status.value = AssetPackStatus.FAILED
+            _state.value = PpOcrPackState(status = AssetPackStatus.FAILED)
             throw PpOcrModel.DownloadException(
                 "Google Play refused the ${PACK_NAME} download: ${e.message ?: e}"
             )
@@ -184,15 +213,15 @@ internal object PpOcrPack {
             // rejection itself is what ends the wait — promptly, carrying Play's own reason, rather
             // than leaving the caller on the timeout.
             fetchError.set(error.message ?: error.toString())
-            _status.value = AssetPackStatus.FAILED
+            _state.value = PpOcrPackState(status = AssetPackStatus.FAILED)
         }
 
         // The prompt is raised once, off the state watch: it is a dialog the user may leave open, and
         // blocking the watch on it would stop the very state that reports the download it authorised.
         val prompted = AtomicBoolean(false)
         val terminal = withTimeoutOrNull(INSTALL_TIMEOUT_MS) {
-            _status.first { state ->
-                when (state) {
+            _state.first { state ->
+                when (state.status) {
                     AssetPackStatus.COMPLETED,
                     AssetPackStatus.FAILED,
                     AssetPackStatus.CANCELED,
@@ -205,12 +234,12 @@ internal object PpOcrPack {
                     }
                     else -> false
                 }
-            }
+            }.status
         } ?: run {
             // Nothing became terminal within the budget: stop reporting a transfer this request no
             // longer owns, so a parked settings screen cannot read the armed sentinel as a download
             // that is still running. Play's own state, if it ever speaks, overwrites this.
-            _status.value = AssetPackStatus.FAILED
+            _state.value = PpOcrPackState(status = AssetPackStatus.FAILED)
             throw PpOcrModel.DownloadException("Play did not finish delivering the ${PACK_NAME} pack.")
         }
         if (terminal != AssetPackStatus.COMPLETED) {
@@ -260,12 +289,24 @@ internal object PpOcrPack {
             null
         } ?: return null
         // Attached before the manager is published, so no fetch or location query can precede it:
-        // the callback writes every state Play reports into _status, which is what the fetch watch
-        // and isTransferring read. Play Core keeps the listener alive for the life of the manager,
-        // so no reference is held here.
-        created.registerListener(AssetPackStateUpdateListener { state -> _status.value = state.status() })
+        // the callback writes every state Play reports into _state, which is what the fetch watch,
+        // isTransferring, and the bridge's progress collector read. Play Core keeps the listener
+        // alive for the life of the manager, so no reference is held here.
+        created.registerListener(AssetPackStateUpdateListener { state -> record(state) })
         manager = created
         created
+    }
+
+    /**
+     * Publishes one Play state. Both the listener and an on-demand read go through here, so status
+     * and byte counts are always from the same report.
+     */
+    private fun record(state: AssetPackState) {
+        _state.value = PpOcrPackState(
+            status = state.status(),
+            bytesDownloaded = state.bytesDownloaded(),
+            totalBytesToDownload = state.totalBytesToDownload()
+        )
     }
 
     /**

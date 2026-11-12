@@ -32,7 +32,6 @@
 import React, {memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
 import {
   AccessibilityInfo,
-  Alert,
   AppState,
   BackHandler,
   findNodeHandle,
@@ -61,13 +60,21 @@ import Animated, {
 import {Gesture, GestureDetector} from "react-native-gesture-handler";
 import * as GatenAnki from "../../native/GatenAnki";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
+import * as GatenHaptics from "../../native/GatenHaptics";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {downloadAnkiDroid} from "../anki/anki-actions";
 import {Button, Icon, IconButton} from "../components";
+import {DownloadBar} from "../DownloadBar";
+import {DownloadConfirmDialog} from "../DownloadConfirmDialog";
 import {reloadKanjiReferenceSource} from "../kanjiReference";
 import {PressableScale} from "../PressableScale";
+import {
+  ENHANCED_ENGINE_SUMMARY,
+  engineReadyLine,
+  STANDARD_ENGINE_SUMMARY,
+} from "../recognition-copy";
 import type {WaniKaniConnectOutcome} from "../review/review-store";
 import {FAILURE_LABELS} from "../settings/WaniKaniSettingsScreen";
 import {TextField, useLookupModeRequest} from "../settings/settings-components";
@@ -89,9 +96,7 @@ import {
   actionAreaKey,
   ankiSteps,
   connectReadout,
-  downloadPercent,
   downloadProgressText,
-  formatMegabytes,
   lookupSteps,
   nextStep,
   shouldAutoAdvance,
@@ -1138,8 +1143,11 @@ export function OnboardingFlow({
       return;
     }
     // The one-shot booking is spent only on the write that actually happens: a transient refusal
-    // leaves the visit re-armable.
+    // leaves the visit re-armable. The haptic belongs to that same moment — one confirm for the
+    // page that really moves — never to a stale, cancelled or retried timer, and never alongside a
+    // manual Done, which has already ticked from its own press.
     autoFiredVisit.current = inputs.navRun;
+    void GatenHaptics.play("confirm").catch(() => {});
     write(nextStep(inputs.step));
   }, [write, swipePose, contentProgress]);
 
@@ -1789,11 +1797,14 @@ function RadioMark({selected}: {selected: boolean}) {
   );
 }
 
-/** One selectable reader: its name, its mark, and the one line that stands for its state. */
+/** One selectable reader: its name, its benefit line, and an optional short state line. */
 function ReaderRow({
   title,
   badge,
   summary,
+  summaryLive = false,
+  summaryTone = "neutral",
+  status,
   selected,
   disabled,
   hint,
@@ -1802,6 +1813,11 @@ function ReaderRow({
   title: string;
   badge?: string;
   summary: string | null;
+  /** Announce a changing state line (a running download) as it replaces the benefit line. */
+  summaryLive?: boolean;
+  /** A failed download is the one state line that wears the theme's error role. */
+  summaryTone?: "neutral" | "error";
+  status?: string | null;
   selected: boolean;
   disabled?: boolean;
   hint?: string;
@@ -1832,9 +1848,26 @@ function ReaderRow({
         </View>
         {summary != null && (
           <Text
-            style={[typeScale.description, {color: colors.onSurfaceVariant, marginTop: spacing.xs}]}
+            accessibilityLiveRegion={summaryLive ? "polite" : undefined}
+            style={[
+              typeScale.description,
+              {
+                color: summaryTone === "error" ? colors.error : colors.onSurfaceVariant,
+                marginTop: spacing.xs,
+              },
+            ]}
           >
             {summary}
+          </Text>
+        )}
+        {status != null && (
+          <Text
+            style={[
+              typeScale.labelMedium,
+              {color: colors.onSurfaceVariant, marginTop: spacing.xs},
+            ]}
+          >
+            {status}
           </Text>
         )}
       </View>
@@ -1843,34 +1876,19 @@ function ReaderRow({
   );
 }
 
-/** The 4 dp download bar under its own percentage line; the bar itself is decorative. */
-function DownloadBar({percent}: {percent: number}) {
-  const {colors} = useTheme();
-  return (
-    <View
-      accessible
-      accessibilityRole="progressbar"
-      accessibilityValue={{min: 0, max: 100, now: percent, text: `${percent}%`}}
-      style={{height: 4, borderRadius: 2, backgroundColor: colors.outlineVariant, overflow: "hidden"}}
-    >
-      <View style={{height: 4, width: `${percent}%`, backgroundColor: colors.accent}} />
-    </View>
-  );
-}
-
 /** The one line a failed download leaves: what went wrong, in the reader's own words. */
 function downloadFailureText(failure: DownloadFailure): string {
   switch (failure) {
     case "offline":
-      return "Couldn't download Enhanced: no connection.";
+      return "Couldn't download. No connection.";
     case "storage":
-      return "Couldn't download Enhanced: not enough storage on this device";
+      return "Couldn't download. Not enough storage on this device.";
     case "verify":
-      return "Couldn't download Enhanced: the file did not pass its check";
+      return "Couldn't download. The file didn't pass its check.";
     case "cancelled":
-      return "Cancelled.";
+      return "Download cancelled.";
     default:
-      return "Couldn't download Enhanced.";
+      return "Couldn't download.";
   }
 }
 
@@ -1895,6 +1913,9 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
   const [mediumSelected, setMediumSelected] = useState(false);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [failure, setFailure] = useState<DownloadFailure | null>(null);
+  // The shared confirmation dialog. It is separate from [medium]: while it is open the row keeps
+  // its normal Download state, and "Downloading…" starts only after the reader confirms.
+  const [confirmingDownload, setConfirmingDownload] = useState(false);
   // True while a foreground re-read is on its way: the shown success stays, but the beat waits.
   const [revalidating, setRevalidating] = useState(false);
   // True while the installed reader's own mode selection is being written: the advance waits for it.
@@ -1909,6 +1930,19 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      unsubscribe.current?.();
+      unsubscribe.current = null;
+    };
+  }, []);
+
+  // A download outlives this page — and this flow — so the listener rides the page's whole life
+  // rather than one press: a page reopened while a download runs still shows its live bytes, and
+  // leaving onboarding stops only the listening, never the transfer.
+  useEffect(() => {
+    unsubscribe.current = subscribeDownloadProgress((next) => {
+      if (mounted.current && next.engine === "medium") setProgress(next);
+    });
+    return () => {
       unsubscribe.current?.();
       unsubscribe.current = null;
     };
@@ -1942,7 +1976,11 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
         if (!mounted.current || seq !== ocrSeq.current) return;
         const engine = settings.engines.find((candidate) => candidate.id === "medium");
         setMediumBytes(engine?.downloadBytes ?? 0);
-        setMediumSelected(settings.mode === "medium");
+        // A read that started before the selection write landed can still answer "ml_kit"; once
+        // the write has been accepted, the row stays Enhanced instead of flickering back.
+        setMediumSelected(
+          settings.mode === "medium" || (engine?.installed === true && mediumApplied.current),
+        );
         setMedium(
           settings.downloading.includes("medium")
             ? "downloading"
@@ -1957,7 +1995,16 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
           mediumApplied.current = true;
           setModeSettling(true);
           void setRecognitionMode("medium")
-            .catch(() => {})
+            .then(() => {
+              // The write is what makes the row Enhanced: without this the radio kept drawing
+              // Standard even though the selection had really moved.
+              if (mounted.current) setMediumSelected(true);
+            })
+            .catch(() => {
+              // Leave the row on Standard, but let the next read try again rather than silently
+              // treating a failed write as the one that already happened.
+              mediumApplied.current = false;
+            })
             .finally(() => {
               if (mounted.current) setModeSettling(false);
             });
@@ -2000,22 +2047,14 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     setFailure(null);
     setProgress({engine: "medium", phase: "downloading", bytesDone: 0, bytesTotal: mediumBytes});
     setMedium("downloading");
-    unsubscribe.current?.();
-    unsubscribe.current = subscribeDownloadProgress((next) => {
-      if (mounted.current) setProgress(next);
-    });
     void downloadMedium().then(
       () => {
-        unsubscribe.current?.();
-        unsubscribe.current = null;
         if (mounted.current) {
           setProgress(null);
           readOcr(false);
         }
       },
       (error: unknown) => {
-        unsubscribe.current?.();
-        unsubscribe.current = null;
         if (!mounted.current) return;
         setProgress(null);
         setFailure(classifyDownloadError(error));
@@ -2024,26 +2063,17 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     );
   }, [mediumBytes, readOcr]);
 
-  /** A Download tap: nothing is fetched until the reader confirms, as the settings screen does. */
-  const confirmDownload = useCallback(() => {
+  /** A Download tap: opens the shared confirmation; nothing is marked downloading yet. */
+  const requestDownload = useCallback(() => {
     if (medium === "downloading") return;
-    Alert.alert(
-      "Download Enhanced?",
-      mediumBytes > 0
-        ? `Enhanced is ${formatMegabytes(mediumBytes)}. Wi-Fi is recommended. Downloading on mobile data may incur charges.`
-        : "Wi-Fi is recommended. Downloading on mobile data may incur charges.",
-      [
-        {text: "Cancel", style: "cancel"},
-        {
-          text: "Download",
-          onPress: () => {
-            if (mounted.current) startDownload();
-          },
-        },
-      ],
-      {cancelable: true},
-    );
-  }, [medium, mediumBytes, startDownload]);
+    setConfirmingDownload(true);
+  }, [medium]);
+
+  /** The reader pressed Download in the dialog: only now does the row say "Downloading…". */
+  const confirmedDownload = useCallback(() => {
+    setConfirmingDownload(false);
+    if (mounted.current) startDownload();
+  }, [startDownload]);
 
   const selectMedium = useCallback(() => {
     if (medium !== "installed" || mediumSelected) return;
@@ -2068,7 +2098,9 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
 
   const primary: Action =
     active === 2
-      ? {label: "Done", onPress: () => onAdvance(nextStep(step))}
+      ? // Done stays available while a download runs: the transfer is native state, so leaving the
+        // flow neither waits for it nor cancels it — only this row's explicit Cancel does.
+        {label: "Done", onPress: () => onAdvance(nextStep(step))}
       : lookup === "checking"
         ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
         : lookup === "failed"
@@ -2082,6 +2114,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     done:
       steps.verified &&
       !dialogOpen &&
+      !confirmingDownload &&
       !revalidating &&
       !modeSettling &&
       medium !== "checking" &&
@@ -2101,18 +2134,29 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
 
   const progressShown =
     progress ?? {engine: "medium" as const, phase: "downloading" as const, bytesDone: 0, bytesTotal: mediumBytes};
+  const failureLine =
+    failure != null && medium !== "downloading" ? downloadFailureText(failure) : null;
+  // Active state replaces the benefit line; the Download button, dialog and the ready status carry
+  // download and installation information otherwise.
   const mediumSummary =
-    medium === "installed"
-      ? "Installed \u00b7 offline"
-      : medium === "downloading"
-        ? null
-        : mediumBytes > 0
-          ? `${formatMegabytes(mediumBytes)} download`
-          : "Download";
+    medium === "downloading"
+      ? downloadProgressText(progressShown)
+      : (failureLine ?? ENHANCED_ENGINE_SUMMARY);
+  const mediumStatus =
+    medium === "downloading" || failureLine != null
+      ? null
+      : engineReadyLine("medium", medium === "installed", false);
 
   return (
     <>
       {dialog}
+      {confirmingDownload && (
+        <DownloadConfirmDialog
+          bytes={mediumBytes}
+          onCancel={() => setConfirmingDownload(false)}
+          onConfirm={confirmedDownload}
+        />
+      )}
       <StepList style={{marginTop: spacing.l}}>
         <StepRow
           index={1}
@@ -2138,8 +2182,8 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
           <View>
             <ReaderRow
               title="Standard"
-              summary="Included \u00b7 offline"
-              hint="Japanese text, included with Gaten"
+              summary={STANDARD_ENGINE_SUMMARY}
+              hint={STANDARD_ENGINE_SUMMARY}
               selected={!mediumSelected}
               disabled={medium === "downloading"}
               onPress={selectMlKit}
@@ -2148,24 +2192,17 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
               title="Enhanced"
               badge="Recommended"
               summary={mediumSummary}
-              hint={
-                medium === "installed"
-                  ? "Installed. Use it for screen and novel text"
-                  : "Downloads Enhanced for screen and novel text"
-              }
+              summaryLive={medium === "downloading" || failureLine != null}
+              summaryTone={failureLine != null ? "error" : "neutral"}
+              status={mediumStatus}
+              hint={mediumStatus ?? ENHANCED_ENGINE_SUMMARY}
               selected={mediumSelected}
               disabled={medium === "downloading"}
-              onPress={medium === "installed" ? selectMedium : confirmDownload}
+              onPress={medium === "installed" ? selectMedium : requestDownload}
             />
             {medium === "downloading" && (
               <View style={{gap: spacing.s, paddingBottom: spacing.s}}>
-                <Text
-                  accessibilityLiveRegion="polite"
-                  style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}
-                >
-                  {downloadProgressText(progressShown)}
-                </Text>
-                <DownloadBar percent={downloadPercent(progressShown)} />
+                <DownloadBar progress={progressShown} />
                 {canCancelDownload() && (
                 <Button
                   variant="text"
@@ -2180,16 +2217,10 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
             )}
             {failure != null && medium !== "downloading" && (
               <View style={{gap: spacing.s, paddingBottom: spacing.s}}>
-                <Text
-                  accessibilityLiveRegion="polite"
-                  style={[typeScale.bodySmall, {color: colors.error, flexShrink: 1}]}
-                >
-                  {downloadFailureText(failure)}
-                </Text>
                 <Button
                   variant="text"
                   label={failure === "cancelled" ? "Download" : "Try again"}
-                  onPress={confirmDownload}
+                  onPress={requestDownload}
                   fullWidth
                 />
               </View>

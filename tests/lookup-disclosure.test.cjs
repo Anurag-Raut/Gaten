@@ -53,6 +53,17 @@ const fakeReact = {
   useCallback: (fn) => fn,
 };
 const anyObject = new Proxy({}, {get: () => 8});
+const platformCalls = [];
+const mockPlatform = {
+  markAwaitingAccessibilityReturn: async () => {
+    platformCalls.push('mark');
+  },
+  openAccessibilitySettings: async () => {
+    platformCalls.push('open');
+    return true;
+  },
+  toast: async () => true,
+};
 const mockModules = {
   react: fakeReact,
   'react-native': {
@@ -65,7 +76,7 @@ const mockModules = {
     useWindowDimensions: () => ({width: 360, height: 640, fontScale}),
   },
   'react-native-safe-area-context': {useSafeAreaInsets: () => ({top: 0, bottom: 0})},
-  '../../native/GatenPlatform': {},
+  '../../native/GatenPlatform': mockPlatform,
   '../components': {Button: 'Button', Icon: 'Icon', IconButton: 'IconButton', SectionLabel: 'SectionLabel'},
   '../DialogShell': {DialogShell: 'DialogShell'},
   '../Collapsible': {DisclosureChevron: 'DisclosureChevron'},
@@ -93,6 +104,7 @@ const {
   DISCLOSURE_SUMMARY_ROWS,
   disclosureLineText,
   LookupModeDisclosureDialog,
+  useLookupModeRequest,
 } = component;
 
 /** Every element in a tree, depth first, including the dialog's action and footer slots. */
@@ -187,4 +199,53 @@ test('the checkbox and both actions are always rendered, pinned outside the scro
   assert.ok(dialog.props.actions, 'the actions must be pinned');
   assert.equal(dialog.props.scrollBody, true);
   assert.equal(dialog.props.fitToViewport, true, 'the card must fit the viewport so the actions stay reachable');
+});
+
+test('opening Accessibility Settings arms the return before it opens the screen', async () => {
+  hookSlots.length = 0;
+  hookIndex = 0;
+  platformCalls.length = 0;
+  const first = useLookupModeRequest();
+  first.request();
+  // The fake React keeps state in slots rather than re-rendering, so read the hook again the way
+  // the component would after that state change.
+  hookIndex = 0;
+  const {dialog} = useLookupModeRequest();
+  assert.ok(dialog, 'the disclosure must be showing after the request');
+  dialog.props.onAccept();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    platformCalls,
+    ['mark', 'open'],
+    'the marker must be set before the Settings intent, so the service connection can bring Gaten back',
+  );
+});
+
+test('the accessibility-return marker is safe on a build without the bridge', async () => {
+  const platform = loadTypeScript('src/rn/native/GatenPlatform.ts', (name) => {
+    if (name === 'react-native') return {NativeModules: {}};
+    throw new Error(`unexpected import in the test: ${name}`);
+  });
+  assert.equal(typeof platform.markAwaitingAccessibilityReturn, 'function');
+  await platform.markAwaitingAccessibilityReturn();
+});
+
+test('the accessibility-return marker delegates when the bridge carries it', async () => {
+  let calls = 0;
+  const platform = loadTypeScript('src/rn/native/GatenPlatform.ts', (name) => {
+    if (name === 'react-native') {
+      return {
+        NativeModules: {
+          GatenPlatform: {
+            markAwaitingAccessibilityReturn: async () => {
+              calls += 1;
+            },
+          },
+        },
+      };
+    }
+    throw new Error(`unexpected import in the test: ${name}`);
+  });
+  await platform.markAwaitingAccessibilityReturn();
+  assert.equal(calls, 1);
 });
