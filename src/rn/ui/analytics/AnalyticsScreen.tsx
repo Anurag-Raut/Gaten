@@ -34,7 +34,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useIsFocused} from "@react-navigation/native";
-import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, shape, spacing, typeScale} from "../tokens";
+import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, spacing, typeScale} from "../tokens";
 import {Icon} from "../components";
 import {PressableScale} from "../PressableScale";
 import {TabHeading} from "../TabHeading";
@@ -340,8 +340,9 @@ function waniKaniRead(
 }
 
 /**
- * The heading, and the one control on the page: the refresh button, which carries the read's
- * in-flight state in its own colour.
+ * The heading, and the one control on the page: the refresh mark, which carries the read's
+ * in-flight state in its own colour. The mark is bare, the way Home's header mark is — no fill, no
+ * frame, just the glyph inside its own touch target.
  */
 function Header({busy, onRefresh}: {busy: boolean; onRefresh: () => void}) {
   const {colors} = useTheme();
@@ -352,11 +353,11 @@ function Header({busy, onRefresh}: {busy: boolean; onRefresh: () => void}) {
         <PressableScale
           accessibilityRole="button"
           accessibilityLabel="Refresh the numbers"
-          accessibilityState={{disabled: busy}}
+          accessibilityState={{busy, disabled: busy}}
           onPress={onRefresh}
-          style={[styles.refresh, {backgroundColor: colors.surfaceVariant}]}
+          style={styles.refresh}
         >
-          <Icon name="refresh" size={22} color={busy ? colors.onSurfaceVariant : colors.accent} />
+          <Icon name="refresh" size={24} color={busy ? colors.onSurfaceVariant : colors.accent} />
         </PressableScale>
       </View>
     </View>
@@ -977,11 +978,14 @@ const styles = StyleSheet.create({
     gap: spacing.l,
   },
   headerHeading: {flex: 1},
-  /** The one control on the page: a quiet square, the accent on the glyph rather than a filled block. */
+  /**
+   * The one control on the page: the 48 dp target Home's header mark uses, with no fill of its own —
+   * the accent lives on the glyph, so the header stays whitespace and type.
+   */
   refresh: {
-    width: 43,
-    height: 43,
-    borderRadius: shape.small,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
