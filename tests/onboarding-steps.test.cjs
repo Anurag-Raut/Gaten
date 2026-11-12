@@ -378,3 +378,31 @@ test('a download that reports no bytes reads as working, not as a false 0%', () 
   const quiet = {engine: 'medium', phase: 'downloading', bytesDone: 0, bytesTotal: 76_600_000};
   assert.equal(steps.downloadProgressText(quiet), 'Downloading…');
 });
+
+test('the download bar sweeps until a byte is reported, then fills from the real bytes', () => {
+  const total = 76_600_000;
+  // Play's pack transfer, and the first moments of any download, report no bytes: a grey empty bar
+  // there would read as stalled, so the bar sweeps instead.
+  assert.deepEqual(steps.downloadBarState({phase: 'downloading', bytesDone: 0, bytesTotal: total}), {
+    percent: 0,
+    indeterminate: true,
+  });
+  // The first real byte turns the sweep into a fill.
+  assert.deepEqual(steps.downloadBarState({phase: 'downloading', bytesDone: 1, bytesTotal: total}), {
+    percent: 0,
+    indeterminate: false,
+  });
+  assert.deepEqual(
+    steps.downloadBarState({phase: 'downloading', bytesDone: 32_200_000, bytesTotal: total}),
+    {percent: 42, indeterminate: false},
+  );
+  // "Verifying" is the full bar even when the last byte event lagged, and never a sweep.
+  assert.deepEqual(
+    steps.downloadBarState({phase: 'verifying', bytesDone: 70_000_000, bytesTotal: total}),
+    {percent: 100, indeterminate: false},
+  );
+  assert.equal(
+    steps.downloadPercent({phase: 'verifying', bytesDone: 70_000_000, bytesTotal: total}),
+    100,
+  );
+});

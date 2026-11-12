@@ -66,6 +66,7 @@ import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {downloadAnkiDroid} from "../anki/anki-actions";
 import {Button, Icon, IconButton} from "../components";
+import {DownloadBar} from "../DownloadBar";
 import {reloadKanjiReferenceSource} from "../kanjiReference";
 import {PressableScale} from "../PressableScale";
 import type {WaniKaniConnectOutcome} from "../review/review-store";
@@ -89,7 +90,6 @@ import {
   actionAreaKey,
   ankiSteps,
   connectReadout,
-  downloadPercent,
   downloadProgressText,
   formatMegabytes,
   lookupSteps,
@@ -1843,21 +1843,6 @@ function ReaderRow({
   );
 }
 
-/** The 4 dp download bar under its own percentage line; the bar itself is decorative. */
-function DownloadBar({percent}: {percent: number}) {
-  const {colors} = useTheme();
-  return (
-    <View
-      accessible
-      accessibilityRole="progressbar"
-      accessibilityValue={{min: 0, max: 100, now: percent, text: `${percent}%`}}
-      style={{height: 4, borderRadius: 2, backgroundColor: colors.outlineVariant, overflow: "hidden"}}
-    >
-      <View style={{height: 4, width: `${percent}%`, backgroundColor: colors.accent}} />
-    </View>
-  );
-}
-
 /** The one line a failed download leaves: what went wrong, in the reader's own words. */
 function downloadFailureText(failure: DownloadFailure): string {
   switch (failure) {
@@ -1909,6 +1894,19 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      unsubscribe.current?.();
+      unsubscribe.current = null;
+    };
+  }, []);
+
+  // A download outlives this page — and this flow — so the listener rides the page's whole life
+  // rather than one press: a page reopened while a download runs still shows its live bytes, and
+  // leaving onboarding stops only the listening, never the transfer.
+  useEffect(() => {
+    unsubscribe.current = subscribeDownloadProgress((next) => {
+      if (mounted.current && next.engine === "medium") setProgress(next);
+    });
+    return () => {
       unsubscribe.current?.();
       unsubscribe.current = null;
     };
@@ -2000,22 +1998,14 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
     setFailure(null);
     setProgress({engine: "medium", phase: "downloading", bytesDone: 0, bytesTotal: mediumBytes});
     setMedium("downloading");
-    unsubscribe.current?.();
-    unsubscribe.current = subscribeDownloadProgress((next) => {
-      if (mounted.current) setProgress(next);
-    });
     void downloadMedium().then(
       () => {
-        unsubscribe.current?.();
-        unsubscribe.current = null;
         if (mounted.current) {
           setProgress(null);
           readOcr(false);
         }
       },
       (error: unknown) => {
-        unsubscribe.current?.();
-        unsubscribe.current = null;
         if (!mounted.current) return;
         setProgress(null);
         setFailure(classifyDownloadError(error));
@@ -2068,7 +2058,9 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
 
   const primary: Action =
     active === 2
-      ? {label: "Done", onPress: () => onAdvance(nextStep(step))}
+      ? // Done stays available while a download runs: the transfer is native state, so leaving the
+        // flow neither waits for it nor cancels it — only this row's explicit Cancel does.
+        {label: "Done", onPress: () => onAdvance(nextStep(step))}
       : lookup === "checking"
         ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
         : lookup === "failed"
@@ -2165,7 +2157,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
                 >
                   {downloadProgressText(progressShown)}
                 </Text>
-                <DownloadBar percent={downloadPercent(progressShown)} />
+                <DownloadBar progress={progressShown} />
                 {canCancelDownload() && (
                 <Button
                   variant="text"

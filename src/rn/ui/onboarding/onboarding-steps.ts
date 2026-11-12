@@ -311,11 +311,36 @@ export interface DownloadProgressLike {
   bytesTotal: number;
 }
 
-/** The whole percent of a download, clamped to 0..100 for the bar and the spoken value. */
+/**
+ * The whole percent of a download, clamped to 0..100 for the bar and the spoken value. Once the
+ * bytes are all in the phase turns to "verifying" and the bar is full: the check is working on the
+ * finished file, so a last event that still named a few missing bytes must not leave the bar short.
+ */
 export function downloadPercent(progress: DownloadProgressLike): number {
+  if (progress.phase === "verifying") return 100;
   if (progress.bytesTotal <= 0) return 0;
   const percent = Math.floor((progress.bytesDone / progress.bytesTotal) * 100);
   return Math.max(0, Math.min(100, percent));
+}
+
+/** What the download bar draws: a real fill, or a sweep while there is no byte report yet. */
+export interface DownloadBarState {
+  /** The determinate fill, 0..100. Always 0 while [indeterminate]. */
+  percent: number;
+  /** True while the download is running but has not reported any bytes (e.g. a Play pack). */
+  indeterminate: boolean;
+}
+
+/**
+ * The bar's state from the live event. Play's pack transfer, and the first moments of any download,
+ * report no bytes at all; a 0% fill there would claim a stalled download, so the bar sweeps instead.
+ * As soon as a byte arrives it is a real fill, and "verifying" is the full bar.
+ */
+export function downloadBarState(progress: DownloadProgressLike): DownloadBarState {
+  if (progress.phase === "downloading" && progress.bytesDone <= 0) {
+    return {percent: 0, indeterminate: true};
+  }
+  return {percent: downloadPercent(progress), indeterminate: false};
 }
 
 /**
@@ -323,11 +348,11 @@ export function downloadPercent(progress: DownloadProgressLike): number {
  * figure done, and the total with the unit — "Downloading… 42% · 32.2 of 76.6 MB".
  */
 export function downloadProgressText(progress: DownloadProgressLike): string {
-  if (progress.phase === "verifying") return "Verifying\u2026";
+  if (progress.phase === "verifying") return "Verifying…";
   // Play's pack transfer reports no bytes: say it is working rather than pin a false 0%.
-  if (progress.bytesDone <= 0) return "Downloading\u2026";
+  if (progress.bytesDone <= 0) return "Downloading…";
   const percent = downloadPercent(progress);
-  return `Downloading\u2026 ${percent}% \u00b7 ${(progress.bytesDone / 1_000_000).toFixed(1)} of ${formatMegabytes(progress.bytesTotal)}`;
+  return `Downloading… ${percent}% · ${(progress.bytesDone / 1_000_000).toFixed(1)} of ${formatMegabytes(progress.bytesTotal)}`;
 }
 
 /**

@@ -23,11 +23,14 @@ import {Alert, AppState, Text, View} from "react-native";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenRecognition from "../../native/GatenRecognition";
 import type {
+  DownloadProgress,
   EngineStatus,
   RecognitionEngine,
   RecognitionSettings,
 } from "../../native/GatenRecognition";
 import {Icon} from "../components";
+import {DownloadBar} from "../DownloadBar";
+import {downloadProgressText} from "../onboarding/onboarding-steps";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
@@ -143,6 +146,7 @@ function EngineRow({
   engine,
   selected,
   downloading,
+  progress,
   busy,
   disabled,
   onSelect,
@@ -151,6 +155,8 @@ function EngineRow({
   engine: EngineStatus;
   selected: boolean;
   downloading: boolean;
+  /** The live report for this engine, or null before the first event. */
+  progress: DownloadProgress | null;
   busy: boolean;
   disabled?: boolean;
   onSelect: () => void;
@@ -159,6 +165,16 @@ function EngineRow({
   const {colors} = useTheme();
   const size = formatMegabytes(engine.downloadBytes);
   const summary = `${engineUse(engine)} · ${engineState(engine)}`;
+  // A running download with no event yet still says it is working: the module may be delivering
+  // through Play, which reports no bytes, or the first event may not have arrived.
+  const progressShown: DownloadProgress | null = downloading
+    ? (progress ?? {
+        engine: "medium",
+        phase: "downloading",
+        bytesDone: 0,
+        bytesTotal: engine.downloadBytes,
+      })
+    : null;
   return (
     <View>
       <ModeRow
@@ -170,7 +186,18 @@ function EngineRow({
         onPress={onSelect}
       />
       {!engine.installed && (
-        <View style={{marginBottom: spacing.m, marginStart: 22 + spacing.m}}>
+        <View style={{marginBottom: spacing.m, marginStart: 22 + spacing.m, gap: spacing.xs}}>
+          {progressShown != null && (
+            <View style={{gap: spacing.xs}}>
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}
+              >
+                {downloadProgressText(progressShown)}
+              </Text>
+              <DownloadBar progress={progressShown} />
+            </View>
+          )}
           <OutlinedButton
             label={downloading ? "Downloading…" : `Download · ${size}`}
             disabled={downloading || busy || disabled === true}
@@ -191,6 +218,7 @@ function EngineRow({
 
 export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
   const [settings, setSettings] = useState<RecognitionSettings | null>(null);
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [requested, setRequested] = useState<RecognitionEngine | null>(null);
   // One mode save at a time: the native writes run on a multi-threaded IO dispatcher, so two quick
   // taps must not race which persisted value wins.
@@ -206,6 +234,15 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
     return () => {
       mounted.current = false;
     };
+  }, []);
+
+  // A download started here — or in onboarding, or before this screen opened — reports its bytes
+  // through the module's own event, so the row shows the real percent rather than a static word.
+  useEffect(() => {
+    const unsubscribe = GatenRecognition.subscribeDownloadProgress((next) => {
+      if (mounted.current) setProgress(next);
+    });
+    return () => unsubscribe();
   }, []);
 
   // One read applied only while it is still the newest: a read that started before a switch must
@@ -274,6 +311,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
       return;
     }
     setRequested(engine);
+    setProgress(null);
     void GatenRecognition.downloadRecognitionEngine(engine)
       .then(() => {
         // Re-read rather than trust the response: a mode chosen while the download ran is the
@@ -354,6 +392,7 @@ export function RecognitionSettingsScreen({onClose}: {onClose: () => void}) {
             engine={engine}
             selected={mode === engine.id}
             downloading={requested === engine.id || nativeDownloading.includes(engine.id)}
+            progress={progress?.engine === engine.id ? progress : null}
             busy={busy && requested !== engine.id}
             disabled={saving}
             onSelect={() => selectMode(engine.id)}

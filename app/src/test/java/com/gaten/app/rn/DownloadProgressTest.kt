@@ -139,4 +139,32 @@ class DownloadProgressTest {
         throttle.onBytes(1_000, 1_000)
         assertEquals(listOf(DownloadProgressThrottle.DOWNLOADING), seen.phases)
     }
+
+    /**
+     * A Play pack reports its real byte counts, so the bar has a real ratio all the way to full and
+     * one verifying event, not a stream of zeros the way a status-only signal produced.
+     */
+    @Test
+    fun `play pack byte samples fill the bar and verify once`() {
+        var now = 0L
+        val seen = Recorder()
+        val throttle = throttle({ now }, seen)
+        val total = PpOcrModel.Engine.MEDIUM.approximateDownloadBytes
+        val samples = listOf(0L, 12_000_000L, 48_000_000L, total)
+        for (done in samples) {
+            throttle.onBytes(done, total)
+            now += 200
+        }
+        assertEquals(
+            listOf(
+                DownloadProgressThrottle.DOWNLOADING,
+                DownloadProgressThrottle.DOWNLOADING,
+                DownloadProgressThrottle.DOWNLOADING,
+                DownloadProgressThrottle.VERIFYING
+            ),
+            seen.phases
+        )
+        assertEquals(samples.dropLast(1) + total, seen.done)
+        assertEquals(List(samples.size) { total }, seen.totals)
+    }
 }
