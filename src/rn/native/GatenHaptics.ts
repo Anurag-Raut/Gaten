@@ -10,8 +10,9 @@ import { NativeModules } from "react-native";
 /**
  * What play() plays: `tick`, `lookup` and `confirm` are haptics (a step, a dictionary hit, an
  * action that landed); `right` and `wrong` are the answers' own vibration patterns — one short
- * pulse for a right answer, a double buzz for a wrong one; `added` and `done` are the two sound
- * cues, gated by the sounds preference.
+ * pulse for a right answer, a double buzz for a wrong one; `added`, `done`, `answerRight`,
+ * `answerWrong`, `rateAgain`, `rateHard`, `rateGood`, `rateEasy` and `match` are the sound cues,
+ * gated by the sounds preference.
  */
 export type FeedbackKind =
   | "tick"
@@ -20,7 +21,14 @@ export type FeedbackKind =
   | "right"
   | "wrong"
   | "added"
-  | "done";
+  | "done"
+  | "answerRight"
+  | "answerWrong"
+  | "rateAgain"
+  | "rateHard"
+  | "rateGood"
+  | "rateEasy"
+  | "match";
 
 interface GatenHapticsNative {
   play(kind: FeedbackKind): Promise<boolean>;

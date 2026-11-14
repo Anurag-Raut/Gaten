@@ -44,12 +44,22 @@ enum class FeedbackPattern(
     Wrong(longArrayOf(0, 45, 70, 45), intArrayOf(0, 200, 0, 200)),
 }
 
-/** The two moments in the app that carry a cue of their own. */
-enum class FeedbackSound { Added, Done }
+/** The moments in the app that carry a sound cue of their own. */
+enum class FeedbackSound {
+    Added,
+    Done,
+    AnswerRight,
+    AnswerWrong,
+    RateAgain,
+    RateHard,
+    RateGood,
+    RateEasy,
+    Match,
+}
 
 /**
  * What an action gives back: a haptic tick on the phone's own terms, the answers' own vibration
- * patterns ([pattern]), and — only when the reader has turned sounds on — one of two short cues.
+ * patterns ([pattern]), and — only when the reader has turned sounds on — one of its short cues.
  *
  * One instance belongs to one composition and owns the single [SoundPool] behind it, built on the
  * first sound actually asked for: a reader who leaves sounds off never allocates one. Cues load
@@ -160,7 +170,7 @@ class Feedback internal constructor(
     }
 
     /**
-     * Builds the pool and sets both cues loading; it is usable straight away, with the cues landing
+     * Builds the pool and sets every cue loading; it is usable straight away, with the cues landing
      * in [loaded] as they arrive.
      *
      * The load callback plays a queued cue and re-reads the preference first: sounds can be turned
@@ -191,6 +201,13 @@ class Feedback internal constructor(
         }
         load(pool, FeedbackSound.Added, R.raw.feedback_added)
         load(pool, FeedbackSound.Done, R.raw.feedback_done)
+        load(pool, FeedbackSound.AnswerRight, R.raw.feedback_answer_right)
+        load(pool, FeedbackSound.AnswerWrong, R.raw.feedback_answer_wrong)
+        load(pool, FeedbackSound.RateAgain, R.raw.feedback_rate_again)
+        load(pool, FeedbackSound.RateHard, R.raw.feedback_rate_hard)
+        load(pool, FeedbackSound.RateGood, R.raw.feedback_rate_good)
+        load(pool, FeedbackSound.RateEasy, R.raw.feedback_rate_easy)
+        load(pool, FeedbackSound.Match, R.raw.feedback_match)
         this.pool = pool
         return pool
     }

@@ -93,3 +93,11 @@ Copyright (c) 2021 Matthieu Esnault
 Licence: MIT (bundled in assets/licenses/wanakana-MIT.txt)
 https://github.com/esnaultdev/wanakana-kt
 A Kotlin port of WanaKana, itself MIT licensed.
+
+Feedback sound cues
+-------------------
+The files app/src/main/res/raw/feedback_answer_right.ogg, feedback_answer_wrong.ogg,
+feedback_rate_again.ogg, feedback_rate_hard.ogg, feedback_rate_good.ogg,
+feedback_rate_easy.ogg and feedback_match.ogg were generated with ElevenLabs Sound Effects
+(model elevenlabs-sound-effects-v2) from text prompts on 2026-11-14, then trimmed and
+level-matched for Gaten.

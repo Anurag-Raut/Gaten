@@ -215,8 +215,8 @@ Motion: a 380 ms emphasized horizontal page slide for tabs (bottom-tabs `transit
 custom scene interpolator) and for pushed pages (native-stack, platform animator), the review's
 step swaps on a Reanimated shared value with parallax, staggered list entrances and a Material
 tab indicator in the bottom bar — see `docs/rn-migration/PLAN.md` § Motion. The overlay keeps its
-own sheet slide. Appearance settings include optional feedback sounds, off by default; haptics
-respect the phone's settings.
+own sheet slide. Appearance settings include optional feedback sounds for answers, ratings and
+matches, off by default; haptics respect the phone's settings.
 
 ## Building from source
 
