@@ -10,11 +10,12 @@
  * thing that silences it for good. The backdrop and Android Back behave as "Maybe later".
  *
  * It is offered only at a good moment, never on arrival: right after the reader finishes a study
- * session (see support-moments), or, for someone who mostly uses lookups, after a long, settled stay
- * on Home once they are a regular. At most once per launch, and each "Maybe later" pushes the next
- * offer further out (3, 7, 14, then 30 days; the native side keeps the schedule).
+ * session (see support-moments), or when they are about to leave — Back at Home's root, the one
+ * point where the app would close. At most once per launch, and "Maybe later" holds it back for a
+ * week.
  */
 import React, {useCallback, useEffect, useRef, useState} from "react";
+import {BackHandler} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import {Button} from "../components";
 import {openSupportLink} from "./support-links";
@@ -22,17 +23,13 @@ import {consumeSupportMoment, hasSupportMoment} from "./support-moments";
 import {SupportSheet} from "./SupportSheet";
 
 /** How many app opens pass before the popup is offered: enough to have used the app, not one look. */
-const MIN_APP_OPENS = 4;
+const MIN_APP_OPENS = 5;
 
 /** The first-run step that means setup is finished; the popup is never offered before it. */
 const ONBOARDING_DONE_STEP = 3;
 
 /** The beat after a finished session before the offer, so it follows the result rather than covers it. */
 const MOMENT_DELAY_MS = 1_500;
-
-/** Without a study session, a regular (this many opens) is offered it after this long on Home. */
-const REGULAR_OPENS = 8;
-const SETTLED_DELAY_MS = 45_000;
 
 /** Whether the offer was already made this launch; "Maybe later" counts, so it asks once per launch. */
 let offeredThisLaunch = false;
@@ -64,6 +61,8 @@ export function useSupportPrompt(): {
 } {
   const [visible, setVisible] = useState(false);
   const readSeq = useRef(0);
+  /** Whether the stored state allows an offer at all; Back may spend it without a pending moment. */
+  const eligible = useRef(false);
 
   useEffect(() => {
     if (offeredThisLaunch) {
@@ -91,21 +90,19 @@ export function useSupportPrompt(): {
         if (onboardingStep < ONBOARDING_DONE_STEP || !isEligible(state)) {
           return;
         }
-        const afterSession = hasSupportMoment();
-        if (!afterSession && state.openCount < REGULAR_OPENS) {
+        eligible.current = true;
+        // Only a finished session schedules an offer on its own; Back asks for the rest.
+        if (!hasSupportMoment()) {
           return;
         }
-        timer = setTimeout(
-          () => {
-            if (seq !== readSeq.current || offeredThisLaunch) {
-              return;
-            }
-            offeredThisLaunch = true;
-            consumeSupportMoment();
-            setVisible(true);
-          },
-          afterSession ? MOMENT_DELAY_MS : SETTLED_DELAY_MS,
-        );
+        timer = setTimeout(() => {
+          if (seq !== readSeq.current || offeredThisLaunch) {
+            return;
+          }
+          offeredThisLaunch = true;
+          consumeSupportMoment();
+          setVisible(true);
+        }, MOMENT_DELAY_MS);
       })
       .catch(() => {
         if (seq === readSeq.current) {
@@ -120,7 +117,26 @@ export function useSupportPrompt(): {
     };
   }, []);
 
-  /** "Maybe later": hides it and starts the next, longer wait on the native side. */
+  /**
+   * Back at Home's root is the point where the app would close, so that press is the last chance to
+   * ask. This component only mounts while Home is in front, so the listener can never steal Back
+   * from a page, a tab, or an open sheet; when the reader has already been asked this launch, or is
+   * not eligible, it is left alone and the app closes as usual.
+   */
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (offeredThisLaunch || !eligible.current) {
+        return false;
+      }
+      offeredThisLaunch = true;
+      consumeSupportMoment();
+      setVisible(true);
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  /** "Maybe later": hides it and starts the week-long wait on the native side. */
   const dismissTemporarily = useCallback(() => {
     readSeq.current += 1;
     setVisible(false);
