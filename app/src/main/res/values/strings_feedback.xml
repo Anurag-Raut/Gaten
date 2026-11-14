@@ -8,7 +8,7 @@
 
 <!--
  * Copy for the Feedback group in Appearance. Haptics are the phone's own, so the row says where
- * they come from; sounds are the app's, are off until asked for, and are two cues.
+ * they come from; sounds are the app's, are off until asked for, and are short cues.
  -->
 
 <resources>
@@ -19,6 +19,6 @@
     <string name="feedback_haptics_summary">Follows your phone\'s settings.</string>
 
     <string name="feedback_sounds_title">Sounds</string>
-    <string name="feedback_sounds_summary">A short cue when a word is added to Anki, and when a review session ends.</string>
+    <string name="feedback_sounds_summary">Short koto cues for answers, review ratings, dictionary matches, words added to Anki and finished sessions.</string>
 
 </resources>
