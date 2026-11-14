@@ -18,15 +18,11 @@ object SupportPreferences {
     private const val KEY_OPEN_COUNT = "support_open_count"
     private const val KEY_NEVER = "support_prompt_never"
     private const val KEY_NEXT_AT = "support_prompt_next_at"
-    private const val KEY_POSTPONES = "support_prompt_postpones"
 
     private const val DAY_MS = 24L * 60 * 60 * 1000
 
-    /**
-     * How long each successive "Not now" holds the popup back: 3, 7, 14, then 30 days for every one
-     * after. Asking less often the more times the reader has said no is what keeps it from nagging.
-     */
-    private val POSTPONE_DAYS = longArrayOf(3, 7, 14, 30)
+    /** How long a "Maybe later" holds the popup back: the same week every time, so it never nags. */
+    private const val POSTPONE_DAYS = 7L
 
     /**
      * Wall-clock time behind one seam, as the WaniKani readers keep theirs: the AnkiDroid lint check
@@ -52,17 +48,14 @@ object SupportPreferences {
 
     /**
      * Records a dismissal. [permanent] is "Don't show again" — the one thing that silences the popup
-     * for good; otherwise "Not now" holds it back for the next step of [POSTPONE_DAYS].
+     * for good; otherwise "Not now" holds it back for [POSTPONE_DAYS].
      */
     fun dismissPrompt(context: Context, permanent: Boolean) {
         val editor = prefs(context).edit()
         if (permanent) {
             editor.putBoolean(KEY_NEVER, true)
         } else {
-            val postpones = prefs(context).getInt(KEY_POSTPONES, 0)
-            val days = POSTPONE_DAYS[postpones.coerceAtMost(POSTPONE_DAYS.size - 1)]
-            editor.putInt(KEY_POSTPONES, postpones + 1)
-            editor.putLong(KEY_NEXT_AT, now() + days * DAY_MS)
+            editor.putLong(KEY_NEXT_AT, now() + POSTPONE_DAYS * DAY_MS)
         }
         editor.apply()
     }
