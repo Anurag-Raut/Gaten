@@ -83,6 +83,7 @@ import com.gaten.app.ocr.ScreenTextScanner
 import com.gaten.app.ocr.prefetchOrder
 import com.gaten.app.ui.FeedbackHaptic
 import com.gaten.app.ui.FeedbackPattern
+import com.gaten.app.ui.FeedbackSound
 import com.gaten.app.ui.rememberFeedback
 import com.gaten.app.ui.overlay.ViewMapping
 import com.gaten.app.ui.theme.Motion
@@ -241,6 +242,7 @@ fun LookupOverlay(
         if (session != null && result?.words?.isNotEmpty() == true && feedbackSession !== session) {
             feedbackSession = session
             feedback.haptic(FeedbackHaptic.Lookup)
+            feedback.sound(FeedbackSound.Match)
         }
     }
     var resultAnchor by remember { mutableStateOf<Rect?>(null) }

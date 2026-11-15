@@ -47,6 +47,7 @@ import * as Anki from "../native/GatenAnki";
 import {downloadAnkiDroid} from "./anki/anki-actions";
 import * as GatenDict from "../native/GatenDict";
 import * as GatenWaniKani from "../native/GatenWaniKani";
+import * as GatenHaptics from "../native/GatenHaptics";
 import {GatenCardWebView} from "../native/GatenCardWebView";
 import {distinctIdeographs, Icon, KanjiStrip} from "./components";
 import {PressableScale} from "./PressableScale";
@@ -71,6 +72,7 @@ import {
   type ReviewStep,
 } from "./review/review-store";
 import {reviewActions, useReview} from "./review/useReview";
+import {ratingSoundFor} from "./review/rating-sound";
 import {atTeachStart} from "./review/wanikani-lesson-steps";
 import {DetailsReveal} from "./review/DetailsReveal";
 import {AnkiDeckPicker} from "./review/AnkiDeckPicker";
@@ -922,6 +924,8 @@ function AnkiSession({
             onGrade={(ease) => {
               // The rating that goes back is also what the card flashes with: "Again" is
               // the one answer that means the card was not known.
+              const sound = ratingSoundFor(ease, session.buttonLabels.length);
+              if (sound != null) void GatenHaptics.play(sound).catch(() => {});
               setFlashTint(ease === 1 ? colors.error : colors.accent);
               onGrade(ease);
             }}

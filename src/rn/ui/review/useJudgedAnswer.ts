@@ -28,6 +28,7 @@ export function useJudgedAnswer<S>(
     if (judged == null) return;
     // The answer's own pattern: one short pulse for a right answer, a double buzz for a wrong one.
     void Haptics.play(judged.tone).catch(() => {});
+    void Haptics.play(judged.tone === "right" ? "answerRight" : "answerWrong").catch(() => {});
     setShakeKey(judged.tone === "wrong" ? judged.key : null);
   }, [session, judgement]);
 

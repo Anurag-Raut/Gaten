@@ -77,7 +77,11 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
   const toggleSounds = (next: boolean) => {
     if (next === soundsEnabled) return;
     setSoundsEnabled(next);
-    void GatenHaptics.setSoundsEnabled(next).catch(() => {});
+    void GatenHaptics.setSoundsEnabled(next)
+      .then(() => {
+        if (next) void GatenHaptics.play("answerRight").catch(() => {});
+      })
+      .catch(() => {});
   };
 
   return (
@@ -196,7 +200,7 @@ export function AppearanceSettingsScreen({onClose}: {onClose: () => void}) {
         <SwitchRow
           icon="volume_up"
           title="Sounds"
-          summary="Anki and review cues"
+          summary="Review, lookup and Anki cues"
           value={soundsEnabled}
           onValueChange={toggleSounds}
         />

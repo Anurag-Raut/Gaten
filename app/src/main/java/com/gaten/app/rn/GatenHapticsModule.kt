@@ -31,7 +31,8 @@ import com.gaten.app.ui.lookup.LookupSheetHost
  *
  * [play]'s kinds are [FeedbackHaptic]'s, [FeedbackPattern]'s and [FeedbackSound]'s names,
  * lowercased: `tick`, `lookup` and `confirm` are haptics, `right` and `wrong` are the answers' own
- * vibration patterns, and `added` and `done` are the two sound cues.
+ * vibration patterns, and `added`, `done`, `answerRight`, `answerWrong`, `rateAgain`, `rateHard`,
+ * `rateGood`, `rateEasy` and `match` are the sound cues.
  */
 class GatenHapticsModule(
     reactContext: com.facebook.react.bridge.ReactApplicationContext,
@@ -59,9 +60,10 @@ class GatenHapticsModule(
 
     /**
      * Plays [kind]: a haptic for `tick`, `lookup` or `confirm`, the answers' own vibration pattern
-     * for `right` or `wrong`, a sound cue for `added` or `done` — the sound only when the reader has
+     * for `right` or `wrong`, a sound cue for `added`, `done`, `answerRight`, `answerWrong`,
+     * `rateAgain`, `rateHard`, `rateGood`, `rateEasy` or `match` — the sound only when the reader has
      * sounds on, which [Feedback] checks itself, and the pattern only when the reader has haptics on,
-     * which it also checks. Rejects with `E_FEEDBACK_KIND` for a kind that is not one of the seven,
+     * which it also checks. Rejects with `E_FEEDBACK_KIND` for a kind that is not one of the fourteen,
      * and with `E_NO_WINDOW` when there is no visible window to deliver feedback through.
      */
     @ReactMethod
@@ -87,6 +89,13 @@ class GatenHapticsModule(
             "wrong" -> instance.pattern(FeedbackPattern.Wrong)
             "added" -> instance.sound(FeedbackSound.Added)
             "done" -> instance.sound(FeedbackSound.Done)
+            "answerright" -> instance.sound(FeedbackSound.AnswerRight)
+            "answerwrong" -> instance.sound(FeedbackSound.AnswerWrong)
+            "rateagain" -> instance.sound(FeedbackSound.RateAgain)
+            "ratehard" -> instance.sound(FeedbackSound.RateHard)
+            "rategood" -> instance.sound(FeedbackSound.RateGood)
+            "rateeasy" -> instance.sound(FeedbackSound.RateEasy)
+            "match" -> instance.sound(FeedbackSound.Match)
             else -> {
                 promise.reject(CODE_KIND, "Unknown feedback kind '$kind'")
                 return
