@@ -617,7 +617,7 @@ function EntryDetail({
         )}
         {/* The same corpus section the word detail page carries, so the overlay's entry is exactly
             as complete as the full page it mirrors. */}
-        <ExampleSentencesSection key={entry.id} term={entry.primary} />
+        <ExampleSentencesSection key={entry.id} term={entry.primary} boxed />
         {/* The Anki action ends the entry's content in both orientations, so the reader scrolls to
             it with the entry it belongs to, drawn as the entry's own last section. */}
         <AddToAnkiBar entry={entry} anki={anki} exportState={exportState} />

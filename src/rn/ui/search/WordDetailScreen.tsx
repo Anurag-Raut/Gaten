@@ -34,6 +34,7 @@ import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
+import {MEANING_COLLAPSE_ABOVE, MEANING_PREVIEW_SENSES, splitParentheticals, splitSense} from "./meaningList";
 import {hitFor, useSearchState} from "./searchStore";
 import {SEARCHING_NOTICE_TITLE, SearchNotice} from "./SearchScreen";
 import {useAnkiExport, type AnkiExport, type ExportState} from "./useAnkiExport";
@@ -192,60 +193,132 @@ export function HeadwordSection({hit}: {hit: SearchResult}) {
   );
 }
 
-// Preview five dictionary senses, preserving their grouping, and reveal the rest on request.
+/**
+ * The meanings as a tidy list: one row per sense, the sense's first synonym as the row's lead in
+ * the reader's accent, its other synonyms as a bulleted sub-list under that lead, and any
+ * parenthetical note inside a gloss dimmed in place. A parenthetical is a remark about the meaning,
+ * not the meaning, so it reads quieter without being moved out of the sentence it belongs to.
+ *
+ * Rows are numbered, and the sense count is stated, only when the entry has more than one sense: a
+ * single-sense word is its own definition, so it drops the number and the indent with it. Up to
+ * four senses show in full; a longer list shows the first three and puts the rest behind the toggle
+ * that ends the list.
+ */
 export function MeaningSection({glosses, partsOfSpeech}: {
   glosses: string[];
   partsOfSpeech: string[];
 }) {
   const {colors} = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const meaningRows = glosses.map((gloss, index) =>
-    // The leading sense is the entry's value, drawn in the accent like every other meaning on the app; the
-    // senses after it are plain dictionary lines, set apart by space rather than hairline rules.
-    index === 0 ? (
-      <ReferenceValue key={`${index}-${gloss}`}>{capitaliseGloss(gloss)}</ReferenceValue>
-    ) : (
-      <Text
-        key={`${index}-${gloss}`}
-        style={[typeScale.bodyMedium, {color: colors.onSurface, marginTop: spacing.m}]}
-      >
-        {capitaliseGloss(gloss)}
-      </Text>
-    ),
-  );
+  // A sense the bridge left blank has no lines to show, so it is not a row — and not counted by the
+  // count or the toggle, which count what the section actually lists.
+  const senses = glosses.map(splitSense).filter((synonyms) => synonyms.length > 0);
+  // The count and the number column answer the same question, so they share one answer.
+  const numbered = senses.length > 1;
+  const collapsible = senses.length > MEANING_COLLAPSE_ABOVE;
+  const toggleLabel = expanded
+    ? "Show fewer"
+    : `Show ${senses.length - MEANING_PREVIEW_SENSES} more meanings`;
+  const meaningRows = senses.map((synonyms, senseIndex) => (
+    <View
+      key={`sense-${senseIndex}`}
+      accessible
+      // The row reads as one statement: its number when it has one, then the synonyms as the
+      // dictionary joins them.
+      accessibilityLabel={numbered ? `${senseIndex + 1}. ${synonyms.join(", ")}` : synonyms.join(", ")}
+      style={[
+        styles.meaningRow,
+        // The heading already separates the list from what is above it, so only the rows after the
+        // first carry a hairline.
+        senseIndex === 0
+          ? styles.meaningRowFirst
+          : {borderTopWidth: 1, borderTopColor: colors.outlineVariant},
+      ]}
+    >
+      {numbered && (
+        <Text
+          style={[typeScale.labelMedium, styles.meaningNumber, {color: colors.onSurfaceVariant}]}
+        >
+          {senseIndex + 1}
+        </Text>
+      )}
+      <View style={styles.meaningContent}>
+        {/* The first synonym is the row's value, drawn in the accent as every meaning in the app
+            is; the others are the dictionary's alternatives to it, so they sit under it. */}
+        <ReferenceValue style={numbered ? styles.meaningLeadNumbered : undefined}>
+          {meaningRuns(capitaliseGloss(synonyms[0]), colors)}
+        </ReferenceValue>
+        {synonyms.length > 1 && (
+          <View style={styles.meaningSynonyms}>
+            {synonyms.slice(1).map((synonym, synonymIndex) => (
+              <View key={`${senseIndex}-${synonymIndex}`} style={styles.meaningSynonym}>
+                <View style={[styles.meaningBullet, {backgroundColor: `${colors.primary}80`}]} />
+                <Text
+                  style={[
+                    typeScale.bodyMedium,
+                    styles.meaningSynonymText,
+                    {color: colors.onSurface},
+                  ]}
+                >
+                  {meaningRuns(synonym, colors)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  ));
   return (
     <View style={[styles.meaningSection, {borderBottomColor: sectionRule(colors)}]}>
-      <ReferenceSection title="Meanings" topGap={0}>
-        {glosses.length === 0 ? (
-          <Text
-            style={[typeScale.bodyMedium, styles.meaningFallback, {color: colors.onSurfaceVariant}]}
-          >
-            The dictionary has no gloss for this entry.
+      {/* The section's own heading row: `ReferenceSection`'s title, with the sense count beside it
+          when there is more than one sense to count. */}
+      <View style={styles.meaningHeader}>
+        <Text
+          accessibilityRole="header"
+          style={[typeScale.labelMedium, {color: colors.onSurfaceVariant}]}
+        >
+          Meanings
+        </Text>
+        {numbered && (
+          <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>
+            {`${senses.length} meanings`}
           </Text>
-        ) : (
-          <>
-            {meaningRows.slice(0, 5)}
-            {glosses.length > 5 && (
-              <Collapsible expanded={expanded}>{meaningRows.slice(5)}</Collapsible>
-            )}
-          </>
         )}
-      </ReferenceSection>
-      {glosses.length > 5 && (
+      </View>
+      {senses.length === 0 ? (
+        <Text
+          style={[typeScale.bodyMedium, styles.meaningFallback, {color: colors.onSurfaceVariant}]}
+        >
+          The dictionary has no gloss for this entry.
+        </Text>
+      ) : (
+        <>
+          {/* Four senses or fewer show whole; only a longer list is worth opening. */}
+          {collapsible ? meaningRows.slice(0, MEANING_PREVIEW_SENSES) : meaningRows}
+          {collapsible && (
+            <Collapsible expanded={expanded}>
+              {meaningRows.slice(MEANING_PREVIEW_SENSES)}
+            </Collapsible>
+          )}
+        </>
+      )}
+      {collapsible && (
         <PressableScale
           accessibilityRole="button"
+          accessibilityLabel={toggleLabel}
           accessibilityState={{expanded}}
           onPress={() => setExpanded((value) => !value)}
-          style={styles.meaningAction}
+          style={[styles.meaningToggle, {borderTopColor: colors.outlineVariant}]}
         >
-          <DisclosureChevron expanded={expanded} color={colors.primary} size={20} />
-          <Text style={[typeScale.labelLarge, styles.meaningActionLabel, {color: colors.primary}]}>
-            {expanded ? "Show fewer meanings" : `View all meanings (${glosses.length})`}
+          <Text style={[typeScale.labelLarge, styles.meaningToggleLabel, {color: colors.onSurface}]}>
+            {toggleLabel}
           </Text>
+          <DisclosureChevron expanded={expanded} color={colors.onSurface} size={18} />
         </PressableScale>
       )}
       {partsOfSpeech.length > 0 && (
-        <ReferenceSection title="Part of speech" topGap={spacing.xl}>
+        <ReferenceSection title="Part of speech" topGap={spacing.l}>
           <Text
             style={[
               typeScale.bodyMedium,
@@ -259,6 +332,21 @@ export function MeaningSection({glosses, partsOfSpeech}: {
       )}
     </View>
   );
+}
+
+/**
+ * One gloss line as spans: its plain text, and each parenthetical note dimmed and taken back to
+ * normal weight in place — "To go to and from" stays bold in the accent, "(a place)" turns quiet.
+ */
+function meaningRuns(text: string, colors: ThemeColors): React.ReactNode {
+  return splitParentheticals(text).map((run, index) => (
+    <Text
+      key={index}
+      style={run.note ? [styles.meaningNote, {color: colors.onSurfaceVariant}] : undefined}
+    >
+      {run.text}
+    </Text>
+  ));
 }
 
 /** The dictionary states senses in lower case; each is presented as its own line, as before. */
@@ -356,7 +444,7 @@ export function WordKanjiSection({
             style={[
               styles.kanjiTile,
               flat
-                ? styles.kanjiTileFlat
+                ? [styles.kanjiTileFlat, {borderColor: colors.outlineVariant}]
                 : {
                     backgroundColor: colors.surfaceVariant,
                     borderColor: colors.outlineVariant,
@@ -379,7 +467,14 @@ export function WordKanjiSection({
  * so the overlay offers the same detail as the full page. Three states: the lookup is unanswered
  * (a muted line, not an empty section), no sentence carries the word, or the sentences themselves.
  */
-export function ExampleSentencesSection({term}: {term: string}) {
+export function ExampleSentencesSection({
+  term,
+  boxed = false,
+}: {
+  term: string;
+  /** Draws the list inside an outlined box, rows split by hairlines (the lookup sheet). */
+  boxed?: boolean;
+}) {
   const {colors} = useTheme();
   const [examples, setExamples] = useState<GatenDict.SentenceExample[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -427,12 +522,18 @@ export function ExampleSentencesSection({term}: {term: string}) {
           No example sentences found for this word.
         </Text>
       ) : (
-        <View style={styles.examplesList}>
+        <View
+          style={[
+            styles.examplesList,
+            boxed && [styles.examplesBox, {borderColor: colors.outlineVariant}],
+          ]}
+        >
           {examples.map((example, index) => (
             <View
               key={`${index}-${example.japanese}`}
               style={[
                 styles.exampleRow,
+                boxed && styles.exampleRowBoxed,
                 index > 0 && {borderTopWidth: 1, borderTopColor: colors.outlineVariant},
               ]}
             >
@@ -673,6 +774,9 @@ export function AddToAnkiBar({
   );
 }
 
+/** The meaning list's bullet, in dp: a dot centred on the first line of the synonym beside it. */
+const MEANING_BULLET_SIZE = 5;
+
 const styles = StyleSheet.create({
   root: {flex: 1},
   body: {flex: 1},
@@ -680,14 +784,51 @@ const styles = StyleSheet.create({
   headwordSection: {paddingBottom: spacing.xl, borderBottomWidth: 1},
   metadata: {...typeScale.bodyMedium, marginTop: spacing.m},
   meaningSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
-  meaningAction: {
+  // The heading row: `ReferenceSection`'s title, with the sense count beside it on the same baseline.
+  meaningHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: spacing.s,
+    marginBottom: spacing.m,
+  },
+  // A sense: a hairline over every row (the first one included), then the number and the content
+  // side by side. The 14 dp rhythm is the list's own, between the spacing scale's 12 and 16.
+  meaningRow: {flexDirection: "row", gap: 14, paddingVertical: 12},
+  // The first row hangs straight off the heading, with no rule between them.
+  meaningRowFirst: {paddingTop: 0},
+  // The number column: a fixed gutter so every lead starts on the same edge, the digits set on the
+  // line's own baseline rather than its box.
+  meaningNumber: {width: 20, paddingTop: 3, fontVariant: ["tabular-nums"]},
+  // The content column shrinks instead of widening the row. React Native has no `overflow-wrap`, so
+  // a long gloss wraps inside this column rather than pushing past the section's edge.
+  meaningContent: {flex: 1, minWidth: 0},
+  // The lead of a numbered row: the value role's semi-bold at titleLarge's smaller size, so a lead
+  // reads at one weight whether the entry has one sense or many.
+  meaningLeadNumbered: {...typeScale.titleLarge, fontWeight: typeScale.valueLarge.fontWeight},
+  // A parenthetical note is a remark, so it goes back to the body weight under a bold lead.
+  meaningNote: {fontWeight: typeScale.bodyMedium.fontWeight},
+  meaningSynonyms: {marginTop: 6},
+  // A synonym and its dot, centred on the first line of the text rather than on the wrapped block.
+  meaningSynonym: {flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 3},
+  meaningBullet: {
+    width: MEANING_BULLET_SIZE,
+    height: MEANING_BULLET_SIZE,
+    borderRadius: MEANING_BULLET_SIZE,
+    marginTop: (typeScale.bodyMedium.lineHeight - MEANING_BULLET_SIZE) / 2,
+  },
+  meaningSynonymText: {flex: 1, minWidth: 0},
+  // The toggle ends the list: its own hairline, then the label and its chevron centred in a 48 dp
+  // row.
+  meaningToggle: {
     minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: spacing.s,
-    paddingVertical: spacing.m,
+    borderTopWidth: 1,
   },
-  meaningActionLabel: {flexShrink: 1},
+  meaningToggleLabel: {flexShrink: 1},
   partsOfSpeechValue: {marginTop: spacing.xs},
   meaningFallback: {marginTop: spacing.m},
   detailLabel: {flex: 1},
@@ -715,12 +856,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Flat, the tile keeps its 58 dp target and the glyph on it; the fill, rounding and border go.
-  kanjiTileFlat: {borderRadius: 0, borderWidth: 0},
+  // Flat, the tile keeps its 58 dp target and glyph but paints no fill of its own: the host's
+  // surface shows through and only the outline marks each character as a tappable tile.
+  kanjiTileFlat: {backgroundColor: "transparent"},
   examplesSection: {paddingVertical: spacing.l, borderBottomWidth: 1},
   examplesState: {marginTop: spacing.m},
   examplesList: {marginTop: spacing.s},
   exampleRow: {paddingVertical: spacing.l},
+  examplesBox: {borderWidth: 1, borderRadius: shape.empty, overflow: "hidden", marginTop: spacing.m},
+  exampleRowBoxed: {paddingHorizontal: spacing.l},
   exampleEnglish: {marginTop: spacing.xs},
   // The section's own rhythm is the detail rows' (`detailRowContent`): the same 58 dp box with the
   // same vertical padding, so the deck row does not carry air the rows above it do not.
