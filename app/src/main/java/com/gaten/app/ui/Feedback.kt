@@ -25,8 +25,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import com.gaten.app.R
 
-/** How firm a touch's feedback is: a step, a dictionary hit, or an action that landed. */
-enum class FeedbackHaptic { Tick, Lookup, Confirm }
+/**
+ * How firm a touch's feedback is: a step, a dictionary hit, or an action that landed — plus the
+ * moments of a drag ([Grab], [Snap], [Unsnap], [Land], [Remove]), each its own feel so a reader can
+ * tell by hand alone that a dragged control was picked up, locked onto a target, let go of it,
+ * landed, or was removed.
+ */
+enum class FeedbackHaptic { Tick, Lookup, Confirm, Grab, Snap, Unsnap, Land, Remove }
 
 /**
  * The two answers' own touch: the one cue in the app a reader feels rather than reads. A waveform
@@ -90,6 +95,37 @@ class Feedback internal constructor(
                 FeedbackHaptic.Tick -> HapticFeedbackConstants.CONTEXT_CLICK
                 FeedbackHaptic.Lookup -> HapticFeedbackConstants.CLOCK_TICK
                 FeedbackHaptic.Confirm -> HapticFeedbackConstants.LONG_PRESS
+                // The drag constants are API 34; older phones get the nearest plain tick.
+                FeedbackHaptic.Grab ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        HapticFeedbackConstants.DRAG_START
+                    } else {
+                        HapticFeedbackConstants.CLOCK_TICK
+                    }
+                FeedbackHaptic.Snap ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
+                    } else {
+                        HapticFeedbackConstants.CONTEXT_CLICK
+                    }
+                FeedbackHaptic.Unsnap ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE
+                    } else {
+                        HapticFeedbackConstants.CLOCK_TICK
+                    }
+                FeedbackHaptic.Land ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        HapticFeedbackConstants.GESTURE_END
+                    } else {
+                        HapticFeedbackConstants.CLOCK_TICK
+                    }
+                FeedbackHaptic.Remove ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        HapticFeedbackConstants.CONFIRM
+                    } else {
+                        HapticFeedbackConstants.LONG_PRESS
+                    }
             }
         )
     }

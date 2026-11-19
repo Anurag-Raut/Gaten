@@ -34,9 +34,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box as LayoutBox
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -188,6 +201,11 @@ fun LookupOverlay(
      * focus loss belongs to this session's IME rather than to another app.
      */
     onTextEntryActive: (Boolean) -> Unit,
+    /**
+     * Whether to draw the overlay's own close chip. False when the lookup was started from the
+     * floating button, which then stays above the overlay as the close control in its place.
+     */
+    showCloseButton: Boolean = true,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -730,6 +748,33 @@ fun LookupOverlay(
                 )
             }
 
+            // The way out that needs no Back button, for a lookup the floating button did not start
+            // (that one keeps the button itself up as its close): a round close disk at the bottom
+            // centre, just above the navigation bar — where a thumb already is, and where readers
+            // look for a floating close. Only its own disk takes touches, so a lasso started
+            // anywhere else, or one drawn across it, behaves exactly as before. Gone while a result
+            // is up — the sheet has its own close, and its surface takes every touch while attached.
+            AnimatedVisibility(
+                visible = showCloseButton && phase != Phase.Result && !closing,
+                enter = fadeIn(tween(Motion.SHORT, easing = Motion.emphasized)),
+                exit = fadeOut(tween(Motion.SHORT, easing = Motion.emphasized)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(
+                        WindowInsets.navigationBarsIgnoringVisibility
+                            .union(WindowInsets.displayCutout)
+                            .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                    )
+                    .padding(bottom = Spacing.xxl)
+            ) {
+                OverlayCloseButton(
+                    onClick = {
+                        feedback.haptic(FeedbackHaptic.Tick)
+                        close()
+                    }
+                )
+            }
+
             // The sheet body itself is React Native. One surface per displayed result session is
             // mounted on the application's shared React host and driven by published state; the
             // native overlay keeps the frozen frame, the lasso, the rail and the accessibility
@@ -754,3 +799,45 @@ fun LookupOverlay(
         }
     }
 }
+
+/**
+ * The overlay's close disk: the floating button's own size and shadow, in the theme's paper with the
+ * rail's hairline and a ✕ in the theme's red ink, so it reads over any frozen frame without
+ * borrowing an accent. Only its own circle takes touches; everything around it still belongs to
+ * the lasso.
+ */
+@Composable
+private fun OverlayCloseButton(onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val label = stringResource(R.string.lookup_close)
+    LayoutBox(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(CloseTouchTarget)
+            .clip(CircleShape)
+            .semantics { role = Role.Button }
+            .clickable(onClickLabel = label, onClick = onClick)
+    ) {
+        LayoutBox(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(CloseDiskSize)
+                .shadow(6.dp, CircleShape)
+                .background(colors.surface, CircleShape)
+                .border(1.dp, colors.outlineVariant, CircleShape)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = label,
+                // The theme's red ink on its own paper: a close, written the way the theme
+                // writes errors and destructive actions, never a filled accent.
+                tint = colors.error,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+/** The close chip's touch target and its visible disk. */
+private val CloseTouchTarget = 56.dp
+private val CloseDiskSize = 48.dp
