@@ -37,8 +37,8 @@ class WaniKaniDecodeTest {
         assertNull(kanji.components.single().character)
         assertNull(kanji.components.single().name)
         assertEquals("https://www.wanikani.com/kanji/%E4%B8%80", kanji.documentUrl)
-        assertEquals("The ground holds a single One stroke.", kanji.meaningMnemonic)
-        assertEquals("Say specimen (いち) next to the One.", kanji.readingMnemonic)
+        assertEquals("The ground holds a single One stroke.", plainWaniKaniText(kanji.meaningMnemonic))
+        assertEquals("Say specimen (いち) next to the One.", plainWaniKaniText(kanji.readingMnemonic))
     }
 
     @Test
@@ -197,6 +197,12 @@ class WaniKaniDecodeTest {
         assertEquals("🍣", plainWaniKaniText("&#127843;"))
         assertEquals("&bogus;", plainWaniKaniText("&bogus;"))
         assertEquals("plain", plainWaniKaniText("plain"))
+        assertEquals("ground", plainWaniKaniText(markedWaniKaniText("<radical>ground</radical>")))
+        assertEquals(
+            "a ${MARK_OPEN}kanji${MARK_SEP}One${MARK_CLOSE} b",
+            markedWaniKaniText("a <kanji>One</kanji> b")
+        )
+        assertEquals("x", markedWaniKaniText("<b>x</b>\uE000"))
         assertEquals("", plainWaniKaniText(""))
         // A tag with content that would be dangerous in a renderer keeps only its words.
         assertEquals("alert(1)", plainWaniKaniText("<script>alert(1)</script>"))

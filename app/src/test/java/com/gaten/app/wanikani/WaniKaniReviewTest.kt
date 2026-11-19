@@ -92,8 +92,8 @@ class WaniKaniReviewTest {
         assertEquals(27, item.level)
         // The mnemonics are the plain text the details render: WaniKani's markup is stripped, not
         // shown, exactly as the lesson decoder already does.
-        assertEquals("A single ground stroke.", item.meaningMnemonic)
-        assertEquals("It is read いち.", item.readingMnemonic)
+        assertEquals("A single ground stroke.", plainWaniKaniText(item.meaningMnemonic))
+        assertEquals("It is read いち.", plainWaniKaniText(item.readingMnemonic))
         assertEquals(listOf(WaniKaniContextSentence("靴屋", "shoe store")), item.contextSentences)
     }
 

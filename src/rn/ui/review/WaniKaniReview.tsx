@@ -57,6 +57,7 @@ import {RadicalDrawing} from "./WaniKaniRadical";
 import {WANIKANI_FAILURE_LABELS} from "./wanikani-labels";
 import {romajiToHiragana} from "./wanikani-romaji";
 import {reviewCue} from "./wanikani-cue";
+import {MnemonicText} from "../reference/ReferenceText";
 import {useJudgedAnswer} from "./useJudgedAnswer";
 import type {WaniKaniReviewItem} from "../../native/GatenWaniKani";
 import type {WaniKaniSession} from "./review-store";
@@ -79,7 +80,7 @@ function ReviewDetails({item, tab}: {item: WaniKaniReviewItem; tab: DetailTab}) 
             <Text style={[styles.detailLabel, styles.detailLabelSpaced, {color: colors.onSurfaceVariant}]}>
               Mnemonic
             </Text>
-            <Text style={[styles.detailText, {color: colors.onSurface}]}>{item.readingMnemonic}</Text>
+            <MnemonicText style={[styles.detailText, {color: colors.onSurface}]}>{item.readingMnemonic}</MnemonicText>
           </>
         )}
       </View>
@@ -120,7 +121,7 @@ function ReviewDetails({item, tab}: {item: WaniKaniReviewItem; tab: DetailTab}) 
           <Text style={[styles.detailLabel, styles.detailLabelSpaced, {color: colors.onSurfaceVariant}]}>
             Mnemonic
           </Text>
-          <Text style={[styles.detailText, {color: colors.onSurface}]}>{item.meaningMnemonic}</Text>
+          <MnemonicText style={[styles.detailText, {color: colors.onSurface}]}>{item.meaningMnemonic}</MnemonicText>
         </>
       )}
     </View>

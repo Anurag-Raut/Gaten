@@ -51,8 +51,8 @@ class WaniKaniLessonTest {
         assertEquals(listOf("いち"), item.readings)
         assertEquals("いち", item.primaryReading)
         // The mnemonics are plain text: WaniKani's own markup is stripped.
-        assertEquals("A single ground stroke.", item.meaningMnemonic)
-        assertEquals("It is read いち.", item.readingMnemonic)
+        assertEquals("A single ground stroke.", plainWaniKaniText(item.meaningMnemonic))
+        assertEquals("It is read いち.", plainWaniKaniText(item.readingMnemonic))
         assertEquals(listOf(WaniKaniComponent(440, null, null)), item.components)
         assertEquals(listOf(WaniKaniContextSentence("一", "one")), item.contextSentences)
         assertEquals("https://www.wanikani.com/vocabulary/%E4%B8%80", item.documentUrl)
