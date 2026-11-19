@@ -17,6 +17,7 @@ import React from "react";
 import { Text, View, type StyleProp, type TextStyle } from "react-native";
 import { PressableScale } from "../PressableScale";
 import { useTheme } from "../theme";
+import { parseMnemonic, type MnemonicKind } from "./mnemonic-markup";
 import { KANJI_LETTERING, shape, spacing, typeScale } from "../tokens";
 
 /** A titled block: the caption and whatever it introduces, spaced from what is above it. */
@@ -62,6 +63,48 @@ export function ReferenceValue({
   );
 }
 
+/**
+ * WaniKani's highlight colours, as its own site shows them: radicals blue, kanji pink, vocabulary
+ * purple, readings a quiet grey chip. Light mode uses the deeper tone so the word stays legible.
+ */
+const HIGHLIGHT: Record<MnemonicKind, { dark: string; light: string } | null> = {
+  radical: { dark: "#4CC3FF", light: "#0077B8" },
+  kanji: { dark: "#FF5CC8", light: "#C2007F" },
+  vocabulary: { dark: "#C77DFF", light: "#8A1FD6" },
+  reading: { dark: "#E6E6EA", light: "#3A3A42" },
+  ja: null,
+};
+
+/**
+ * Mnemonic prose with the words WaniKani highlights coloured on a soft tint of the same hue. Plain
+ * text with no markers renders as ordinary text.
+ */
+export function MnemonicText({
+  children,
+  style,
+  selectable,
+}: {
+  children: string;
+  style?: StyleProp<TextStyle>;
+  selectable?: boolean;
+}) {
+  const { dark } = useTheme();
+  return (
+    <Text selectable={selectable} style={style}>
+      {parseMnemonic(children).map((piece, index) => {
+        const tone = piece.kind == null ? null : HIGHLIGHT[piece.kind];
+        if (tone == null) return piece.text;
+        const color = dark ? tone.dark : tone.light;
+        return (
+          <Text key={index} style={{ color, backgroundColor: color + "26" }}>
+            {piece.text}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
 /** The prose under a value: a mnemonic, a story, WaniKani's explanation. */
 export function ReferenceBody({
   children,
@@ -71,14 +114,19 @@ export function ReferenceBody({
   selectable?: boolean;
 }) {
   const { colors } = useTheme();
+  const style = [
+    typeScale.bodyMedium,
+    { color: colors.onSurfaceVariant, marginTop: spacing.m },
+  ];
+  if (typeof children === "string") {
+    return (
+      <MnemonicText selectable={selectable} style={style}>
+        {children}
+      </MnemonicText>
+    );
+  }
   return (
-    <Text
-      selectable={selectable}
-      style={[
-        typeScale.bodyMedium,
-        { color: colors.onSurfaceVariant, marginTop: spacing.m },
-      ]}
-    >
+    <Text selectable={selectable} style={style}>
       {children}
     </Text>
   );

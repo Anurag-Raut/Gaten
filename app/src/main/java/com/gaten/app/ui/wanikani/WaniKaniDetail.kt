@@ -73,6 +73,7 @@ import com.gaten.app.ui.lookup.RailTone
 import com.gaten.app.ui.lookup.SheetType
 import com.gaten.app.ui.theme.Motion
 import com.gaten.app.ui.theme.Spacing
+import com.gaten.app.wanikani.plainWaniKaniText
 import com.gaten.app.wanikani.WaniKaniComponent
 import com.gaten.app.wanikani.WaniKaniFailure
 import com.gaten.app.wanikani.WaniKaniLookup
@@ -557,7 +558,7 @@ private fun Mnemonic(@StringRes label: Int, text: String, type: SheetType) {
     Caption(stringResource(label), type)
     SelectionContainer {
         Text(
-            text = text,
+            text = plainWaniKaniText(text),
             style = type.gloss,
             color = MaterialTheme.colorScheme.onSurface
         )

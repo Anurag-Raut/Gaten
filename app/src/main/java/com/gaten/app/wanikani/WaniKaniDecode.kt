@@ -144,8 +144,8 @@ private fun decodeReviewSubject(resource: JSONObject): WaniKaniReviewItem? {
         readings = readings,
         primaryReading = readings.firstOrNull(),
         level = data.optInt("level", 0),
-        meaningMnemonic = plainWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
-        readingMnemonic = plainWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
+        meaningMnemonic = markedWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
+        readingMnemonic = markedWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
         contextSentences = decodeContextSentences(data.optJSONArray("context_sentences"))
     )
 }
@@ -307,8 +307,8 @@ internal fun decodeLessonSubject(resource: JSONObject, assignmentId: Int): WaniK
         primaryMeaning = accepted.first(),
         readings = readings,
         primaryReading = readings.firstOrNull(),
-        readingMnemonic = plainWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
-        meaningMnemonic = plainWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
+        readingMnemonic = markedWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
+        meaningMnemonic = markedWaniKaniText(data.optionalText("meaning_mnemonic") ?: ""),
         components = decodeIds(data.optJSONArray("component_subject_ids"))
             .map { WaniKaniComponent(it, null, null) },
         contextSentences = decodeContextSentences(data.optJSONArray("context_sentences")),
@@ -411,8 +411,32 @@ internal fun plainWaniKaniText(text: String): String {
     if (text.isEmpty()) return text
     val withoutTags = if ('<' in text) MARKUP.replace(text, "") else text
     val plain = if ('&' in withoutTags) ENTITY.replace(withoutTags) { decodeEntity(it.groupValues[1]) } else withoutTags
+    return MARK_STRIP.replace(plain, "").trim()
+}
+
+/**
+ * Like [plainWaniKaniText], but the words WaniKani highlights keep a marker so a screen can colour
+ * them as its site does: `<radical>`, `<kanji>`, `<vocabulary>`, `<reading>` and `<ja>` become
+ * `MARK_OPEN kind MARK_SEP words MARK_CLOSE`, using three private-use characters. Every other tag is
+ * dropped and the entities are decoded; any private-use character already in the remote text is
+ * removed first, so a marker can only come from here. [plainWaniKaniText] strips the markers again.
+ */
+internal fun markedWaniKaniText(text: String): String {
+    if (text.isEmpty()) return text
+    val clean = MARK_CHARS.replace(text, "")
+    val marked = HIGHLIGHT.replace(clean) { "$MARK_OPEN${it.groupValues[1]}$MARK_SEP${it.groupValues[2]}$MARK_CLOSE" }
+    val withoutTags = if ('<' in marked) MARKUP.replace(marked, "") else marked
+    val plain = if ('&' in withoutTags) ENTITY.replace(withoutTags) { decodeEntity(it.groupValues[1]) } else withoutTags
     return plain.trim()
 }
+
+internal const val MARK_OPEN = '\uE000'
+internal const val MARK_SEP = '\uE001'
+internal const val MARK_CLOSE = '\uE002'
+private val MARK_CHARS = Regex("[\uE000-\uE002]")
+/** A marker with the kind word it carries, or a stray marker character: nothing a reader should see. */
+private val MARK_STRIP = Regex("\uE000[a-z]*\uE001|[\uE000-\uE002]")
+private val HIGHLIGHT = Regex("<(radical|kanji|vocabulary|reading|ja)>(.*?)</\\1>", RegexOption.DOT_MATCHES_ALL)
 
 private fun jsonObject(text: String): JSONObject? = try {
     JSONObject(text)
@@ -436,7 +460,7 @@ private fun decodeSubject(resource: JSONObject): DecodedSubject? {
 
     val level = data.optInt("level", 0)
     val documentUrl = decodeDocumentUrl(data.optionalText("document_url"))
-    val meaningMnemonic = plainWaniKaniText(data.optionalText("meaning_mnemonic") ?: "")
+    val meaningMnemonic = markedWaniKaniText(data.optionalText("meaning_mnemonic") ?: "")
     val subject = if (kind == "kanji") {
         val character = characters ?: return null
         WaniKaniSubject.Kanji(
@@ -452,7 +476,7 @@ private fun decodeSubject(resource: JSONObject): DecodedSubject? {
             meanings = meanings,
             primaryMeaning = primaryMeaning,
             meaningMnemonic = meaningMnemonic,
-            readingMnemonic = plainWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
+            readingMnemonic = markedWaniKaniText(data.optionalText("reading_mnemonic") ?: ""),
             documentUrl = documentUrl
         )
     } else {
