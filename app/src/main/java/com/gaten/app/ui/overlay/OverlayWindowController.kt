@@ -129,7 +129,13 @@ class OverlayWindowController(
      * and again before the media is paused: the capture may have been taken while the screen was
      * still on and resolved only after the screen went off or the phone locked.
      */
-    fun show(bitmap: Bitmap, token: Long, admission: () -> Boolean): Boolean {
+    fun show(
+        bitmap: Bitmap,
+        token: Long,
+        /** Whether the overlay draws its own close chip: false when the floating button is the close. */
+        showCloseButton: Boolean = true,
+        admission: () -> Boolean
+    ): Boolean {
         hide()
         if (!admission()) {
             Log.d(TAG, "Screen off or locked - not showing the captured overlay")
@@ -268,7 +274,7 @@ class OverlayWindowController(
             // Scheduled first: composing the lookup UI below blocks this thread for a while.
             mediaPauser.pause(PauseAfterFreezeMs)
             root.addView(
-                lookupView(bitmap, mapping, current.scan),
+                lookupView(bitmap, mapping, current.scan, showCloseButton),
                 FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
             )
         }
@@ -285,7 +291,8 @@ class OverlayWindowController(
     private fun lookupView(
         bitmap: Bitmap,
         mapping: ViewMapping,
-        scan: Deferred<ScreenText?>
+        scan: Deferred<ScreenText?>,
+        showCloseButton: Boolean
     ) = ComposeView(context).apply {
         setContent {
             GatenTheme(
@@ -302,6 +309,7 @@ class OverlayWindowController(
                         mapping = mapping,
                         earlyScan = scan,
                         onTextEntryActive = ::setTextEntryActive,
+                        showCloseButton = showCloseButton,
                         onDismiss = ::hide
                     )
                 }

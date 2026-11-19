@@ -128,6 +128,14 @@ class GatenAccessibilityService : AccessibilityService() {
     }
     private var capturePackage: String? = null
 
+    /**
+     * True while the capture in flight — and then the overlay drawn from it — was started from the
+     * floating button. That lookup keeps the button up above the frozen frame as its close control,
+     * in the same place the reader just tapped; a lookup started any other way shows its own close
+     * chip instead.
+     */
+    private var lookupFromBubble = false
+
     private val powerManager by lazy { getSystemService(PowerManager::class.java) }
     private val keyguardManager by lazy { getSystemService(KeyguardManager::class.java) }
     private val displayManager by lazy { getSystemService(DisplayManager::class.java) }
@@ -180,6 +188,7 @@ class GatenAccessibilityService : AccessibilityService() {
             // so the next trigger is accepted, and the button comes back where the state allows.
             onHidden = { token ->
                 captureToken.complete(token)
+                lookupFromBubble = false
                 BitmapRepository.clear()
                 overlayGeometry = null
                 syncFloatingButton()
@@ -455,6 +464,7 @@ class GatenAccessibilityService : AccessibilityService() {
     /** Invalidates capture callbacks and closes without resuming playback or retaining the frame. */
     private fun cancelLookup() {
         captureToken.abort()
+        lookupFromBubble = false
         pendingGeometry = null
         overlayGeometry = null
         capturePackage = null
@@ -496,20 +506,28 @@ class GatenAccessibilityService : AccessibilityService() {
     fun syncFloatingButton() {
         // Before onServiceConnected there is no window token: adding the button now would throw
         // BadTokenException, so the attempt is deferred to that callback.
-        if (!serviceConnected || !admissionAllowed() || overlay.isShowing || captureToken.busy) {
+        // Over a lookup the bubble started, it stays up as that lookup's close control; any other
+        // overlay, and a capture still on its way to the screen, keep it down.
+        val closeMode = overlay.isShowing && lookupFromBubble
+        if (!serviceConnected || !admissionAllowed() ||
+            (overlay.isShowing && !closeMode) || (captureToken.busy && !overlay.isShowing)
+        ) {
             floatingButton?.hide()
             return
         }
         if (TriggerPreferences.floatingButtonEnabled(this)) {
+            floatingButton?.setCloseMode(closeMode)
             if (floatingButton?.isShowing == true) return
             val button = floatingButton
                 ?: FloatingTriggerButton(
                     context = this,
-                    onTrigger = { triggerCapture() },
+                    // A tap while a lookup is up closes it: triggerCapture toggles.
+                    onTrigger = { triggerCapture(fromBubble = true) },
                     // The remove button writes the preference off itself; this is only the bridge
                     // announcement, so an open Screen lookup page re-reads its switch.
                     onDismissed = { GatenBridgeEmitter.emitFloatingButtonChanged() }
                 ).also { floatingButton = it }
+            button.setCloseMode(closeMode)
             try {
                 button.show()
             } catch (e: Exception) {
@@ -653,7 +671,10 @@ class GatenAccessibilityService : AccessibilityService() {
             finishCapture(token)
             return
         }
-        if (!overlay.show(bitmap, token) { captureToken.isCurrent(token) && admissionAllowed() }) {
+        if (!overlay.show(bitmap, token, showCloseButton = !lookupFromBubble) {
+                captureToken.isCurrent(token) && admissionAllowed()
+            }
+        ) {
             // The window could not be added; the capture is over and the button comes back.
             BitmapRepository.clear()
             finishCapture(token)
@@ -664,7 +685,9 @@ class GatenAccessibilityService : AccessibilityService() {
         BitmapRepository.setScreenshot(bitmap)
         overlayGeometry = geometryOf(resources.configuration)
         pendingGeometry = null
-        floatingButton?.hide()
+        // Now that the frozen frame is taken, a bubble-started lookup gets its bubble back — above
+        // the overlay, as the close control; every other lookup keeps it down.
+        syncFloatingButton()
     }
 
     /** Screen dimensions and actual rotation, including half-turns without a configuration change. */
@@ -801,7 +824,7 @@ class GatenAccessibilityService : AccessibilityService() {
          * the keyguard is locked — is refused: the capture would only be frozen for a screen the
          * user is not there to see.
          */
-        fun triggerCapture(fromShade: Boolean = false) {
+        fun triggerCapture(fromShade: Boolean = false, fromBubble: Boolean = false) {
             val service = instance
             if (service == null) {
                 Log.d(TAG, "triggerCapture called but the accessibility service is not connected")
@@ -832,6 +855,7 @@ class GatenAccessibilityService : AccessibilityService() {
                 // step is checked against, so a trigger that is overtaken is dropped, not shown.
                 val token = service.captureToken.start()
                 service.capturePackage = service.foregroundPackage
+                service.lookupFromBubble = fromBubble
                 // A capture is only valid for the display it was accepted on: a rotation before the
                 // screenshot lands drops it rather than freezing the wrong screen.
                 service.pendingGeometry = service.geometryOf(service.resources.configuration)
