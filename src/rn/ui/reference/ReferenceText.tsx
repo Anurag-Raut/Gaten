@@ -14,7 +14,7 @@
  * `typeScale`, never from numbers here.
  */
 import React from "react";
-import { Text, View, type StyleProp, type TextStyle } from "react-native";
+import { StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { PressableScale } from "../PressableScale";
 import { useTheme } from "../theme";
 import { parseMnemonic, type MnemonicKind } from "./mnemonic-markup";
@@ -76,8 +76,10 @@ const HIGHLIGHT: Record<MnemonicKind, { dark: string; light: string } | null> = 
 };
 
 /**
- * Mnemonic prose with the words WaniKani highlights coloured on a soft tint of the same hue. Plain
- * text with no markers renders as ordinary text.
+ * Mnemonic prose with the words WaniKani highlights set in a small rounded chip of the same hue on a
+ * soft tint. A nested Text span cannot take padding or corners on Android, so each highlight is an
+ * inline View carrying its own Text in the paragraph's lettering. Plain text with no markers renders
+ * as ordinary text.
  */
 export function MnemonicText({
   children,
@@ -89,6 +91,12 @@ export function MnemonicText({
   selectable?: boolean;
 }) {
   const { dark } = useTheme();
+  // The chip's Text does not inherit from the paragraph (it sits inside a View), so it is handed the
+  // paragraph's lettering explicitly, without the paragraph's own margins.
+  const {
+    margin, marginTop, marginBottom, marginVertical, marginHorizontal, marginLeft, marginRight,
+    ...lettering
+  } = StyleSheet.flatten(style) ?? {};
   return (
     <Text selectable={selectable} style={style}>
       {parseMnemonic(children).map((piece, index) => {
@@ -96,14 +104,28 @@ export function MnemonicText({
         if (tone == null) return piece.text;
         const color = dark ? tone.dark : tone.light;
         return (
-          <Text key={index} style={{ color, backgroundColor: color + "26" }}>
-            {piece.text}
-          </Text>
+          <View
+            key={index}
+            style={{
+              backgroundColor: color + "24",
+              borderRadius: MNEMONIC_CHIP_RADIUS,
+              paddingHorizontal: 5,
+              transform: [{ translateY: MNEMONIC_CHIP_NUDGE }],
+            }}
+          >
+            <Text style={[lettering, { color }]}>{piece.text}</Text>
+          </View>
         );
       })}
     </Text>
   );
 }
+
+/** Android sets an inline view's bottom on the text baseline; this drops it back onto the line box. */
+const MNEMONIC_CHIP_NUDGE = 5;
+
+/** A highlight chip's corners: rounder than a hard box, well short of a pill. */
+const MNEMONIC_CHIP_RADIUS = 6;
 
 /** The prose under a value: a mnemonic, a story, WaniKani's explanation. */
 export function ReferenceBody({

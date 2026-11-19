@@ -52,6 +52,7 @@ import {lessonJudgement} from "./wanikani-cue";
 import {useJudgedAnswer} from "./useJudgedAnswer";
 import {atTeachStart, lessonStepsOf, teachForward, type LessonStep} from "./wanikani-lesson-steps";
 import {revealEntering} from "../reference/reveal";
+import {ReferenceMeanings} from "../reference/ReferenceMeanings";
 import {
   ReferenceBody,
   ReferenceExample,
@@ -123,7 +124,7 @@ function TeachingStep({item, step}: {item: WaniKaniLessonItem; step: LessonStep}
     case "meaning":
       return (
         <ReferenceSection title="Meaning">
-          <ReferenceValue>{item.meanings.join(", ")}</ReferenceValue>
+          <ReferenceMeanings meanings={item.meanings} />
           {item.meaningMnemonic !== "" && <ReferenceBody>{item.meaningMnemonic}</ReferenceBody>}
         </ReferenceSection>
       );

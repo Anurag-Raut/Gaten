@@ -33,6 +33,7 @@ import type {
 } from "../../native/GatenWaniKani";
 import {Button, Icon, IconButton} from "../components";
 import {ReferenceBody, ReferenceSection, ReferenceTile, ReferenceValue} from "../reference/ReferenceText";
+import {ReferenceMeanings} from "../reference/ReferenceMeanings";
 import {useTheme} from "../theme";
 import {
   CONTENT_COLUMN,
@@ -376,7 +377,7 @@ function AvailableContent({
       )}
       {subject != null && (
         <ReferenceSection title="Meaning">
-          <ReferenceValue>{[primaryMeaning, ...alternates].join(", ")}</ReferenceValue>
+          <ReferenceMeanings meanings={[primaryMeaning, ...alternates]} />
           {meaningMnemonic.trim() !== "" && (
             <ReferenceBody selectable>{meaningMnemonic}</ReferenceBody>
           )}
