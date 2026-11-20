@@ -55,7 +55,13 @@ function recognitionModeLabel(mode: RecognitionEngine): string {
   }
 }
 
-export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) => void}) {
+export function SettingsHub({
+  onOpenPage,
+  onReplayWalkthrough,
+}: {
+  onOpenPage: (page: SettingsPageName) => void;
+  onReplayWalkthrough?: () => void;
+}) {
   const theme = useTheme();
   const colors = theme.colors;
   const kanjiReference = useKanjiReferenceSource();
@@ -188,6 +194,14 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               value={theme.mode}
               onPress={() => onOpenPage("appearance")}
             />
+            {onReplayWalkthrough != null && (
+              <SettingsRow
+                icon="help"
+                title="How to use Gaten"
+                summary="Replay the quick walkthrough"
+                onPress={onReplayWalkthrough}
+              />
+            )}
             {/* Always here, whatever the popup's own dismissal state: silencing the popup must
                 never take away the way to support the project. */}
             <SettingsRow

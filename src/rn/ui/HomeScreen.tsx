@@ -30,6 +30,7 @@ import Animated, {
 } from "react-native-reanimated";
 import {Icon} from "./components";
 import {SupportPrompt} from "./support/SupportPrompt";
+import {useWalkthroughActive} from "./walkthrough/walkthrough-store";
 import {useTheme} from "./theme";
 import {BOTTOM_BAR_HEIGHT, CONTENT_COLUMN, contentInsetFor, MAX_CONTENT_WIDTH, PAGE_EASING_REANIMATED, spacing} from "./tokens";
 import {HomeDashboard} from "./home/HomeDashboard";
@@ -82,6 +83,7 @@ export function HomeScreen({
   const focused = useIsFocused();
   const home = useHomeDashboard(focused);
   const lookup = useLookupStatus(focused);
+  const walkthroughActive = useWalkthroughActive();
 
   const searchState = store.useSearchState();
   const rows = useMemo(
@@ -397,7 +399,7 @@ export function HomeScreen({
       </KeyboardAvoidingView>
       {/* Only while Home is the screen on show: the same gate that keeps it off a pushed page's
           dialogs keeps it off another tab, so it can never stack on a dialog the reader raised. */}
-      {focused && <SupportPrompt />}
+      {focused && !walkthroughActive && <SupportPrompt />}
     </View>
   );
 }

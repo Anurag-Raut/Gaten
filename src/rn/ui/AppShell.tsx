@@ -79,6 +79,13 @@ import {OnboardingFlow} from "./onboarding/OnboardingFlow";
 import {STEP_SCENE_MS} from "./onboarding/onboarding-motion";
 import {reviewStore} from "./review/review-store";
 import * as searchStore from "./search/searchStore";
+import {HomeWalkthrough} from "./walkthrough/HomeWalkthrough";
+import {SAMPLE_LOOKUP_QUERY} from "./walkthrough/walkthrough-steps";
+import {
+  consumePendingWalkthroughReplay,
+  setWalkthroughActive,
+  subscribeWalkthroughReplay,
+} from "./walkthrough/walkthrough-store";
 
 /** The Home root's props: its own stack plus the tab level above it, for the review flow's page. */
 type HomeRouteProps<RouteName extends keyof HomeStackParamList> =
@@ -557,6 +564,76 @@ export function AppShell() {
     return () => clearTimeout(timer);
   }, [handoff, setupDone, warmTabs]);
 
+  const [walkthroughVisible, setWalkthroughVisible] = useState(false);
+  const walkthroughChecked = useRef(false);
+
+  // Show the guided Home walkthrough once after first-run onboarding finishes.
+  useEffect(() => {
+    if (!setupDone || handoff || walkthroughChecked.current) {
+      return;
+    }
+    walkthroughChecked.current = true;
+    let cancelled = false;
+    void GatenAppInfo.isWalkthroughComplete()
+      .then((done) => {
+        if (!cancelled && !done) {
+          setWalkthroughVisible(true);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [handoff, setupDone]);
+
+  // Honor replay requests triggered from Settings -> "How to use Gaten".
+  useEffect(() => {
+    if (!setupDone || handoff) {
+      return;
+    }
+    const maybeReplay = () => {
+      if (consumePendingWalkthroughReplay()) {
+        searchStore.onQueryChange("");
+        searchStore.setSearchActive(false);
+        navigationRef.current?.navigate("Home");
+        setWalkthroughVisible(true);
+      }
+    };
+    maybeReplay();
+    return subscribeWalkthroughReplay(maybeReplay);
+  }, [handoff, navigationRef, setupDone]);
+
+  useEffect(() => {
+    setWalkthroughActive(walkthroughVisible);
+    return () => setWalkthroughActive(false);
+  }, [walkthroughVisible]);
+
+  const finishWalkthrough = useCallback(() => {
+    setWalkthroughVisible(false);
+    void GatenAppInfo.setWalkthroughComplete(true).catch(() => undefined);
+  }, []);
+
+  const openLookupFromWalkthrough = useCallback(() => {
+    const container = navigationRef.current;
+    if (container == null) return;
+    const root = container.getRootState();
+    const homeRoute = root?.routes.find((route) => route.name === "Home");
+    const stackKey = homeRoute?.state?.key;
+    const params = {page: "lookup" as const, instance: freshSettingsInstance()};
+    if (stackKey != null) {
+      container.dispatch({...StackActions.push("SettingsPage", params), target: stackKey});
+    } else {
+      container.navigate("Home", {screen: "SettingsPage", params, initial: false});
+    }
+  }, [navigationRef]);
+
+  const trySampleSearchFromWalkthrough = useCallback(() => {
+    navigationRef.current?.navigate("Home");
+    searchStore.setSearchActive(true);
+    searchStore.onQueryChange(SAMPLE_LOOKUP_QUERY);
+    searchStore.searchNow();
+  }, [navigationRef]);
+
   // The settings page an outside launch asked for: matched against the pages Settings itself
   // knows, a match selects the Settings tab and pushes that page — onto the Settings stack's own
   // state when it is already mounted, so a page the reader left open is stacked above rather than
@@ -849,6 +926,15 @@ export function AppShell() {
             />
           </View>
         </Animated.View>
+      )}
+      {setupDone && !handoff && (
+        <HomeWalkthrough
+          visible={walkthroughVisible}
+          onComplete={finishWalkthrough}
+          onSkip={finishWalkthrough}
+          onOpenLookupSettings={openLookupFromWalkthrough}
+          onTrySampleSearch={trySampleSearchFromWalkthrough}
+        />
       )}
     </View>
   );

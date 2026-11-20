@@ -14,6 +14,8 @@ interface GatenAppInfoNative {
   dismissSupportPrompt(permanent: boolean): Promise<void>;
   getOnboardingStep(): Promise<number>;
   setOnboardingStep(step: number): Promise<void>;
+  isWalkthroughComplete?(): Promise<boolean>;
+  setWalkthroughComplete?(complete: boolean): Promise<void>;
 }
 
 /** The support popup's own state, as the Kotlin `getSupportPromptState` map reports it. */
@@ -27,6 +29,7 @@ export interface SupportPromptState {
 }
 
 const GatenAppInfo = NativeModules.GatenAppInfo as GatenAppInfoNative;
+const nativeAppInfo = NativeModules.GatenAppInfo as GatenAppInfoNative | undefined;
 
 /** The app's own version name. */
 export function getAppVersion(): Promise<string> {
@@ -80,4 +83,21 @@ export function getOnboardingStep(): Promise<number> {
  */
 export function setOnboardingStep(step: number): Promise<void> {
   return GatenAppInfo.setOnboardingStep(step);
+}
+
+/**
+ * Whether the interactive Home walkthrough has already been completed or skipped. Resolves `true`
+ * on older native builds without this bridge method so the app stays non-blocking.
+ */
+export function isWalkthroughComplete(): Promise<boolean> {
+  const fn = nativeAppInfo?.isWalkthroughComplete;
+  if (typeof fn !== "function") return Promise.resolve(true);
+  return fn.call(nativeAppInfo);
+}
+
+/** Persists whether the interactive Home walkthrough has been completed or skipped. */
+export function setWalkthroughComplete(complete: boolean): Promise<void> {
+  const fn = nativeAppInfo?.setWalkthroughComplete;
+  if (typeof fn !== "function") return Promise.resolve();
+  return fn.call(nativeAppInfo, complete);
 }

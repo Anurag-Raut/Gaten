@@ -22,6 +22,8 @@ export interface HandoffReadiness {
   reportHomeReady: () => void;
   /** The bottom bar has laid out its visible, label-measured form. */
   reportBarReady: () => void;
+  /** True once onboarding has completed and the handoff overlay has gone, so Home owns the screen. */
+  interactive?: boolean;
 }
 
 const HandoffReadinessContext = createContext<HandoffReadiness | null>(null);

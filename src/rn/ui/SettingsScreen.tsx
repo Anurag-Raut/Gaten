@@ -11,9 +11,11 @@
  */
 import React from "react";
 import {useIsFocused, useNavigation} from "@react-navigation/native";
+import type {MaterialTopTabNavigationProp} from "@react-navigation/material-top-tabs";
 import type {NativeStackNavigationProp} from "@react-navigation/native-stack";
 import {
   openSettingsPage,
+  type RootTabParamList,
   type SettingsPageName,
   type SettingsStackParamList,
 } from "./navigation";
@@ -25,12 +27,20 @@ import {WaniKaniSettingsScreen} from "./settings/WaniKaniSettingsScreen";
 import {KanjiReferenceSettingsScreen} from "./settings/KanjiReferenceSettingsScreen";
 import {AppearanceSettingsScreen} from "./settings/AppearanceSettingsScreen";
 import {AboutScreen} from "./settings/AboutScreen";
+import {requestWalkthroughReplay} from "./walkthrough/walkthrough-store";
 
 export function SettingsTab() {
   const navigation =
     useNavigation<NativeStackNavigationProp<SettingsStackParamList, "SettingsTab">>();
+  const replayWalkthrough = () => {
+    requestWalkthroughReplay();
+    navigation.getParent<MaterialTopTabNavigationProp<RootTabParamList>>()?.navigate("Home");
+  };
   return (
-    <SettingsHub onOpenPage={(page) => openSettingsPage(navigation, page)} />
+    <SettingsHub
+      onOpenPage={(page) => openSettingsPage(navigation, page)}
+      onReplayWalkthrough={replayWalkthrough}
+    />
   );
 }
 

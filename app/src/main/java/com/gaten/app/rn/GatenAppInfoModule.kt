@@ -144,6 +144,22 @@ class GatenAppInfoModule(
         promise.resolve(null)
     }
 
+    /**
+     * Whether the reader has finished or skipped the interactive Home walkthrough. False on a
+     * fresh install so new users see the guided tour once after onboarding finishes.
+     */
+    @ReactMethod
+    fun isWalkthroughComplete(promise: Promise) {
+        promise.resolve(prefs(reactApplicationContext).getBoolean(KEY_WALKTHROUGH_COMPLETE, false))
+    }
+
+    /** Marks the interactive Home walkthrough as completed (or resets it to replay). */
+    @ReactMethod
+    fun setWalkthroughComplete(complete: Boolean, promise: Promise) {
+        prefs(reactApplicationContext).edit().putBoolean(KEY_WALKTHROUGH_COMPLETE, complete).apply()
+        promise.resolve(null)
+    }
+
     override fun invalidate() {
         scope.cancel()
     }
@@ -209,6 +225,7 @@ class GatenAppInfoModule(
         /** The app's shared settings file, and the one key this module stores. */
         private const val PREFS_NAME = "gaten_settings"
         private const val KEY_ONBOARDING_STEP = "onboarding_step"
+        private const val KEY_WALKTHROUGH_COMPLETE = "walkthrough_complete"
 
         /** The bytes of the SQLite header the schema version sits behind. */
         private const val HEADER_SIZE = 64
