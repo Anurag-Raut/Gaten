@@ -7,6 +7,7 @@ import { NativeModules } from "react-native";
 
 interface GatenAppInfoNative {
   getAppVersion(): Promise<string>;
+  getDiagnosticsInfo?(): Promise<DiagnosticsInfo>;
   getDictionarySchemaVersion(): Promise<number>;
   isLookupModeActive(): Promise<boolean>;
   getSupportPromptState(): Promise<SupportPromptState>;
@@ -14,6 +15,16 @@ interface GatenAppInfoNative {
   dismissSupportPrompt(permanent: boolean): Promise<void>;
   getOnboardingStep(): Promise<number>;
   setOnboardingStep(step: number): Promise<void>;
+}
+
+/** Non-PII app and device details formatted into user-initiated bug reports. */
+export interface DiagnosticsInfo {
+  appVersion: string;
+  versionCode: number;
+  androidRelease: string;
+  androidSdk: number;
+  manufacturer: string;
+  model: string;
 }
 
 /** The support popup's own state, as the Kotlin `getSupportPromptState` map reports it. */
@@ -27,10 +38,34 @@ export interface SupportPromptState {
 }
 
 const GatenAppInfo = NativeModules.GatenAppInfo as GatenAppInfoNative;
+const nativeAppInfo = NativeModules.GatenAppInfo as GatenAppInfoNative | undefined;
 
 /** The app's own version name. */
 export function getAppVersion(): Promise<string> {
   return GatenAppInfo.getAppVersion();
+}
+
+/**
+ * Non-PII build and device details for bug reports. Falls back gracefully on older builds or
+ * off-device test environments where `getDiagnosticsInfo` is absent.
+ */
+export async function getDiagnosticsInfo(): Promise<DiagnosticsInfo> {
+  const fn = nativeAppInfo?.getDiagnosticsInfo;
+  if (typeof fn === "function") {
+    return fn.call(nativeAppInfo);
+  }
+  const appVersion =
+    typeof nativeAppInfo?.getAppVersion === "function"
+      ? await nativeAppInfo.getAppVersion().catch(() => "")
+      : "";
+  return {
+    appVersion,
+    versionCode: 0,
+    androidRelease: "",
+    androidSdk: 0,
+    manufacturer: "",
+    model: "",
+  };
 }
 
 /** The dictionary schema the bundled database was built for (`PRAGMA user_version`). */

@@ -8,6 +8,7 @@ package com.gaten.app.rn
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
@@ -61,6 +62,39 @@ class GatenAppInfoModule(
             promise.resolve(info.versionName.orEmpty())
         } catch (e: Exception) {
             promise.reject(CODE_VERSION, "Could not read the app version", e)
+        }
+    }
+
+    /**
+     * Non-PII build and device facts for bug reports: app version/code, Android release/SDK, and
+     * hardware manufacturer/model. Never transmitted automatically — only formatted when the user
+     * chooses to open or copy a feedback report.
+     */
+    @ReactMethod
+    fun getDiagnosticsInfo(promise: Promise) {
+        try {
+            val info = reactApplicationContext.packageManager.getPackageInfo(
+                reactApplicationContext.packageName,
+                0
+            )
+            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                info.versionCode.toLong()
+            }
+            promise.resolve(
+                Arguments.createMap().apply {
+                    putString("appVersion", info.versionName.orEmpty())
+                    putDouble("versionCode", versionCode.toDouble())
+                    putString("androidRelease", Build.VERSION.RELEASE.orEmpty())
+                    putInt("androidSdk", Build.VERSION.SDK_INT)
+                    putString("manufacturer", Build.MANUFACTURER.orEmpty())
+                    putString("model", Build.MODEL.orEmpty())
+                }
+            )
+        } catch (e: Exception) {
+            promise.reject(CODE_VERSION, "Could not read diagnostics info", e)
         }
     }
 
