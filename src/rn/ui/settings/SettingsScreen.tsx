@@ -27,6 +27,7 @@ import type {SettingsPageName} from "../navigation";
 import {useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme} from "../theme";
 import {TabHeading} from "../TabHeading";
+import {FeedbackSheet} from "../support/FeedbackSheet";
 import {SupportSheet} from "../support/SupportSheet";
 import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
@@ -69,6 +70,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
   const [wanikaniConnected, setWanikaniConnected] = useState(false);
   const [versionName, setVersionName] = useState("");
   const [supportOpen, setSupportOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Lookup mode is a system setting the reader grants outside Gaten, and a model or a token
   // changes inside a page, so the rows are read on every arrival — the return from one of the
@@ -188,6 +190,12 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               value={theme.mode}
               onPress={() => onOpenPage("appearance")}
             />
+            <SettingsRow
+              icon="help"
+              title="Send feedback"
+              summary="Report a bug or suggest a feature"
+              onPress={() => setFeedbackOpen(true)}
+            />
             {/* Always here, whatever the popup's own dismissal state: silencing the popup must
                 never take away the way to support the project. */}
             <SettingsRow
@@ -205,6 +213,7 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
           </SettingsGroup>
         </View>
       </ScrollView>
+      {feedbackOpen && <FeedbackSheet onDismiss={() => setFeedbackOpen(false)} />}
       {supportOpen && <SupportSheet onDismiss={() => setSupportOpen(false)} />}
     </View>
   );
