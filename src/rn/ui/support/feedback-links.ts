@@ -6,7 +6,7 @@
 
 /**
  * User-initiated feedback destinations and diagnostic formatting. Nothing is sent automatically:
- * the reader chooses whether to open a pre-filled GitHub issue or copy device info to the clipboard.
+ * the reader chooses whether to open a pre-filled GitHub issue.
  */
 import * as GatenPlatform from "../../native/GatenPlatform";
 import type {DiagnosticsInfo} from "../../native/GatenAppInfo";
@@ -14,20 +14,16 @@ import type {DiagnosticsInfo} from "../../native/GatenAppInfo";
 export const GITHUB_NEW_ISSUE_URL = "https://github.com/Anurag-Raut/Gaten/issues/new";
 
 export const FEEDBACK_OPEN_FAILED = "Couldn't open the page. Try again.";
-export const DIAGNOSTICS_COPIED = "Device info copied";
-export const DIAGNOSTICS_COPY_FAILED = "Couldn't copy device info.";
 
 export type FeedbackKind = "bug" | "feature";
 
 export interface FeedbackBridge {
   openUrl: (url: string) => Promise<boolean>;
-  copyToClipboard: (text: string) => Promise<boolean>;
   toast: (message: string) => Promise<boolean>;
 }
 
 const defaultBridge: FeedbackBridge = {
   openUrl: (url) => GatenPlatform.openUrl(url),
-  copyToClipboard: (text) => GatenPlatform.copyToClipboard(text),
   toast: (message) => GatenPlatform.toast(message),
 };
 
@@ -121,14 +117,4 @@ export async function openFeedbackDestination(
     await bridge.toast(FEEDBACK_OPEN_FAILED).catch(() => false);
   }
   return opened;
-}
-
-/** Copies the non-PII diagnostics summary to the clipboard and confirms with a toast. */
-export async function copyDiagnostics(
-  diagnostics?: DiagnosticsInfo | null,
-  bridge: FeedbackBridge = defaultBridge,
-): Promise<boolean> {
-  const copied = await bridge.copyToClipboard(formatDiagnostics(diagnostics)).catch(() => false);
-  await bridge.toast(copied ? DIAGNOSTICS_COPIED : DIAGNOSTICS_COPY_FAILED).catch(() => false);
-  return copied;
 }

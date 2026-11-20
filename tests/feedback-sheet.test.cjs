@@ -112,7 +112,6 @@ test("openFeedbackDestination opens issue URL and toasts only when opening fails
       openedUrls.push(url);
       return true;
     },
-    copyToClipboard: async () => true,
     toast: async (msg) => {
       toasts.push(msg);
       return true;
@@ -124,7 +123,6 @@ test("openFeedbackDestination opens issue URL and toasts only when opening fails
 
   const failed = await mod.openFeedbackDestination("feature", SAMPLE_INFO, {
     openUrl: async () => false,
-    copyToClipboard: async () => true,
     toast: async (msg) => {
       toasts.push(msg);
       return true;
@@ -132,41 +130,6 @@ test("openFeedbackDestination opens issue URL and toasts only when opening fails
   });
   assert.equal(failed, false);
   assert.deepEqual(toasts, [mod.FEEDBACK_OPEN_FAILED]);
-});
-
-test("copyDiagnostics copies formatted diagnostics and shows confirmation or failure toast", async () => {
-  const mod = loadTsModule("src/rn/ui/support/feedback-links.ts", {
-    "../../native/GatenPlatform": {},
-  });
-
-  const copied = [];
-  const toasts = [];
-  const ok = await mod.copyDiagnostics(SAMPLE_INFO, {
-    openUrl: async () => true,
-    copyToClipboard: async (text) => {
-      copied.push(text);
-      return true;
-    },
-    toast: async (msg) => {
-      toasts.push(msg);
-      return true;
-    },
-  });
-  assert.equal(ok, true);
-  assert.equal(copied[0], "App: Gaten 0.1.0 (12)\nAndroid: 14 (API 34)\nDevice: Google Pixel 7");
-  assert.deepEqual(toasts, [mod.DIAGNOSTICS_COPIED]);
-
-  const toastsFail = [];
-  const fail = await mod.copyDiagnostics(SAMPLE_INFO, {
-    openUrl: async () => true,
-    copyToClipboard: async () => false,
-    toast: async (msg) => {
-      toastsFail.push(msg);
-      return true;
-    },
-  });
-  assert.equal(fail, false);
-  assert.deepEqual(toastsFail, [mod.DIAGNOSTICS_COPY_FAILED]);
 });
 
 test("SettingsScreen exposes Send feedback row and FeedbackSheet", () => {

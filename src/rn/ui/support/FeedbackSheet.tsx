@@ -19,7 +19,6 @@ import {DialogShell} from "../DialogShell";
 import {useTheme} from "../theme";
 import {shape, spacing, typeScale} from "../tokens";
 import {
-  copyDiagnostics,
   diagnosticsSummaryLine,
   openFeedbackDestination,
   type FeedbackKind,
@@ -31,11 +30,9 @@ const FEEDBACK_BODY =
 export function FeedbackSheet({
   onDismiss,
   onOpenFeedback,
-  onCopyDiagnostics,
 }: {
   onDismiss: () => void;
   onOpenFeedback?: (kind: FeedbackKind, diagnostics: DiagnosticsInfo | null) => void;
-  onCopyDiagnostics?: (diagnostics: DiagnosticsInfo | null) => void;
 }) {
   const {colors} = useTheme();
   const [diagnostics, setDiagnostics] = useState<DiagnosticsInfo | null>(null);
@@ -57,14 +54,6 @@ export function FeedbackSheet({
       onOpenFeedback(kind, diagnostics);
     } else {
       void openFeedbackDestination(kind, diagnostics);
-    }
-  };
-
-  const handleCopy = () => {
-    if (onCopyDiagnostics) {
-      onCopyDiagnostics(diagnostics);
-    } else {
-      void copyDiagnostics(diagnostics);
     }
   };
 
@@ -118,13 +107,6 @@ export function FeedbackSheet({
           fullWidth
           leading={<Icon name="add" size={20} color={colors.accent} />}
           onPress={() => openDestination("feature")}
-        />
-        <Button
-          label="Copy device info"
-          variant="outlined"
-          fullWidth
-          leading={<Icon name="content_copy" size={20} color={colors.accent} />}
-          onPress={handleCopy}
         />
       </View>
     </DialogShell>
