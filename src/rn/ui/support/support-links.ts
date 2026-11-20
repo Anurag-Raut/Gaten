@@ -11,15 +11,30 @@
 import * as GatenPlatform from "../../native/GatenPlatform";
 import type {IconName} from "../icons";
 
-/** The Play listing the review action opens. */
-export const REVIEW_URL = "https://play.google.com/store/apps/details?id=com.gaten";
+/** The Play Store package id Gaten is published under. */
+export const PLAY_STORE_PACKAGE = "com.gaten";
+
+/** The Play listing the review action opens when Play Store itself is unavailable. */
+export const REVIEW_URL = `https://play.google.com/store/apps/details?id=${PLAY_STORE_PACKAGE}`;
 
 /** Said when a hand-off fails, and when a destination has not been filled in yet. */
-const OPEN_FAILED = "Couldn't open the page. Try again.";
+export const OPEN_FAILED = "Couldn't open the page. Try again.";
 
 export const SUPPORT_LINKS: ReadonlyArray<{label: string; url: string; icon: IconName}> = [
   {label: "Buy Me a Coffee", url: "https://buymeacoffee.com/anuragraut", icon: "local_cafe"},
 ];
+
+export interface ReviewBridge {
+  openPlayStoreListing: (packageName: string, fallbackUrl: string) => Promise<boolean>;
+  requestInAppReview: () => Promise<boolean>;
+  toast: (message: string) => Promise<boolean>;
+}
+
+const defaultReviewBridge: ReviewBridge = {
+  openPlayStoreListing: GatenPlatform.openPlayStoreListing,
+  requestInAppReview: GatenPlatform.requestInAppReview,
+  toast: GatenPlatform.toast,
+};
 
 /**
  * Opens one support destination. An empty url is not a broken page to fall into but the owner's own
@@ -36,4 +51,41 @@ export function openSupportLink(url: string): void {
       void GatenPlatform.toast(OPEN_FAILED);
     }
   });
+}
+
+/**
+ * Opens Gaten's Play Store page directly (`market://`, with HTTPS fallback). Used by explicit
+ * manual buttons (Settings → Rate Gaten and SupportSheet) so a deliberate tap always opens the
+ * listing rather than silently hitting Google Play's In-App Review quota.
+ */
+export async function openPlayStoreReview(bridge: ReviewBridge = defaultReviewBridge): Promise<boolean> {
+  try {
+    const opened = await bridge.openPlayStoreListing(PLAY_STORE_PACKAGE, REVIEW_URL);
+    if (!opened) {
+      void bridge.toast(OPEN_FAILED);
+    }
+    return opened;
+  } catch {
+    void bridge.toast(OPEN_FAILED);
+    return false;
+  }
+}
+
+/**
+ * Tries Google Play's native In-App Review flow first, falling back to opening the Play Store
+ * listing when Play Store / Play Services is unavailable (e.g. sideloaded APKs). Used by the
+ * proactive post-session prompt for a seamless in-app rating experience.
+ */
+export async function requestInAppOrStoreReview(
+  bridge: ReviewBridge = defaultReviewBridge,
+): Promise<boolean> {
+  try {
+    const reviewed = await bridge.requestInAppReview();
+    if (reviewed) {
+      return true;
+    }
+  } catch {
+    // Fall through to the Play Store listing.
+  }
+  return openPlayStoreReview(bridge);
 }

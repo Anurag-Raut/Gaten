@@ -17,7 +17,7 @@
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import {Button} from "../components";
-import {openSupportLink} from "./support-links";
+import {openSupportLink, requestInAppOrStoreReview} from "./support-links";
 import {consumeSupportMoment, hasSupportMoment} from "./support-moments";
 import {SupportSheet} from "./SupportSheet";
 
@@ -60,6 +60,7 @@ export function useSupportPrompt(): {
   visible: boolean;
   dismissTemporarily: () => void;
   dismissPermanently: () => void;
+  rateApp: () => void;
   openLink: (url: string) => void;
 } {
   const [visible, setVisible] = useState(false);
@@ -133,7 +134,18 @@ export function useSupportPrompt(): {
     void GatenAppInfo.dismissSupportPrompt(true);
   }, []);
 
-  return {visible, dismissTemporarily, dismissPermanently, openLink: openSupportLink};
+  /**
+   * Launches Play In-App Review (falling back to the Play Store listing) and retires the proactive
+   * prompt so a reader who already engaged with rating is not asked again.
+   */
+  const rateApp = useCallback(() => {
+    readSeq.current += 1;
+    setVisible(false);
+    void GatenAppInfo.dismissSupportPrompt(true);
+    void requestInAppOrStoreReview();
+  }, []);
+
+  return {visible, dismissTemporarily, dismissPermanently, rateApp, openLink: openSupportLink};
 }
 
 /** Thanks first, the ask second, and nothing that reads as an obligation. */
@@ -141,7 +153,7 @@ const POPUP_BODY =
   "Thanks for studying with Gaten. It’s built by one person, so a quick rating or a coffee goes a long way. No pressure at all.";
 
 export function SupportPrompt() {
-  const {visible, dismissTemporarily, dismissPermanently, openLink} = useSupportPrompt();
+  const {visible, dismissTemporarily, dismissPermanently, rateApp, openLink} = useSupportPrompt();
   if (!visible) {
     return null;
   }
@@ -150,6 +162,7 @@ export function SupportPrompt() {
       title="Enjoying Gaten?"
       body={POPUP_BODY}
       onDismiss={dismissTemporarily}
+      onRate={rateApp}
       onOpenLink={openLink}
       dismissalActions={
         <>

@@ -345,4 +345,8 @@ dependencies {
     // exist — a sideloaded APK, a device without Play — and the in-app downloader is used instead,
     // so the library ships in every build rather than only the bundle.
     implementation(libs.play.asset.delivery)
+
+    // Play In-App Review, for seamless rating from the proactive support prompt (GatenPlatformModule).
+    // Fails cleanly on sideloaded or Play-less devices, where JS falls back to the Play Store URL.
+    implementation(libs.play.review)
 }

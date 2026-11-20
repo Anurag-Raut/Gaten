@@ -28,6 +28,10 @@ wanakana = "1.1.1"
 # the (deprecated) -ktx one: the ktx extensions drag in an older play-services-basement whose
 # annotation classes R8 then reports missing.
 playAssetDelivery = "2.3.0"
+# Play In-App Review: plain artifact (not -ktx) for the same R8/play-services-basement reason as
+# Play Asset Delivery above. Used for proactive rating prompts, with a Play Store URL fallback on
+# sideloaded or Play-less devices.
+playReview = "2.0.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -51,6 +55,7 @@ androidx-lifecycle-viewmodel-navigation3 = { group = "androidx.lifecycle", name 
 kotlinx-serialization-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
 wanakana-core = { group = "dev.esnault.wanakana", name = "wanakana-core", version.ref = "wanakana" }
 play-asset-delivery = { group = "com.google.android.play", name = "asset-delivery", version.ref = "playAssetDelivery" }
+play-review = { group = "com.google.android.play", name = "review", version.ref = "playReview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

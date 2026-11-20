@@ -28,6 +28,7 @@ import {useKanjiReferenceSource} from "../kanjiReference";
 import {useTheme} from "../theme";
 import {TabHeading} from "../TabHeading";
 import {SupportSheet} from "../support/SupportSheet";
+import {openPlayStoreReview} from "../support/support-links";
 import {BOTTOM_BAR_HEIGHT, contentInsetFor, spacing} from "../tokens";
 import {CONTENT_COLUMN, SettingsGroup, SettingsRow} from "./settings-components";
 
@@ -187,6 +188,14 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
               title="Appearance"
               value={theme.mode}
               onPress={() => onOpenPage("appearance")}
+            />
+            <SettingsRow
+              icon="star"
+              title="Rate Gaten"
+              summary="Review on Google Play"
+              onPress={() => {
+                void openPlayStoreReview();
+              }}
             />
             {/* Always here, whatever the popup's own dismissal state: silencing the popup must
                 never take away the way to support the project. */}

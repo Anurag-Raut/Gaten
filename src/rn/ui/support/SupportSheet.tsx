@@ -15,7 +15,7 @@ import {Button, Icon, IconBadge} from "../components";
 import {DialogShell} from "../DialogShell";
 import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
-import {REVIEW_URL, SUPPORT_LINKS, openSupportLink} from "./support-links";
+import {SUPPORT_LINKS, openPlayStoreReview, openSupportLink} from "./support-links";
 
 /** The one line above the actions: who this is for and what helps. */
 const SUPPORT_BODY =
@@ -26,6 +26,9 @@ export function SupportSheet({
   body = SUPPORT_BODY,
   onDismiss,
   dismissalActions,
+  onRate = () => {
+    void openPlayStoreReview();
+  },
   onOpenLink = openSupportLink,
 }: {
   /** Settings keeps the default; the proactive popup passes its softer wording. */
@@ -34,6 +37,8 @@ export function SupportSheet({
   onDismiss: () => void;
   /** Replaces the pinned Close action; the popup passes its own two dismissal actions instead. */
   dismissalActions?: React.ReactNode;
+  /** Opens the rating flow; the proactive popup passes In-App Review, Settings opens the listing. */
+  onRate?: () => void;
   /** Opens a destination; the popup passes the hook's own opener, Settings leaves the default. */
   onOpenLink?: (url: string) => void;
 }) {
@@ -60,7 +65,7 @@ export function SupportSheet({
           variant="tonal"
           fullWidth
           leading={<Icon name="star" size={20} color={colors.onActionSecondary} />}
-          onPress={() => onOpenLink(REVIEW_URL)}
+          onPress={onRate}
         />
         {SUPPORT_LINKS.map((link) => (
           <Button

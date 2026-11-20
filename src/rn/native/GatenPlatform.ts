@@ -21,6 +21,16 @@ interface GatenPlatformNative {
   /** Turns Gaten's own accessibility service off; `false` when there is no instance to turn off. */
   disableAccessibilityService(): Promise<boolean>;
   openUrl(url: string): Promise<boolean>;
+  /**
+   * Opens the Play Store listing via `market://`, falling back to [fallbackUrl] when Play Store is
+   * absent. Optional so older native builds and off-device tests fall back to `openUrl`.
+   */
+  openPlayStoreListing?(packageName: string, fallbackUrl: string): Promise<boolean>;
+  /**
+   * Launches Google Play's native In-App Review sheet. Resolves `false` when Play Store is absent
+   * or the flow fails, so JS can fall back to the store listing.
+   */
+  requestInAppReview?(): Promise<boolean>;
   copyToClipboard(text: string): Promise<boolean>;
   toast(message: string): Promise<boolean>;
   /**
@@ -59,6 +69,30 @@ export function openNotificationListenerSettings(): Promise<boolean> {
 /** Opens a URL in the browser; a silent no-op resolves `false` when no browser is installed. */
 export function openUrl(url: string): Promise<boolean> {
   return GatenPlatform.openUrl(url);
+}
+
+/**
+ * Opens the app's Play Store page (`market://` with HTTPS fallback). Falls back to `openUrl` on
+ * builds without the native method.
+ */
+export function openPlayStoreListing(packageName: string, fallbackUrl: string): Promise<boolean> {
+  const open = nativePlatform?.openPlayStoreListing;
+  if (typeof open === "function") {
+    return open.call(nativePlatform, packageName, fallbackUrl);
+  }
+  return openUrl(fallbackUrl);
+}
+
+/**
+ * Requests and launches Google Play's native In-App Review sheet. Resolves `false` when the native
+ * method is absent or Play Review cannot run on this device.
+ */
+export function requestInAppReview(): Promise<boolean> {
+  const request = nativePlatform?.requestInAppReview;
+  if (typeof request !== "function") {
+    return Promise.resolve(false);
+  }
+  return request.call(nativePlatform);
 }
 
 /** True when Gaten is an enabled notification listener — the media-pause permission. */

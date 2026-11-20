@@ -26,6 +26,8 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.gaten.app.GatenAccessibilityService
 import com.gaten.app.media.hasNotificationAccess
+import com.google.android.play.core.review.ReviewManagerFactory
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The platform bits the settings pages reach for directly: the system screens the two permissions
@@ -114,6 +116,65 @@ class GatenPlatformModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun openUrl(url: String, promise: Promise) {
         startIntent(Intent(Intent.ACTION_VIEW, Uri.parse(url)), promise)
+    }
+
+    /**
+     * Opens the app's Play Store page directly via `market://`, falling back to [fallbackUrl] in
+     * the browser when Play Store is not installed on the device.
+     */
+    @ReactMethod
+    fun openPlayStoreListing(packageName: String, fallbackUrl: String, promise: Promise) {
+        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl))
+        startIntent(marketIntent, promise, fallback = webIntent)
+    }
+
+    /**
+     * Requests and launches Google Play's native In-App Review sheet. Resolves `true` when the
+     * Play flow completed (Play intentionally withholds whether the user submitted or quota hid
+     * the dialog), and `false` when Play Services/Store is unavailable or the activity left before
+     * the sheet could launch so JS can fall back to the store URL.
+     */
+    @ReactMethod
+    fun requestInAppReview(promise: Promise) {
+        val settled = AtomicBoolean(false)
+        fun resolveOnce(result: Boolean) {
+            if (settled.compareAndSet(false, true)) {
+                promise.resolve(result)
+            }
+        }
+        mainHandler.post {
+            val initialActivity = reactApplicationContext.currentActivity
+            if (initialActivity == null || initialActivity.isFinishing || initialActivity.isDestroyed) {
+                resolveOnce(false)
+                return@post
+            }
+            try {
+                val manager = ReviewManagerFactory.create(reactApplicationContext)
+                manager.requestReviewFlow().addOnCompleteListener { requestTask ->
+                    if (!requestTask.isSuccessful) {
+                        resolveOnce(false)
+                        return@addOnCompleteListener
+                    }
+                    val reviewInfo = requestTask.result
+                    val liveActivity = reactApplicationContext.currentActivity
+                    if (liveActivity == null || liveActivity.isFinishing || liveActivity.isDestroyed) {
+                        resolveOnce(false)
+                        return@addOnCompleteListener
+                    }
+                    try {
+                        manager.launchReviewFlow(liveActivity, reviewInfo)
+                            .addOnCompleteListener { launchTask ->
+                                resolveOnce(launchTask.isSuccessful)
+                            }
+                    } catch (_: Exception) {
+                        resolveOnce(false)
+                    }
+                }
+            } catch (_: Exception) {
+                resolveOnce(false)
+            }
+        }
     }
 
     /** True when Gaten is an enabled notification listener — `hasNotificationAccess`, re-read. */
