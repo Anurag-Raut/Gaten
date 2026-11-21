@@ -51,6 +51,15 @@
         <package android:name="com.ichi2.anki" />
     </queries>
 
+    <!-- MainActivity's portrait lock makes the build imply android.hardware.screen.portrait as a
+         required feature, which Play uses to hide the app from devices that do not report
+         portrait (some tablets, Chromebooks, desktop and Android XR). The lock is a layout choice,
+         not a hardware need, so the feature is declared optional: those devices can install the
+         app and show it letterboxed in a portrait window. -->
+    <uses-feature
+        android:name="android.hardware.screen.portrait"
+        android:required="false" />
+
     <application
         android:name=".MainApplication"
         android:allowBackup="true"
@@ -64,6 +73,14 @@
         android:enableOnBackInvokedCallback="false"
         android:extractNativeLibs="true"
         tools:targetApi="31">
+        <!-- Targeting SDK 36, Android 16 ignores screenOrientation on large screens
+             (smallest width >= 600dp), so tablets and unfolded foldables would rotate the app into
+             a landscape layout it does not have. This opts out of that change and keeps the
+             portrait lock there. It is only honoured while targetSdk is 36: SDK 37 removes it, and
+             by then the screens need a large-screen/landscape form. -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
         <!-- The React host's activity, with the window settings React Native expects of it.
 
              configChanges: these are handled without recreating the activity — ReactActivity hands
