@@ -66,6 +66,7 @@ import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {downloadAnkiDroid} from "../anki/anki-actions";
 import {Button, Icon, IconButton} from "../components";
+import {BusySpinner} from "../review/review-ui";
 import {DownloadBar} from "../DownloadBar";
 import {DownloadConfirmDialog} from "../DownloadConfirmDialog";
 import {reloadKanjiReferenceSource} from "../kanjiReference";
@@ -554,6 +555,7 @@ const StepActions = memo(function StepActions({
         <Button
           key="primary"
           label={visual.primary.label}
+          leading={/^Checking/.test(visual.primary.label) ? <BusySpinner size={16} /> : null}
           onPress={visual.primary.onPress}
           disabled={visual.primary.disabled || busy}
           fullWidth
@@ -2102,7 +2104,7 @@ function LookupPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
         // flow neither waits for it nor cancels it — only this row's explicit Cancel does.
         {label: "Done", onPress: () => onAdvance(nextStep(step))}
       : lookup === "checking"
-        ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
+        ? {label: "Checking", onPress: () => {}, disabled: true}
         : lookup === "failed"
           ? {label: "Try again", onPress: () => read(true)}
           : {label: "Turn on lookup mode", onPress: () => request()};
@@ -2367,7 +2369,7 @@ function AnkiPage({step, onAdvance, saveError, onRetry, report}: PageProps) {
 
   const primary: Action =
     state.kind === "checking"
-      ? {label: "Checking\u2026", onPress: () => {}, disabled: true}
+      ? {label: "Checking", onPress: () => {}, disabled: true}
       : steps.step1 === "current"
         ? notInstalled && returned
           ? {label: "Check again", onPress: () => read(true)}

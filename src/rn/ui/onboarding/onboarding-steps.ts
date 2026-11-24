@@ -254,8 +254,8 @@ export interface WaniKaniPrimary {
  * getting silence.
  */
 export function wanikaniPrimary(facts: WaniKaniPrimaryFacts): WaniKaniPrimary {
-  if (facts.connected == null) return {label: "Checking\u2026", disabled: true, intent: "none"};
-  if (facts.connecting) return {label: "Checking token\u2026", disabled: true, intent: "none"};
+  if (facts.connected == null) return {label: "Checking", disabled: true, intent: "none"};
+  if (facts.connecting) return {label: "Checking token", disabled: true, intent: "none"};
   if (facts.connected) return {label: "Done", disabled: false, intent: "advance"};
   return {
     label: facts.retry ? "Try again" : "Connect WaniKani",
@@ -345,14 +345,14 @@ export function downloadBarState(progress: DownloadProgressLike): DownloadBarSta
 
 /**
  * The one line a reader's download row shows: its phase and, once bytes arrive, the whole percent.
- * The size belongs to the button or the confirmation, not to this line — "Downloading… 42%".
+ * The size belongs to the button or the confirmation, not to this line — "Downloading 42%".
  */
 export function downloadProgressText(progress: DownloadProgressLike): string {
-  if (progress.phase === "verifying") return "Verifying…";
+  if (progress.phase === "verifying") return "Verifying";
   // Play's pack transfer reports no bytes: say it is working rather than pin a false 0%.
-  if (progress.bytesDone <= 0) return "Downloading…";
+  if (progress.bytesDone <= 0) return "Downloading";
   const percent = downloadPercent(progress);
-  return `Downloading… ${percent}%`;
+  return `Downloading ${percent}%`;
 }
 
 /**

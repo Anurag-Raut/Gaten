@@ -896,6 +896,43 @@ export function BusyRow({message}: {message: string}) {
 }
 
 /**
+ * A loading state that stands alone as status text: a small spinner beside plain words, never an
+ * ellipsis (the app font sets U+2026 mid-height instead of on the baseline). The same ring and
+ * spacing as `BusyRow`, with the text size and outer spacing the caller's line already had.
+ */
+export function LoadingLine({
+  text,
+  size = "small",
+  style,
+}: {
+  text: string;
+  size?: "small" | "medium";
+  style?: StyleProp<ViewStyle>;
+}) {
+  const {colors} = useTheme();
+  return (
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={text}
+      accessibilityLiveRegion="polite"
+      style={[styles.busyRow, style]}
+    >
+      <BusySpinner />
+      <Text
+        style={[
+          size === "medium" ? typeScale.bodyMedium : typeScale.bodySmall,
+          styles.busyText,
+          {color: colors.onSurfaceVariant},
+        ]}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/**
  * The arrival of a nested screen: 8 dp from the trailing edge, and 70% to full opacity, over the
  * design's 200 ms. It keys on the screen's own identity, so moving between two cards of one session
  * changes nothing here — the design's motion belongs to entering a screen, not to every redraw. A back

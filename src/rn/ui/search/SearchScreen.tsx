@@ -19,12 +19,12 @@ import {useTheme} from "../theme";
 import {spacing, typeScale} from "../tokens";
 
 /**
- * What every search's loading notice says. Three ASCII periods, not U+2026: IBM Plex Sans JP sets
- * the single ellipsis glyph a third of an em above the baseline, so the dots float above the line
- * the text sits on, while three periods sit on it. It lives here beside the notice the three screens
- * raise, so Home, the word detail and the lookup sheet cannot drift apart on it.
+ * What every search's loading notice says. No ellipsis of any kind: IBM Plex Sans JP sets U+2026 a
+ * third of an em above the baseline, so a loading state is a spinner beside plain words. It lives
+ * here beside the notice the three screens raise, so Home, the word detail and the lookup sheet
+ * cannot drift apart on it.
  */
-export const SEARCHING_NOTICE_TITLE = "Searching the dictionary...";
+export const SEARCHING_NOTICE_TITLE = "Searching the dictionary";
 
 /**
  * A state with no results to show: what happened, and — when something can be done — the action.

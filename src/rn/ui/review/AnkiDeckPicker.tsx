@@ -126,8 +126,8 @@ export function AnkiDeckPicker({
         : todayFailureCopy(anki.todayFailure)
       : anki.todayRefreshing
         ? anki.studiedToday != null
-          ? "Updating…"
-          : "Checking…"
+          ? "Updating"
+          : "Checking"
         : null;
 
   return (
@@ -167,7 +167,7 @@ export function AnkiDeckPicker({
                   // selection with nothing in it.
                   note:
                     busy && decks.length === 0
-                      ? "Checking…"
+                      ? "Checking"
                       : anki.studyDecks != null && anki.studyDecks.length === 0
                         ? "No study decks selected"
                         : null,
@@ -235,7 +235,7 @@ export function AnkiDeckPicker({
         )}
         {busy && decks.length > 0 && (
           <View style={styles.busy}>
-            <BusyRow message="Reading Anki…" />
+            <BusyRow message="Reading Anki" />
           </View>
         )}
       </ScrollView>

@@ -25,7 +25,7 @@
     <string name="wk_settings_connect">Save and connect</string>
     <string name="wk_settings_recheck">Recheck connection</string>
     <string name="wk_settings_disconnect">Disconnect</string>
-    <string name="wk_settings_checking">Checking…</string>
+    <string name="wk_settings_checking">Checking</string>
     <string name="wk_settings_status_none">Not connected. Kanji pages say what to do until you connect.</string>
     <string name="wk_settings_status_saved">Connected: a token is saved on this device.</string>
     <string name="wk_settings_connected">Connected. Gaten can read WaniKani&#8217;s reference content.</string>
@@ -55,7 +55,7 @@
     <string name="wk_not_saved">Not saved for offline use</string>
     <string name="wk_stale">Showing saved copy</string>
     <string name="wk_stale_support">Could not refresh WaniKani</string>
-    <string name="wk_loading">Loading WaniKani…</string>
+    <string name="wk_loading">Loading WaniKani</string>
     <string name="wk_retry">Try again</string>
     <string name="wk_open_app">Open Gaten</string>
     <string name="wk_no_entry_kanji">No WaniKani entry for %1$s</string>

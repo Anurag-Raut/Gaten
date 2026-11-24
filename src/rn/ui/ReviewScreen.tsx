@@ -83,6 +83,7 @@ import {WaniKaniReview} from "./review/WaniKaniReview";
 import {
   ActionFooter,
   BusyRow,
+  LoadingLine,
   FilledAction,
   ProgressLine,
   RatingBar,
@@ -530,7 +531,7 @@ function OpeningView({
         ]}
       >
         <BusyRow
-          message={source === "anki" ? "Opening Anki…" : "Reading WaniKani…"}
+          message={source === "anki" ? "Opening Anki" : "Reading WaniKani"}
         />
       </View>
     </View>
@@ -1144,9 +1145,7 @@ function ExampleSentences({
       <Collapsible expanded={expanded}>
         <View>
           {loading && (
-            <Text style={[typeScale.bodySmall, styles.exampleState, {color: colors.onSurfaceVariant}]}>
-              Finding examples…
-            </Text>
+            <LoadingLine text="Finding examples" style={styles.exampleState} />
           )}
           {corpus.map((example, index) => (
             <View key={index} style={[styles.exampleRow, {borderBottomColor: colors.outlineVariant}]}>

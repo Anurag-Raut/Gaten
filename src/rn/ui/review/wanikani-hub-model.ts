@@ -94,7 +94,7 @@ function summarizeBatch(session: WaniKaniLessonSession): string {
  */
 function sessionUpdate(hub: WaniKaniHubState, stale: boolean): string | null {
   if (!hub.sessionFinished) return null;
-  if (hub.refreshing) return "Updating queue…";
+  if (hub.refreshing) return "Updating queue";
   if (hub.failed || stale) return "Session finished · queue update unavailable.";
   return null;
 }

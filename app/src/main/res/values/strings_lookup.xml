@@ -9,12 +9,12 @@
 <resources>
 
     <!--
-      Lookup overlay: the status rail. One line each, one job each. "Reading screen…" is the
-      full-screen index still running; "Reading selection…" is the crop the reader just committed.
+      Lookup overlay: the status rail. One line each, one job each. "Reading screen" is the
+      full-screen index still running; "Reading selection" is the crop the reader just committed.
       The instruction names both ways in — the lasso and the tap — because the tap is invisible.
     -->
-    <string name="lookup_reading_screen">Reading screen…</string>
-    <string name="lookup_reading_selection">Reading selection…</string>
+    <string name="lookup_reading_screen">Reading screen</string>
+    <string name="lookup_reading_selection">Reading selection</string>
     <string name="lookup_hint">Circle or tap Japanese text</string>
     <!-- Shown when the index is unavailable: only the lasso can still read text by itself. -->
     <string name="lookup_circle_hint">Circle Japanese text</string>

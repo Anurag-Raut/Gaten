@@ -116,7 +116,7 @@ test('the WaniKani primary is never a dead tap: an empty token still crosses', (
   // A stored token being read, and a check in flight, are the only disabled states.
   assert.deepEqual(
     steps.wanikaniPrimary({connected: null, connecting: false, retry: false, token: ''}),
-    {label: 'Checking\u2026', disabled: true, intent: 'none'},
+    {label: 'Checking', disabled: true, intent: 'none'},
   );
   const checkingToken = steps.wanikaniPrimary({
     connected: false,
@@ -124,7 +124,7 @@ test('the WaniKani primary is never a dead tap: an empty token still crosses', (
     retry: false,
     token: 'abc',
   });
-  assert.deepEqual(checkingToken, {label: 'Checking token\u2026', disabled: true, intent: 'none'});
+  assert.deepEqual(checkingToken, {label: 'Checking token', disabled: true, intent: 'none'});
 
   // Empty field, not connected: enabled, and the press asks the reader for a token.
   for (const token of ['', '   ']) {
@@ -218,10 +218,10 @@ test('the last page finishes onboarding and other pages step forward', () => {
 test('a download line reads plainly as its phase and whole percent', () => {
   const downloading = {engine: 'medium', phase: 'downloading', bytesDone: 32_200_000, bytesTotal: 76_600_000};
   assert.equal(steps.downloadPercent(downloading), 42);
-  assert.equal(steps.downloadProgressText(downloading), 'Downloading\u2026 42%');
+  assert.equal(steps.downloadProgressText(downloading), 'Downloading 42%');
   assert.equal(
     steps.downloadProgressText({...downloading, phase: 'verifying'}),
-    'Verifying\u2026',
+    'Verifying',
   );
   assert.equal(steps.downloadPercent({...downloading, bytesTotal: 0}), 0);
   assert.equal(steps.formatMegabytes(76_600_000), '76.6 MB');
@@ -376,7 +376,7 @@ function gate(overrides) {
 
 test('a download that reports no bytes reads as working, not as a false 0%', () => {
   const quiet = {engine: 'medium', phase: 'downloading', bytesDone: 0, bytesTotal: 76_600_000};
-  assert.equal(steps.downloadProgressText(quiet), 'Downloading…');
+  assert.equal(steps.downloadProgressText(quiet), 'Downloading');
 });
 
 test('the download bar sweeps until a byte is reported, then fills from the real bytes', () => {

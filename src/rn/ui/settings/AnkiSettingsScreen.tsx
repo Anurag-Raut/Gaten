@@ -40,6 +40,7 @@ import {DialogShell} from "../DialogShell";
 import {Collapsible, DisclosureChevron} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {reviewStore} from "../review/review-store";
+import {LoadingLine} from "../review/review-ui";
 import {ScreenHeader} from "../ScreenHeader";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
@@ -208,9 +209,11 @@ export function AnkiSettingsScreen({
       <View style={{flex: 1, backgroundColor: colors.background, paddingTop: insets.top}}>
         <ScreenHeader title="Anki cards" onBack={onClose} />
         <View style={{flex: 1, padding: spacing.xl, paddingBottom: spacing.xl + insets.bottom, justifyContent: "center"}}>
-          <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>
-            {preferencesLoadFailed ? "Could not read Anki settings" : "Reading Anki settings…"}
-          </Text>
+          {preferencesLoadFailed ? (
+            <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Could not read Anki settings</Text>
+          ) : (
+            <LoadingLine text="Reading Anki settings" size="medium" />
+          )}
           {preferencesLoadFailed && (
             <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
               <Button
@@ -389,9 +392,7 @@ export function AnkiSettingsScreen({
               </View>
             )}
             {(loading || loadingFields) && (
-              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant, marginTop: spacing.s}]}>
-                Reading Anki…
-              </Text>
+              <LoadingLine text="Reading Anki" size="medium" style={{marginTop: spacing.s}} />
             )}
             {readFailed && (
               <Text style={[typeScale.bodyMedium, {color: colors.error, marginTop: spacing.s}]}>
@@ -408,9 +409,7 @@ export function AnkiSettingsScreen({
                 Allow Anki access to choose study decks.
               </Text>
             ) : loading ? (
-              <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
-                Reading Anki decks…
-              </Text>
+              <LoadingLine text="Reading Anki decks" size="medium" />
             ) : studyDecks.length === 0 ? (
               <Text style={[typeScale.bodyMedium, {color: colors.onSurfaceVariant}]}>
                 No decks are available.
