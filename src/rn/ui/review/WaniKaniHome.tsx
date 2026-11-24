@@ -19,9 +19,9 @@
  * session state as their support line.
  *
  * While the row the reader acted on is still working, that row says what is happening — Opening
- * reviews…, Opening lessons…, Refreshing — with a spinner, every row goes quiet, and the row's
+ * reviews, Opening lessons, Refreshing — with a spinner, every row goes quiet, and the row's
  * accessibility state is busy. A background re-read does not lock anything: it only adds a quiet
- * quiet "Updating…" chip, a spinner beside its words, under the heading. Today's progress stands as the
+ * quiet "Updating" chip, a spinner beside its words, under the heading. Today's progress stands as the
  * available rows' own placeholders until its first read lands.
  */
 import React, {useState} from "react";
@@ -193,8 +193,8 @@ export function WaniKaniHome({
   // row it belongs to shows the spinner and what is happening instead of its standing words.
   const pending = hub.pendingAction ?? null;
   const pendingText =
-    pending === "reviews" ? "Opening reviews…"
-    : pending === "lessons" ? "Opening lessons…"
+    pending === "reviews" ? "Opening reviews"
+    : pending === "lessons" ? "Opening lessons"
     : pending === "sync" ? "Refreshing"
     : null;
   const locked = busy || pending != null;
@@ -212,7 +212,7 @@ export function WaniKaniHome({
   const learned =
     prefs != null && !prefsFailed && datedToday && !storageFailed ? prefs.learnedToday : null;
   const hintFor = (known: boolean): string | null => {
-    if (prefs == null) return prefsFailed ? "Couldn't read your settings." : "Checking…";
+    if (prefs == null) return prefsFailed ? "Couldn't read your settings." : "Checking";
     if (storageFailed) return "Couldn't read today's activity.";
     if (!datedToday) return "Not available for today.";
     return known ? null : "Not tracked yet on this device.";
@@ -368,11 +368,11 @@ export function WaniKaniHome({
             <View
               accessibilityLiveRegion="polite"
               accessible
-              accessibilityLabel="Updating…"
+              accessibilityLabel="Updating"
               style={[styles.updatingChip, {backgroundColor: colors.surfaceVariant}]}
             >
               <BusySpinner size={12} />
-              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>Updating…</Text>
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>Updating</Text>
             </View>
           )}
           {allClear && (
