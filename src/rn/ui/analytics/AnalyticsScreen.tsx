@@ -86,6 +86,7 @@ import {
 } from "./useAnkiStats";
 import {useWaniKaniStats, type WaniKaniStatsState} from "./useWaniKaniStats";
 import * as Anki from "../../native/GatenAnki";
+import {BusySpinner} from "../review/review-ui";
 import {downloadAnkiDroid} from "../anki/anki-actions";
 import * as GatenPlatform from "../../native/GatenPlatform";
 import type {WaniKaniStatsSnapshot} from "../../native/GatenWaniKani";
@@ -357,7 +358,7 @@ function Header({busy, onRefresh}: {busy: boolean; onRefresh: () => void}) {
           onPress={onRefresh}
           style={styles.refresh}
         >
-          <Icon name="refresh" size={24} color={busy ? colors.onSurfaceVariant : colors.accent} />
+          {busy ? <BusySpinner size={22} /> : <Icon name="refresh" size={24} color={colors.accent} />}
         </PressableScale>
       </View>
     </View>

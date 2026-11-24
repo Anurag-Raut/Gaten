@@ -18,10 +18,11 @@
  * has to guess which of two places a tap will take them.
  */
 import React, {useCallback, useEffect, useRef, useState} from "react";
-import {ActivityIndicator, AppState, StyleSheet} from "react-native";
+import {AppState, StyleSheet} from "react-native";
 import * as GatenAppInfo from "../../native/GatenAppInfo";
 import {PressableScale} from "../PressableScale";
 import {useTheme} from "../theme";
+import {BusySpinner} from "../review/review-ui";
 import {LookupModeMark} from "./LookupModeArtwork";
 
 /** What the button reports: the grant's own state, never an intention. */
@@ -115,7 +116,7 @@ export function LookupStatusButton({
       style={styles.target}
     >
       {pending ? (
-        <ActivityIndicator size={SPINNER} color={colors.iconSecondary} />
+        <BusySpinner size={SPINNER} color={colors.iconSecondary} />
       ) : (
         <LookupModeMark state={state} />
       )}

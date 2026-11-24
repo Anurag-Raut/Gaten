@@ -6,7 +6,6 @@
 
 import React, {useState} from "react";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -18,6 +17,7 @@ import {Icon, StatusDot} from "../components";
 import {Collapsible} from "../Collapsible";
 import {PressableScale} from "../PressableScale";
 import {shape, spacing, typeScale} from "../tokens";
+import {BusySpinner} from "../review/review-ui";
 import type {SearchResult} from "../../native/GatenDict";
 import type {HomeDashboardData} from "./useHomeDashboard";
 import {
@@ -425,7 +425,7 @@ function ServiceCard({
           <Text numberOfLines={1} style={[typeScale.titleSmall, {color: ink}]}>{title}</Text>
           <View style={styles.serviceStatusRow}>
             {loading ? (
-              <ActivityIndicator size={12} color={colors.accent} />
+              <BusySpinner size={12} />
             ) : (
               <StatusDot
                 tone={statusTone === "connected" ? "connected" : statusTone === "error" ? "warning" : "neutral"}
@@ -530,7 +530,7 @@ function RecentLookups({
         </View>
       ) : recentLookupsStatus === "loading" ? (
         <EmptyRecent
-          icon={<ActivityIndicator size="small" color={colors.iconSecondary} />}
+          icon={<BusySpinner size={22} />}
           title="Loading recent lookups"
           message=""
         />

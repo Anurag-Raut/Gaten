@@ -12,7 +12,6 @@
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,7 +29,7 @@ import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../k
 import {useTheme, type ThemeColors} from "../theme";
 import {CONTENT_COLUMN, contentInsetFor, KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
-import {LoadingLine} from "../review/review-ui";
+import {BusySpinner, LoadingLine} from "../review/review-ui";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
@@ -751,7 +750,7 @@ export function AddToAnkiBar({
           }}
           leading={
             busy ? (
-              <ActivityIndicator size="small" color={colors.onActionPrimary} />
+              <BusySpinner size={20} color={colors.onActionPrimary} />
             ) : exportState.kind === "idle" || exportState.kind === "failed" ? (
               <Icon name="add" size={18} color={colors.onActionPrimary} />
             ) : null

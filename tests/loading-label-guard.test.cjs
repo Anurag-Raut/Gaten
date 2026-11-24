@@ -56,3 +56,18 @@ test("no Android loading string ends in an ellipsis", () => {
   }
   assert.deepEqual(offenders, []);
 });
+
+test("no loading state in the React Native UI uses the native ActivityIndicator", () => {
+  // `ActivityIndicator` is an Android ProgressBar; with animations off it draws the static refresh
+  // arrow instead of a ring. Every loading marker is the shared `BusySpinner` (or `LoadingLine`).
+  const offenders = [];
+  for (const file of walk(path.join(ROOT, "src", "rn"))) {
+    if (!/\.tsx?$/.test(file)) continue;
+    fs.readFileSync(file, "utf8").split("\n").forEach((line, index) => {
+      const code = line.trim();
+      if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) return;
+      if (/\bActivityIndicator\b/.test(line)) offenders.push(`${rel(file)}:${index + 1}: ${code}`);
+    });
+  }
+  assert.deepEqual(offenders, []);
+});

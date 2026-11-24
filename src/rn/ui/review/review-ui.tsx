@@ -25,7 +25,6 @@
  */
 import React, {useEffect, useRef} from "react";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   TextInput,
@@ -483,7 +482,7 @@ export function StudyRow({
       </View>
       <View style={styles.studyTrailing}>
         {loading ? (
-          <ActivityIndicator size="small" color={colors.accent} />
+          <BusySpinner size={20} />
         ) : complete ? (
           <SuccessCheck />
         ) : trailing != null ? (
@@ -872,6 +871,7 @@ export function BusySpinner({size, color}: {size?: number; color?: string} = {})
   return (
     <Animated.View
       pointerEvents="none"
+      accessibilityRole="progressbar"
       style={[
         styles.busySpinner,
         size != null && {width: size, height: size, borderRadius: size / 2},
