@@ -343,7 +343,7 @@ up to 340 × 148 dp, followed by **No recent searches found**. Keep this approve
 do not substitute a mascot or colored feature panel.
 
 Loading is a centred accent spinner with **Loading recent lookups** beneath it, held in an area at least 120 dp tall
-so the section keeps its place until the entries land. Failure uses a compact icon/copy row with Try again.
+so the section keeps its place until the entries land. Failure uses the same centred block (icon, message, Try again) in that area.
 Existing entries remain visible if only their refresh fails.
 
 ## 6. Analytics
