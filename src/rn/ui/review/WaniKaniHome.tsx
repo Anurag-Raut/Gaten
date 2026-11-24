@@ -19,9 +19,10 @@
  * session state as their support line.
  *
  * While the row the reader acted on is still working, that row says what is happening — Opening
- * reviews…, Opening lessons…, Refreshing — with a spinner, every row goes quiet, and the row's
+ * reviews, Opening lessons, Refreshing — with a spinner, every row goes quiet, and the row's
  * accessibility state is busy. A background re-read does not lock anything: it only adds a quiet
- * "Updating…" line under the heading.
+ * quiet "Updating" chip, a spinner beside its words, under the heading. Today's progress stands as the
+ * available rows' own placeholders until its first read lands.
  */
 import React, {useState} from "react";
 import {ScrollView, StyleSheet, Text, View, useWindowDimensions} from "react-native";
@@ -41,7 +42,7 @@ import {
 import type {WaniKaniHubState} from "./review-store";
 import type {WaniKaniLearningPreferences} from "../../native/GatenWaniKani";
 import {deriveWaniKaniHub, type HubModuleModel} from "./wanikani-hub-model";
-import {SectionCaption, StudyRow, SuccessCheck} from "./review-ui";
+import {BusySpinner, SectionCaption, StudyRow, SuccessCheck} from "./review-ui";
 import {ProviderSetupHelp} from "./provider-setup-help";
 
 /**
@@ -127,6 +128,38 @@ function HubRowSkeleton({title, minHeight}: {title: string; minHeight: number}) 
   );
 }
 
+/**
+ * Today's two figures while neither has been read yet: the same two sides, hairline and line boxes
+ * as the loaded pair (38 dp figure, 5 dp step, 17 dp caption), drawn as the available rows' own
+ * quiet placeholders so the numbers land without moving anything.
+ */
+function TodayMetricsSkeleton() {
+  const {colors} = useTheme();
+  const bar = {backgroundColor: colors.surfaceVariant};
+  return (
+    <View
+      accessible
+      accessibilityLabel="Today’s progress, loading"
+      style={styles.skeletonPair}
+    >
+      <View style={[styles.skeletonSide, styles.skeletonLeft]}>
+        <View style={[styles.skeletonFigure, bar]} />
+        <View style={[styles.skeletonCaption, bar]} />
+      </View>
+      <View
+        style={[
+          styles.skeletonSide,
+          styles.skeletonRight,
+          {borderLeftWidth: 1, borderLeftColor: colors.outlineVariant},
+        ]}
+      >
+        <View style={[styles.skeletonFigure, bar]} />
+        <View style={[styles.skeletonCaption, bar]} />
+      </View>
+    </View>
+  );
+}
+
 /** The accent strengths the day's one bar is drawn from — one hue, two weights. */
 const TODAY_INTENSITY = [1, 0.42] as const;
 
@@ -160,8 +193,8 @@ export function WaniKaniHome({
   // row it belongs to shows the spinner and what is happening instead of its standing words.
   const pending = hub.pendingAction ?? null;
   const pendingText =
-    pending === "reviews" ? "Opening reviews…"
-    : pending === "lessons" ? "Opening lessons…"
+    pending === "reviews" ? "Opening reviews"
+    : pending === "lessons" ? "Opening lessons"
     : pending === "sync" ? "Refreshing"
     : null;
   const locked = busy || pending != null;
@@ -179,7 +212,7 @@ export function WaniKaniHome({
   const learned =
     prefs != null && !prefsFailed && datedToday && !storageFailed ? prefs.learnedToday : null;
   const hintFor = (known: boolean): string | null => {
-    if (prefs == null) return prefsFailed ? "Couldn't read your settings." : "Checking…";
+    if (prefs == null) return prefsFailed ? "Couldn't read your settings." : "Checking";
     if (storageFailed) return "Couldn't read today's activity.";
     if (!datedToday) return "Not available for today.";
     return known ? null : "Not tracked yet on this device.";
@@ -212,6 +245,9 @@ export function WaniKaniHome({
   // The analytics page's one-shot entrance: the figures sweep in once, when the first of them is
   // actually known, and never replay on a refresh.
   const entrance = useAnalyticsEntrance(reviewed != null || learned != null);
+  // Nothing about today has been read yet (and no read has failed): the block is a placeholder, not
+  // a pair of dashes. Once a read lands — or fails — the real figures and their reasons take over.
+  const todayLoading = prefs == null && !prefsFailed;
   const pressFor = (model: HubModuleModel) => {
     switch (model.tap) {
       case "reviews":
@@ -329,12 +365,15 @@ export function WaniKaniHome({
             </Text>
           )}
           {pending !== "sync" && hub.refreshing && !busy && (
-            <Text
+            <View
               accessibilityLiveRegion="polite"
-              style={[styles.subtitle, styles.updating, {color: colors.onSurfaceVariant}]}
+              accessible
+              accessibilityLabel="Updating"
+              style={[styles.updatingChip, {backgroundColor: colors.surfaceVariant}]}
             >
-              Updating…
-            </Text>
+              <BusySpinner size={12} />
+              <Text style={[typeScale.bodySmall, {color: colors.onSurfaceVariant}]}>Updating</Text>
+            </View>
           )}
           {allClear && (
             <View
@@ -360,6 +399,9 @@ export function WaniKaniHome({
             />
           </View>
           <View style={styles.todayMetrics}>
+            {todayLoading ? (
+              <TodayMetricsSkeleton />
+            ) : (
             <MetricPair
               left={{
                 value: reviewed == null ? "—" : String(reviewed),
@@ -377,6 +419,7 @@ export function WaniKaniHome({
               }}
               entrance={entrance}
             />
+            )}
           </View>
           {/* The day's completed mix is one segmented bar straight under the figures; the caption
               swatches are its key, so nothing below the bar repeats a count or explains itself. */}
@@ -440,6 +483,24 @@ const styles = StyleSheet.create({
   refreshTarget: {width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center"},
   subtitle: {...typeScale.bodySmall, marginTop: spacing.s},
   updating: {marginTop: 4},
+  // The background re-read: a small quiet chip, a spinner beside its own words.
+  updatingChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: spacing.s,
+    marginTop: spacing.s,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  // Today's placeholder: the loaded pair's geometry (38 dp figure line, 5 dp step, 17 dp caption).
+  skeletonPair: {flexDirection: "row", alignItems: "flex-start"},
+  skeletonSide: {flex: 1, minWidth: 0},
+  skeletonLeft: {paddingRight: 12},
+  skeletonRight: {paddingLeft: 18},
+  skeletonFigure: {width: 36, height: 26, marginVertical: 6, borderRadius: 5},
+  skeletonCaption: {width: "70%", height: 12, marginTop: 5 + 2.5, marginBottom: 2.5, borderRadius: 5},
   // The all-clear state is one flat line, not a surface: the accent check and a quiet sentence.
   caughtUp: {flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: 22},
   caughtUpText: {...typeScale.bodySmall, flex: 1, minWidth: 0},
