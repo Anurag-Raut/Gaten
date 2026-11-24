@@ -26,6 +26,7 @@ import * as GatenPlatform from "../../native/GatenPlatform";
 import * as GatenWaniKani from "../../native/GatenWaniKani";
 import type {WaniKaniFailure} from "../../native/GatenWaniKani";
 import {Button, Icon} from "../components";
+import {BusySpinner} from "../review/review-ui";
 import {reloadKanjiReferenceSource} from "../kanjiReference";
 import {reviewStore} from "../review/review-store";
 import {ScreenHeader} from "../ScreenHeader";
@@ -284,7 +285,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
   const saving = busy || preferenceBusy;
   const connectionState =
     connected == null
-      ? "Checking connection…"
+      ? "Checking connection"
       : !isKnownConnected
         ? "Not connected"
         : answer != null && answer.status === "connected" && answer.maxLevelGranted < WANIKANI_LEVELS
@@ -453,7 +454,8 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
             the explicit text action above, so a blank field can never end a connection. */}
         <View style={{marginTop: spacing.xl}}>
           <Button
-            label={preferenceBusy ? "Saving…" : busy ? "Checking…" : "Save"}
+            leading={preferenceBusy || busy ? <BusySpinner size={16} /> : null}
+            label={preferenceBusy ? "Saving" : busy ? "Checking" : "Save"}
             disabled={saving || preferenceLoading || (preferenceLoadFailed && token.trim().length === 0)}
             fullWidth
             onPress={save}

@@ -172,7 +172,7 @@ function AnkiCard({
   const {anki} = home;
   const due = anki.dueCount;
   const completed = anki.completedToday;
-  let status = "Checking…";
+  let status = "Checking";
   let statusTone: ServiceStatusTone = "neutral";
   let count: number | null = null;
   let countLabel = "reviews due";
@@ -184,8 +184,9 @@ function AnkiCard({
 
   switch (anki.status) {
     case "connected":
-      status = anki.refreshing ? "Refreshing…" : "Connected";
+      status = anki.refreshing ? "Refreshing" : "Connected";
       statusTone = anki.refreshing ? "neutral" : "connected";
+      loading = anki.refreshing;
       action = onOpen;
       hint = "Opens Anki's decks";
       if (due != null) {
@@ -231,8 +232,8 @@ function AnkiCard({
       }
       break;
     case "loading":
-      status = "Checking…";
-      detail = "Loading reviews…";
+      status = "Checking";
+      detail = "Loading reviews";
       loading = true;
       break;
   }
@@ -266,7 +267,7 @@ function WaniKaniCard({
   onRefresh: () => void;
 }) {
   const {waniKani} = home;
-  let status = "Checking…";
+  let status = "Checking";
   let statusTone: ServiceStatusTone = "neutral";
   let count: number | null = null;
   let detail: string | undefined;
@@ -288,8 +289,9 @@ function WaniKaniCard({
         hint = "Opens WaniKani reviews";
         break;
       }
-      status = waniKani.error ? "Refresh failed" : waniKani.refreshing ? "Refreshing…" : "Connected";
+      status = waniKani.error ? "Refresh failed" : waniKani.refreshing ? "Refreshing" : "Connected";
       statusTone = waniKani.error ? "error" : waniKani.refreshing ? "neutral" : "connected";
+      loading = !waniKani.error && waniKani.refreshing;
       count = waniKani.dueNow;
       detail = count == null ? "Review count unavailable" : undefined;
       if (waniKani.error) {
@@ -332,8 +334,8 @@ function WaniKaniCard({
       hint = "Retries reading WaniKani";
       break;
     case "loading":
-      status = "Checking…";
-      detail = "Loading reviews…";
+      status = "Checking";
+      detail = "Loading reviews";
       loading = true;
       break;
   }
@@ -529,7 +531,7 @@ function RecentLookups({
       ) : recentLookupsStatus === "loading" ? (
         <EmptyRecent
           icon={<ActivityIndicator size="small" color={colors.iconSecondary} />}
-          title="Loading recent lookups…"
+          title="Loading recent lookups"
           message=""
         />
       ) : recentLookupsStatus === "error" ? (

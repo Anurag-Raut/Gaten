@@ -12,8 +12,8 @@
     <string name="anki_add">Add to Anki</string>
     <string name="anki_added">Added</string>
     <string name="anki_duplicate">Already in Anki</string>
-    <string name="anki_checking">Checking Anki…</string>
-    <string name="anki_adding">Adding…</string>
+    <string name="anki_checking">Checking Anki</string>
+    <string name="anki_adding">Adding</string>
     <string name="anki_deck">Anki deck</string>
     <!-- The deck row in the sheet's footer is a control: it names the change it opens. -->
     <string name="anki_deck_change">Change deck</string>
@@ -38,7 +38,7 @@
     <string name="anki_settings_connect">Allow AnkiDroid access</string>
     <string name="anki_settings_refresh">Refresh from AnkiDroid</string>
     <string name="anki_settings_load_failed">Could not read AnkiDroid. Open AnkiDroid, then try Refresh.</string>
-    <string name="anki_settings_loading">Reading AnkiDroid…</string>
+    <string name="anki_settings_loading">Reading AnkiDroid</string>
     <string name="anki_settings_deck">Deck</string>
     <string name="anki_settings_deck_help">Enter a deck name, or choose an existing deck. A new deck is created on your next export.</string>
     <string name="anki_settings_choose_deck">Choose existing deck</string>

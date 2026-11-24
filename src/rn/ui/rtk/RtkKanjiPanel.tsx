@@ -292,7 +292,7 @@ function Notice({message}: {message: string}) {
 function RtkSkeleton({flat}: {flat?: boolean}) {
   const {colors} = useTheme();
   return (
-    <View accessibilityLabel="Reading the Remembering the Kanji entry…">
+    <View accessibilityLabel="Reading the Remembering the Kanji entry">
       <View style={styles.sectionBlock}>
         <View
           style={[

@@ -113,7 +113,7 @@ const DOWNSTREAM_MESSAGES: Record<Exclude<Downstream, "empty">, string> = {
 };
 
 /** What a source still being read says in the sections that depend on it. */
-const DOWNSTREAM_LOADING = "Loading source data…";
+const DOWNSTREAM_LOADING = "Loading source data";
 
 /** Which of AnkiDroid's own fixes a failure needs. */
 type AnkiFix = "install" | "grant" | "open" | "settings" | "retry";
@@ -645,7 +645,7 @@ export function AnalyticsScreen({
             <SourceState
               read={ankiState}
               art={AnkiConnectionArt}
-              loadingTitle="Checking Anki…"
+              loadingTitle="Checking Anki"
               loadingDetail="Checking collection access."
             />
           ) : (
@@ -703,7 +703,7 @@ export function AnalyticsScreen({
             <SourceState
               read={wkState}
               art={WaniKaniConnectionArt}
-              loadingTitle="Connecting…"
+              loadingTitle="Connecting"
               loadingDetail="Checking your WaniKani account."
             />
           ) : (

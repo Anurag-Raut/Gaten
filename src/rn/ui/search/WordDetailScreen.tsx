@@ -30,6 +30,7 @@ import {kanjiReferenceLabel, showKanjiStrip, useKanjiReferenceSource} from "../k
 import {useTheme, type ThemeColors} from "../theme";
 import {CONTENT_COLUMN, contentInsetFor, KANJI_LETTERING, shape, spacing, typeScale} from "../tokens";
 import type {SearchResult} from "../../native/GatenDict";
+import {LoadingLine} from "../review/review-ui";
 import * as GatenAnki from "../../native/GatenAnki";
 import type {AnkiDeckResult} from "../../native/GatenAnki";
 import * as GatenDict from "../../native/GatenDict";
@@ -514,9 +515,7 @@ export function ExampleSentencesSection({
           Could not read example sentences. Reopen the word to try again.
         </Text>
       ) : examples === null ? (
-        <Text style={[typeScale.bodyMedium, styles.examplesState, {color: colors.onSurfaceVariant}]}>
-          Finding examples…
-        </Text>
+        <LoadingLine text="Finding examples" size="medium" style={styles.examplesState} />
       ) : examples.length === 0 ? (
         <Text style={[typeScale.bodyMedium, styles.examplesState, {color: colors.onSurfaceVariant}]}>
           No example sentences found for this word.
@@ -702,11 +701,7 @@ export function AddToAnkiBar({
                   </Text>
                 </PressableScale>
               ) : decks === null ? (
-                <Text
-                  style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}
-                >
-                  Reading Anki decks…
-                </Text>
+                <LoadingLine text="Reading Anki decks" size="medium" style={styles.deckNote} />
               ) : decks.length === 0 ? (
                 <Text
                   style={[typeScale.bodyMedium, styles.deckNote, {color: colors.onSurfaceVariant}]}

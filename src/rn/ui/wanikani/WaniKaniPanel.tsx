@@ -582,7 +582,7 @@ function Skeleton({compact, flat}: {compact: boolean; flat?: boolean}) {
   const {colors} = useTheme();
   return (
     <View
-      accessibilityLabel="Looking up WaniKani…"
+      accessibilityLabel="Looking up WaniKani"
       style={CONTENT_COLUMN}
     >
       <View style={styles.sectionBlock}>

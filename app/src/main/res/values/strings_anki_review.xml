@@ -13,13 +13,13 @@
     <string name="ankireview_back">Back</string>
     <string name="ankireview_finish">Finish</string>
     <string name="ankireview_change_deck">Change deck</string>
-    <string name="ankireview_starting">Reading AnkiDroid…</string>
+    <string name="ankireview_starting">Reading AnkiDroid</string>
     <string name="ankireview_choose_deck">Choose a deck</string>
     <string name="ankireview_start">Start reviewing</string>
     <string name="ankireview_no_decks">AnkiDroid has no decks yet.</string>
     <string name="ankireview_deck_filtered">filtered</string>
     <string name="ankireview_show_answer">Show answer</string>
-    <string name="ankireview_saving">Saving to AnkiDroid…</string>
+    <string name="ankireview_saving">Saving to AnkiDroid</string>
     <string name="ankireview_nothing_due">Nothing is due in %1$s.</string>
     <string name="ankireview_card_cd">Card</string>
 
