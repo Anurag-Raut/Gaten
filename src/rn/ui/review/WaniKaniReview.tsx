@@ -254,12 +254,23 @@ export function WaniKaniReview({
                   handler consumes the key's action without blurring, so focus — and the keyboard the
                   IME chooses to leave up — survive the judgement. */}
               <AnswerShake shakeKey={shakeKey}>
+                {/* Drawn here, not as the input's native hint: once the text is erased Android places
+                    the caret from the hint's layout and it lands at the right edge. With no hint the
+                    empty field centres its caret like any other centred text. */}
+                {session.entry === "" && (
+                  <Text
+                    pointerEvents="none"
+                    accessible={false}
+                    style={[styles.answerPlaceholder, {color: colors.onSurfaceVariant}]}
+                  >
+                    {reading ? "こたえ" : "Type the meaning"}
+                  </Text>
+                )}
                 <AnswerInput
                   ref={inputRef}
                   key={`${session.index}:${session.part}`}
                   value={session.entry}
                   onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
-                  placeholder={reading ? "こたえ" : "Type the meaning"}
                   selectionColor={colors.accent}
                   editable={session.phase !== "submitFailed"}
                   autoFocus
@@ -384,6 +395,17 @@ const styles = StyleSheet.create({
   promptWord: {...typeScale.displayMedium, ...HERO_LETTERING},
   taskPillWrap: {marginTop: spacing.m},
   answerField: {position: "relative", width: "100%", marginTop: spacing.s},
+  answerPlaceholder: {
+    ...typeScale.headline,
+    letterSpacing: 0,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    textAlign: "center",
+    textAlignVertical: "center",
+  },
   revealRow: {
     flexDirection: "row",
     alignItems: "center",
