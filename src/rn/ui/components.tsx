@@ -302,7 +302,8 @@ export function Button({
   disabled?: boolean;
   variant?: "filled" | "tonal" | "outlined" | "text";
   fullWidth?: boolean;
-  leading?: React.ReactNode;
+  /** Content before the label. A function receives the label's ink, so a spinner matches it on every fill. */
+  leading?: React.ReactNode | ((ink: string) => React.ReactNode);
   accessibilityLabel?: string;
   /** What the press does, for a label that does not say it (§13's readable secondary detail). */
   accessibilityHint?: string;
@@ -363,7 +364,7 @@ export function Button({
       pressScale={pressScale}
       style={[container, style]}
     >
-      {leading}
+      {typeof leading === "function" ? leading(textColor) : leading}
       {label != null && (
         <Text style={[typeScale.labelLarge, {color: textColor, flexShrink: 1, textAlign: "center"}]}>{label}</Text>
       )}

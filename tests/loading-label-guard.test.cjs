@@ -20,9 +20,6 @@ const path = require("node:path");
 
 const ROOT = path.join(__dirname, "..");
 
-// A file another open change owns; remove once it lands and the file is clean.
-const PENDING = new Set(["src/rn/ui/review/WaniKaniHome.tsx"]);
-
 function walk(dir, out = []) {
   for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
     const full = path.join(dir, entry.name);
@@ -39,7 +36,7 @@ const JSX_TEXT = /^\s*[A-Z][^<>{}"]*(?:…|\\u2026|\.\.\.)\s*$/;
 test("no loading label in the React Native UI ends in an ellipsis", () => {
   const offenders = [];
   for (const file of walk(path.join(ROOT, "src", "rn", "ui"))) {
-    if (!/\.tsx?$/.test(file) || PENDING.has(rel(file))) continue;
+    if (!/\.tsx?$/.test(file)) continue;
     fs.readFileSync(file, "utf8").split("\n").forEach((line, index) => {
       const code = line.trim();
       if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) return;

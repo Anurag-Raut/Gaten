@@ -850,7 +850,7 @@ export function StateChip({label}: {label: string}) {
  * Sized by the style's own 16 dp unless a caller asks for another one: the review flow's rows are
  * the default, and the search notice's 24 dp glyph column asks for a ring that sits inside it.
  */
-export function BusySpinner({size}: {size?: number} = {}) {
+export function BusySpinner({size, color}: {size?: number; color?: string} = {}) {
   const {colors} = useTheme();
   const spin = useSharedValue(0);
   useEffect(() => {
@@ -875,7 +875,7 @@ export function BusySpinner({size}: {size?: number} = {}) {
       style={[
         styles.busySpinner,
         size != null && {width: size, height: size, borderRadius: size / 2},
-        {borderColor: colors.accent, borderTopColor: "transparent"},
+        {borderColor: color ?? colors.accent, borderTopColor: "transparent"},
         rotation,
       ]}
     />

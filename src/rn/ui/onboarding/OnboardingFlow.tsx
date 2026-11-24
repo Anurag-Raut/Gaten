@@ -555,7 +555,7 @@ const StepActions = memo(function StepActions({
         <Button
           key="primary"
           label={visual.primary.label}
-          leading={/^Checking/.test(visual.primary.label) ? <BusySpinner size={16} /> : null}
+          leading={/^Checking/.test(visual.primary.label) ? (ink) => <BusySpinner size={16} color={ink} /> : null}
           onPress={visual.primary.onPress}
           disabled={visual.primary.disabled || busy}
           fullWidth
