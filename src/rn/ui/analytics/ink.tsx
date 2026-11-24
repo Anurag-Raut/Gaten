@@ -28,7 +28,6 @@
  */
 import React, {useEffect, useRef, useState} from "react";
 import {
-  ActivityIndicator,
   InteractionManager,
   StyleSheet,
   Text,
@@ -55,6 +54,7 @@ import Animated, {
 import {PressableScale} from "../PressableScale";
 import {useTheme, type ThemeColors} from "../theme";
 import {APP_FONT, PRESS_EASING_REANIMATED, spacing, typeScale} from "../tokens";
+import {BusySpinner} from "../review/review-ui";
 import {formatCount, type HeatmapCell} from "./model";
 import type {Artwork} from "./illustrations";
 
@@ -1568,7 +1568,7 @@ export function SourceUnavailable({
       <View style={styles.sourceCopy}>
         <View style={styles.sourceStatus}>
           {busy ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            <BusySpinner size={20} />
           ) : (
             <View style={[styles.sourceDot, {backgroundColor: toneColor ?? colors.fine}]} />
           )}
