@@ -1028,7 +1028,9 @@ const styles = StyleSheet.create({
     // The typed answer carries no tracking of its own, so the state title's tightening is cancelled
     // here rather than letting the field's characters crowd as the reader types.
     letterSpacing: 0,
-    textAlign: "left",
+    // The answer is written under the prompt, which is centred: the placeholder, the typed text and the
+    // caret of an empty field all centre with it, on the review and the lesson quiz alike.
+    textAlign: "center",
     width: "100%",
     minHeight: 62,
     paddingTop: 9,
