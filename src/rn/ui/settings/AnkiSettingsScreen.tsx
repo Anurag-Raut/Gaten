@@ -42,6 +42,7 @@ import {PressableScale} from "../PressableScale";
 import {reviewStore} from "../review/review-store";
 import {LoadingLine} from "../review/review-ui";
 import {ScreenHeader} from "../ScreenHeader";
+import {AnkiSettingsSkeleton} from "./AnkiSettingsSkeleton";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useTheme} from "../theme";
 import {APP_FONT, contentInsetFor, spacing, typeScale} from "../tokens";
@@ -208,13 +209,9 @@ export function AnkiSettingsScreen({
     return (
       <View style={{flex: 1, backgroundColor: colors.background, paddingTop: insets.top}}>
         <ScreenHeader title="Anki cards" onBack={onClose} />
-        <View style={{flex: 1, padding: spacing.xl, paddingBottom: spacing.xl + insets.bottom, justifyContent: "center"}}>
-          {preferencesLoadFailed ? (
+        {preferencesLoadFailed ? (
+          <View style={{flex: 1, padding: spacing.xl, paddingBottom: spacing.xl + insets.bottom, justifyContent: "center"}}>
             <Text style={[typeScale.titleMedium, {color: colors.onSurface}]}>Could not read Anki settings</Text>
-          ) : (
-            <LoadingLine text="Reading Anki settings" size="medium" />
-          )}
-          {preferencesLoadFailed && (
             <View style={{alignSelf: "flex-start", marginTop: spacing.m}}>
               <Button
                 label="Retry"
@@ -222,8 +219,10 @@ export function AnkiSettingsScreen({
                 disabled={preferencesLoading}
               />
             </View>
-          )}
-        </View>
+          </View>
+        ) : (
+          <AnkiSettingsSkeleton />
+        )}
       </View>
     );
   }
