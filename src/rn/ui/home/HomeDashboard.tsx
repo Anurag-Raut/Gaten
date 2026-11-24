@@ -529,11 +529,12 @@ function RecentLookups({
           </Collapsible>
         </View>
       ) : recentLookupsStatus === "loading" ? (
-        <EmptyRecent
-          icon={<BusySpinner size={22} />}
-          title="Loading recent lookups"
-          message=""
-        />
+        <View accessible accessibilityLabel="Loading recent lookups" style={styles.recentLoading}>
+          <BusySpinner size={20} />
+          <Text style={[typeScale.bodySmall, styles.recentLoadingText, {color: colors.onSurfaceVariant}]}>
+            Loading recent lookups
+          </Text>
+        </View>
       ) : recentLookupsStatus === "error" ? (
         <EmptyRecent
           icon={<Icon name="error" color={colors.warning} />}
@@ -768,5 +769,7 @@ const styles = StyleSheet.create({
   emptyTitle: {...typeScale.homeCaption, textAlign: "center"},
   emptyMessage: {marginTop: 4},
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
+  recentLoading: {minHeight: 120, marginTop: spacing.s, alignItems: "center", justifyContent: "center", gap: spacing.s},
+  recentLoadingText: {textAlign: "center"},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},
 });
