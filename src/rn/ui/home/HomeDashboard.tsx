@@ -529,20 +529,30 @@ function RecentLookups({
           </Collapsible>
         </View>
       ) : recentLookupsStatus === "loading" ? (
-        <View accessible accessibilityLabel="Loading recent lookups" style={styles.recentLoading}>
+        <View accessible accessibilityLabel="Loading recent lookups" style={styles.recentStatus}>
           <BusySpinner size={20} />
-          <Text style={[typeScale.bodySmall, styles.recentLoadingText, {color: colors.onSurfaceVariant}]}>
+          <Text style={[typeScale.bodySmall, styles.recentStatusText, {color: colors.onSurfaceVariant}]}>
             Loading recent lookups
           </Text>
         </View>
       ) : recentLookupsStatus === "error" ? (
-        <EmptyRecent
-          icon={<Icon name="error" color={colors.warning} />}
-          title="Recent lookups could not be loaded"
-          message={recentLookupsError ?? "Try loading them again."}
-          error
-          action={{label: "Try again", onPress: onRefresh}}
-        />
+        <View style={styles.recentStatus}>
+          <Icon name="error" color={colors.warning} />
+          <Text style={[typeScale.titleSmall, styles.recentStatusText, {color: colors.error}]}>
+            Recent lookups could not be loaded
+          </Text>
+          <Text style={[typeScale.bodySmall, styles.recentStatusText, {color: colors.onSurfaceVariant}]}>
+            {recentLookupsError ?? "Try loading them again."}
+          </Text>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+            onPress={onRefresh}
+            style={styles.emptyAction}
+          >
+            <Text style={[typeScale.labelLarge, {color: colors.accent}]}>Try again</Text>
+          </PressableScale>
+        </View>
       ) : (
         <View accessible accessibilityLabel="No recent searches found" style={styles.noRecentLookups}>
           <View style={styles.emptyArtwork} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -630,41 +640,6 @@ function RecentLookupRow({
         </Text>
       ) : null}
     </PressableScale>
-  );
-}
-
-function EmptyRecent({
-  icon,
-  title,
-  message,
-  action,
-  error = false,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  message: string;
-  action?: {label: string; onPress: () => void};
-  error?: boolean;
-}) {
-  const {colors} = useTheme();
-  return (
-    <View style={styles.emptyRecent}>
-        <View style={[styles.emptyIcon, {backgroundColor: colors.surfaceVariant}]}>{icon}</View>
-      <View style={styles.emptyCopy}>
-        <Text style={[typeScale.titleSmall, {color: error ? colors.error : colors.onSurface}]}>{title}</Text>
-        {message ? <Text style={[typeScale.bodySmall, styles.emptyMessage, {color: colors.onSurfaceVariant}]}>{message}</Text> : null}
-        {action ? (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            onPress={action.onPress}
-            style={styles.emptyAction}
-          >
-            <Text style={[typeScale.labelLarge, {color: colors.accent}]}>{action.label}</Text>
-          </PressableScale>
-        ) : null}
-      </View>
-    </View>
   );
 }
 
@@ -763,13 +738,9 @@ const styles = StyleSheet.create({
   lookupGlossStacked: {width: "100%", textAlign: "left"},
   noRecentLookups: {alignItems: "center", marginTop: 20, paddingBottom: spacing.m},
   emptyArtwork: {width: "100%", maxWidth: 340, marginBottom: spacing.m},
-  emptyRecent: {flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 16, paddingBottom: 16},
-  emptyIcon: {width: 39, height: 39, borderRadius: shape.empty, alignItems: "center", justifyContent: "center"},
-  emptyCopy: {flex: 1, minWidth: 0},
   emptyTitle: {...typeScale.homeCaption, textAlign: "center"},
-  emptyMessage: {marginTop: 4},
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
-  recentLoading: {minHeight: 120, marginTop: spacing.s, alignItems: "center", justifyContent: "center", gap: spacing.s},
-  recentLoadingText: {textAlign: "center"},
+  recentStatus: {minHeight: 120, marginTop: spacing.s, alignItems: "center", justifyContent: "center", gap: spacing.s},
+  recentStatusText: {textAlign: "center"},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},
 });
