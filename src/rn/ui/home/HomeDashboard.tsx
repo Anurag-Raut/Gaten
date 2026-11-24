@@ -753,11 +753,10 @@ const styles = StyleSheet.create({
   },
   lookupRowStacked: {flexDirection: "column", alignItems: "stretch", gap: spacing.xs},
   lookupWord: {flex: 1, minWidth: 0},
-  // The gloss block hangs on the row's own bottom edge: its last line sits on the row's content bottom,
-  // below the reading's line, and the row's 4 dp vertical padding is what keeps the descenders clear of
-  // the divider. In the stacked layout this is the cross axis and the 100 % lane fills it, so nothing
-  // moves there.
-  lookupGloss: {width: "34%", textAlign: "right", alignSelf: "flex-end"},
+  // The meaning is centred on the row's own height, whatever the left column holds: a word alone, or a
+  // word over its reading. In the stacked layout this is the cross axis and the 100 % lane fills it, so
+  // nothing moves there.
+  lookupGloss: {width: "34%", textAlign: "right", alignSelf: "center"},
   lookupGlossStacked: {width: "100%", textAlign: "left"},
   noRecentLookups: {alignItems: "center", marginTop: 20, paddingBottom: spacing.m},
   emptyArtwork: {width: "100%", maxWidth: 340, marginBottom: spacing.m},
