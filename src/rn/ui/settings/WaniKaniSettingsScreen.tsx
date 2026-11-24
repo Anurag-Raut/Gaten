@@ -454,7 +454,7 @@ export function WaniKaniSettingsScreen({onClose}: {onClose: () => void}) {
             the explicit text action above, so a blank field can never end a connection. */}
         <View style={{marginTop: spacing.xl}}>
           <Button
-            leading={preferenceBusy || busy ? <BusySpinner size={16} /> : null}
+            leading={preferenceBusy || busy ? (ink) => <BusySpinner size={16} color={ink} /> : null}
             label={preferenceBusy ? "Saving" : busy ? "Checking" : "Save"}
             disabled={saving || preferenceLoading || (preferenceLoadFailed && token.trim().length === 0)}
             fullWidth
