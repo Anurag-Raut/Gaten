@@ -17,6 +17,8 @@ object TriggerPreferences {
     private const val KEY_FLOATING_BUTTON = "floating_button"
     private const val KEY_FLOATING_BUTTON_X = "floating_button_x"
     private const val KEY_FLOATING_BUTTON_Y = "floating_button_y"
+    private const val KEY_CLOSE_BUTTON_DX = "lookup_close_button_dx"
+    private const val KEY_CLOSE_BUTTON_DY = "lookup_close_button_dy"
     const val KEY_TILE_ADDED = "tile_added"
     private const val KEY_TILE_ENABLED = "tile_enabled"
 
@@ -64,6 +66,23 @@ object TriggerPreferences {
         prefs(context).edit()
             .putInt(KEY_FLOATING_BUTTON_X, x)
             .putInt(KEY_FLOATING_BUTTON_Y, y)
+            .apply()
+    }
+
+    /**
+     * Where the lookup's own close disk was last left, as a pixel offset from its default spot at the
+     * bottom centre; (0, 0) when it was never moved. Kept apart from the bubble's position because the
+     * two are different windows with different homes.
+     */
+    fun lookupCloseButtonOffset(context: Context): Pair<Int, Int> {
+        val stored = prefs(context)
+        return stored.getInt(KEY_CLOSE_BUTTON_DX, 0) to stored.getInt(KEY_CLOSE_BUTTON_DY, 0)
+    }
+
+    fun setLookupCloseButtonOffset(context: Context, dx: Int, dy: Int) {
+        prefs(context).edit()
+            .putInt(KEY_CLOSE_BUTTON_DX, dx)
+            .putInt(KEY_CLOSE_BUTTON_DY, dy)
             .apply()
     }
 

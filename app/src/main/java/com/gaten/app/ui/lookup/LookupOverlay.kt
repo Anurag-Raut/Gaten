@@ -40,7 +40,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box as LayoutBox
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import com.gaten.app.trigger.TriggerPreferences
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -810,10 +816,43 @@ fun LookupOverlay(
 private fun OverlayCloseButton(onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val label = stringResource(R.string.lookup_close)
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    // The disk starts at the bottom centre and the reader can drag it anywhere on the screen; where
+    // it is left is kept, like the floating button's own position. The offset is from that default
+    // spot, clamped so the whole touch target stays on the display.
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val targetPx = with(density) { CloseTouchTarget.toPx() }
+    val bottomMarginPx = with(density) { Spacing.xxl.toPx() }
+    val maxDx = ((screenWidthPx - targetPx) / 2f).coerceAtLeast(0f)
+    val minDy = -(screenHeightPx - targetPx - bottomMarginPx).coerceAtLeast(0f)
+    val maxDy = bottomMarginPx
+    var offset by remember {
+        val (dx, dy) = TriggerPreferences.lookupCloseButtonOffset(context)
+        mutableStateOf(Offset(dx.toFloat(), dy.toFloat()))
+    }
     LayoutBox(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
             .size(CloseTouchTarget)
+            .pointerInput(maxDx, minDy, maxDy) {
+                detectDragGestures(
+                    onDragEnd = {
+                        TriggerPreferences.setLookupCloseButtonOffset(
+                            context, offset.x.roundToInt(), offset.y.roundToInt()
+                        )
+                    }
+                ) { change, drag ->
+                    change.consume()
+                    offset = Offset(
+                        (offset.x + drag.x).coerceIn(-maxDx, maxDx),
+                        (offset.y + drag.y).coerceIn(minDy, maxDy)
+                    )
+                }
+            }
             .clip(CircleShape)
             .semantics { role = Role.Button }
             .clickable(onClickLabel = label, onClick = onClick)
