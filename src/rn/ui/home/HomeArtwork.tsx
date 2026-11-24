@@ -183,3 +183,28 @@ export function EmptyRecentArtwork() {
     </Svg>
   );
 }
+
+/** The same open tray as the empty state, with a warning mark where the history clock sits: "could not be loaded". */
+export function RecentErrorArtwork() {
+  const {colors} = useTheme();
+  return (
+    <Svg width="100%" height={148} viewBox="0 0 340 148" fill="none" style={{maxWidth: 340}}>
+      <Ellipse cx={170} cy={130} rx={65} ry={4} fill={colors.onSurfaceVariant} fillOpacity={0.04} />
+      <G stroke={colors.iconSecondary} strokeOpacity={0.5} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M112 82l16-27h84l16 27v30a10 10 0 0 1-10 10h-96a10 10 0 0 1-10-10Z" fill={colors.surface} />
+        <Path d="M120 82l13-19h74l13 19" fill={colors.surfaceVariant} fillOpacity={0.45} strokeOpacity={0.2} />
+        <Path d="M112 82h34c2 12 10 18 24 18s22-6 24-18h34v30a10 10 0 0 1-10 10h-96a10 10 0 0 1-10-10Z" fill={colors.surface} />
+        <Path d="M158 111h24" strokeOpacity={0.25} />
+      </G>
+
+      <Circle cx={170} cy={36} r={22} fill={colors.surface} />
+      <Circle cx={170} cy={36} r={19} stroke={colors.error} strokeOpacity={0.7} strokeWidth={1.8} />
+      <Circle cx={170} cy={36} r={14} fill={colors.error} fillOpacity={0.05} />
+      <Path d="M170 26v13" stroke={colors.error} strokeOpacity={0.8} strokeWidth={2.2} strokeLinecap="round" />
+      <Circle cx={170} cy={45} r={1.6} fill={colors.error} fillOpacity={0.8} />
+      <Circle cx={98} cy={62} r={4} fill={colors.accent} fillOpacity={0.08} />
+      <Circle cx={243} cy={96} r={2.5} fill={colors.iconSecondary} fillOpacity={0.18} />
+      <Path d="M238 45h10M243 40v10" stroke={colors.accent} strokeOpacity={0.08} strokeWidth={1.7} strokeLinecap="round" />
+    </Svg>
+  );
+}

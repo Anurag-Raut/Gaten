@@ -343,7 +343,7 @@ up to 340 × 148 dp, followed by **No recent searches found**. Keep this approve
 do not substitute a mascot or colored feature panel.
 
 Loading is a centred accent spinner with **Loading recent lookups** beneath it, held in an area at least 120 dp tall
-so the section keeps its place until the entries land. Failure uses the same centred block (icon, message, Try again) in that area.
+so the section keeps its place until the entries land. Failure shows the same history-tray artwork as the empty state with a warning mark, **Recent lookups could not be loaded** beneath it, and Try again.
 Existing entries remain visible if only their refresh fails.
 
 ## 6. Analytics

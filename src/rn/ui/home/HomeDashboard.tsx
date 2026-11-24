@@ -23,6 +23,7 @@ import type {HomeDashboardData} from "./useHomeDashboard";
 import {
   AnkiServiceMark,
   EmptyRecentArtwork,
+  RecentErrorArtwork,
   StreakDayMark,
   StreakFlameMark,
   ToriiServiceMark,
@@ -536,12 +537,12 @@ function RecentLookups({
           </Text>
         </View>
       ) : recentLookupsStatus === "error" ? (
-        <View style={styles.recentStatus}>
-          <Icon name="error" color={colors.warning} />
-          <Text style={[typeScale.titleSmall, styles.recentStatusText, {color: colors.error}]}>
-            Recent lookups could not be loaded
-          </Text>
-          <Text style={[typeScale.bodySmall, styles.recentStatusText, {color: colors.onSurfaceVariant}]}>
+        <View style={styles.noRecentLookups}>
+          <View style={styles.emptyArtwork} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <RecentErrorArtwork />
+          </View>
+          <Text style={[styles.emptyTitle, {color: colors.error}]}>Recent lookups could not be loaded</Text>
+          <Text style={[typeScale.bodySmall, styles.recentStatusText, styles.errorMessage, {color: colors.onSurfaceVariant}]}>
             {recentLookupsError ?? "Try loading them again."}
           </Text>
           <PressableScale
@@ -742,5 +743,6 @@ const styles = StyleSheet.create({
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
   recentStatus: {minHeight: 120, marginTop: spacing.s, alignItems: "center", justifyContent: "center", gap: spacing.s},
   recentStatusText: {textAlign: "center"},
+  errorMessage: {marginTop: spacing.xs},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},
 });
