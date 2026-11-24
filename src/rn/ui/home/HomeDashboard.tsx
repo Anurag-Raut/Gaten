@@ -24,6 +24,7 @@ import {
   AnkiServiceMark,
   EmptyRecentArtwork,
   RecentErrorArtwork,
+  RecentLoadingArtwork,
   StreakDayMark,
   StreakFlameMark,
   ToriiServiceMark,
@@ -530,11 +531,11 @@ function RecentLookups({
           </Collapsible>
         </View>
       ) : recentLookupsStatus === "loading" ? (
-        <View accessible accessibilityLabel="Loading recent lookups" style={styles.recentStatus}>
-          <BusySpinner size={20} />
-          <Text style={[typeScale.bodySmall, styles.recentStatusText, {color: colors.onSurfaceVariant}]}>
-            Loading recent lookups
-          </Text>
+        <View accessible accessibilityLabel="Loading recent lookups" style={styles.noRecentLookups}>
+          <View style={styles.emptyArtwork} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <RecentLoadingArtwork />
+          </View>
+          <Text style={[styles.emptyTitle, {color: colors.onSurface}]}>Loading recent lookups</Text>
         </View>
       ) : recentLookupsStatus === "error" ? (
         <View style={styles.noRecentLookups}>
@@ -741,7 +742,6 @@ const styles = StyleSheet.create({
   emptyArtwork: {width: "100%", maxWidth: 340, marginBottom: spacing.m},
   emptyTitle: {...typeScale.homeCaption, textAlign: "center"},
   emptyAction: {minHeight: 48, justifyContent: "center", paddingHorizontal: spacing.m},
-  recentStatus: {minHeight: 120, marginTop: spacing.s, alignItems: "center", justifyContent: "center", gap: spacing.s},
   recentStatusText: {textAlign: "center"},
   errorMessage: {marginTop: spacing.xs},
   recentError: {minHeight: 48, justifyContent: "center", alignItems: "center"},
