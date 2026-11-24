@@ -13,6 +13,8 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.EnterTransition
@@ -812,6 +814,7 @@ fun LookupOverlay(
  * borrowing an accent. Only its own circle takes touches; everything around it still belongs to
  * the lasso.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OverlayCloseButton(onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -826,12 +829,40 @@ private fun OverlayCloseButton(onClick: () -> Unit) {
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
     val targetPx = with(density) { CloseTouchTarget.toPx() }
     val bottomMarginPx = with(density) { Spacing.xxl.toPx() }
+    // Docked like the floating button: let go anywhere and the disk glides to the nearer side edge at
+    // the height it was released at, so it never rests mid-screen. The status bar stays clear.
+    val edgeMarginPx = with(density) { 2.dp.toPx() }
     val maxDx = ((screenWidthPx - targetPx) / 2f).coerceAtLeast(0f)
-    val minDy = -(screenHeightPx - targetPx - bottomMarginPx).coerceAtLeast(0f)
+    val dockDx = (maxDx - edgeMarginPx).coerceAtLeast(0f)
+    val topInsetPx = WindowInsets.statusBarsIgnoringVisibility.getTop(density).toFloat()
+    val minDy = -(screenHeightPx - targetPx - bottomMarginPx - topInsetPx).coerceAtLeast(0f)
     val maxDy = bottomMarginPx
-    var offset by remember {
+    val scope = rememberCoroutineScope()
+    var glide by remember { mutableStateOf<Job?>(null) }
+    var offset by remember(dockDx, minDy, maxDy) {
         val (dx, dy) = TriggerPreferences.lookupCloseButtonOffset(context)
-        mutableStateOf(Offset(dx.toFloat(), dy.toFloat()))
+        // Never moved: the default bottom-centre spot. Otherwise re-docked for this display, so a
+        // position saved at another orientation still rests against an edge.
+        mutableStateOf(
+            if (dx == 0 && dy == 0) Offset.Zero
+            else Offset(if (dx < 0) -dockDx else dockDx, dy.toFloat().coerceIn(minDy, maxDy))
+        )
+    }
+    fun dock() {
+        if (offset == Offset.Zero) return
+        val from = offset
+        val toX = if (from.x < 0f) -dockDx else dockDx
+        glide?.cancel()
+        glide = scope.launch {
+            animate(
+                initialValue = from.x,
+                targetValue = toX,
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f)
+            ) { x, _ -> offset = Offset(x, offset.y) }
+            TriggerPreferences.setLookupCloseButtonOffset(
+                context, offset.x.roundToInt(), offset.y.roundToInt()
+            )
+        }
     }
     LayoutBox(
         contentAlignment = Alignment.Center,
@@ -840,11 +871,9 @@ private fun OverlayCloseButton(onClick: () -> Unit) {
             .size(CloseTouchTarget)
             .pointerInput(maxDx, minDy, maxDy) {
                 detectDragGestures(
-                    onDragEnd = {
-                        TriggerPreferences.setLookupCloseButtonOffset(
-                            context, offset.x.roundToInt(), offset.y.roundToInt()
-                        )
-                    }
+                    onDragStart = { glide?.cancel() },
+                    onDragEnd = { dock() },
+                    onDragCancel = { dock() }
                 ) { change, drag ->
                     change.consume()
                     offset = Offset(
