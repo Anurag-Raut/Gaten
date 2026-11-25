@@ -193,7 +193,6 @@ export function SettingsHub({onOpenPage}: {onOpenPage: (page: SettingsPageName) 
             <SettingsRow
               icon="help"
               title="Send feedback"
-              summary="Report a bug or suggest a feature"
               onPress={() => setFeedbackOpen(true)}
             />
             {/* Always here, whatever the popup's own dismissal state: silencing the popup must
