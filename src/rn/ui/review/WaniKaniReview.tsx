@@ -271,7 +271,6 @@ export function WaniKaniReview({
                   key={`${session.index}:${session.part}`}
                   value={session.entry}
                   onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
-                  selectionColor={colors.accent}
                   editable={session.phase !== "submitFailed"}
                   autoFocus
                   autoCapitalize="none"

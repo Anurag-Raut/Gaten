@@ -8,17 +8,20 @@ package com.gaten.app.ui.lookup
 
 import android.content.Context
 import android.os.Bundle
+import android.view.ContextThemeWrapper
 import android.view.View
 import com.facebook.react.ReactHost
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.interfaces.fabric.ReactSurface
 import com.facebook.react.runtime.ReactSurfaceImpl
 import com.gaten.app.MainApplication
+import com.gaten.app.R
 import com.gaten.app.dict.DictEntry
 import com.gaten.app.dict.SearchMatch
 import com.gaten.app.dict.ScannedWord
 import com.gaten.app.rn.GatenLookupSheetModule
 import com.gaten.app.rn.ReactHostLifecycle
+import com.gaten.app.ui.theme.AccentThemeOverlay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -93,7 +96,10 @@ object LookupSheetHost {
     ): Session? {
         val app = context.applicationContext as? MainApplication ?: return null
         val reactHost: ReactHost = app.reactHost
-        val surface: ReactSurface = reactHost.createSurface(context, MODULE_NAME, initialProps)
+        val themedContext = ContextThemeWrapper(context, R.style.Theme_Gaten).apply {
+            AccentThemeOverlay.apply(this)
+        }
+        val surface: ReactSurface = reactHost.createSurface(themedContext, MODULE_NAME, initialProps)
         val view = surface.view ?: return null
         // Resume the shared host before starting the surface; this session holds it open until stop.
         ReactHostLifecycle.onSheetSessionOpened(reactHost)

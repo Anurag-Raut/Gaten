@@ -90,7 +90,7 @@ export function MnemonicText({
   style?: StyleProp<TextStyle>;
   selectable?: boolean;
 }) {
-  const { dark } = useTheme();
+  const { dark, colors } = useTheme();
   // The chip's Text does not inherit from the paragraph (it sits inside a View), so it is handed the
   // paragraph's lettering explicitly, without the paragraph's own margins.
   const {
@@ -98,7 +98,11 @@ export function MnemonicText({
     ...lettering
   } = StyleSheet.flatten(style) ?? {};
   return (
-    <Text selectable={selectable} style={style}>
+    <Text
+      selectable={selectable}
+      selectionColor={selectable ? colors.selection : undefined}
+      style={style}
+    >
       {parseMnemonic(children).map((piece, index) => {
         const tone = piece.kind == null ? null : HIGHLIGHT[piece.kind];
         if (tone == null) return piece.text;
@@ -148,7 +152,11 @@ export function ReferenceBody({
     );
   }
   return (
-    <Text selectable={selectable} style={style}>
+    <Text
+      selectable={selectable}
+      selectionColor={selectable ? colors.selection : undefined}
+      style={style}
+    >
       {children}
     </Text>
   );

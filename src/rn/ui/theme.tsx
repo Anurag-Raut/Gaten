@@ -42,12 +42,23 @@ export interface ThemeColors extends ThemeColorMap {
   iconSecondary: string;
   accent: string;
   accentSubtle: string;
+  /** Translucent accent tint for text selection highlights; keeps foreground ink legible. */
+  selection: string;
   reviewMeaning: string;
   reviewReading: string;
   success: string;
   warning: string;
   disabled: string;
   onDisabled: string;
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return hex;
+  const r = Number.parseInt(clean.slice(0, 2), 16);
+  const g = Number.parseInt(clean.slice(2, 4), 16);
+  const b = Number.parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /** What every screen reads its colours and type from. */
@@ -165,6 +176,7 @@ export function ThemeProvider({children}: {children: React.ReactNode}) {
         iconSecondary: dark ? "#909099" : "#83838C",
         accent: colorMap.primary,
         accentSubtle: colorMap.primaryContainer,
+        selection: withAlpha(colorMap.primary, dark ? 0.3 : 0.25),
         // Review task colors stay distinct regardless of the reader's chosen accent.
         reviewMeaning: dark ? "#8FC5CA" : "#2B7178",
         reviewReading: dark ? "#B0A0FF" : "#6D28D9",

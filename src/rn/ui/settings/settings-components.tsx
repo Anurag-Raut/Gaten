@@ -321,10 +321,13 @@ export function TextField({
       }}
     >
       <TextInput
+        key={colors.accent}
         {...props}
         ref={inputRef ?? input}
         placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
         cursorColor={props.cursorColor ?? colors.accent}
+        selectionColor={props.selectionColor ?? colors.selection}
+        selectionHandleColor={props.selectionHandleColor ?? colors.accent}
         underlineColorAndroid="transparent"
         style={[typeScale.bodyMedium, {color: colors.onSurface, padding: 0}, props.style]}
       />

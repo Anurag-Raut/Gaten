@@ -28,7 +28,7 @@ export function EmphasizedText({
     [text]
   );
   return (
-    <Text selectable style={style}>
+    <Text selectable selectionColor={colors.selection} style={style}>
       {paragraphs.map((paragraph, index) => (
         <React.Fragment key={index}>
           {index > 0 && "\n\n"}

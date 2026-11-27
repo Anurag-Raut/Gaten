@@ -245,7 +245,6 @@ export function WaniKaniLesson({
                       value={session.entry}
                       onChangeText={(text) => onEntry(reading ? romajiToHiragana(text) : text)}
                       placeholder={reading ? "こたえ" : "Type the meaning"}
-                      selectionColor={colors.accent}
                       editable={!busy && !starting && !failed}
                       autoFocus
                       autoCapitalize="none"

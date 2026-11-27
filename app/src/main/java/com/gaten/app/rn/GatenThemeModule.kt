@@ -21,6 +21,7 @@ import com.facebook.react.bridge.WritableMap
 import com.facebook.react.common.LifecycleState
 import com.facebook.react.uimanager.UIManagerHelper
 import com.gaten.app.ui.theme.AccentColor
+import com.gaten.app.ui.theme.AccentThemeOverlay
 import com.gaten.app.ui.theme.DarkError
 import com.gaten.app.ui.theme.DarkErrorContainer
 import com.gaten.app.ui.theme.DarkOnErrorContainer
@@ -104,8 +105,7 @@ class GatenThemeModule(
             promise.reject(CODE_SAVE, "Could not save the theme mode.", error)
             return
         }
-        promise.resolve(prefsToJsMap())
-        GatenBridgeEmitter.emitThemeChanged()
+        applyOverlayAndNotify(promise)
     }
 
     /** Stores the accent ([AccentColor]'s names) and announces it. */
@@ -122,8 +122,15 @@ class GatenThemeModule(
             promise.reject(CODE_SAVE, "Could not save the accent.", error)
             return
         }
-        promise.resolve(prefsToJsMap())
-        GatenBridgeEmitter.emitThemeChanged()
+        applyOverlayAndNotify(promise)
+    }
+
+    private fun applyOverlayAndNotify(promise: Promise) {
+        UiThreadUtil.runOnUiThread {
+            reactApplicationContext.currentActivity?.let(AccentThemeOverlay::apply)
+            promise.resolve(prefsToJsMap())
+            GatenBridgeEmitter.emitThemeChanged()
+        }
     }
 
     /**
