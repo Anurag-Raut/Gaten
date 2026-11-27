@@ -7,6 +7,7 @@
 package com.gaten.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -80,6 +81,39 @@ class PaletteTest {
                 )
             }
         }
+    }
+
+    /**
+     * Translucent text selection highlights (25% light, 30% dark) must keep foreground text
+     * readable over both the page canvas and filled input surfaces for every accent.
+     */
+    @Test
+    fun selectionHighlightKeepsTextReadable() {
+        for (accent in AccentColor.entries) {
+            for (dark in listOf(false, true)) {
+                val tone = accentRoles(accent, dark)
+                val neutral = gatenNeutrals(dark)
+                val alpha = if (dark) 0.30f else 0.25f
+                for (surface in listOf(neutral.background, neutral.surfaceVariant)) {
+                    val blended = tone.primary.copy(alpha = alpha).compositeOver(surface)
+                    val ratio = contrast(neutral.onSurface, blended)
+                    assertTrue(
+                        "$accent (dark=$dark): selected text contrast is only $ratio:1",
+                        ratio >= 4.5f
+                    )
+                }
+            }
+        }
+    }
+
+    /** Every accent and mode combination has its own Android theme overlay resource. */
+    @Test
+    fun everyAccentAndModeHasDistinctThemeOverlay() {
+        val overlays = AccentColor.entries.flatMap { accent ->
+            listOf(false, true).map { dark -> AccentThemeOverlay.overlayRes(accent, dark) }
+        }
+        assertEquals(AccentColor.entries.size * 2, overlays.toSet().size)
+        assertTrue(overlays.all { it != 0 })
     }
 
     @Test

@@ -279,6 +279,7 @@ export function SearchField({
       >
         <InkIcon name="search" color={colors.iconPrimary} />
         <TextInput
+          key={colors.accent}
           ref={inputRef}
           value={query}
           onChangeText={onChangeQuery}
@@ -299,6 +300,8 @@ export function SearchField({
           placeholder="猫, ねこ, neko..."
           placeholderTextColor={colors.onSurfaceVariant}
           cursorColor={colors.accent}
+          selectionColor={colors.selection}
+          selectionHandleColor={colors.accent}
           returnKeyType="search"
           onSubmitEditing={onSearch}
           style={[styles.field, {color: colors.onSurface}]}

@@ -709,10 +709,13 @@ export const AnswerInput = React.forwardRef<TextInput, TextInputProps>(function 
   const {colors} = useTheme();
   return (
     <TextInput
+      key={colors.accent}
       ref={ref}
       {...props}
       placeholderTextColor={props.placeholderTextColor ?? colors.onSurfaceVariant}
       cursorColor={props.cursorColor ?? colors.accent}
+      selectionColor={props.selectionColor ?? colors.selection}
+      selectionHandleColor={props.selectionHandleColor ?? colors.accent}
       underlineColorAndroid="transparent"
       style={[styles.input, {color: colors.onSurface}, props.style]}
     />

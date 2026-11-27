@@ -8,11 +8,13 @@
 package com.gaten.app
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import com.facebook.react.ReactActivity
 import com.gaten.app.ocr.PpOcrPack
 import com.gaten.app.rn.GatenBridgeEmitter
 import com.gaten.app.rn.ReactHostLifecycle
+import com.gaten.app.ui.theme.AccentThemeOverlay
 import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
 
 /**
@@ -46,6 +48,7 @@ class MainActivity : ReactActivity() {
         // instance and React mounts fresh screens over it. Required by the library: see
         // react-native-screens README → Installation → Android.
         supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
+        AccentThemeOverlay.apply(this)
         super.onCreate(savedInstanceState)
 
         // A rotation replays onCreate with the same intent, and whatever it asked for has already
@@ -53,6 +56,11 @@ class MainActivity : ReactActivity() {
         if (savedInstanceState == null) {
             settingsPageRequest = intent.getStringExtra(EXTRA_SETTINGS_PAGE)
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        AccentThemeOverlay.apply(this, newConfig)
+        super.onConfigurationChanged(newConfig)
     }
 
     override fun onNewIntent(intent: Intent) {

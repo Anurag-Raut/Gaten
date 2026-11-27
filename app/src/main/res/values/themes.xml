@@ -17,5 +17,129 @@
              glyph the same width. Every React Native text already carries the family as a span, so no
              visible text moves. -->
         <item name="android:fontFamily">@font/ibm_plex_sans_jp</item>
+        <!-- Default to Gaten's shipped Indigo Light accent so AppCompat's teal never leaks into
+             text cursors, selection handles or highlights (including OEM ROMs like ColorOS/OxygenOS
+             that tint cursors and handles from theme attributes rather than drawable color filters).
+             AccentThemeOverlay overrides these at runtime for the reader's active accent and mode. -->
+        <item name="colorAccent">#4338CA</item>
+        <item name="colorControlActivated">#4338CA</item>
+        <item name="android:colorAccent">#4338CA</item>
+        <item name="android:colorControlActivated">#4338CA</item>
+        <item name="android:textColorHighlight">#404338CA</item>
+    </style>
+
+    <!-- Runtime theme overlays matching Color.kt's AccentRoles primary tones (25% highlight alpha in
+         light mode, 30% in dark mode). Applied via AccentThemeOverlay so platform and OEM text
+         editors match the reader's chosen accent and mode. -->
+    <style name="ThemeOverlay.Gaten.Accent.Indigo.Light" parent="">
+        <item name="colorAccent">#4338CA</item>
+        <item name="colorControlActivated">#4338CA</item>
+        <item name="android:colorAccent">#4338CA</item>
+        <item name="android:colorControlActivated">#4338CA</item>
+        <item name="android:textColorHighlight">#404338CA</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Indigo.Dark" parent="">
+        <item name="colorAccent">#A5B4FC</item>
+        <item name="colorControlActivated">#A5B4FC</item>
+        <item name="android:colorAccent">#A5B4FC</item>
+        <item name="android:colorControlActivated">#A5B4FC</item>
+        <item name="android:textColorHighlight">#4DA5B4FC</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Blue.Light" parent="">
+        <item name="colorAccent">#0B4FB8</item>
+        <item name="colorControlActivated">#0B4FB8</item>
+        <item name="android:colorAccent">#0B4FB8</item>
+        <item name="android:colorControlActivated">#0B4FB8</item>
+        <item name="android:textColorHighlight">#400B4FB8</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Blue.Dark" parent="">
+        <item name="colorAccent">#93C5FD</item>
+        <item name="colorControlActivated">#93C5FD</item>
+        <item name="android:colorAccent">#93C5FD</item>
+        <item name="android:colorControlActivated">#93C5FD</item>
+        <item name="android:textColorHighlight">#4D93C5FD</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Violet.Light" parent="">
+        <item name="colorAccent">#6D28D9</item>
+        <item name="colorControlActivated">#6D28D9</item>
+        <item name="android:colorAccent">#6D28D9</item>
+        <item name="android:colorControlActivated">#6D28D9</item>
+        <item name="android:textColorHighlight">#406D28D9</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Violet.Dark" parent="">
+        <item name="colorAccent">#C4B5FD</item>
+        <item name="colorControlActivated">#C4B5FD</item>
+        <item name="android:colorAccent">#C4B5FD</item>
+        <item name="android:colorControlActivated">#C4B5FD</item>
+        <item name="android:textColorHighlight">#4DC4B5FD</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Teal.Light" parent="">
+        <item name="colorAccent">#115E59</item>
+        <item name="colorControlActivated">#115E59</item>
+        <item name="android:colorAccent">#115E59</item>
+        <item name="android:colorControlActivated">#115E59</item>
+        <item name="android:textColorHighlight">#40115E59</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Teal.Dark" parent="">
+        <item name="colorAccent">#5EEAD4</item>
+        <item name="colorControlActivated">#5EEAD4</item>
+        <item name="android:colorAccent">#5EEAD4</item>
+        <item name="android:colorControlActivated">#5EEAD4</item>
+        <item name="android:textColorHighlight">#4D5EEAD4</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Green.Light" parent="">
+        <item name="colorAccent">#166534</item>
+        <item name="colorControlActivated">#166534</item>
+        <item name="android:colorAccent">#166534</item>
+        <item name="android:colorControlActivated">#166534</item>
+        <item name="android:textColorHighlight">#40166534</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Green.Dark" parent="">
+        <item name="colorAccent">#6EE7B7</item>
+        <item name="colorControlActivated">#6EE7B7</item>
+        <item name="android:colorAccent">#6EE7B7</item>
+        <item name="android:colorControlActivated">#6EE7B7</item>
+        <item name="android:textColorHighlight">#4D6EE7B7</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Rose.Light" parent="">
+        <item name="colorAccent">#9F1239</item>
+        <item name="colorControlActivated">#9F1239</item>
+        <item name="android:colorAccent">#9F1239</item>
+        <item name="android:colorControlActivated">#9F1239</item>
+        <item name="android:textColorHighlight">#409F1239</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Rose.Dark" parent="">
+        <item name="colorAccent">#FDA4AF</item>
+        <item name="colorControlActivated">#FDA4AF</item>
+        <item name="android:colorAccent">#FDA4AF</item>
+        <item name="android:colorControlActivated">#FDA4AF</item>
+        <item name="android:textColorHighlight">#4DFDA4AF</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Black.Light" parent="">
+        <item name="colorAccent">#000000</item>
+        <item name="colorControlActivated">#000000</item>
+        <item name="android:colorAccent">#000000</item>
+        <item name="android:colorControlActivated">#000000</item>
+        <item name="android:textColorHighlight">#40000000</item>
+    </style>
+
+    <style name="ThemeOverlay.Gaten.Accent.Black.Dark" parent="">
+        <item name="colorAccent">#FFFFFF</item>
+        <item name="colorControlActivated">#FFFFFF</item>
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:colorControlActivated">#FFFFFF</item>
+        <item name="android:textColorHighlight">#4DFFFFFF</item>
     </style>
 </resources>
